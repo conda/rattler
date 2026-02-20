@@ -177,13 +177,12 @@ impl PyGateway {
 
             let repodatas = query.execute().await.map_err(PyRattlerError::from)?;
 
-            // Convert the records into a list of lists
+            // Convert the records into a list of lists (Arc clone, not deep copy)
             Ok(repodatas
                 .into_iter()
                 .map(|r| {
-                    r.into_iter()
-                        .cloned()
-                        .map(PyRecord::from)
+                    r.iter_arc()
+                        .map(|arc| PyRecord::from(arc.clone()))
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>())
@@ -287,7 +286,7 @@ impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'cache-or-fetch', 'use-cache-only', 'force-cache-only', 'no-cache'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -299,7 +298,6 @@ impl PySourceConfig {
     #[new]
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
-        jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
         sharded_enabled: bool,
@@ -307,7 +305,6 @@ impl PySourceConfig {
     ) -> Self {
         Self {
             inner: SourceConfig {
-                jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
                 sharded_enabled,
@@ -345,8 +342,8 @@ impl<'py> FromPyObject<'py> for Wrap<Variant> {
             "current" => Variant::Current,
             v => {
                 return Err(PyValueError::new_err(format!(
-                "variant must be one of {{'after-patches', 'from-packages', 'current'}}, got {v}",
-            )))
+                    "variant must be one of {{'after-patches', 'from-packages', 'current'}}, got {v}",
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -360,7 +357,6 @@ impl PyFetchRepoDataOptions {
     pub fn new(
         cache_action: Wrap<CacheAction>,
         variant: Wrap<Variant>,
-        jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
     ) -> Self {
@@ -368,7 +364,6 @@ impl PyFetchRepoDataOptions {
             inner: FetchRepoDataOptions {
                 cache_action: cache_action.0,
                 variant: variant.0,
-                jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
                 retry_policy: None,

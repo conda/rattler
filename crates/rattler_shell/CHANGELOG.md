@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_shell-v0.25.19...rattler_shell-v0.26.0) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
+## [0.25.19](https://github.com/conda/rattler/compare/rattler_shell-v0.25.18...rattler_shell-v0.25.19) - 2026-02-04
+
+### Fixed
+
+- Ignore CONDA_SHLVL in tests ([#2029](https://github.com/conda/rattler/pull/2029))
+
 ## [0.25.18](https://github.com/conda/rattler/compare/rattler_shell-v0.25.17...rattler_shell-v0.25.18) - 2026-01-22
 
 ### Other

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.13](https://github.com/conda/rattler/compare/rattler_upload-v0.4.12...rattler_upload-v0.4.13) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
+## [0.4.12](https://github.com/conda/rattler/compare/rattler_upload-v0.4.11...rattler_upload-v0.4.12) - 2026-02-10
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.4.11](https://github.com/conda/rattler/compare/rattler_upload-v0.4.10...rattler_upload-v0.4.11) - 2026-02-04
+
+### Fixed
+
+- OIDC ambient token detection with sigstore-rust 0.6.1 ([#2017](https://github.com/conda/rattler/pull/2017))
+
+### Other
+
+- *(ci)* ensure rustls is not used when using native-tls ([#2024](https://github.com/conda/rattler/pull/2024))
+
 ## [0.4.10](https://github.com/conda/rattler/compare/rattler_upload-v0.4.9...rattler_upload-v0.4.10) - 2026-01-22
 
 ### Other

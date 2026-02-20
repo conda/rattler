@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 /// is a type-safe implementation that is coupled to a specific Id type.
 pub struct Queue<T> {
     queue: ffi::Queue,
-    // Makes this queue typesafe
+    // Makes this queue type-safe
     _data: PhantomData<T>,
 }
 

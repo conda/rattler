@@ -11,7 +11,7 @@ license = "BSD-3-Clause"
 [feature.build.dependencies]
 maturin = "~=1.10.1"
 pip = "~=23.2.1"
-rust = "~=1.88.0"
+rust = "~=1.93.1"
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
@@ -38,7 +38,7 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-rust-src = "~=1.88.0"
+rust-src = "~=1.93.1"
 
 [feature.test.pypi-dependencies]
 types-networkx = "*"
@@ -46,7 +46,9 @@ types-networkx = "*"
 boto3 = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = ["build"] }
+test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = [
+  "build",
+] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
@@ -70,7 +72,7 @@ cairosvg = ">=2.8.2,<3"
 pillow = ">=12.0.0,<13"
 ruff = ">=0.14.9,<0.15"
 mkdocs-llmstxt = ">=0.4.0,<0.5"
-python = { build-number = ">10"}
+python = { build-number = ">10" }
 
 
 [feature.docs.tasks]

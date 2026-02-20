@@ -10,8 +10,8 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 ///
 /// This test:
 /// 1. Writes a file with initial content (v1)
-/// 2. Gets the ETag for v1
-/// 3. Updates the file to v2 (changes ETag)
+/// 2. Gets the `ETag` for v1
+/// 3. Updates the file to v2 (changes `ETag`)
 /// 4. Calls `read_package_with_retry` with the old v1 metadata
 /// 5. Verifies the function retries and succeeds with v2 content and metadata
 #[tokio::test]

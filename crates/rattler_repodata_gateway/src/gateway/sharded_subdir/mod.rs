@@ -1,11 +1,16 @@
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use cfg_if::cfg_if;
 use rattler_conda_types::{ChannelUrl, RepoDataRecord, Shard};
 use rattler_redaction::Redact;
 use url::Url;
 
-use crate::{fetch::FetchRepoDataError, GatewayError};
+use crate::{
+    fetch::FetchRepoDataError,
+    gateway::subdir::{extract_unique_deps, PackageRecords},
+    GatewayError,
+};
 
 cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -76,7 +81,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
     channel_base_url: ChannelUrl,
     base_url: Url,
-) -> Result<Vec<RepoDataRecord>, GatewayError> {
+) -> Result<PackageRecords, GatewayError> {
     let parse = move || {
         // let shard =
         // serde_json::from_slice::<Shard>(bytes.as_ref()).
@@ -87,16 +92,25 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
         let packages =
             itertools::chain(shard.packages.into_iter(), shard.conda_packages.into_iter())
                 .filter(|(name, _record)| !shard.removed.contains(name));
-        Ok(packages
-            .map(|(file_name, package_record)| RepoDataRecord {
-                url: base_url
-                    .join(&file_name.to_file_name())
-                    .expect("filename is not a valid url"),
-                channel: Some(channel_base_url.url().clone().redact().to_string()),
-                package_record,
-                identifier: file_name,
+        let channel_str = channel_base_url.url().clone().redact().to_string();
+        let base_url_str = base_url.as_str();
+        let records: Vec<Arc<RepoDataRecord>> = packages
+            .map(|(file_name, package_record)| {
+                let file_name_str = file_name.to_file_name();
+                Arc::new(RepoDataRecord {
+                    url: Url::parse(&format!("{base_url_str}{file_name_str}"))
+                        .expect("filename is not a valid url"),
+                    channel: Some(channel_str.clone()),
+                    package_record,
+                    identifier: file_name,
+                })
             })
-            .collect())
+            .collect();
+        let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
+        Ok(PackageRecords {
+            records,
+            unique_deps,
+        })
     };
 
     #[cfg(target_arch = "wasm32")]

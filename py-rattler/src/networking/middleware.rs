@@ -47,7 +47,6 @@ impl PyMirrorMiddleware {
                             url,
                             no_zstd: false,
                             no_bz2: false,
-                            no_jlap: false,
                             max_failures: None,
                         })
                         .map_err(PyRattlerError::from)
@@ -214,7 +213,7 @@ pub struct AddHeadersMiddleware {
 }
 
 impl AddHeadersMiddleware {
-    /// Create a new AddHeadersMiddleware from a Python callback.
+    /// Create a new `AddHeadersMiddleware` from a Python callback.
     pub fn new(callback: Py<PyAny>) -> Self {
         Self {
             callback: Arc::new(callback),
@@ -259,13 +258,12 @@ impl Middleware for AddHeadersMiddleware {
                 }
 
                 // Try to extract as a dictionary
-                let dict = result.downcast_bound::<PyDict>(py).map_err(|_| {
+                let dict = result.downcast_bound::<PyDict>(py).map_err(|_e| {
                     let type_name = result
                         .bind(py)
                         .get_type()
                         .name()
-                        .map(|n| n.to_string())
-                        .unwrap_or_else(|_| "unknown".to_string());
+                        .map_or_else(|_| "unknown".to_string(), |n| n.to_string());
                     reqwest_middleware::Error::Middleware(anyhow::anyhow!(
                         "Python callback must return a dict or None, got: {type_name}",
                     ))

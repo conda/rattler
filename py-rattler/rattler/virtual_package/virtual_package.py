@@ -79,7 +79,13 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    def __init__(self, osx: Override | None = None, libc: Override | None = None, cuda: Override | None = None) -> None:
+    def __init__(
+        self,
+        osx: Override | None = None,
+        libc: Override | None = None,
+        cuda: Override | None = None,
+        archspec: Override | None = None,
+    ) -> None:
         """
         Returns the default virtual package overrides. By default, none of the overrides are set.
         """
@@ -87,6 +93,7 @@ class VirtualPackageOverrides:
         self.osx = osx
         self.libc = libc
         self.cuda = cuda
+        self.archspec = archspec
 
     @classmethod
     def from_env(cls) -> VirtualPackageOverrides:
@@ -139,6 +146,21 @@ class VirtualPackageOverrides:
         Sets the CUDA override.
         """
         self._overrides.cuda = override._override if override else None
+
+    @property
+    def archspec(self) -> Override | None:
+        """
+        Returns the archspec override.
+        """
+        override = self._overrides.archspec
+        return Override._from_py_override(override) if override else None
+
+    @archspec.setter
+    def archspec(self, override: Override | None) -> None:
+        """
+        Sets the archspec override.
+        """
+        self._overrides.archspec = override._override if override else None
 
     def __str__(self) -> str:
         """

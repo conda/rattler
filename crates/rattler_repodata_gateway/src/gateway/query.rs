@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     future::{Future, IntoFuture},
     sync::Arc,
 };
@@ -13,7 +13,7 @@ use url::Url;
 
 use super::{
     source::{CustomSourceClient, Source},
-    subdir::{Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData},
     BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
@@ -58,16 +58,6 @@ enum SourceSpecs {
 
     /// The record is required by a dependency.
     Transitive,
-}
-
-impl SourceSpecs {
-    /// Returns true if this record should be processed for these specs.
-    fn matches(&self, record: &RepoDataRecord) -> bool {
-        match self {
-            SourceSpecs::Input(specs) => specs.iter().any(|spec| spec.matches(record)),
-            SourceSpecs::Transitive => true,
-        }
-    }
 }
 
 /// A spec that references a package by direct URL.
@@ -150,13 +140,19 @@ struct QueryExecutor {
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
 
+    /// Specs with glob/regex patterns that need expansion
+    pending_pattern_specs: Vec<(PackageNameMatcher, MatchSpec)>,
+    /// Track names already considered for pattern expansion (across subdirs)
+    pattern_names_seen: HashSet<PackageName>,
+
     // Mutable state during execution
-    seen: HashSet<PackageName>,
-    pending_package_specs: HashMap<PackageName, SourceSpecs>,
+    /// Normalized (lowercase) package names we've already queued.
+    seen: hashbrown::HashMap<String, (), ahash::RandomState>,
+    pending_package_specs: ahash::HashMap<PackageName, SourceSpecs>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
-    pending_subdirs: FuturesUnordered<BoxFuture<Result<(), GatewayError>>>,
+    pending_subdirs: FuturesUnordered<BoxFuture<PendingSubdirResult>>,
 
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
@@ -178,12 +174,14 @@ impl QueryExecutor {
             reporter,
         } = query;
 
-        let mut seen = HashSet::new();
-        let mut pending_package_specs = HashMap::new();
+        let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
+        let mut pending_package_specs = ahash::HashMap::default();
         let mut direct_url_specs = Vec::new();
+        let mut pending_pattern_specs = Vec::new();
+        let pattern_names_seen = HashSet::new();
 
-        // Categorize specs into direct_url_specs and pending_package_specs
-        // TODO: allow glob/regex package names as well
+        // Categorize specs into direct_url_specs, pending_package_specs, and
+        // pending_pattern_specs
         for spec in specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
@@ -193,17 +191,30 @@ impl QueryExecutor {
                     .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
                         spec.clone(),
                     )))?;
-                seen.insert(name.clone());
+                seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
-            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
-                seen.insert(name.clone());
-                let pending = pending_package_specs
-                    .entry(name.clone())
-                    .or_insert_with(|| SourceSpecs::Input(vec![]));
-                let SourceSpecs::Input(input_specs) = pending else {
-                    panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
-                };
-                input_specs.push(spec);
+            } else {
+                match &spec.name {
+                    Some(PackageNameMatcher::Exact(name)) => {
+                        seen.insert(name.as_normalized().to_string(), ());
+                        let pending = pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        let SourceSpecs::Input(input_specs) = pending else {
+                            panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
+                        };
+                        input_specs.push(spec);
+                    }
+                    Some(
+                        matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)),
+                    ) => {
+                        // Store pattern specs for later expansion
+                        pending_pattern_specs.push((matcher.clone(), spec));
+                    }
+                    None => {
+                        return Err(GatewayError::MatchSpecWithoutName(Box::new(spec)));
+                    }
+                }
             }
         }
 
@@ -229,31 +240,30 @@ impl QueryExecutor {
                 barrier: barrier.clone(),
             });
 
-            match source {
+            let pending = match source {
                 Source::Channel(channel) => {
                     let inner = gateway.clone();
                     let reporter = reporter.clone();
-                    pending_subdirs.push(box_future(async move {
-                        match inner
+                    box_future(async move {
+                        let subdir = inner
                             .get_or_create_subdir(&channel, platform, reporter)
-                            .await
-                        {
-                            Ok(subdir) => {
-                                barrier.set(subdir).expect("subdir was set twice");
-                                Ok(())
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }));
+                            .await?;
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
                 Source::Custom(custom_source) => {
                     // For custom sources, create an adapter that wraps the source
-                    // for the specific platform
+                    // for the specific platform.
                     let client = CustomSourceClient::new(custom_source, platform);
                     let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
-                    barrier.set(subdir).expect("subdir was set twice");
+                    box_future(async move {
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
-            }
+            };
+            pending_subdirs.push(pending);
         }
 
         let result_len = subdir_handles.len() + direct_url_offset;
@@ -263,6 +273,8 @@ impl QueryExecutor {
             recursive,
             reporter,
             direct_url_specs,
+            pending_pattern_specs,
+            pattern_names_seen,
             seen,
             pending_package_specs,
             subdir_handles,
@@ -288,13 +300,13 @@ impl QueryExecutor {
                     spec.md5,
                 );
 
-                let record = query
+                let records = query
                     .execute()
                     .await
                     .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
 
                 // Check if record actually has the same name
-                if let Some(record) = record.first() {
+                if let Some(record) = records.first() {
                     if record.package_record.name != name {
                         return Err(GatewayError::UrlRecordNameMismatch(
                             record.package_record.name.as_source().to_string(),
@@ -304,7 +316,15 @@ impl QueryExecutor {
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic
-                Ok((0, SourceSpecs::Input(vec![spec]), record))
+                let unique_deps = super::subdir::extract_unique_deps(records.iter().map(|r| &**r));
+                Ok((
+                    0,
+                    SourceSpecs::Input(vec![spec]),
+                    PackageRecords {
+                        records,
+                        unique_deps,
+                    },
+                ))
             }));
         }
 
@@ -338,8 +358,8 @@ impl QueryExecutor {
                         Subdir::Found(subdir) => subdir
                             .get_or_fetch_package_records(&package_name, reporter)
                             .await
-                            .map(|records| (result_index, specs, records)),
-                        Subdir::NotFound => Ok((result_index, specs, Arc::from(vec![]))),
+                            .map(|pkg| (result_index, specs, pkg)),
+                        Subdir::NotFound => Ok((result_index, specs, PackageRecords::default())),
                     }
                 }));
             }
@@ -347,29 +367,47 @@ impl QueryExecutor {
     }
 
     /// Extract dependencies from records and queue them if not seen.
-    fn queue_dependencies(&mut self, records: &[RepoDataRecord], request_specs: &SourceSpecs) {
-        for record in records {
-            if !request_specs.matches(record) {
-                continue;
-            }
-
-            for dependency in &record.package_record.depends {
-                let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                if self.seen.insert(dependency_name.clone()) {
-                    self.pending_package_specs
-                        .insert(dependency_name, SourceSpecs::Transitive);
+    fn queue_dependencies(&mut self, pkg: &PackageRecords, request_specs: &SourceSpecs) {
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // Use precomputed unique deps — typically ~50-100 strings
+                // instead of iterating all records (~20,000 dep strings).
+                for dep in pkg.unique_deps.iter() {
+                    self.queue_dependency(dep);
                 }
             }
-
-            for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
-                for dependency in dependencies {
-                    let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                    if self.seen.insert(dependency_name.clone()) {
-                        self.pending_package_specs
-                            .insert(dependency_name, SourceSpecs::Transitive);
+            SourceSpecs::Input(specs) => {
+                // For input specs, only process deps from matching records.
+                for record in &pkg.records {
+                    if !specs.iter().any(|s| s.matches(record.as_ref())) {
+                        continue;
+                    }
+                    for dependency in &record.package_record.depends {
+                        self.queue_dependency(dependency);
+                    }
+                    for (_, dependencies) in record.package_record.experimental_extra_depends.iter()
+                    {
+                        for dependency in dependencies {
+                            self.queue_dependency(dependency);
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /// Queue a single dependency if not already seen.
+    ///
+    /// Uses `entry_ref` for a single hash lookup. Only allocates when the
+    /// name is genuinely new (~500 unique names vs ~1M+ dependency strings).
+    fn queue_dependency(&mut self, dependency: &str) {
+        let normalized = PackageName::normalized_name_from_matchspec_str(dependency);
+        let normalized_str: &str = &normalized;
+        if let hashbrown::hash_map::EntryRef::Vacant(entry) = self.seen.entry_ref(normalized_str) {
+            entry.insert(());
+            let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
+            self.pending_package_specs
+                .insert(dependency_name, SourceSpecs::Transitive);
         }
     }
 
@@ -377,17 +415,63 @@ impl QueryExecutor {
     fn accumulate_records(
         &mut self,
         result_idx: usize,
-        records: &[RepoDataRecord],
+        records: Vec<Arc<RepoDataRecord>>,
         request_specs: &SourceSpecs,
     ) {
         let result = &mut self.result[result_idx];
 
-        for record in records {
-            if !request_specs.matches(record) {
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // All records match — extend with Arc clones (cheap refcount bumps).
+                result.records.extend(records);
+            }
+            SourceSpecs::Input(specs) => {
+                // Only a subset matches — filter and clone matching Arcs.
+                for record in &records {
+                    if specs.iter().any(|s| s.matches(record.as_ref())) {
+                        result.records.push(record.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Expand pattern specs based on the names provided by a resolved subdir.
+    fn expand_pattern_specs_for_subdir(&mut self, subdir: &Subdir) {
+        if self.pending_pattern_specs.is_empty() {
+            return;
+        }
+
+        let Some(names) = subdir.package_names() else {
+            return;
+        };
+
+        for name_str in names {
+            let Ok(name) = PackageName::try_from(name_str) else {
+                continue;
+            };
+            if !self.pattern_names_seen.insert(name.clone()) {
                 continue;
             }
-            result.len += 1;
-            result.shards.push(Arc::new([record.clone()]));
+
+            for (matcher, spec) in &self.pending_pattern_specs {
+                if matcher.matches(&name) {
+                    if self
+                        .seen
+                        .insert(name.as_normalized().to_string(), ())
+                        .is_none()
+                    {
+                        let pending = self
+                            .pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        if let SourceSpecs::Input(input_specs) = pending {
+                            input_specs.push(spec.clone());
+                        }
+                    }
+                    break;
+                }
+            }
         }
     }
 
@@ -401,18 +485,23 @@ impl QueryExecutor {
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs
                 subdir_result = self.pending_subdirs.select_next_some() => {
-                    subdir_result?;
+                    let subdir = subdir_result?;
+                    self.expand_pattern_specs_for_subdir(subdir.as_ref());
+                    if self.pending_subdirs.is_empty() {
+                        self.pending_pattern_specs.clear();
+                        self.pattern_names_seen.clear();
+                    }
                 }
 
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
-                    let (result_idx, request_specs, records) = records?;
+                    let (result_idx, request_specs, pkg) = records?;
 
                     if self.recursive {
-                        self.queue_dependencies(&records, &request_specs);
+                        self.queue_dependencies(&pkg, &request_specs);
                     }
 
-                    self.accumulate_records(result_idx, &records, &request_specs);
+                    self.accumulate_records(result_idx, pkg.records, &request_specs);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -444,7 +533,8 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 }
 
 /// Result type for pending record fetches.
-type PendingRecordsResult = Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>;
+type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
+type PendingRecordsResult = Result<(usize, SourceSpecs, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
@@ -530,7 +620,7 @@ impl NamesQuery {
                 }
             });
         }
-        let mut names: HashSet<String> = HashSet::default();
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
 
         while let Some(result) = pending_subdirs.next().await {
             let subdir_names = result?;

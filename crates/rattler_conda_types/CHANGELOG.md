@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.2...rattler_conda_types-v0.43.3) - 2026-02-19
+
+### Added
+
+- implement comparison and hashing for `PackageRecord` types ([#2046](https://github.com/conda/rattler/pull/2046))
+
+### Fixed
+
+- gracefully handle missing `$HOME` in file backend ([#2065](https://github.com/conda/rattler/pull/2065))
+
+### Other
+
+- speed up matchspec parsing ([#2066](https://github.com/conda/rattler/pull/2066))
+- use `when` syntax instead of `; if` ([#2007](https://github.com/conda/rattler/pull/2007))
+- optimized repodata loading ([#2058](https://github.com/conda/rattler/pull/2058))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
+## [0.43.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.1...rattler_conda_types-v0.43.2) - 2026-02-04
+
+### Added
+
+- Add CACHEDIR.TAG to environments and global cache ([#2011](https://github.com/conda/rattler/pull/2011))
+
 ## [0.43.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.0...rattler_conda_types-v0.43.1) - 2026-01-22
 
 ### Added

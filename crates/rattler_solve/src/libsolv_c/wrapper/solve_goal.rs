@@ -72,7 +72,7 @@ impl SolveGoal {
         self.push_id_with_flags(match_spec, SOLVER_UPDATE | SOLVER_SOLVABLE_PROVIDES);
     }
 
-    /// Favor the specified solvable over other variants. This doesnt mean this variant will be
+    /// Favor the specified solvable over other variants. This doesn't mean this variant will be
     /// used. To guarantee a solvable is used (if selected) use the `Self::lock` function.
     pub fn favor(&mut self, solvable: SolvableId) {
         self.push_id_with_flags(solvable, SOLVER_SOLVABLE | SOLVER_FAVOR);

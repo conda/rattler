@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.47](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.46...rattler_menuinst-v0.2.47) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- Remove dead struct ([#2048](https://github.com/conda/rattler/pull/2048))
+
+## [0.2.46](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.45...rattler_menuinst-v0.2.46) - 2026-02-04
+
+### Fixed
+
+- Ignore CONDA_SHLVL in tests ([#2029](https://github.com/conda/rattler/pull/2029))
+
 ## [0.2.45](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.44...rattler_menuinst-v0.2.45) - 2026-01-22
 
 ### Other

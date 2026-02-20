@@ -152,6 +152,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral_async_zip"
+version = "0.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
+dependencies = [
+ "async-compression",
+ "crc32fast",
+ "futures-lite",
+ "pin-project",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -183,6 +198,7 @@ checksum = "d10e4f991a553474232bc0a31799f6d24b034a84c0971d80d2e2f78b2e576e40"
 dependencies = [
  "compression-codecs",
  "compression-core",
+ "futures-io",
  "pin-project-lite",
  "tokio",
 ]
@@ -310,6 +326,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-spooled-tempfile"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dd9c58a1dbecfc23aa470d57e5aff60877ab1b459bf05e60e861dd18fcaa5f5"
+dependencies = [
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "async-task"
 version = "4.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -384,6 +410,28 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
  "zeroize",
+]
+
+[[package]]
+name = "aws-lc-rs"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9a7b350e3bb1767102698302bc37256cbd48422809984b98d292c40e2579aa9"
+dependencies = [
+ "aws-lc-sys",
+ "zeroize",
+]
+
+[[package]]
+name = "aws-lc-sys"
+version = "0.37.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b092fe214090261288111db7a2b2c2118e5a7f30dc2569f1732c4069a6840549"
+dependencies = [
+ "cc",
+ "cmake",
+ "dunce",
+ "fs_extra",
 ]
 
 [[package]]
@@ -1094,6 +1142,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e64b0cc0439b12df2fa678eae89a1c56a529fd067a9115f7827f1fffd22b32"
 
 [[package]]
+name = "cmake"
+version = "0.1.57"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75443c44cd6b379beb8c5b45d85d0773baf31cce901fe7bb252f4eff3008ef7d"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "coalesced_map"
 version = "0.1.2"
 dependencies = [
@@ -1510,6 +1567,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1881,6 +1944,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_extra"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
+
+[[package]]
 name = "fslock"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2057,16 +2126,16 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "1.5.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e806615abbb009b47212a12d1ea0aa15aa3f07a3202f82d2067e3a78a4cbe5a7"
+checksum = "36ad774d41426ab205eeec577540f209a5485c366814dd5c89a7e3018fe84e7c"
 dependencies = [
  "async-trait",
  "base64",
  "bytes",
  "google-cloud-gax",
  "http 1.4.0",
- "reqwest 0.13.1",
+ "reqwest 0.13.2",
  "rustc_version",
  "rustls",
  "rustls-pki-types",
@@ -2195,6 +2264,8 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.1.5",
 ]
 
@@ -3781,6 +3852,7 @@ version = "0.11.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1906b49b0c3bc04b5fe5d86a77925ae6524a19b816ae38ce1e426255f1d8a31"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "getrandom 0.3.4",
  "lru-slab",
@@ -3901,7 +3973,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.10"
+version = "0.39.12"
 dependencies = [
  "anyhow",
  "console",
@@ -3931,6 +4003,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "reqwest-middleware",
+ "serde",
  "serde_json",
  "simple_spawn_blocking",
  "smallvec",
@@ -3944,7 +4017,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.9"
+version = "0.6.11"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3975,7 +4048,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
  "ahash",
  "chrono",
@@ -4015,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.25"
+version = "0.2.26"
 dependencies = [
  "console",
  "fs-err",
@@ -4048,7 +4121,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.11"
+version = "0.27.13"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4085,7 +4158,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.12"
+version = "0.26.13"
 dependencies = [
  "ahash",
  "chrono",
@@ -4117,7 +4190,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.45"
+version = "0.2.46"
 dependencies = [
  "chrono",
  "configparser",
@@ -4146,7 +4219,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.32"
+version = "0.25.33"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4176,13 +4249,16 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.24"
+version = "0.23.26"
 dependencies = [
  "astral-tokio-tar",
+ "astral_async_zip",
  "async-compression",
+ "async-spooled-tempfile",
  "bzip2",
  "chrono",
  "fs-err",
+ "futures",
  "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -4227,8 +4303,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.10"
+version = "0.25.12"
 dependencies = [
+ "ahash",
  "anyhow",
  "async-compression",
  "async-fd-lock",
@@ -4245,6 +4322,7 @@ dependencies = [
  "fs-err",
  "fslock",
  "futures",
+ "hashbrown 0.15.5",
  "hex",
  "http 1.4.0",
  "http-cache-semantics",
@@ -4287,7 +4365,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4303,7 +4381,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.18"
+version = "0.25.19"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4321,7 +4399,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.2.2"
+version = "4.2.3"
 dependencies = [
  "chrono",
  "futures",
@@ -4338,7 +4416,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.7"
+version = "2.3.8"
 dependencies = [
  "archspec",
  "libloading",
@@ -4548,9 +4626,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
+checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
 dependencies = [
  "base64",
  "bytes",
@@ -4565,6 +4643,7 @@ dependencies = [
  "log",
  "percent-encoding",
  "pin-project-lite",
+ "quinn",
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
@@ -4735,6 +4814,7 @@ version = "0.23.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c665f33d38cea657d9614f766881e4d510e0eda4239891eea56b4cadcf01801b"
 dependencies = [
+ "aws-lc-rs",
  "log",
  "once_cell",
  "ring",
@@ -4799,6 +4879,7 @@ version = "0.103.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
 dependencies = [
+ "aws-lc-rs",
  "ring",
  "rustls-pki-types",
  "untrusted",
@@ -5637,6 +5718,7 @@ checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

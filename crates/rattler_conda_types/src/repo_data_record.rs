@@ -31,6 +31,18 @@ pub struct RepoDataRecord {
     pub channel: Option<String>,
 }
 
+impl PartialOrd for RepoDataRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RepoDataRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.package_record.cmp(&other.package_record)
+    }
+}
+
 impl RepoDataRecord {
     /// Returns true if `run_exports` is some.
     pub fn has_run_exports(&self) -> bool {

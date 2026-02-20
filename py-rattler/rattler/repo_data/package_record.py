@@ -879,6 +879,151 @@ class PackageRecord:
         """
         self._record.set_python_site_packages_path(value)
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Returns True if the two records are equal.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> b = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> a == b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record == other._record
+
+    def __ne__(self, other: object) -> bool:
+        """
+        Returns True if the two records are not equal.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> b = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> a != b
+        False
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record != other._record
+
+    def __lt__(self, other: object) -> bool:
+        """
+        Returns True if this record is less than the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a < b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record < other._record
+
+    def __le__(self, other: object) -> bool:
+        """
+        Returns True if this record is less than or equal to the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a <= b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record <= other._record
+
+    def __gt__(self, other: object) -> bool:
+        """
+        Returns True if this record is greater than the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a > b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record > other._record
+
+    def __ge__(self, other: object) -> bool:
+        """
+        Returns True if this record is greater than or equal to the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a >= b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record >= other._record
+
+    def __hash__(self) -> int:
+        """
+        Returns the hash of the record.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> isinstance(hash(a), int)
+        True
+        >>>
+        ```
+        """
+        return hash(self._record)
+
     def __str__(self) -> str:
         """
         Returns the string representation of the PackageRecord.

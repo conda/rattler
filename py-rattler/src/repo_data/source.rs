@@ -22,7 +22,7 @@ use crate::record::PyRecord;
 /// source, it must be implemented within the source itself.
 ///
 /// **Performance:** Custom sources are slower than channels because data must be
-/// marshalled between Python and Rust for each request. For performance-critical
+/// marshaled between Python and Rust for each request. For performance-critical
 /// applications, channels should be preferred when possible.
 pub struct PyRepoDataSource {
     inner: Py<PyAny>,
@@ -50,7 +50,7 @@ impl RepoDataSource for PyRepoDataSource {
         &self,
         platform: Platform,
         name: &PackageName,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
         // Clone what we need before the async block
         let name_clone = name.clone();
 
@@ -94,10 +94,10 @@ impl RepoDataSource for PyRepoDataSource {
                     .try_into()
                     .map_err(|e: PyErr| GatewayError::Generic(e.to_string()))?;
 
-                rust_records.push(record);
+                rust_records.push(Arc::new(record));
             }
 
-            Ok(Arc::from(rust_records))
+            Ok(rust_records)
         })
     }
 

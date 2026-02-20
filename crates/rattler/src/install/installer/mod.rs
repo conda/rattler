@@ -833,7 +833,7 @@ async fn populate_cache(
 /// `MinimalPrefixRecord`, which doesn't contain most of the fields.
 /// Therefore direct writing could overwrite data we want to preserve.
 ///
-/// Currently we're loading full json, but we could do that inplace without
+/// Currently we're loading full json, but we could do that in place without
 /// parsing whole file.
 fn update_requested_specs_in_json(
     path: &Path,

@@ -2,7 +2,7 @@ use crate::package::PackageFile;
 use std::path::{Path, PathBuf};
 
 /// Representation of the `info/no_softlink` file in older package archives. This file contains a list
-/// of all files that should not be "softlinked".
+/// of all files that should not be "softlink-ed".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoSoftlink {
     /// A list of files in the package that should not be "softlinked".
