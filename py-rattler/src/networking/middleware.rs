@@ -93,7 +93,7 @@ impl PyOciMiddleware {
 
 impl From<PyOciMiddleware> for OciMiddleware {
     fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
+        OciMiddleware::default()
     }
 }
 
