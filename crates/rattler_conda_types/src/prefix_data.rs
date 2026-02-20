@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use crate::package::ArchiveIdentifier;
+use crate::package_name::PackageName;
 use crate::PrefixRecord;
 
 /// Internal state for a lazily loaded package record
@@ -17,7 +19,7 @@ pub struct PrefixData {
     /// The path to the environment prefix
     prefix_path: PathBuf,
     /// A map of package names to their file path and a lazy lock for the parsed record
-    records: HashMap<String, LazyRecordEntry>,
+    records: HashMap<PackageName, LazyRecordEntry>,
 }
 
 impl PrefixData {
@@ -48,17 +50,18 @@ impl PrefixData {
             }
 
             if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                if let Some(name) = filename
-                    .strip_suffix(".json")
-                    .and_then(|s| s.rsplitn(3, '-').last())
-                {
-                    records.insert(
-                        name.to_string(),
-                        LazyRecordEntry {
-                            path,
-                            record: OnceLock::new(),
-                        },
-                    );
+                if let Some(base_name) = filename.strip_suffix(".json") {
+                    if let Ok(archive_id) = base_name.parse::<ArchiveIdentifier>() {
+                        if let Ok(package_name) = PackageName::try_from(archive_id.name) {
+                            records.insert(
+                                package_name,
+                                LazyRecordEntry {
+                                    path,
+                                    record: OnceLock::new(),
+                                },
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -69,7 +72,10 @@ impl PrefixData {
     }
 
     /// Retrieves a record lazily. Parses the JSON only on the first call.
-    pub fn get(&self, package_name: &str) -> Option<Result<&PrefixRecord, &std::io::Error>> {
+    pub fn get(
+        &self,
+        package_name: &PackageName,
+    ) -> Option<Result<&PrefixRecord, &std::io::Error>> {
         // 1. Check if the file path exists in our initial scan
         let entry = self.records.get(package_name)?;
 
@@ -99,8 +105,9 @@ mod tests {
         fs::write(&fake_json_path, "{}").unwrap();
 
         let prefix_data = PrefixData::new(dir.path()).unwrap();
+        let numpy_name = PackageName::try_from("numpy").unwrap();
         assert!(
-            prefix_data.records.contains_key("numpy"),
+            prefix_data.records.contains_key(&numpy_name),
             "Did not extract package name correctly!"
         );
     }
@@ -119,34 +126,38 @@ mod tests {
 
         let prefix_data = PrefixData::new(dir.path()).unwrap();
 
+        let numpy_name = PackageName::try_from("numpy").unwrap();
+        let scikit_name = PackageName::try_from("scikit-learn").unwrap();
+        let does_not_exist_name = PackageName::try_from("does-not-exist").unwrap();
+
         assert_eq!(
             prefix_data.records.len(),
             2,
             "Should only load the 2 valid .json files"
         );
         assert!(
-            prefix_data.records.contains_key("numpy"),
+            prefix_data.records.contains_key(&numpy_name),
             "Failed to extract simple package name"
         );
         assert!(
-            prefix_data.records.contains_key("scikit-learn"),
+            prefix_data.records.contains_key(&scikit_name),
             "Failed to extract package name with hyphens"
         );
 
-        let numpy_record = prefix_data.get("numpy");
+        let numpy_record = prefix_data.get(&numpy_name);
         assert!(
             numpy_record.unwrap().is_err(),
             "Expected Some(Err) because the JSON is malformed/empty"
         );
 
-        let entry = prefix_data.records.get("numpy").unwrap();
+        let entry = prefix_data.records.get(&numpy_name).unwrap();
         assert!(
             entry.record.get().is_some(),
             "The OnceLock should be populated (with an Err value) after the first get() call"
         );
 
         assert!(
-            prefix_data.get("does-not-exist").is_none(),
+            prefix_data.get(&does_not_exist_name).is_none(),
             "Expected None because the package is not in the directory at all"
         );
     }
