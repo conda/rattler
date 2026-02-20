@@ -1,5 +1,6 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 from rattler import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, Platform
 
