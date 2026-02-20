@@ -1631,6 +1631,13 @@ mod test {
         let cache_path = cache_dir.path().to_owned();
 
         // Launch several concurrent fetches for the same URL.
+        //
+        // IMPORTANT: we drop `CachedRepoData` (and its exclusive `LockedFile`)
+        // with `.map(|_| ())` inside each spawned task, *before* the
+        // `JoinHandle` stores the result.  If we returned `CachedRepoData`
+        // from the task and awaited the handles sequentially, the lock held by
+        // an already-finished task's `JoinHandle` would block the next task
+        // from ever acquiring the lock, causing a deadlock.
         let fetches: Vec<_> = (0..4)
             .map(|_| {
                 let url = server_url.clone();
@@ -1648,6 +1655,9 @@ mod test {
                         None,
                     )
                     .await
+                    // Drop CachedRepoData (and its exclusive lock) right here
+                    // so that remaining tasks can proceed immediately.
+                    .map(|_| ())
                 })
             })
             .collect();
