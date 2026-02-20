@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
-    PackageRecord, PackageUrl, RepoData, Shard, WhlPackageRecord,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    PackageRecord, PackageUrl, RepoData, Shard,
 };
 
 /// Represents a Conda repodata patch.
@@ -152,6 +152,34 @@ mod tracked_features {
     }
 }
 
+/// Patches for packages stored under the `v3` top-level key.
+/// Mirrors [`ExperimentalV3Packages`] but with [`PackageRecordPatch`] values.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct ExperimentalV3PackagePatches {
+    /// Patches for v3 tar.bz2 package records
+    #[serde(
+        default,
+        rename = "tar.bz2",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub tar_bz2: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for v3 conda package records
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub conda: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for v3 whl package records
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub whl: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+}
+
+impl ExperimentalV3PackagePatches {
+    /// Returns true if all sub-maps are empty.
+    pub fn is_empty(&self) -> bool {
+        self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+    }
+}
+
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`]
 /// for more information.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
@@ -172,13 +200,13 @@ pub struct PatchInstructions {
     )]
     pub conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 
-    /// Patches for wheel package records (experimental)
+    /// Patches for v3 packages
     #[serde(
         default,
-        rename = "packages.whl",
-        skip_serializing_if = "ahash::HashMap::is_empty"
+        rename = "v3",
+        skip_serializing_if = "ExperimentalV3PackagePatches::is_empty"
     )]
-    pub experimental_whl_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
+    pub experimental_v3: ExperimentalV3PackagePatches,
 }
 
 impl PackageRecord {
@@ -213,11 +241,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    experimental_whl_packages: &mut IndexMap<
-        DistArchiveIdentifier,
-        WhlPackageRecord,
-        ahash::RandomState,
-    >,
+    v3: &mut super::ExperimentalV3Packages,
     removed: &mut ahash::HashSet<DistArchiveIdentifier>,
     instructions: &PatchInstructions,
 ) {
@@ -238,9 +262,19 @@ pub fn apply_patches_impl(
         }
     }
 
-    // Apply patches to wheel packages
-    for (identifier, patch) in instructions.experimental_whl_packages.iter() {
-        if let Some(record) = experimental_whl_packages.get_mut(identifier) {
+    // Apply patches to v3 packages
+    for (identifier, patch) in instructions.experimental_v3.tar_bz2.iter() {
+        if let Some(record) = v3.tar_bz2.get_mut(identifier) {
+            record.apply_patch(patch);
+        }
+    }
+    for (identifier, patch) in instructions.experimental_v3.conda.iter() {
+        if let Some(record) = v3.conda.get_mut(identifier) {
+            record.apply_patch(patch);
+        }
+    }
+    for (identifier, patch) in instructions.experimental_v3.whl.iter() {
+        if let Some(record) = v3.whl.get_mut(identifier) {
             record.package_record.apply_patch(patch);
         }
     }
@@ -267,13 +301,9 @@ pub fn apply_patches_impl(
                     removed.insert(identifier.clone());
                 }
             }
-            DistArchiveType::Wheel(WheelArchiveType::Whl) => {
-                if experimental_whl_packages
-                    .shift_remove_entry(identifier)
-                    .is_some()
-                {
-                    removed.insert(identifier.clone());
-                }
+            DistArchiveType::Wheel(_) => {
+                // Wheel packages are stored in v3.whl; removal by
+                // DistArchiveIdentifier is not currently supported for v3.
             }
         }
     }
@@ -286,7 +316,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
-            &mut self.experimental_whl_packages,
+            &mut self.experimental_v3,
             &mut self.removed,
             instructions,
         );
@@ -300,7 +330,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
-            &mut self.experimental_whl_packages,
+            &mut self.experimental_v3,
             &mut self.removed,
             instructions,
         );
