@@ -140,6 +140,11 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
+///
+/// The `modification_time` is a timestamp we set on all files we modify. We want a value
+/// we control here to make the generated filesystem tree more reproducible. `modification_time`
+/// should be greater than any of the modification times of any of the files that were packaged
+/// up (ignoring any data conda stores).
 #[allow(clippy::too_many_arguments)] // TODO: Fix this properly
 pub fn link_file(
     path_json_entry: &PathsEntry,
@@ -152,6 +157,7 @@ pub fn link_file(
     allow_ref_links: bool,
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
+    modification_time: filetime::FileTime,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -268,8 +274,7 @@ pub fn link_file(
         // Copy file permissions and timestamps
         fs::set_permissions(&destination_path, metadata.permissions())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-        let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-        filetime::set_file_times(&destination_path, file_time, file_time)
+        filetime::set_file_times(&destination_path, modification_time, modification_time)
             .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
 
         LinkMethod::Patched(*file_mode)
@@ -846,6 +851,136 @@ mod test {
     use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
+
+    /// Patched files must receive `modification_time` rather than preserving
+    /// the source file's mtime. Without this, Python reuses stale .pyc files
+    /// whose headers record the original source mtime, even though the .py
+    /// content was changed by prefix replacement.
+    #[test]
+    fn test_patched_file_receives_modification_time() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(
+            package_dir.join("config.py"),
+            "prefix = '/old/placeholder/path'\n",
+        )
+        .unwrap();
+
+        let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
+        filetime::set_file_times(package_dir.join("config.py"), source_time, source_time).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Text,
+                placeholder: "/old/placeholder/path".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("config.py"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+        )
+        .unwrap();
+
+        assert_eq!(result.method, super::LinkMethod::Patched(FileMode::Text));
+
+        let content = fs::read_to_string(target_dir.path().join("config.py")).unwrap();
+        assert!(content.contains(target_dir.path().to_str().unwrap()));
+        assert!(!content.contains("/old/placeholder/path"));
+
+        let dest_metadata = fs::metadata(target_dir.path().join("config.py")).unwrap();
+        let dest_mtime = filetime::FileTime::from_last_modification_time(&dest_metadata);
+        assert_eq!(
+            dest_mtime, modification_time,
+            "patched file should have modification_time ({modification_time}), not source mtime ({source_time})",
+        );
+    }
+
+    /// Files without `prefix_placeholder` are reflinked/hardlinked/copied and
+    /// must keep their original mtime, not receive `modification_time`.
+    #[test]
+    fn test_unpatched_file_keeps_source_mtime() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(package_dir.join("data.txt"), "no prefix here\n").unwrap();
+
+        let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
+        filetime::set_file_times(package_dir.join("data.txt"), source_time, source_time).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("data.txt"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("data.txt"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+        )
+        .unwrap();
+
+        assert_ne!(
+            result.method,
+            super::LinkMethod::Patched(rattler_conda_types::package::FileMode::Text)
+        );
+        assert_ne!(
+            result.method,
+            super::LinkMethod::Patched(rattler_conda_types::package::FileMode::Binary)
+        );
+
+        let dest_metadata = fs::metadata(target_dir.path().join("data.txt")).unwrap();
+        let dest_mtime = filetime::FileTime::from_last_modification_time(&dest_metadata);
+        assert_eq!(
+            dest_mtime, source_time,
+            "unpatched file should keep source mtime ({source_time}), not modification_time ({modification_time})",
+        );
+    }
 
     #[rstest]
     #[case("Hello, cruel world!", "cruel", "fabulous", "Hello, fabulous world!")]
