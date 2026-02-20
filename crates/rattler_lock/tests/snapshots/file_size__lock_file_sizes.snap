@@ -1,0 +1,8 @@
+---
+source: crates/rattler_lock/tests/file_size.rs
+assertion_line: 62
+expression: report
+---
+python: raw=42107, zstd=7829, ratio=5.4x
+numpy: raw=407812, zstd=60287, ratio=6.8x
+turtlesim: raw=1351469, zstd=221151, ratio=6.1x
