@@ -182,7 +182,8 @@ impl PyPtyProcess {
             WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
             WaitStatus::Stopped(_, _) => "Stopped".to_string(),
             WaitStatus::StillAlive => "StillAlive".to_string(),
-            WaitStatus::Continued(_) => "Unknown".to_string(),
+            #[allow(clippy::match_wildcard_for_single_variants)]
+            _ => "Unknown".to_string(),
         })
     }
 
