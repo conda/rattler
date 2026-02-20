@@ -725,7 +725,7 @@ async fn link_package(
     let _io_permit = driver.acquire_io_permit().await.map_err(|_| {
         InstallerError::IoError(
             "IO semaphore closed".to_string(),
-            std::io::Error::new(std::io::ErrorKind::Other, "semaphore closed"),
+            std::io::Error::other("semaphore closed"),
         )
     })?;
     let (tx, rx) = tokio::sync::oneshot::channel();
