@@ -1,6 +1,7 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
 use crate::package::DistArchiveIdentifier;
+use crate::repo_data::ExperimentalV3Packages;
 use crate::PackageRecord;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
@@ -54,6 +55,10 @@ pub struct Shard {
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+
+    /// Packages stored under the `v3` top-level key.
+    #[serde(default, rename = "v3")]
+    pub experimental_v3: ExperimentalV3Packages,
 
     /// The file names of all removed for this shard
     #[serde(default)]
