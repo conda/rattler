@@ -107,7 +107,7 @@ pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use platform::{OwnedPlatform, ParsePlatformError, Platform, PlatformData, PlatformName};
-pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
+pub use pypi::{PypiPackageData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::{Matches, RepoDataRecord};
 pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
@@ -139,7 +139,6 @@ struct LockFileInner {
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
-    pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
     environment_lookup: ahash::HashMap<String, usize>,
 }
@@ -151,7 +150,7 @@ struct LockFileInner {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 enum EnvironmentPackageData {
     Conda(usize),
-    Pypi(usize, usize),
+    Pypi(usize),
 }
 
 /// Information about a specific environment in the lock file.
@@ -354,10 +353,9 @@ impl<'lock> Environment<'lock> {
                     EnvironmentPackageData::Conda(data) => {
                         LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                     }
-                    EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
-                        &self.lock_file.inner.pypi_packages[*data],
-                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
-                    ),
+                    EnvironmentPackageData::Pypi(data) => {
+                        LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
+                    }
                 }),
         )
     }
@@ -385,10 +383,9 @@ impl<'lock> Environment<'lock> {
                         EnvironmentPackageData::Conda(data) => {
                             LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                         }
-                        EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
-                            &self.lock_file.inner.pypi_packages[*data],
-                            &self.lock_file.inner.pypi_environment_package_data[*env_data],
-                        ),
+                        EnvironmentPackageData::Pypi(data) => {
+                            LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
+                        }
                     }),
                 )
             })
@@ -400,7 +397,7 @@ impl<'lock> Environment<'lock> {
     ) -> impl ExactSizeIterator<
         Item = (
             Platform<'_>,
-            impl DoubleEndedIterator<Item = (&'_ PypiPackageData, &'_ PypiPackageEnvironmentData)>,
+            impl DoubleEndedIterator<Item = &'_ PypiPackageData>,
         ),
     > + '_ {
         self.packages_by_platform()
@@ -478,10 +475,7 @@ impl<'lock> Environment<'lock> {
     pub fn pypi_packages(
         &self,
         platform: Platform<'lock>,
-    ) -> Option<
-        impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>
-            + '_,
-    > {
+    ) -> Option<impl DoubleEndedIterator<Item = &'lock PypiPackageData> + '_> {
         self.packages(platform)
             .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
     }
@@ -532,7 +526,7 @@ pub enum LockedPackageRef<'lock> {
     Conda(&'lock CondaPackageData),
 
     /// A pypi package
-    Pypi(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData),
+    Pypi(&'lock PypiPackageData),
 }
 
 impl<'lock> LockedPackageRef<'lock> {
@@ -541,7 +535,7 @@ impl<'lock> LockedPackageRef<'lock> {
     pub fn name(self) -> &'lock str {
         match self {
             LockedPackageRef::Conda(data) => data.record().name.as_source(),
-            LockedPackageRef::Pypi(data, _) => data.name.as_ref(),
+            LockedPackageRef::Pypi(data) => data.name.as_ref(),
         }
     }
 
@@ -549,15 +543,15 @@ impl<'lock> LockedPackageRef<'lock> {
     pub fn location(self) -> &'lock UrlOrPath {
         match self {
             LockedPackageRef::Conda(data) => data.location(),
-            LockedPackageRef::Pypi(data, _) => &data.location,
+            LockedPackageRef::Pypi(data) => &data.location,
         }
     }
 
     /// Returns the pypi package if this is a pypi package.
-    pub fn as_pypi(self) -> Option<(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)> {
+    pub fn as_pypi(self) -> Option<&'lock PypiPackageData> {
         match self {
             LockedPackageRef::Conda(_) => None,
-            LockedPackageRef::Pypi(data, env) => Some((data, env)),
+            LockedPackageRef::Pypi(data) => Some(data),
         }
     }
 
