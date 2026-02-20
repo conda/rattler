@@ -6,8 +6,8 @@ use rattler::install::TransactionError;
 use rattler_conda_types::{
     version_spec::ParseVersionSpecError, ConvertSubdirError, InvalidPackageNameError,
     PackageNameMatcherParseError, ParseArchError, ParseChannelError, ParseMatchSpecError,
-    ParsePlatformError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    ParsePackageArchiveHashError, ParsePlatformError, ParseVersionError,
+    ValidatePackageRecordsError, VersionBumpError, VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
@@ -93,6 +93,8 @@ pub enum PyRattlerError {
     InvalidHeaderValueError(#[from] reqwest::header::InvalidHeaderValue),
     #[error(transparent)]
     FromSdkError(#[from] rattler_s3::FromSDKError),
+    #[error(transparent)]
+    ParsePackageArchiveHashError(#[from] ParsePackageArchiveHashError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -200,6 +202,9 @@ impl From<PyRattlerError> for PyErr {
                 InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
+            PyRattlerError::ParsePackageArchiveHashError(err) => {
+                PyValueError::new_err(pretty_print_error(&err))
+            }
         }
     }
 }

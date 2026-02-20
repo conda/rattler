@@ -60,3 +60,59 @@ http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
 def test_parse_invalid_explicit_environment() -> None:
     with pytest.raises(Exception):
         ExplicitEnvironmentSpec.from_str("invalid content # platform: invalid-platform")
+
+
+def test_explicit_environment_constructor() -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
+
+    assert spec.platform == Platform("linux-64")
+    assert len(spec.packages) == 1
+    assert spec.packages[0].url == "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash"
+
+
+def test_explicit_environment_to_spec_string() -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
+
+    spec_str = spec.to_spec_string()
+    assert "# platform: linux-64" in spec_str
+    assert "@EXPLICIT" in spec_str
+    assert "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash" in spec_str
+
+
+def test_explicit_environment_to_path(tmp_path: Path) -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("win-64"))
+
+    path = tmp_path / "explicit_env.txt"
+    spec.to_path(path)
+
+    assert path.exists()
+    content = path.read_text()
+    assert "# platform: win-64" in content
+    assert "@EXPLICIT" in content
+    assert "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash" in content
+
+
+def test_explicit_environment_entry_hash() -> None:
+    # Test MD5
+    entry_md5 = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#d7c89558ba9fa0495403155b64376d81"
+    )
+    assert entry_md5.package_archive_hash is not None
+    assert isinstance(entry_md5.package_archive_hash, bytes)
+    assert entry_md5.package_archive_hash.hex() == "d7c89558ba9fa0495403155b64376d81"
+
+    # Test SHA256
+    sha256_hex = "1030174db5c183f3afb4181a0a02873d1030174db5c183f3afb4181a0a02873d"
+    entry_sha256 = ExplicitEnvironmentEntry(
+        f"https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#{sha256_hex}"
+    )
+    assert entry_sha256.package_archive_hash is not None
+    assert entry_sha256.package_archive_hash.hex() == sha256_hex
+
+    # Test no hash
+    entry_no_hash = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2")
+    assert entry_no_hash.package_archive_hash is None
+
