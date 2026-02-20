@@ -11,19 +11,23 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+bytes = { workspace = true, optional = true }
 bzip2 = { workspace = true }
 chrono = { workspace = true }
+http = { workspace = true, optional = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
-rattler_digest = { workspace = true, default-features = false, features = ["tokio"] }
+rattler_digest = { workspace = true, default-features = false, features = [
+  "tokio",
+] }
 rattler_networking = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",
 ], default-features = false }
-reqwest = { workspace = true, features = ["stream"], optional = true }
+reqwest = { workspace = true, features = ["stream", "http2"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 serde_json = { workspace = true }
@@ -35,7 +39,12 @@ tokio-util = { workspace = true, features = ["io-util"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
-astral_async_zip = { workspace = true, features = ["deflate", "tokio", "tokio-fs"] }
+# https://github.com/Majored/rs-async-zip/issues/173
+astral_async_zip = { workspace = true, features = [
+  "deflate",
+  "tokio",
+  "tokio-fs",
+] }
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
@@ -55,7 +64,13 @@ getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
 default = ["rustls-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
-reqwest = ["dep:reqwest-middleware", "dep:reqwest", "dep:fs-err"]
+reqwest = [
+  "dep:reqwest-middleware",
+  "dep:reqwest",
+  "dep:fs-err",
+  "dep:bytes",
+  "dep:http",
+]
 wasm = ["zstd/wasm"]
 
 [package.metadata.docs.rs]
