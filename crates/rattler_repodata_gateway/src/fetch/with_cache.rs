@@ -173,6 +173,21 @@ async fn repodata_from_file(
 ///
 /// The checks to see if a `.zst` and/or `.bz2` file exist are performed by
 /// doing a HEAD request to the respective URLs. The result of these are cached.
+///
+/// ## Concurrent access and Windows memory-mapping
+///
+/// Multiple processes or threads may call this function for the same channel
+/// simultaneously. When the server returns no caching headers every caller will
+/// download the file and then try to atomically replace the cached copy.  On
+/// **Windows**, a file that is currently memory-mapped (`memmap2`) by another
+/// caller cannot be overwritten in-place.  To avoid the resulting
+/// "access denied" error this function:
+///
+/// 1. Renames the existing cache file to a temporary *deprecated* path before
+///    writing the new file (renaming an open file is allowed on Windows).
+/// 2. Cleans up any leftover deprecated files on a best-effort basis while the
+///    exclusive lock is held; failures are silently ignored because the file may
+///    still be held open by another process.
 #[instrument(err(level = Level::INFO), skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
@@ -442,14 +457,51 @@ pub async fn fetch_repo_data(
         reporter.on_download_complete(&response_url, index);
     }
 
-    // Persist the file to its final destination
+    // Persist the file to its final destination.
+    //
+    // On Windows, a file that is memory-mapped by another process cannot be
+    // replaced in-place (the rename syscall returns an "access denied" error).
+    // This happens when a concurrent caller has already fetched the same
+    // repodata, released the lock, and opened the file via `SparseRepoData`
+    // (which uses `memmap2`).
+    //
+    // The workaround: if the destination already exists, move it to a
+    // uniquely-named "deprecated" path first (renaming an open file is always
+    // allowed on Windows), then place the newly downloaded file at the
+    // canonical location. Stale deprecated files are cleaned up eagerly on the
+    // next fetch while the exclusive lock is still held.
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
+        // Remove any leftover deprecated files from previous concurrent writes.
+        cleanup_deprecated_repodata_files(&repo_data_destination_path);
+
+        // If the destination already exists, move it out of the way so that
+        // persisting the new file does not fail on Windows (see comment above).
+        if repo_data_destination_path.exists() {
+            let deprecated = deprecated_repodata_path(&repo_data_destination_path);
+            if let Err(err) =
+                std::fs::rename(&repo_data_destination_path, &deprecated)
+            {
+                tracing::warn!(
+                    "failed to move existing repodata cache aside before \
+                     replacing it ({}); attempting an in-place replace instead",
+                    err
+                );
+            }
+        }
+
         let file = temp_file
             .persist(repo_data_destination_path.clone())
             .map_err(|e| {
-                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path.clone())
             })?;
+
+        // Attempt a best-effort cleanup of deprecated files once more now that
+        // the new canonical file is in place. This catches the deprecated file
+        // that *we* just created above. On Windows the file may still be
+        // memory-mapped (and thus undeletable) by another process that holds an
+        // older snapshot; failures are silently ignored.
+        cleanup_deprecated_repodata_files(&repo_data_destination_path);
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding
@@ -695,6 +747,69 @@ async fn check_valid_download_target(url: &Url, client: &LazyClient) -> bool {
                 );
                 false
             }
+        }
+    }
+}
+
+/// Returns a unique "deprecated" path alongside the given repodata JSON path.
+///
+/// When the existing cache file needs to be moved out of the way before a new
+/// one is written (see the persist step in [`fetch_repo_data`]), it is renamed
+/// to this path. The name embeds a nanosecond timestamp so multiple concurrent
+/// writers never collide on the same backup name.
+///
+/// Example: `/cache/302f0a61.json` → `/cache/302f0a61.json.deprecated.1700000000000000000`
+fn deprecated_repodata_path(json_path: &std::path::Path) -> std::path::PathBuf {
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let file_name = json_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("repodata.json");
+    json_path.with_file_name(format!("{file_name}.deprecated.{suffix}"))
+}
+
+/// Deletes any leftover "deprecated" repodata files that were moved aside by a
+/// previous [`fetch_repo_data`] call.
+///
+/// This is called while the exclusive cache lock is held, so no other process
+/// can create new deprecated files for the same cache key at the same time.
+/// Deletion is best-effort: on Windows a file that is still memory-mapped
+/// cannot be deleted, so failures are silently ignored.
+fn cleanup_deprecated_repodata_files(json_path: &std::path::Path) {
+    let Some(dir) = json_path.parent() else {
+        return;
+    };
+    let Some(file_name) = json_path.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let prefix = format!("{file_name}.deprecated.");
+    match std::fs::read_dir(dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(&prefix)
+                {
+                    if let Err(err) = std::fs::remove_file(entry.path()) {
+                        tracing::debug!(
+                            "could not remove deprecated repodata cache file {:?}: {}",
+                            entry.path(),
+                            err
+                        );
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            tracing::debug!(
+                "could not read cache directory {:?} during deprecated file cleanup: {}",
+                dir,
+                err
+            );
         }
     }
 }
@@ -1483,6 +1598,87 @@ mod test {
             *request_count.lock().await,
             2,
             "there must have been exactly two requests"
+        );
+    }
+
+    /// Regression test for <https://github.com/conda/rattler/issues/1952>.
+    ///
+    /// When multiple tasks fetch the same channel concurrently and the server
+    /// returns no caching headers, every task downloads the file and then tries
+    /// to persist its temporary file to the same cache path.  On Windows, the
+    /// second writer fails with "access denied" because the first writer already
+    /// opened the file via `memmap2`.  The fix moves the existing file aside
+    /// before persisting the new one.
+    #[tracing_test::traced_test]
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_concurrent_fetch_no_cache_headers() {
+        use axum::{http::HeaderMap, routing::get};
+
+        // A handler that serves repodata.json without any caching headers.
+        async fn serve_repodata() -> impl IntoResponse {
+            (HeaderMap::new(), FAKE_REPO_DATA)
+        }
+
+        let router = Router::new().route("/repodata.json", get(serve_repodata));
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+
+        let server_url = Url::parse(&format!("http://localhost:{}/", addr.port())).unwrap();
+        let cache_dir = TempDir::new().unwrap();
+        let cache_path = cache_dir.path().to_owned();
+
+        // Launch several concurrent fetches for the same URL.
+        let fetches: Vec<_> = (0..4)
+            .map(|_| {
+                let url = server_url.clone();
+                let cache = cache_path.clone();
+                tokio::spawn(async move {
+                    fetch_repo_data(
+                        url,
+                        LazyClient::default(),
+                        cache,
+                        FetchRepoDataOptions {
+                            bz2_enabled: false,
+                            zstd_enabled: false,
+                            ..FetchRepoDataOptions::default()
+                        },
+                        None,
+                    )
+                    .await
+                })
+            })
+            .collect();
+
+        for handle in fetches {
+            handle
+                .await
+                .expect("task should not panic")
+                .expect("fetch should succeed even when concurrent writers race");
+        }
+
+        // After all fetches, the cache should contain exactly the canonical JSON
+        // file and no leftover deprecated files.
+        let cache_key = crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
+        let json_path = cache_path.join(format!("{cache_key}.json"));
+        assert!(
+            json_path.exists(),
+            "canonical repodata.json cache file must exist"
+        );
+        let deprecated_count = std::fs::read_dir(&cache_path)
+            .unwrap()
+            .flatten()
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .contains(".json.deprecated.")
+            })
+            .count();
+        assert_eq!(
+            deprecated_count, 0,
+            "all deprecated files should have been cleaned up"
         );
     }
 }

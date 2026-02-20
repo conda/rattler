@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- avoid "access denied" on Windows when multiple processes persist repodata to the same cache path concurrently ([#1952](https://github.com/conda/rattler/issues/1952))
+
 ## [0.26.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.12...rattler_repodata_gateway-v0.26.0) - 2026-02-19
 
 ### Added
