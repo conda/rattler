@@ -35,6 +35,15 @@ mod conda_sorting;
 
 type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 
+/// A dependency override rule.
+#[derive(Clone)]
+pub struct DependencyOverride {
+    /// Matches packages whose dependencies should be overridden.
+    pub package_matcher: MatchSpec,
+    /// Replaces matching dependencies.
+    pub override_spec: MatchSpec,
+}
+
 /// Represents the information required to load available packages into libsolv
 /// for a single channel and platform combination
 #[derive(Clone)]
@@ -275,6 +284,8 @@ pub struct CondaDependencyProvider<'a> {
     strategy: SolveStrategy,
 
     direct_dependencies: HashSet<NameId>,
+
+    dependency_overrides: HashMap<PackageName, Vec<DependencyOverride>>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -291,6 +302,7 @@ impl<'a> CondaDependencyProvider<'a> {
         exclude_newer: Option<DateTime<Utc>>,
         min_age: Option<&MinimumAgeConfig>,
         strategy: SolveStrategy,
+        dependency_overrides: Vec<DependencyOverride>,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -544,6 +556,16 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.hint_dependencies_available = HintDependenciesAvailable::All;
         }
 
+        // Build a lookup table for dependency overrides keyed by target package name.
+        let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
+        for rule in dependency_overrides {
+            if let Some(name) = rule.override_spec.name.as_ref() {
+                if let Some(name) = Option::<PackageName>::from(name.clone()) {
+                    override_map.entry(name).or_default().push(rule);
+                }
+            }
+        }
+
         Ok(Self {
             pool,
             name_to_condition: RefCell::default(),
@@ -553,6 +575,7 @@ impl<'a> CondaDependencyProvider<'a> {
             stop_time,
             strategy,
             direct_dependencies,
+            dependency_overrides: override_map,
         })
     }
 
@@ -572,6 +595,22 @@ impl<'a> CondaDependencyProvider<'a> {
             self.pool
                 .intern_condition(Condition::Requirement(version_set))
         })
+    }
+
+    fn apply_dependency_override(
+        &self,
+        record: &RepoDataRecord,
+        dep_spec: &MatchSpec,
+    ) -> Option<String> {
+        let dep_name = dep_spec.name.as_ref()?;
+        let dep_name = Option::<PackageName>::from(dep_name.clone())?;
+        let rules = self.dependency_overrides.get(&dep_name)?;
+        for rule in rules {
+            if rule.package_matcher.matches(&record.package_record) {
+                return Some(rule.override_spec.to_string());
+            }
+        }
+        None
     }
 }
 
@@ -704,7 +743,14 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
-            let specs = match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+            // Try to parse the dependency and check for overrides.
+            let dep_str = match MatchSpec::from_str(depends, ParseMatchSpecOptions::lenient()) {
+                Ok(dep_spec) => self
+                    .apply_dependency_override(record, &dep_spec)
+                    .unwrap_or_else(|| depends.clone()),
+                Err(_) => depends.clone(),
+            };
+            let specs = match parse_match_spec(&self.pool, &dep_str, &mut parse_match_spec_cache) {
                 Ok(version_set_id) => version_set_id,
                 Err(e) => {
                     tracing::debug!(
@@ -712,12 +758,12 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         record.package_record.subdir,
                         record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
-                        depends,
+                        dep_str,
                         e
                     );
                     let reason = self
                         .pool
-                        .intern_string(format!("the dependency '{depends}' failed to parse: {e}",));
+                        .intern_string(format!("the dependency '{dep_str}' failed to parse: {e}",));
 
                     return Dependencies::Unknown(reason);
                 }
@@ -906,6 +952,15 @@ impl super::SolverImpl for Solver {
             .map(|timeout| std::time::SystemTime::now() + timeout);
 
         // Construct a provider that can serve the data.
+        let dependency_overrides: Vec<DependencyOverride> = task
+            .dependency_overrides
+            .into_iter()
+            .map(|(package_matcher, override_spec)| DependencyOverride {
+                package_matcher,
+                override_spec,
+            })
+            .collect();
+
         let provider = CondaDependencyProvider::new(
             task.available_packages.into_iter().map(|r| r.into()),
             &task.locked_packages,
@@ -917,6 +972,7 @@ impl super::SolverImpl for Solver {
             task.exclude_newer,
             task.min_age.as_ref(),
             task.strategy,
+            dependency_overrides,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.
