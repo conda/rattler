@@ -60,9 +60,9 @@ impl PyMinimumAgeConfig {
     /// Args:
     ///     seconds: The minimum age in seconds that a package must have been
     ///         published before it can be installed.
-    ///     exempt_packages: Optional list of package names that are exempt
+    ///     `exempt_packages`: Optional list of package names that are exempt
     ///         from the minimum age requirement.
-    ///     include_unknown_timestamp: Whether to include packages without a
+    ///     `include_unknown_timestamp`: Whether to include packages without a
     ///         timestamp. Defaults to False (exclude them).
     #[new]
     #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false))]
