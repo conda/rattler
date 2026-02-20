@@ -22,5 +22,4 @@ packages.conda:
     subdir: win-64
     timestamp: 1744247964462
     version: 2.6.0
-packages.whl: {}
 repodata_version: 1

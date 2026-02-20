@@ -180,5 +180,4 @@ packages:
     timestamp: 1605110689658
     version: "2.1"
 packages.conda: {}
-packages.whl: {}
 repodata_version: 2

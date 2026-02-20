@@ -127,6 +127,15 @@ pub struct DistArchiveIdentifier {
 }
 
 impl DistArchiveIdentifier {
+    /// Constructs a new [`DistArchiveIdentifier`] from an
+    /// [`ArchiveIdentifier`] and an archive type.
+    pub fn new(identifier: ArchiveIdentifier, archive_type: impl Into<DistArchiveType>) -> Self {
+        Self {
+            identifier,
+            archive_type: archive_type.into(),
+        }
+    }
+
     /// Returns a new version but with a different archive type.
     pub fn with_archive_type(&self, archive_type: DistArchiveType) -> Self {
         Self {
