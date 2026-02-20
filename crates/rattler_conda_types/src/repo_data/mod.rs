@@ -23,7 +23,10 @@ use url::Url;
 
 use crate::{
     build_spec::BuildNumber,
-    package::{DistArchiveIdentifier, IndexJson, RunExportsJson},
+    package::{
+        ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
+        WheelArchiveType,
+    },
     utils::{
         serde::{
             sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
@@ -57,14 +60,15 @@ pub struct RepoData {
     )]
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
-    /// The wheel packages contained in the repodata.json file
+    /// Packages stored under the `v3` top-level key.
+    /// Uses extension-less `ArchiveIdentifier` keys with sub-maps for each
+    /// archive type.
     #[serde(
         default,
-        rename = "packages.whl",
-        serialize_with = "sort_index_map_alphabetically"
+        rename = "v3",
+        skip_serializing_if = "ExperimentalV3Packages::is_empty"
     )]
-    pub experimental_whl_packages:
-        IndexMap<DistArchiveIdentifier, WhlPackageRecord, ahash::RandomState>,
+    pub experimental_v3: ExperimentalV3Packages,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -89,6 +93,45 @@ pub struct ChannelInfo {
     /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+}
+
+/// Packages stored under the `v3` top-level key.
+///
+/// Records in this set of packages can have conditional dependencies, extras
+/// and can be whls.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct ExperimentalV3Packages {
+    /// The tar.bz2 package records
+    #[serde(
+        default,
+        rename = "tar.bz2",
+        serialize_with = "sort_map_alphabetically",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub tar_bz2: ahash::HashMap<ArchiveIdentifier, PackageRecord>,
+
+    /// The conda package records
+    #[serde(
+        default,
+        serialize_with = "sort_map_alphabetically",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub conda: ahash::HashMap<ArchiveIdentifier, PackageRecord>,
+
+    /// The whl package records
+    #[serde(
+        default,
+        serialize_with = "sort_map_alphabetically",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub whl: ahash::HashMap<ArchiveIdentifier, WhlPackageRecord>,
+}
+
+impl ExperimentalV3Packages {
+    /// Returns true if all sub-maps are empty.
+    pub fn is_empty(&self) -> bool {
+        self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+    }
 }
 
 /// Trait to allow for generic deserialization of records from a path.
@@ -363,41 +406,61 @@ impl RepoData {
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
         let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
         let base_url = self.base_url().map(ToOwned::to_owned);
+        let channel_str = channel.base_url.as_str().to_string();
 
-        // Determine the base_url of the channel
-        for (identifier, package_record) in self.packages.into_iter().chain(self.conda_packages) {
+        let subdir_url = |subdir: &str| {
+            channel
+                .base_url
+                .url()
+                .join(subdir)
+                .expect("cannot join channel base_url and subdir")
+        };
+
+        // Conda packages: packages, packages.conda, v3.tar.bz2, v3.conda
+        let v3_tar_bz2 = self.experimental_v3.tar_bz2.into_iter().map(|(id, rec)| {
+            (
+                DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
+                rec,
+            )
+        });
+        let v3_conda = self
+            .experimental_v3
+            .conda
+            .into_iter()
+            .map(|(id, rec)| (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec));
+
+        for (identifier, package_record) in self
+            .packages
+            .into_iter()
+            .chain(self.conda_packages)
+            .chain(v3_tar_bz2)
+            .chain(v3_conda)
+        {
             records.push(RepoDataRecord {
                 url: compute_package_url(
-                    &channel
-                        .base_url
-                        .url()
-                        .join(&package_record.subdir)
-                        .expect("cannot join channel base_url and subdir"),
+                    &subdir_url(&package_record.subdir),
                     base_url.as_deref(),
                     &identifier.to_file_name(),
                 ),
-                channel: Some(channel.base_url.as_str().to_string()),
+                channel: Some(channel_str.clone()),
                 package_record,
                 identifier,
             });
         }
 
-        // Determine the base_url of the channel
+        // Whl packages: v3.whl
         for (
-            identifier,
+            id,
             WhlPackageRecord {
                 url,
                 package_record,
             },
-        ) in self.experimental_whl_packages
+        ) in self.experimental_v3.whl
         {
+            let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
             let url = match url {
                 UrlOrPath::Path(path) => compute_package_url(
-                    &channel
-                        .base_url
-                        .url()
-                        .join(&package_record.subdir)
-                        .expect("cannot join channel base_url and subdir"),
+                    &subdir_url(&package_record.subdir),
                     base_url.as_deref(),
                     &path,
                 ),
@@ -406,9 +469,9 @@ impl RepoData {
 
             records.push(RepoDataRecord {
                 url,
-                channel: Some(channel.base_url.as_str().to_string()),
+                channel: Some(channel_str.clone()),
                 package_record,
-                identifier,
+                identifier: dist_id,
             });
         }
 
@@ -571,6 +634,42 @@ pub struct SubdirRunExportsJson {
         serialize_with = "sort_map_alphabetically"
     )]
     conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRunExports>,
+
+    /// Run exports for v3 packages.
+    #[serde(
+        default,
+        rename = "v3",
+        skip_serializing_if = "ExperimentalV3RunExports::is_empty"
+    )]
+    experimental_v3: ExperimentalV3RunExports,
+}
+
+/// Run exports for packages stored under the `v3` top-level key.
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
+struct ExperimentalV3RunExports {
+    /// Run exports for v3 tar.bz2 packages
+    #[serde(
+        default,
+        rename = "tar.bz2",
+        serialize_with = "sort_map_alphabetically",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    tar_bz2: ahash::HashMap<ArchiveIdentifier, PackageRunExports>,
+
+    /// Run exports for v3 conda packages
+    #[serde(
+        default,
+        serialize_with = "sort_map_alphabetically",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    conda: ahash::HashMap<ArchiveIdentifier, PackageRunExports>,
+}
+
+impl ExperimentalV3RunExports {
+    /// Returns true if all sub-maps are empty.
+    pub fn is_empty(&self) -> bool {
+        self.tar_bz2.is_empty() && self.conda.is_empty()
+    }
 }
 
 impl SubdirRunExportsJson {
@@ -580,6 +679,12 @@ impl SubdirRunExportsJson {
         self.packages
             .get(file_name)
             .or_else(|| self.conda_packages.get(file_name))
+            .or_else(|| {
+                self.experimental_v3
+                    .tar_bz2
+                    .get(&file_name.identifier)
+                    .or_else(|| self.experimental_v3.conda.get(&file_name.identifier))
+            })
             .map(|pre| &pre.run_exports)
     }
 
@@ -724,7 +829,7 @@ mod test {
     use crate::{
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
-        Channel, ChannelConfig, PackageRecord, RepoData,
+        Channel, ChannelConfig, ExperimentalV3Packages, PackageRecord, RepoData,
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -746,7 +851,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_whl_packages: IndexMap::default(),
+            experimental_v3: ExperimentalV3Packages::default(),
             removed: [
                 "xyz-1-py.conda",
                 "foo-1-py.conda",
@@ -1003,7 +1108,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            experimental_whl_packages: IndexMap::default(),
+            experimental_v3: ExperimentalV3Packages::default(),
             removed: ahash::HashSet::default(),
         };
 
