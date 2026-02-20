@@ -35,13 +35,10 @@ use std::ops::Deref;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
-    ActivationError, CacheDirError, ConvertSubdirError, DetectVirtualPackageError,
-    EnvironmentCreationError, ExtractError, FetchRepoDataError,
-    InvalidChannelError, InvalidMatchSpecError, InvalidPackageNameError,
+    CacheDirError, EnvironmentCreationError,
+    InvalidChannelError, InvalidMatchSpecError,
     InvalidUrlError, InvalidVersionError, InvalidVersionSpecError, IoError,
-    LinkError, PackageNameMatcherParseError, ParseArchError, ParsePlatformError,
-    PyRattlerError, SolverError, TransactionError, ValidatePackageRecordsError,
-    VersionBumpError,
+    LinkError, PyRattlerError, SolverError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -82,8 +79,6 @@ use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
 #[cfg(feature = "pty")]
 use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
-
-use crate::error::GatewayError;
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
@@ -206,56 +201,18 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "InvalidMatchSpecError",
         py.get_type::<InvalidMatchSpecError>(),
     )?;
-    m.add(
-        "PackageNameMatcherParseError",
-        py.get_type::<PackageNameMatcherParseError>(),
-    )?;
-    m.add(
-        "InvalidPackageNameError",
-        py.get_type::<InvalidPackageNameError>(),
-    )?;
     m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
     m.add(
         "InvalidChannelError",
         py.get_type::<InvalidChannelError>(),
     )?;
-    m.add("ActivationError", py.get_type::<ActivationError>())?;
-    m.add(
-        "ParsePlatformError",
-        py.get_type::<ParsePlatformError>(),
-    )?;
-    m.add("ParseArchError", py.get_type::<ParseArchError>())?;
     m.add("SolverError", py.get_type::<SolverError>())?;
-    m.add("TransactionError", py.get_type::<TransactionError>())?;
     m.add("LinkError", py.get_type::<LinkError>())?;
     m.add("IoError", py.get_type::<IoError>())?;
-    m.add(
-        "DetectVirtualPackageError",
-        py.get_type::<DetectVirtualPackageError>(),
-    )?;
     m.add("CacheDirError", py.get_type::<CacheDirError>())?;
-    m.add(
-        "FetchRepoDataError",
-        py.get_type::<FetchRepoDataError>(),
-    )?;
-    m.add(
-        "ConvertSubdirError",
-        py.get_type::<ConvertSubdirError>(),
-    )?;
-    m.add("VersionBumpError", py.get_type::<VersionBumpError>())?;
-
     m.add(
         "EnvironmentCreationError",
         py.get_type::<EnvironmentCreationError>(),
-    )?;
-
-    m.add("ExtractError", py.get_type::<ExtractError>())?;
-
-    m.add("GatewayError", py.get_type::<GatewayError>())?;
-
-    m.add(
-        "ValidatePackageRecordsError",
-        py.get_type::<ValidatePackageRecordsError>(),
     )?;
 
     Ok(())
