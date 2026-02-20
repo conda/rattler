@@ -16,8 +16,8 @@ pytorch=*=cuda*:
   error: "the build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
 "x264 >=1!164.3095,<1!165": "x264 >=1!164.3095,<1!165"
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2: "foo[url=\"file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2\"]"
-"conda-forge::foo[version=1.0.*]": "conda-forge::foo 1.0.*"
-"conda-forge::foo[version=1.0.*, build_number=\">6\"]": "conda-forge::foo 1.0.*[build_number=\">6\"]"
+"conda-forge::foo[version=1.0.*]": "https://conda.anaconda.org/conda-forge::foo 1.0.*"
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]": "https://conda.anaconda.org/conda-forge::foo 1.0.*[build_number=\">6\"]"
 python ==2.7.*.*|>=3.6:
   error: regex constraints are not supported
 python=3.9: python 3.9.*
@@ -31,9 +31,9 @@ python=*:
   error: "missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
   error: "missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
-"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
-"python ==3.9[channel=conda-forge]": "conda-forge::python ==3.9"
-"python ==3.9[channel=conda-forge/linux-64]": "conda-forge/linux-64::python ==3.9"
+"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
+"python ==3.9[channel=conda-forge]": "https://conda.anaconda.org/conda-forge::python ==3.9"
+"python ==3.9[channel=conda-forge/linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
 rust ~=1.2.3: rust ~=1.2.3
 "~/channel/dir::package": "file://<HOME>/channel/dir/::package"
 "~\\windows_channel::package":
@@ -41,7 +41,7 @@ rust ~=1.2.3: rust ~=1.2.3
 "./relative/channel::package": "file://<CRATE>/relative/channel/::package"
 "python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
   error: "missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
-"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "conda-forge/linux-64::foobar"
+"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::foobar"
 numpy>=2.*.*:
   error: regex constraints are not supported
 "bird_tool_utils_python =0.*,>=0.4.1":

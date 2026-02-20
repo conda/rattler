@@ -12,24 +12,24 @@ python 3.8.* *_cpython: python 3.8.* *_cpython
 pytorch=*=cuda*: pytorch * cuda*
 "x264 >=1!164.3095,<1!165": "x264 >=1!164.3095,<1!165"
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2: "foo[url=\"file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2\"]"
-"conda-forge::foo[version=1.0.*]": "conda-forge::foo 1.0.*"
-"conda-forge::foo[version=1.0.*, build_number=\">6\"]": "conda-forge::foo 1.0.*[build_number=\">6\"]"
+"conda-forge::foo[version=1.0.*]": "https://conda.anaconda.org/conda-forge::foo 1.0.*"
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]": "https://conda.anaconda.org/conda-forge::foo 1.0.*[build_number=\">6\"]"
 python ==2.7.*.*|>=3.6: python 2.7.*|>=3.6
 python=3.9: python 3.9.*
 python=*: python *
 "https://software.repos.intel.com/python/conda::python[version=3.9]": "https://software.repos.intel.com/python/conda::python ==3.9"
 "https://c.com/p/conda/linux-64::python[version=3.9]": "https://c.com/p/conda/linux-64::python ==3.9"
 "https://c.com/p/conda::python[version=3.9, subdir=linux-64]": "https://c.com/p/conda/linux-64::python ==3.9"
-"conda-forge/linux-32::python[version=3.9, subdir=linux-64]": "conda-forge/linux-64::python ==3.9"
-"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
-"python ==3.9[channel=conda-forge]": "conda-forge::python ==3.9"
-"python ==3.9[channel=conda-forge/linux-64]": "conda-forge/linux-64::python ==3.9"
+"conda-forge/linux-32::python[version=3.9, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
+"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
+"python ==3.9[channel=conda-forge]": "https://conda.anaconda.org/conda-forge::python ==3.9"
+"python ==3.9[channel=conda-forge/linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
 rust ~=1.2.3: rust ~=1.2.3
 "~/channel/dir::package": "file://<HOME>/channel/dir/::package"
 "~\\windows_channel::package":
   error: invalid channel
 "./relative/channel::package": "file://<CRATE>/relative/channel/::package"
-"python[channel=https://conda.anaconda.org/python/conda,version=3.9]": "python/conda::python ==3.9"
-"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "conda-forge/linux-64::foobar"
+"python[channel=https://conda.anaconda.org/python/conda,version=3.9]": "https://conda.anaconda.org/python/conda::python ==3.9"
+"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::foobar"
 numpy>=2.*.*: numpy >=2
 "bird_tool_utils_python =0.*,>=0.4.1": "bird_tool_utils_python 0.*,>=0.4.1"
