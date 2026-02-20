@@ -1311,7 +1311,7 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
             .load_matching_records(
-                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
                 PackageFormatSelection::default(),
             )
             .unwrap()

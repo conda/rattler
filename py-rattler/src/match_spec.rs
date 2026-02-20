@@ -160,7 +160,7 @@ impl PyMatchSpec {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
+                PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?,
             ),
         })
     }

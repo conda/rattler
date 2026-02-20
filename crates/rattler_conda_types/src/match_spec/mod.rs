@@ -393,9 +393,9 @@ impl From<MatchSpec> for NamelessMatchSpec {
 
 impl MatchSpec {
     /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
-    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageNameMatcher>) -> Self {
+    pub fn from_nameless(spec: NamelessMatchSpec, name: PackageNameMatcher) -> Self {
         Self {
-            name,
+            name: Some(name),
             version: spec.version,
             build: spec.build,
             build_number: spec.build_number,
@@ -758,8 +758,8 @@ mod tests {
 
         // Verify every single piece was parsed correctly around the `*`
         assert_eq!(
-            spec.name,
-            Some(PackageNameMatcher::from_str("*").expect("invalid package name matcher"))
+            spec.name.unwrap(),
+            PackageNameMatcher::from_str("*").expect("invalid package name matcher")
         );
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
         assert_eq!(spec.subdir, Some("linux-64".to_string()));
@@ -1088,8 +1088,10 @@ mod tests {
         let spec = MatchSpec::from_str("__virtual_name >=12", Strict).unwrap();
         assert!(spec.is_virtual());
 
-        let spec =
-            MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
+        let spec = MatchSpec::from_nameless(
+            NamelessMatchSpec::from_str(">=12", Strict).unwrap(),
+            "dummy".parse().unwrap(),
+        );
         assert!(!spec.is_virtual());
 
         let spec = MatchSpec::from_str(

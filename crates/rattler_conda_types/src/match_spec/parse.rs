@@ -416,7 +416,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 fn strip_package_name(
     input: &str,
     exact_names_only: bool,
-) -> Result<(Option<PackageNameMatcher>, &str), ParseMatchSpecError> {
+) -> Result<(PackageNameMatcher, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -459,7 +459,7 @@ fn strip_package_name(
         }
     };
 
-    Ok((Some(package_name), rest))
+    Ok((package_name, rest))
 }
 
 /// Splits a string into version and build constraints.

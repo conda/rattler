@@ -294,7 +294,7 @@ impl super::SolverImpl for Solver {
         for virtual_package in task.virtual_packages {
             let id = pool.intern_matchspec(&MatchSpec::from_nameless(
                 NamelessMatchSpec::default(),
-                Some(PackageNameMatcher::Exact(virtual_package.name)),
+                PackageNameMatcher::Exact(virtual_package.name),
             ));
             goal.install(id, false);
         }
