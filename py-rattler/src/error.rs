@@ -106,6 +106,7 @@ fn pretty_print_error(mut err: &dyn Error) -> String {
 
 impl From<PyRattlerError> for PyErr {
     fn from(value: PyRattlerError) -> Self {
+        match value {
             PyRattlerError::InvalidVersion(err) => {
                 InvalidVersionError::new_err(pretty_print_error(&err))
             }
@@ -197,7 +198,6 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::InvalidHeaderValueError(err) => {
                 InvalidHeaderValueError::new_err(pretty_print_error(&err))
-            }
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
         }
