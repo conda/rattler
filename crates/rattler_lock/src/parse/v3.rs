@@ -14,12 +14,12 @@ use crate::{
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PlatformData, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
+    PackageHashes, PlatformData, PypiPackageData, SolveOptions, UrlOrPath, Verbatim,
+    DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, Requirement};
+use pep508_rs::Requirement;
 use rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
@@ -66,27 +66,11 @@ struct PypiLockedPackageV3 {
     #[serde_as(deserialize_as = "crate::utils::serde::Pep440MapOrVec")]
     pub requires_dist: Vec<Requirement>,
     pub requires_python: Option<VersionSpecifiers>,
-    #[serde(flatten)]
-    pub runtime: PypiPackageEnvironmentDataV3,
     pub url: Url,
     pub hash: Option<PackageHashes>,
     // These fields are not used by rattler-lock.
     // pub source: Option<Url>,
     // pub build: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Hash, Eq, PartialEq)]
-pub struct PypiPackageEnvironmentDataV3 {
-    #[serde(default)]
-    pub extras: BTreeSet<ExtraName>,
-}
-
-impl From<PypiPackageEnvironmentDataV3> for PypiPackageEnvironmentData {
-    fn from(config: PypiPackageEnvironmentDataV3) -> Self {
-        Self {
-            extras: config.extras.into_iter().collect(),
-        }
-    }
 }
 
 #[serde_as]
@@ -175,7 +159,6 @@ pub fn parse_v3_or_lower(
     // per platform. There might be duplicates for noarch packages.
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
-    let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
     let mut per_platform: ahash::HashMap<
         rattler_conda_types::Platform,
         IndexSet<EnvironmentPackageData>,
@@ -277,10 +260,7 @@ pub fn parse_v3_or_lower(
                         hash: pkg.hash,
                     })
                     .0;
-                EnvironmentPackageData::Pypi(
-                    deduplicated_index,
-                    pypi_runtime_configs.insert_full(pkg.runtime).0,
-                )
+                EnvironmentPackageData::Pypi(deduplicated_index)
             }
         };
 
@@ -308,11 +288,6 @@ pub fn parse_v3_or_lower(
                 .map(CondaPackageData::from)
                 .collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
-            pypi_environment_package_data: pypi_runtime_configs
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-
             environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), 0)]
                 .into_iter()
                 .collect(),
