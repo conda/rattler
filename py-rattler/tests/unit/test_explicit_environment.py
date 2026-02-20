@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from rattler.explicit_environment import ExplicitEnvironmentSpec, ExplicitEnvironmentEntry
-from rattler.platform import Platform
+
+from rattler import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, Platform
 
 test_env = """# This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
