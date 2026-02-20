@@ -434,7 +434,9 @@ impl PyPtyProcess {
                             WaitStatus::Exited(_, code) => format!("Exited({code})"),
                             WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
                             WaitStatus::Stopped(_, _) => "Stopped".to_string(),
-                            _ => "Unknown".to_string(),
+                            WaitStatus::Continued(_) => "Continued".to_string(),
+                            WaitStatus::StillAlive => "StillAlive".to_string(),
+                            _ => format!("Unknown({status:?})"),
                         });
                     }
                     Err(e) => {

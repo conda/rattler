@@ -1,7 +1,5 @@
 from pathlib import Path
-
 import pytest
-
 from rattler import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, Platform
 
 test_env = """# This file may be used to create an environment using:
