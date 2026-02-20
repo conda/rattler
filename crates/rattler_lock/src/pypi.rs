@@ -1,9 +1,8 @@
 use crate::{PackageHashes, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, PackageName, Requirement};
+use pep508_rs::{PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -27,14 +26,6 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
-}
-
-/// Additional runtime configuration of a package. Multiple environments/platforms might refer to
-/// the same pypi package but with different extras enabled.
-#[derive(Clone, Debug, Default)]
-pub struct PypiPackageEnvironmentData {
-    /// The extras enabled for the package. Note that the order doesn't matter here but it does matter for serialization.
-    pub extras: BTreeSet<ExtraName>,
 }
 
 impl PartialOrd for PypiPackageData {
