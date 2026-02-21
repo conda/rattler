@@ -265,7 +265,8 @@ fn read_index_json_from_archive(
 pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
+    let mut archive = seek::stream_conda_info(reader)
+        .map_err(|e| std::io::Error::other(format!("Could not open conda file: {e}")))?;
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
@@ -281,7 +282,9 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// Returns the parsed `PackageRecord`.
 fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
     let reader = buffer.reader();
-    let archive_type = DistArchiveType::try_from(filename).unwrap();
+    let archive_type = DistArchiveType::try_from(filename).ok_or_else(|| {
+        std::io::Error::other(format!("Unknown archive type for file: {filename}"))
+    })?;
     match archive_type {
         DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
             package_record_from_tar_bz2_reader(reader)
@@ -745,24 +748,16 @@ async fn index_subdir_inner(
         match join_result {
             Ok(Ok(result)) => results.push(result),
             Ok(Err(e)) => {
-                tasks.clear();
-                tracing::error!("Failed to process package: {}", e);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(RepodataError::Other(anyhow::anyhow!(e)));
+                tracing::warn!("Skipping invalid package in {}: {}", subdir, e);
+                pb.inc(1);
             }
             Err(join_err) => {
-                tasks.clear();
-                tracing::error!("Task panicked: {}", join_err);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(join_err.into());
+                tracing::warn!(
+                    "Skipping package in {} due to unexpected error: {}",
+                    subdir,
+                    join_err
+                );
+                pb.inc(1);
             }
         }
     }
@@ -794,7 +789,13 @@ async fn index_subdir_inner(
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 conda_packages.insert(filename, package);
             }
-            _ => panic!("Unknown archive type"),
+            other => {
+                tracing::warn!(
+                    "Skipping package with unsupported archive type {:?}: {}",
+                    other,
+                    filename.to_file_name()
+                );
+            }
         }
     }
 
