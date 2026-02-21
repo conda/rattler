@@ -4,7 +4,6 @@ from typing import List, Optional, Union
 from rattler.rattler import (
     PyExplicitEnvironmentSpec as _PyExplicitEnvironmentSpec,
     PyExplicitEnvironmentEntry as _PyExplicitEnvironmentEntry,
-    PyPackageArchiveHash as _PyPackageArchiveHash,
 )
 from rattler.platform import Platform
 
