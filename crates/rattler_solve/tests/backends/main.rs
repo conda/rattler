@@ -1240,11 +1240,9 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
 
     let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().records;
 
-    let record = result.iter().find(|record| {
-        Some(&spec.name)
-            .unwrap()
-            .matches(&record.package_record.name)
-    });
+    let record = result
+        .iter()
+        .find(|record| spec.name.matches(&record.package_record.name));
     assert_eq!(record.unwrap().channel, Some(expected_channel.to_string()));
 }
 

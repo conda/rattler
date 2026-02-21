@@ -661,7 +661,7 @@ mod test {
             Strict,
         )
         .unwrap();
-        matchspec.name = Default::default();
+        matchspec.name = rattler_conda_types::PackageNameMatcher::default();
 
         let gateway_error = gateway
             .query(
