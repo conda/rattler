@@ -96,7 +96,9 @@ def test_explicit_environment_to_path(tmp_path: Path) -> None:
 
 def test_explicit_environment_entry_hash() -> None:
     # Test MD5
-    entry_md5 = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#d7c89558ba9fa0495403155b64376d81")
+    entry_md5 = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#d7c89558ba9fa0495403155b64376d81"
+    )
     assert entry_md5.package_archive_hash is not None
     assert isinstance(entry_md5.package_archive_hash, bytes)
     assert entry_md5.package_archive_hash.hex() == "d7c89558ba9fa0495403155b64376d81"
