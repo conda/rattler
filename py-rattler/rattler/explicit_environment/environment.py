@@ -109,4 +109,3 @@ class ExplicitEnvironmentSpec:
 
     def __repr__(self) -> str:
         return f"ExplicitEnvironmentSpec(platform={self.platform!r}, packages={self.packages!r})"
-
