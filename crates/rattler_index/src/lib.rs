@@ -75,6 +75,15 @@ impl PreconditionChecks {
     }
 }
 
+/// A package that was skipped during indexing due to an error.
+#[derive(Debug, Clone)]
+pub struct SkippedPackage {
+    /// The filename of the skipped package
+    pub filename: String,
+    /// The error message describing why the package was skipped
+    pub error: String,
+}
+
 /// Statistics for a single subdir indexing operation
 #[derive(Debug, Clone, Default)]
 pub struct SubdirIndexStats {
@@ -82,8 +91,8 @@ pub struct SubdirIndexStats {
     pub packages_added: usize,
     /// Number of packages removed from the index
     pub packages_removed: usize,
-    /// Number of packages skipped due to errors (invalid/corrupt packages)
-    pub packages_skipped: usize,
+    /// Packages that were skipped due to errors (invalid/corrupt packages)
+    pub packages_skipped: Vec<SkippedPackage>,
     /// Number of retries due to concurrent modifications
     pub retries: usize,
 }
@@ -736,23 +745,29 @@ async fn index_subdir_inner(
                     console::style(&filename).dim()
                 ));
 
-                let record =
-                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
-
-                pb.inc(1);
-                Ok::<(DistArchiveIdentifier, PackageRecord), std::io::Error>((filename, record))
+                let file_name_str = filename.to_file_name();
+                match read_and_parse_package(&op, &cache, subdir, &file_name_str).await {
+                    Ok(record) => {
+                        pb.inc(1);
+                        Ok((filename, record))
+                    }
+                    Err(e) => Err((file_name_str, e)),
+                }
             }
         };
         tasks.push(tokio::spawn(task));
     }
     let mut results = Vec::new();
-    let mut packages_skipped = 0usize;
+    let mut packages_skipped = Vec::new();
     while let Some(join_result) = tasks.next().await {
         match join_result {
             Ok(Ok(result)) => results.push(result),
-            Ok(Err(e)) => {
-                tracing::warn!("Skipping invalid package in {}: {}", subdir, e);
-                packages_skipped += 1;
+            Ok(Err((filename, e))) => {
+                tracing::warn!("Skipping invalid package {} in {}: {}", filename, subdir, e);
+                packages_skipped.push(SkippedPackage {
+                    filename,
+                    error: e.to_string(),
+                });
                 pb.inc(1);
             }
             Err(join_err) => {
@@ -761,7 +776,10 @@ async fn index_subdir_inner(
                     subdir,
                     join_err
                 );
-                packages_skipped += 1;
+                packages_skipped.push(SkippedPackage {
+                    filename: "unknown".to_string(),
+                    error: join_err.to_string(),
+                });
                 pb.inc(1);
             }
         }
@@ -772,10 +790,10 @@ async fn index_subdir_inner(
         subdir.as_str()
     ));
 
-    if packages_skipped > 0 {
+    if !packages_skipped.is_empty() {
         tracing::warn!(
             "{} packages in {} were skipped due to errors.",
-            packages_skipped,
+            packages_skipped.len(),
             subdir
         );
     }
