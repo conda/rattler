@@ -726,7 +726,7 @@ pub(crate) fn matchspec_parser(
             // actual version this might be a problem when solving.
             return Ok(MatchSpec {
                 url: Some(url),
-                name,
+                name: name.unwrap(),
                 ..MatchSpec::default()
             });
         }
@@ -1017,7 +1017,7 @@ mod tests {
     #[test]
     fn test_match_spec_more() {
         let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]", Strict).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1032,7 +1032,7 @@ mod tests {
         );
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]", Strict).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1051,7 +1051,7 @@ mod tests {
             Strict,
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1402,7 +1402,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(spec.namespace, Some("namespace".to_owned()));
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
         assert_eq!(
             spec.url,
@@ -1471,7 +1471,7 @@ mod tests {
     fn test_parsing_license() {
         let spec = MatchSpec::from_str("python[license=MIT]", Strict).unwrap();
 
-        assert_eq!(spec.name, Some("python".parse().unwrap()));
+        assert_eq!(spec.name, "python".parse().unwrap());
         assert_eq!(spec.license, Some("MIT".into()));
     }
 
@@ -1552,7 +1552,7 @@ mod tests {
 
         // complete matchspec to verify that we print all fields
         specs.push(MatchSpec {
-            name: Some("foo".parse().unwrap()),
+            name: "foo".parse().unwrap(),
             version: Some(VersionSpec::from_str("1.0.*", Strict).unwrap()),
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
@@ -1614,7 +1614,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
             "python >=3.6".to_string()
@@ -1624,7 +1624,7 @@ mod tests {
     #[test]
     fn test_conditional_parsing_disabled() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert!(spec.condition.is_none());
     }
 

@@ -176,16 +176,12 @@ impl QueryExecutor {
         // TODO: allow glob/regex package names as well
         for spec in specs {
             if let Some(url) = spec.url.clone() {
-                let name = spec
-                    .name
-                    .clone()
-                    .and_then(Option::<PackageName>::from)
-                    .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
-                        spec.clone(),
-                    )))?;
+                let name = Option::<PackageName>::from(spec.name.clone()).ok_or(
+                    GatewayError::MatchSpecWithoutExactName(Box::new(spec.clone())),
+                )?;
                 seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
-            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
+            } else if let PackageNameMatcher::Exact(name) = &spec.name {
                 seen.insert(name.as_normalized().to_string(), ());
                 let pending = pending_package_specs
                     .entry(name.clone())

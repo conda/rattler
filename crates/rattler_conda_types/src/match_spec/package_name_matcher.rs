@@ -217,6 +217,15 @@ pub enum IntoPackageNameError {
     NotExact,
 }
 
+/// The default package name matcher is a wildcard (`*`) that matches any package.
+/// This acts as the equivalent of a missing or unspecified package name, replacing
+/// the need for an `Option`.
+impl Default for PackageNameMatcher {
+    fn default() -> Self {
+        PackageNameMatcher::from_str("*").expect("valid glob")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -661,7 +661,7 @@ mod test {
             Strict,
         )
         .unwrap();
-        matchspec.name = None;
+        matchspec.name = Default::default();
 
         let gateway_error = gateway
             .query(

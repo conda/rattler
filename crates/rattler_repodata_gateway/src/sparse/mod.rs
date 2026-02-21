@@ -307,7 +307,7 @@ impl SparseRepoData {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
             // TODO: support glob/regex package names
             let mut parsed_records = parse_records(
-                package_name.and_then(Option::<PackageName>::from).as_ref(),
+                Option::<PackageName>::from(package_name.clone()).as_ref(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 &repo_data.experimental_whl_packages,

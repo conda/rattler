@@ -883,7 +883,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
     let mut mapping = std::collections::HashMap::new();
 
     for spec in specs {
-        if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
+        if let PackageNameMatcher::Exact(name) = &spec.name {
             mapping
                 .entry(name.clone())
                 .or_insert_with(Vec::new)
@@ -1088,7 +1088,7 @@ mod tests {
             MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
             // Create a nameless spec by removing the name
             MatchSpec {
-                name: None,
+                name: Default::default(),
                 version: Some(">=1.0".parse().unwrap()),
                 ..Default::default()
             },

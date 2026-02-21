@@ -263,21 +263,20 @@ impl super::SolverImpl for Solver {
 
             // If the spec includes extras, also add dependencies on the synthetic extra solvables
             if let Some(extras) = extras_opt {
-                if let Some(name_matcher) = &spec.name {
-                    // Only exact package names support extras
-                    if let Some(exact_name) = name_matcher.as_exact() {
-                        for extra in extras.iter() {
-                            // Create a dependency on the synthetic "package[extra]" solvable
-                            // We can't use MatchSpec::from_str or conda_matchspec because brackets
-                            // have special meaning in conda matchspecs. Instead, we intern the name
-                            // directly and use it as an Id
-                            let extra_name = format!("{}[{}]", exact_name.as_normalized(), extra);
-                            let name_id = pool.intern_str(extra_name.as_str());
-                            // Convert StringId to MatchSpecId - this works because libsolv can use
-                            // a simple name as a dependency specification
-                            let extra_id = MatchSpecId(name_id.into());
-                            goal.install(extra_id, false);
-                        }
+                let name_matcher = &spec.name;
+                // Only exact package names support extras
+                if let Some(exact_name) = name_matcher.as_exact() {
+                    for extra in extras.iter() {
+                        // Create a dependency on the synthetic "package[extra]" solvable
+                        // We can't use MatchSpec::from_str or conda_matchspec because brackets
+                        // have special meaning in conda matchspecs. Instead, we intern the name
+                        // directly and use it as an Id
+                        let extra_name = format!("{}[{}]", exact_name.as_normalized(), extra);
+                        let name_id = pool.intern_str(extra_name.as_str());
+                        // Convert StringId to MatchSpecId - this works because libsolv can use
+                        // a simple name as a dependency specification
+                        let extra_id = MatchSpecId(name_id.into());
+                        goal.install(extra_id, false);
                     }
                 }
             }
