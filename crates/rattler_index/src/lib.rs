@@ -82,6 +82,8 @@ pub struct SubdirIndexStats {
     pub packages_added: usize,
     /// Number of packages removed from the index
     pub packages_removed: usize,
+    /// Number of packages skipped due to errors (invalid/corrupt packages)
+    pub packages_skipped: usize,
     /// Number of retries due to concurrent modifications
     pub retries: usize,
 }
@@ -744,11 +746,13 @@ async fn index_subdir_inner(
         tasks.push(tokio::spawn(task));
     }
     let mut results = Vec::new();
+    let mut packages_skipped = 0usize;
     while let Some(join_result) = tasks.next().await {
         match join_result {
             Ok(Ok(result)) => results.push(result),
             Ok(Err(e)) => {
                 tracing::warn!("Skipping invalid package in {}: {}", subdir, e);
+                packages_skipped += 1;
                 pb.inc(1);
             }
             Err(join_err) => {
@@ -757,6 +761,7 @@ async fn index_subdir_inner(
                     subdir,
                     join_err
                 );
+                packages_skipped += 1;
                 pb.inc(1);
             }
         }
@@ -766,6 +771,14 @@ async fn index_subdir_inner(
         console::style("Finished").green(),
         subdir.as_str()
     ));
+
+    if packages_skipped > 0 {
+        tracing::warn!(
+            "{} packages in {} were skipped due to errors.",
+            packages_skipped,
+            subdir
+        );
+    }
 
     tracing::info!(
         "Successfully added {} packages to subdir {}.",
@@ -789,13 +802,9 @@ async fn index_subdir_inner(
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 conda_packages.insert(filename, package);
             }
-            other => {
-                tracing::warn!(
-                    "Skipping package with unsupported archive type {:?}: {}",
-                    other,
-                    filename.to_file_name()
-                );
-            }
+            // Wheel packages are not supported and will have been skipped
+            // during parsing above, so this arm is unreachable in practice.
+            DistArchiveType::Wheel(_) => {}
         }
     }
 
@@ -824,6 +833,7 @@ async fn index_subdir_inner(
     Ok(SubdirIndexStats {
         packages_added: packages_to_add.len(),
         packages_removed: packages_to_delete.len(),
+        packages_skipped,
         retries: 0, // Will be set by index_subdir
     })
 }
