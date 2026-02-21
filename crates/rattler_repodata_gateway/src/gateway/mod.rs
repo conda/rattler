@@ -1716,27 +1716,4 @@ mod test {
             "glob should find all lib-* packages across both sources and both subdirs"
         );
     }
-
-    #[tokio::test]
-    async fn test_nameless_matchspec_error_without_url() {
-        let gateway = Gateway::new();
-
-        let index = local_conda_forge().await;
-
-        // Create a matchspec and then remove the name
-        let mut matchspec = MatchSpec::from_str("python>=3.8", Lenient).unwrap();
-        matchspec.name = None;
-
-        let gateway_error = gateway
-            .query(
-                vec![index.clone()],
-                vec![Platform::Linux64],
-                vec![matchspec].into_iter(),
-            )
-            .recursive(false)
-            .await
-            .unwrap_err();
-
-        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
-    }
 }

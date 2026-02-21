@@ -1749,7 +1749,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
             "python >=3.6".to_string()
@@ -1764,7 +1764,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("numpy".parse().unwrap()));
+        assert_eq!(spec.name, "numpy".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=2.0", Strict).unwrap())
@@ -1879,7 +1879,7 @@ mod tests {
         // when key combined with other bracket keys
         let spec =
             parse_conditional(r#"foo[version=">=1.0", when="python >=3.6", build="py*"]"#).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
