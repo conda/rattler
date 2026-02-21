@@ -795,7 +795,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                 }
             };
 
-            // Add them as conditional requirements (e.g. `numpy; if extra`).
+            // Add them as conditional requirements (e.g. `numpy[when="extra"]`).
             let extra_condition = self.extra_condition(&record.package_record.name, extra);
             for version_set_id in version_set_ids {
                 dependencies.requirements.push(ConditionalRequirement {
@@ -1009,7 +1009,7 @@ fn parse_match_spec(
     }
 
     // Parse the match spec and extract the name of the package it depends on.
-    // Enable conditionals parsing to support dependencies with conditions like "numpy; if python >=3.9"
+    // Enable conditionals parsing to support dependencies with conditions like `numpy[when="python >=3.9"]`
     let match_spec = MatchSpec::from_str(
         spec_str,
         ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),

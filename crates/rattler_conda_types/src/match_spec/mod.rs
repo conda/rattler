@@ -29,6 +29,7 @@ pub mod parse;
 
 use matcher::StringMatcher;
 use package_name_matcher::PackageNameMatcher;
+use parse::escape_bracket_value;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -235,12 +236,13 @@ impl Display for MatchSpec {
             ));
         }
 
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
+        if let Some(condition) = &self.condition {
+            let condition_str = condition.to_string();
+            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
         }
 
-        if let Some(condition) = &self.condition {
-            write!(f, "; if {condition}")?;
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
         }
 
         Ok(())
@@ -347,19 +349,20 @@ impl Display for NamelessMatchSpec {
         let mut keys = Vec::new();
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5={md5:x}"));
+            keys.push(format!("md5=\"{md5:x}\""));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256={sha256:x}"));
+            keys.push(format!("sha256=\"{sha256:x}\""));
+        }
+
+        if let Some(condition) = &self.condition {
+            let condition_str = condition.to_string();
+            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
         }
 
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        if let Some(condition) = &self.condition {
-            write!(f, "; if {condition}")?;
         }
 
         Ok(())

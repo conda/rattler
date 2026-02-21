@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
+from rattler.channel import Channel
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
 from rattler.platform.platform import Platform
@@ -17,18 +18,26 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[LockChannel]
+        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[Union[Channel, LockChannel]]
     ) -> None:
         """
         Create a new environment.
         """
+        # Convert LockChannel to Channel for compatibility
+        py_channels = []
+        for channel in channels:
+            if isinstance(channel, LockChannel):
+                py_channels.append(Channel(str(channel))._channel)
+            else:
+                py_channels.append(channel._channel)
+
         self._env = PyEnvironment(
             name=name,
             # TODO: move this logic to rust
             records={
                 platform._inner: [record._record for record in records] for (platform, records) in requirements.items()
             },
-            channels=[channel._channel for channel in channels],
+            channels=py_channels,
         )
 
     def platforms(self) -> List[Platform]:
