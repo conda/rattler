@@ -3,7 +3,7 @@ import os
 from typing import List, Optional, TYPE_CHECKING
 import datetime
 
-from rattler import VersionWithSource
+from rattler.version.with_source import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchType, NoArchLiteral
 from rattler.package.package_name import PackageName
