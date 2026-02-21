@@ -111,13 +111,10 @@ def test_explicit_environment_entry_hash() -> None:
 
     # Test SHA256
     sha256_hex = "1030174db5c183f3afb4181a0a02873d1030174db5c183f3afb4181a0a02873d"
-    entry_sha256 = ExplicitEnvironmentEntry(
-        f"https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#{sha256_hex}"
-    )
+    entry_sha256 = ExplicitEnvironmentEntry(f"https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#{sha256_hex}")
     assert entry_sha256.package_archive_hash is not None
     assert entry_sha256.package_archive_hash.hex() == sha256_hex
 
     # Test no hash
     entry_no_hash = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2")
     assert entry_no_hash.package_archive_hash is None
-
