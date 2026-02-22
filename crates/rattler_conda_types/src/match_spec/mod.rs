@@ -198,13 +198,8 @@ impl Display for MatchSpec {
         if let Some(channel) = &self.channel {
             // Always serialize as the full URL to preserve all channel server
             // information during round-tripping.
-            let url = channel.base_url.url();
-            if matches!(url.scheme(), "https" | "http") {
-                let base_str = channel.base_url.as_str().trim_end_matches('/');
-                write!(f, "{base_str}")?;
-            } else {
-                write!(f, "{}", channel.name())?;
-            }
+            let base_str = channel.base_url.as_str().trim_end_matches('/');
+            write!(f, "{base_str}")?;
 
             if let Some(subdir) = &self.subdir {
                 write!(f, "/{subdir}")?;

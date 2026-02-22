@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 1268
+assertion_line: 1404
 expression: evaluated
 ---
 blas *.* mkl: blas * mkl
@@ -35,10 +35,10 @@ python=*:
 "python ==3.9[channel=conda-forge]": "https://conda.anaconda.org/conda-forge::python ==3.9"
 "python ==3.9[channel=conda-forge/linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
 rust ~=1.2.3: rust ~=1.2.3
-"~/channel/dir::package": "file://<HOME>/channel/dir/::package"
+"~/channel/dir::package": "file://<HOME>/channel/dir::package"
 "~\\windows_channel::package":
   error: invalid channel
-"./relative/channel::package": "file://<CRATE>/relative/channel/::package"
+"./relative/channel::package": "file://<CRATE>/relative/channel::package"
 "python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
   error: "missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::foobar"
