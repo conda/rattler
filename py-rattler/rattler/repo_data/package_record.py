@@ -550,15 +550,13 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
-        >>> record = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        >>> from rattler import PackageRecord
+        >>> record = PackageRecord(
+        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
         ... )
+        >>> record.md5 = bytes.fromhex("5e5a97795de72f8cc3baf3d9ea6327a2")
         >>> record.md5.hex()
         '5e5a97795de72f8cc3baf3d9ea6327a2'
-        >>> record.md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
-        >>> record.md5.hex()
-        '2ddbbaf3a82b46ac7214681262e3d746'
         >>> record.md5 = None
         >>> record.md5 is None
         True
@@ -668,12 +666,10 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
-        >>> record = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        >>> from rattler import PackageRecord
+        >>> record = PackageRecord(
+        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
         ... )
-        >>> record.sha256.hex()
-        '4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9'
         >>> record.sha256 = bytes.fromhex("edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1")
         >>> record.sha256.hex()
         'edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1'
@@ -681,7 +677,7 @@ class PackageRecord:
         >>> record.sha256 is None
         True
         >>>
-        ````
+        ```
         """
         return self._record.sha256
 
@@ -877,7 +873,7 @@ class PackageRecord:
         >>>
         ```
         """
-        self._record.set_python_site_packages_path(value)
+        self._record.python_site_packages_path = value
 
     def __eq__(self, other: object) -> bool:
         """
