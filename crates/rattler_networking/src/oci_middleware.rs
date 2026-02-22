@@ -38,11 +38,10 @@ pub struct OciMiddleware {
     client: reqwest::Client,
 }
 
-impl Default for OciMiddleware {
-    fn default() -> Self {
-        Self {
-            client: reqwest::Client::new(),
-        }
+impl OciMiddleware {
+    /// Create a new [`OciMiddleware`] reusing the provided HTTP client.
+    pub fn new(client: reqwest::Client) -> Self {
+        Self { client }
     }
 }
 
@@ -302,9 +301,9 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
-        let middleware = OciMiddleware::default();
-
         let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
             .with(middleware)
             .build();
@@ -335,9 +334,9 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
-        let middleware = OciMiddleware::default();
-
         let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
             .with(middleware)
             .build();
