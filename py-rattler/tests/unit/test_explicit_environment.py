@@ -1,7 +1,6 @@
-import pytest
 from pathlib import Path
-from rattler.explicit_environment import ExplicitEnvironmentSpec
-from rattler.platform import Platform
+import pytest
+from rattler import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, Platform
 
 test_env = """# This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
@@ -26,16 +25,16 @@ def test_parse_explicit_environment_from_str() -> None:
 
     assert (
         spec.packages[0].url
-        == "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81"
+        == "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81"  # noqa: E501
     )
     assert (
         spec.packages[1].url
-        == "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-9.3.0-h2ae2ef3_17.tar.bz2#342f3c931d0a3a209ab09a522469d20c"
+        == "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-9.3.0-h2ae2ef3_17.tar.bz2#342f3c931d0a3a209ab09a522469d20c"  # noqa: E501
     )
 
 
 def test_parse_explicit_environment_no_platform() -> None:
-    content = """@EXPLICIT\nhttp://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"""
+    content = "@EXPLICIT\nhttp://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"
     spec = ExplicitEnvironmentSpec.from_str(content)
 
     assert spec.platform is None
@@ -60,3 +59,56 @@ http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
 def test_parse_invalid_explicit_environment() -> None:
     with pytest.raises(Exception):
         ExplicitEnvironmentSpec.from_str("invalid content # platform: invalid-platform")
+
+
+def test_explicit_environment_constructor() -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
+
+    assert spec.platform == Platform("linux-64")
+    assert len(spec.packages) == 1
+    assert spec.packages[0].url == "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash"
+
+
+def test_explicit_environment_to_spec_string() -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
+
+    spec_str = spec.to_spec_string()
+    assert "# platform: linux-64" in spec_str
+    assert "@EXPLICIT" in spec_str
+    assert "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash" in spec_str
+
+
+def test_explicit_environment_to_path(tmp_path: Path) -> None:
+    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("win-64"))
+
+    path = tmp_path / "explicit_env.txt"
+    spec.to_path(path)
+
+    assert path.exists()
+    content = path.read_text()
+    assert "# platform: win-64" in content
+    assert "@EXPLICIT" in content
+    assert "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash" in content
+
+
+def test_explicit_environment_entry_hash() -> None:
+    # Test MD5
+    entry_md5 = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#d7c89558ba9fa0495403155b64376d81"
+    )
+    assert entry_md5.package_archive_hash is not None
+    assert isinstance(entry_md5.package_archive_hash, bytes)
+    assert entry_md5.package_archive_hash.hex() == "d7c89558ba9fa0495403155b64376d81"
+
+    # Test SHA256
+    sha256_hex = "1030174db5c183f3afb4181a0a02873d1030174db5c183f3afb4181a0a02873d"
+    entry_sha256 = ExplicitEnvironmentEntry(f"https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2#{sha256_hex}")
+    assert entry_sha256.package_archive_hash is not None
+    assert entry_sha256.package_archive_hash.hex() == sha256_hex
+
+    # Test no hash
+    entry_no_hash = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/pkg.tar.bz2")
+    assert entry_no_hash.package_archive_hash is None

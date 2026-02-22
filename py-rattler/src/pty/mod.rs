@@ -1,7 +1,7 @@
-//! Python bindings for rattler_pty
+//! Python bindings for `rattler_pty`
 //!
 //! This module provides Python access to pseudoterminal (PTY) functionality.
-//! It closely mirrors the Rust rattler_pty API structure.
+//! It closely mirrors the Rust `rattler_pty` API structure.
 //!
 //! ## Module Structure
 //! - `pty_process` - Lower-level PTY process control

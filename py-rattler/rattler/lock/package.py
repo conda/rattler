@@ -2,7 +2,9 @@ from __future__ import annotations
 from abc import ABC
 from typing import Optional, Set, List
 
-from rattler import PackageRecord, Version, RepoDataRecord
+from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.package_record import PackageRecord
+from rattler.version import Version
 
 from rattler.rattler import PyLockedPackage
 from rattler.lock.hash import PackageHashes
