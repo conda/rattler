@@ -176,7 +176,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .with_arc(Arc::new(
             AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
         ))
-        .with(rattler_networking::OciMiddleware);
+        .with(rattler_networking::OciMiddleware::default());
     #[cfg(feature = "s3")]
     let download_client = download_client.with(rattler_networking::S3Middleware::new(
         HashMap::new(),
