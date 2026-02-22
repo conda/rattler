@@ -1874,9 +1874,9 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.5.6"
+version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc3dc5ad92c2e2d1c193bbbbdf2ea477cb81331de4f3103f267ca18368b988c4"
+checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
  "powerfmt",
  "serde_core",
@@ -3361,9 +3361,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.85"
+version = "0.3.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c942ebf8e95485ca0d52d97da7c5a2c387d0e7f0ba4c35e93bfcaee045955b3"
+checksum = "c7e709f3e3d22866f9c25b3aff01af289b18422cc8b4262fb19103ee80fe513d"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.14"
+version = "0.39.15"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4879,7 +4879,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.13"
+version = "0.6.14"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4918,7 +4918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.43.4"
+version = "0.43.5"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "console 0.16.2",
  "fs-err",
@@ -5009,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.15"
+version = "0.27.16"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5060,7 +5060,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.15"
+version = "0.26.16"
 dependencies = [
  "ahash",
  "chrono",
@@ -5097,7 +5097,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.48"
+version = "0.2.49"
 dependencies = [
  "chrono",
  "configparser",
@@ -5127,7 +5127,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -5165,7 +5165,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.1"
+version = "0.24.2"
 dependencies = [
  "assert_matches",
  "astral-tokio-tar",
@@ -5225,7 +5225,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5298,7 +5298,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5325,7 +5325,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.2.5"
+version = "4.2.6"
 dependencies = [
  "chrono",
  "criterion",
@@ -5374,7 +5374,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.4.14"
+version = "0.4.15"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -5409,7 +5409,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.10"
+version = "2.3.11"
 dependencies = [
  "archspec",
  "libloading 0.9.0",
@@ -7695,9 +7695,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.108"
+version = "0.2.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64024a30ec1e37399cf85a7ffefebdb72205ca1c972291c51512360d90bd8566"
+checksum = "ec1adf1535672f5b7824f817792b1afd731d7e843d2d04ec8f27e8cb51edd8ac"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -7708,9 +7708,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.58"
+version = "0.4.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70a6e77fd0ae8029c9ea0063f87c46fde723e7d887703d74ad2616d792e51e6f"
+checksum = "fe88540d1c934c4ec8e6db0afa536876c5441289d7f9f9123d4f065ac1250a6b"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -7722,9 +7722,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.108"
+version = "0.2.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "008b239d9c740232e71bd39e8ef6429d27097518b6b30bdf9086833bd5b6d608"
+checksum = "19e638317c08b21663aed4d2b9a2091450548954695ff4efa75bff5fa546b3b1"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -7732,9 +7732,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.108"
+version = "0.2.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5256bae2d58f54820e6490f9839c49780dff84c65aeab9e772f15d5f0e913a55"
+checksum = "2c64760850114d03d5f65457e96fc988f11f01d38fbaa51b254e4ab5809102af"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -7745,9 +7745,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.108"
+version = "0.2.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f01b580c9ac74c8d8f0c0e4afb04eeef2acf145458e52c03845ee9cd23e3d12"
+checksum = "60eecd4fe26177cfa3339eb00b4a36445889ba3ad37080c2429879718e20ca41"
 dependencies = [
  "unicode-ident",
 ]
@@ -7815,9 +7815,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.85"
+version = "0.3.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "312e32e551d92129218ea9a2452120f4aabc03529ef03e4d0d82fb2780608598"
+checksum = "9d6bb20ed2d9572df8584f6dc81d68a41a625cadc6f15999d649a70ce7e3597a"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
