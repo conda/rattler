@@ -17,6 +17,7 @@ mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
+mod py_install_reporter;
 #[cfg(feature = "pty")]
 mod pty;
 mod record;

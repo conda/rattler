@@ -15,10 +15,12 @@ use crate::{
     record::PyRecord,
 };
 
-// TODO: Accept functions to report progress
+// Import the new reporter
+use crate::py_install_reporter::{PyInstallReporter, SharedError};
+
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None, progress_delegate=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -32,6 +34,7 @@ pub fn py_install<'a>(
     reinstall_packages: Option<HashSet<String>>,
     ignored_packages: Option<HashSet<String>>,
     requested_specs: Option<Vec<PyMatchSpec>>,
+    progress_delegate: Option<pyo3::Py<PyAny>>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -69,10 +72,18 @@ pub fn py_install<'a>(
 
     future_into_py(py, async move {
         let mut installer = Installer::new().with_execute_link_scripts(execute_link_scripts);
-
-        if show_progress {
-            installer.set_reporter(IndicatifReporter::builder().finish());
-        }
+        
+        let delegate_error: Option<SharedError> = if let Some(delegate) = progress_delegate {
+            let error: SharedError = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let reporter = PyInstallReporter::new(delegate, error.clone());
+            installer.set_reporter(reporter);
+            Some(error)
+        } else {
+            if show_progress {
+                installer.set_reporter(IndicatifReporter::builder().finish());
+            }
+            None
+        };
 
         if let Some(target_platform) = platform {
             installer.set_target_platform(target_platform);
@@ -108,6 +119,12 @@ pub fn py_install<'a>(
             .install(target_prefix, dependencies)
             .await
             .map_err(PyRattlerError::from)?;
+
+        if let Some(error_slot) = delegate_error {
+            if let Some(err) = error_slot.lock().unwrap().take() {
+                return Err(err);
+            }
+        }
 
         Ok(())
     })

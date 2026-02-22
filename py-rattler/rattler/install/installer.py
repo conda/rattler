@@ -23,6 +23,7 @@ async def install(
     show_progress: bool = True,
     client: Optional[Client] = None,
     requested_specs: Optional[List[MatchSpec]] = None,
+    progress_delegate: Optional[object] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -79,6 +80,14 @@ async def install(
         requested_specs: A list of `MatchSpec`s that were originally requested. These will be used
                 to populate the `requested_specs` field in the generated `conda-meta/*.json` files.
                 If `None`, the `requested_specs` field will remain empty.
+        progress_delegate: An optional object that receives progress callbacks during the
+                install process.  The delegate may implement any subset of the methods defined
+                in `InstallProgressDelegate`: ``on_unlink_start(package_name)``,
+                ``on_unlink_complete(package_name)``, ``on_link_start(package_name)``, and
+                ``on_link_complete(package_name)``.  When a delegate is provided,
+                ``show_progress`` is ignored and the built-in progress bar is disabled.
+                If a callback raises an exception the install will fail and the exception is
+                re-raised to the caller.
     """
 
     await py_install(
@@ -93,4 +102,5 @@ async def install(
         execute_link_scripts=execute_link_scripts,
         show_progress=show_progress,
         requested_specs=requested_specs,
+        progress_delegate=progress_delegate,
     )
