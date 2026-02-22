@@ -5081,9 +5081,11 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "similar-asserts",
+ "tempfile",
  "thiserror 2.0.18",
  "typed-path",
  "url",
+ "zstd",
 ]
 
 [[package]]

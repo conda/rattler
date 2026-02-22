@@ -32,6 +32,8 @@ typed-path = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
+rstest = { workspace = true }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
-rstest = { workspace = true }
+tempfile = { workspace = true }
+zstd = { workspace = true }
