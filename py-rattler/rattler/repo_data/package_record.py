@@ -151,7 +151,7 @@ class PackageRecord:
         >>> from os import listdir
         >>> from os.path import isfile, join
         >>> from rattler import PrefixRecord
-        >>> from rattler.exceptions import ValidatePackageRecordsException
+        >>> from rattler.exceptions import ValidatePackageRecordsError
         >>> records = [
         ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in sorted(listdir("../test-data/conda-meta"))
@@ -159,7 +159,7 @@ class PackageRecord:
         ... ]
         >>> try:
         ...     PackageRecord.validate(records)
-        ... except ValidatePackageRecordsException as e:
+        ... except ValidatePackageRecordsError as e:
         ...     print(e)
         package 'libsqlite=3.40.0=hcfcfb64_0' has dependency 'ucrt >=10.0.20348.0', which is not in the environment
         >>>
