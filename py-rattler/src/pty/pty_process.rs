@@ -1,4 +1,4 @@
-//! Python bindings for `rattler_pty::unix::PtyProcess`
+//! Python bindings for rattler_pty::unix::PtyProcess
 //!
 //! This module provides the lower-level PTY process control API.
 
@@ -25,7 +25,7 @@ impl PyPtyProcessOptions {
     ///     echo: Whether to echo input back to the terminal. Defaults to True.
     ///
     /// Returns:
-    ///     A new `PtyProcessOptions` instance.
+    ///     A new PtyProcessOptions instance.
     ///
     /// Examples
     /// --------
@@ -77,14 +77,14 @@ impl PyPtyProcess {
     /// Arguments:
     ///     command: A list of strings representing the command and its arguments.
     ///              The first element is the executable, subsequent elements are arguments.
-    ///     options: Optional `PtyProcessOptions` to configure the PTY behavior.
+    ///     options: Optional PtyProcessOptions to configure the PTY behavior.
     ///              If not provided, defaults to echo=True.
     ///
     /// Returns:
-    ///     A new `PtyProcess` instance.
+    ///     A new PtyProcess instance.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the PTY process could not be created.
+    ///     RuntimeError: If the PTY process could not be created.
     ///
     /// Examples
     /// --------
@@ -116,17 +116,16 @@ impl PyPtyProcess {
         }
 
         // Use provided options or default
-        let opts = options.map_or(
-            rattler_pty::unix::PtyProcessOptions {
+        let opts = options
+            .map(|o| o.inner)
+            .unwrap_or(rattler_pty::unix::PtyProcessOptions {
                 echo: true,
                 window_size: None,
-            },
-            |o| o.inner,
-        );
+            });
 
         // Create the PTY process
         let process = rattler_pty::unix::PtyProcess::new(cmd, opts)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create PTY process: {e}")))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create PTY process: {}", e)))?;
 
         Ok(PyPtyProcess { inner: process })
     }
@@ -151,8 +150,8 @@ impl PyPtyProcess {
 
     /// Check the status of the child process (non-blocking).
     ///
-    /// This runs `waitpid()` with WNOHANG, so it returns immediately.
-    /// Note: If you previously called `exit()` or `status()` returned an exit status,
+    /// This runs waitpid() with WNOHANG, so it returns immediately.
+    /// Note: If you previously called exit() or status() returned an exit status,
     /// subsequent calls may return None.
     ///
     /// Returns:
@@ -178,12 +177,10 @@ impl PyPtyProcess {
         use nix::sys::wait::WaitStatus;
 
         self.inner.status().map(|status| match status {
-            WaitStatus::Exited(_, code) => format!("Exited({code})"),
-            WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
+            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
             WaitStatus::Stopped(_, _) => "Stopped".to_string(),
             WaitStatus::StillAlive => "StillAlive".to_string(),
-            WaitStatus::Continued(_) => "Continued".to_string(),
-            #[allow(clippy::match_wildcard_for_single_variants)]
             _ => "Unknown".to_string(),
         })
     }
@@ -192,13 +189,13 @@ impl PyPtyProcess {
     ///
     /// This method blocks until the process has exited. If the process doesn't
     /// respond to SIGTERM, it will eventually be killed with SIGKILL if a
-    /// `kill_timeout` was set (not currently exposed to Python).
+    /// kill_timeout was set (not currently exposed to Python).
     ///
     /// Returns:
     ///     A string describing the exit status.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the process could not be terminated.
+    ///     RuntimeError: If the process could not be terminated.
     ///
     /// Examples
     /// --------
@@ -214,26 +211,26 @@ impl PyPtyProcess {
         let status = self
             .inner
             .exit()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit process: {e}")))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit process: {}", e)))?;
 
         Ok(match status {
-            WaitStatus::Exited(_, code) => format!("Exited({code})"),
-            WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
-            _ => format!("Unknown({status:?})"),
+            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
+            _ => format!("Unknown({:?})", status),
         })
     }
 
     /// Get a file descriptor for reading from and writing to the PTY.
     ///
     /// This returns a raw file descriptor (integer) that can be converted to a
-    /// Python file object using `os.fdopen()`. This is useful for non-interactive
+    /// Python file object using os.fdopen(). This is useful for non-interactive
     /// automation where you want to programmatically read the process output.
     ///
     /// Returns:
     ///     A file descriptor (integer) for the PTY.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the file descriptor could not be created.
+    ///     RuntimeError: If the file descriptor could not be created.
     ///
     /// Examples
     /// --------
@@ -253,7 +250,7 @@ impl PyPtyProcess {
         let file = self
             .inner
             .get_file_handle()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get file handle: {e}")))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get file handle: {}", e)))?;
 
         Ok(file.into_raw_fd())
     }
@@ -277,7 +274,7 @@ impl PyPtyProcess {
 
     /// Set the kill timeout in seconds.
     ///
-    /// When calling `exit()` or `async_exit()`, if the process doesn't respond to
+    /// When calling exit() or async_exit(), if the process doesn't respond to
     /// SIGTERM within this timeout, it will be forcefully killed with SIGKILL.
     ///
     /// Arguments:
@@ -298,7 +295,7 @@ impl PyPtyProcess {
 
     /// Read from the PTY asynchronously.
     ///
-    /// This is the async version of reading via `get_file_handle()`. It performs
+    /// This is the async version of reading via get_file_handle(). It performs
     /// non-blocking I/O using tokio, which is bridged to Python's asyncio.
     ///
     /// Arguments:
@@ -308,7 +305,7 @@ impl PyPtyProcess {
     ///     A coroutine that resolves to bytes read from the PTY.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the read operation fails.
+    ///     RuntimeError: If the read operation fails.
     ///
     /// Examples
     /// --------
@@ -331,7 +328,7 @@ impl PyPtyProcess {
 
             let borrowed_fd = unsafe { BorrowedFd::borrow_raw(pty_fd) };
             let fd = dup(borrowed_fd).map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {e}"))
+                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {}", e))
             })?;
 
             let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
@@ -340,7 +337,7 @@ impl PyPtyProcess {
             let n = file
                 .read(&mut buf)
                 .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to read from PTY: {e}")))?;
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to read from PTY: {}", e)))?;
 
             buf.truncate(n);
             Ok(buf)
@@ -349,7 +346,7 @@ impl PyPtyProcess {
 
     /// Write to the PTY asynchronously.
     ///
-    /// This is the async version of writing via `get_file_handle()`. It performs
+    /// This is the async version of writing via get_file_handle(). It performs
     /// non-blocking I/O using tokio.
     ///
     /// Arguments:
@@ -359,7 +356,7 @@ impl PyPtyProcess {
     ///     A coroutine that resolves to the number of bytes written.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the write operation fails.
+    ///     RuntimeError: If the write operation fails.
     ///
     /// Examples
     /// --------
@@ -381,7 +378,7 @@ impl PyPtyProcess {
 
             let borrowed_fd = unsafe { BorrowedFd::borrow_raw(pty_fd) };
             let fd = dup(borrowed_fd).map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {e}"))
+                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {}", e))
             })?;
 
             let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
@@ -389,7 +386,7 @@ impl PyPtyProcess {
             let n = file
                 .write(&data)
                 .await
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to write to PTY: {e}")))?;
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to write to PTY: {}", e)))?;
 
             Ok(n)
         })
@@ -397,14 +394,14 @@ impl PyPtyProcess {
 
     /// Wait for the process to exit asynchronously.
     ///
-    /// This is the async version of polling `status()` in a loop. It polls the
+    /// This is the async version of polling status() in a loop. It polls the
     /// process status periodically without blocking the async runtime.
     ///
     /// Returns:
     ///     A coroutine that resolves to a string describing the exit status.
     ///
     /// Raises:
-    ///     `RuntimeError`: If waiting fails.
+    ///     RuntimeError: If waiting fails.
     ///
     /// Examples
     /// --------
@@ -426,22 +423,21 @@ impl PyPtyProcess {
 
             loop {
                 match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(WaitStatus::StillAlive | WaitStatus::Continued(_)) => {
+                    Ok(WaitStatus::StillAlive) | Ok(WaitStatus::Continued(_)) => {
                         sleep(Duration::from_millis(100)).await;
                     }
                     Ok(status) => {
                         return Ok(match status {
-                            WaitStatus::Exited(_, code) => format!("Exited({code})"),
-                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
+                            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
                             WaitStatus::Stopped(_, _) => "Stopped".to_string(),
-                            WaitStatus::Continued(_) => "Continued".to_string(),
-                            WaitStatus::StillAlive => "StillAlive".to_string(),
-                            _ => format!("Unknown({status:?})"),
+                            _ => "Unknown".to_string(),
                         });
                     }
                     Err(e) => {
                         return Err(PyRuntimeError::new_err(format!(
-                            "Failed to wait for process: {e}"
+                            "Failed to wait for process: {}",
+                            e
                         )));
                     }
                 }
@@ -451,14 +447,14 @@ impl PyPtyProcess {
 
     /// Exit the process gracefully asynchronously by sending SIGTERM.
     ///
-    /// This is the async version of `exit()`. It sends SIGTERM and waits for
+    /// This is the async version of exit(). It sends SIGTERM and waits for
     /// the process to terminate without blocking the async runtime.
     ///
     /// Returns:
     ///     A coroutine that resolves to a string describing the exit status.
     ///
     /// Raises:
-    ///     `RuntimeError`: If the process could not be terminated.
+    ///     RuntimeError: If the process could not be terminated.
     ///
     /// Examples
     /// --------
@@ -494,25 +490,27 @@ impl PyPtyProcess {
                     }
                     Err(e) => {
                         return Err(PyRuntimeError::new_err(format!(
-                            "Failed to kill process: {e}"
+                            "Failed to kill process: {}",
+                            e
                         )));
                     }
                 }
 
                 match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(WaitStatus::StillAlive | WaitStatus::Continued(_)) => {
+                    Ok(WaitStatus::StillAlive) | Ok(WaitStatus::Continued(_)) => {
                         sleep(Duration::from_millis(100)).await;
                     }
                     Ok(status) => {
                         return Ok(match status {
-                            WaitStatus::Exited(_, code) => format!("Exited({code})"),
-                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({signal:?})"),
-                            _ => format!("Unknown({status:?})"),
+                            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
+                            _ => format!("Unknown({:?})", status),
                         });
                     }
                     Err(e) => {
                         return Err(PyRuntimeError::new_err(format!(
-                            "Failed to wait for process: {e}"
+                            "Failed to wait for process: {}",
+                            e
                         )));
                     }
                 }
@@ -521,7 +519,7 @@ impl PyPtyProcess {
                 if let Some(timeout) = kill_timeout {
                     if start.elapsed() > timeout {
                         signal::kill(child_pid, signal::Signal::SIGKILL).map_err(|e| {
-                            PyRuntimeError::new_err(format!("Failed to SIGKILL process: {e}"))
+                            PyRuntimeError::new_err(format!("Failed to SIGKILL process: {}", e))
                         })?;
                     }
                 }

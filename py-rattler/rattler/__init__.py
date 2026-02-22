@@ -1,20 +1,20 @@
+from rattler.version import Version, VersionSpec, VersionWithSource
+from rattler.match_spec import MatchSpec, NamelessMatchSpec
+from rattler.repo_data import (
+    PackageRecord,
+    RepoData,
+    RepoDataRecord,
+    PatchInstructions,
+    SparseRepoData,
+    Gateway,
+    SourceConfig,
+    PackageFormatSelection,
+    RepoDataSource,
+)
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.explicit_environment import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec
-from rattler.index import index
-from rattler.install import install
-from rattler.lock import (
-    LockFile,
-    Environment,
-    LockChannel,
-    PackageHashes,
-    LockedPackage,
-    CondaLockedSourcePackage,
-    CondaLockedBinaryPackage,
-    CondaLockedPackage,
-    PypiLockedPackage,
-)
-from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.networking import Client, fetch_repo_data
+from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
     PackageName,
     AboutJson,
@@ -28,23 +28,23 @@ from rattler.package import (
     NoArchType,
     NoArchLiteral,
 )
-from rattler.platform import Platform
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
-from rattler.repo_data import (
-    PackageRecord,
-    RepoData,
-    RepoDataRecord,
-    PatchInstructions,
-    SparseRepoData,
-    Gateway,
-    SourceConfig,
-    PackageFormatSelection,
-    RepoDataSource,
+from rattler.platform import Platform
+from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
+from rattler.install import install
+from rattler.index import index
+from rattler.lock import (
+    LockFile,
+    Environment,
+    LockChannel,
+    PackageHashes,
+    LockedPackage,
+    CondaLockedSourcePackage,
+    CondaLockedBinaryPackage,
+    CondaLockedPackage,
+    PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
-from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
-from rattler.version import Version, VersionSpec, VersionWithSource
-from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 
 __version__ = _get_rattler_version()
 del _get_rattler_version

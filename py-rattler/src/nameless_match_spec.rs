@@ -132,12 +132,12 @@ impl PyNamelessMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns a string representation of `MatchSpec`
+    /// Returns a string representation of MatchSpec
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }
 
-    /// Match a `PyNamelessMatchSpec` against a `PackageRecord`
+    /// Match a PyNamelessMatchSpec against a PackageRecord
     pub fn matches(&self, record: &PyRecord) -> bool {
         self.inner.matches(&record.as_package_record().clone())
     }

@@ -367,7 +367,7 @@ impl PyPrefixPlaceholder {
     }
 
     /// The type of the file, either binary or text. Depending on the type of file either text
-    /// replacement is performed or `CString` replacement.
+    /// replacement is performed or CString replacement.
     #[getter]
     pub fn file_mode(&self) -> PyFileMode {
         self.inner.file_mode.into()

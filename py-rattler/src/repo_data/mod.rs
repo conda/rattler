@@ -46,7 +46,7 @@ impl PyRepoData {
 
 #[pymethods]
 impl PyRepoData {
-    /// Parses `RepoData` from a file.
+    /// Parses RepoData from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(RepoData::from_path(path)

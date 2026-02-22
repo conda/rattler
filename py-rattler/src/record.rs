@@ -35,7 +35,7 @@ use crate::{
 /// It uses a `RecordInner` enum and (try_)as_{x}_record methods for this
 /// interface.
 ///
-/// `PyO3` cannot expose tagged enums directly, to achieve this we use the
+/// PyO3 cannot expose tagged enums directly, to achieve this we use the
 /// `PyRecord` wrapper pyclass on top of `RecordInner`.
 #[pyclass]
 #[repr(transparent)]
@@ -531,7 +531,7 @@ impl PyRecord {
     /// Track features are nowadays only used to downweight packages
     /// (ie. give them less priority). To that effect, the number of track
     /// features is counted (number of commas) and the package is downweighted
-    /// by the number of `track_features`.
+    /// by the number of track_features.
     #[getter]
     pub fn track_features(&self) -> Vec<String> {
         self.as_package_record().track_features.clone()
@@ -668,7 +668,7 @@ impl PyRecord {
 
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
-    /// Deprecated: Use `requested_specs` instead.
+    /// Deprecated: Use requested_specs instead.
     #[getter]
     #[allow(deprecated)]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
@@ -683,7 +683,7 @@ impl PyRecord {
     }
 
     /// Multiple specs that were used when this package was installed.
-    /// This field replaces the deprecated `requested_spec` field.
+    /// This field replaces the deprecated requested_spec field.
     #[getter]
     pub fn requested_specs(&self) -> PyResult<Vec<String>> {
         Ok(self.try_as_prefix_record()?.requested_specs.clone())
@@ -810,7 +810,7 @@ impl AsMut<PackageRecord> for PyRecord {
 
 #[pymethods]
 impl PyRecord {
-    /// Parses a `PrefixRecord` from a file.
+    /// Parses a PrefixRecord from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(PrefixRecord::from_path(path)

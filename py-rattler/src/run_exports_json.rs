@@ -129,9 +129,9 @@ impl PyRunExportsJson {
         self.inner.strong = strong;
     }
 
-    /// `NoArch` run exports apply a run export only to `noarch` packages (other run exports are ignored).
-    /// For example, `python` uses this to apply a dependency on `python` to all `noarch` packages, but not to
-    /// the `python_abi` package.
+    /// NoArch run exports apply a run export only to noarch packages (other run exports are ignored).
+    /// For example, python uses this to apply a dependency on python to all noarch packages, but not to
+    /// the python_abi package.
     #[getter]
     pub fn noarch(&self) -> Vec<String> {
         self.inner.noarch.clone()
