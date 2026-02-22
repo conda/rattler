@@ -78,6 +78,7 @@ async fn main() {
         None,
         None,
         SolveStrategy::default(),
+        Vec::new(),
     )
     .unwrap();
 

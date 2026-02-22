@@ -714,6 +714,7 @@ mod libsolv_c {
                 exclude_newer: None,
                 min_age: None,
                 strategy: SolveStrategy::default(),
+                dependency_overrides: Vec::new(),
             })
             .unwrap()
             .records;
@@ -1000,6 +1001,26 @@ mod resolvo {
     fn test_lowest_version_direct_strategy() {
         crate::strategy_tests::solve_lowest_version_direct_strategy::<rattler_solve::resolvo::Solver>(
         );
+    }
+
+    #[test]
+    fn test_dependency_override_basic() {
+        crate::solver_case_tests::solve_dependency_override_basic::<rattler_solve::resolvo::Solver>(
+        );
+    }
+
+    #[test]
+    fn test_dependency_override_no_match() {
+        crate::solver_case_tests::solve_dependency_override_no_match::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_dependency_override_multiple() {
+        crate::solver_case_tests::solve_dependency_override_multiple::<
+            rattler_solve::resolvo::Solver,
+        >();
     }
 }
 
