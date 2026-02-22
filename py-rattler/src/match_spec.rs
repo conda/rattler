@@ -63,7 +63,7 @@ impl PyMatchSpec {
     /// The name of the package
     #[getter]
     pub fn name(&self) -> Option<PyPackageNameMatcher> {
-        self.inner.name.clone().map(std::convert::Into::into)
+        Some(self.inner.name.clone().into())
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -160,7 +160,7 @@ impl PyMatchSpec {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
+                PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?,
             ),
         })
     }

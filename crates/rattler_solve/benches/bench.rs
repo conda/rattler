@@ -57,7 +57,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
     let names = specs
         .iter()
-        .map(|s| Option::<PackageName>::from(s.name.clone().unwrap()).unwrap());
+        .map(|s| Option::<PackageName>::from(s.name.clone()).unwrap());
     let available_packages = SparseRepoData::load_records_recursive(
         &sparse_repo_data,
         names,

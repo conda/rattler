@@ -217,7 +217,7 @@ class SparseRepoData:
         >>> channel = Channel("dummy", ChannelConfig())
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, "linux-64", path)
-        >>> [record.file_name for record in sparse_data.load_matching_records([MatchSpec("* 12.5")])]
+        >>> [record.file_name for record in sparse_data.load_matching_records([MatchSpec("cuda-version 12.5")])]
         ['cuda-version-12.5-hd4f0392_3.conda']
         >>>
         ```
