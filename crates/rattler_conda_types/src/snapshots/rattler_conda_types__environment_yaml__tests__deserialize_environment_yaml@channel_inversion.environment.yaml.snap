@@ -9,4 +9,4 @@ channels:
   - conda-forge
 dependencies:
   - cudf
-  - "conda-forge::cuda-python"
+  - "https://conda.anaconda.org/conda-forge::cuda-python"
