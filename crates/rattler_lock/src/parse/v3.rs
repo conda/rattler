@@ -253,7 +253,7 @@ pub fn parse_v3_or_lower(
                 let deduplicated_index = pypi_packages
                     .insert_full(PypiPackageData {
                         name: pep508_rs::PackageName::new(pkg.name)?,
-                        version: pkg.version,
+                        version: Some(pkg.version),
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
                         location: Verbatim::new(UrlOrPath::Url(pkg.url)),

@@ -84,7 +84,7 @@ pub struct PypiPackageDataRaw {
     pub name: pep508_rs::PackageName,
 
     /// The version of the package.
-    pub version: pep440_rs::Version,
+    pub version: Option<pep440_rs::Version>,
 
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,

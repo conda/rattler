@@ -13,7 +13,7 @@ pub struct PypiPackageData {
     pub name: PackageName,
 
     /// The version of the package.
-    pub version: pep440_rs::Version,
+    pub version: Option<pep440_rs::Version>,
 
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
@@ -57,13 +57,18 @@ impl PypiPackageData {
             None => {}
             Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
             Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
-                if !spec.contains(&self.version) {
-                    return false;
-                }
+                return self.version.as_ref().is_none_or(|v| spec.contains(v))
             }
         }
 
         true
+    }
+
+    /// Return the the `version` as a `String` (or `<dynamic>` if the version is `None`)
+    pub fn version_string(&self) -> String {
+        self.version
+            .as_ref()
+            .map_or_else(|| "<dynamic>".to_string(), std::string::ToString::to_string)
     }
 }
 

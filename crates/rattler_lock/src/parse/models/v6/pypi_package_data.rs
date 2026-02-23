@@ -52,7 +52,7 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         Self {
             name: value.name.into_owned(),
-            version: value.version.into_owned(),
+            version: Some(value.version.into_owned()),
             location: value.location.into_owned(),
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
