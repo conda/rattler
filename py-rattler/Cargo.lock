@@ -3697,6 +3697,7 @@ dependencies = [
  "rattler_virtual_packages",
  "reqwest 0.12.28",
  "reqwest-middleware",
+ "reqwest-retry",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
@@ -3973,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.13"
+version = "0.39.14"
 dependencies = [
  "anyhow",
  "console",
@@ -4017,7 +4018,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.12"
+version = "0.6.13"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4048,7 +4049,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.43.3"
+version = "0.43.4"
 dependencies = [
  "ahash",
  "chrono",
@@ -4088,7 +4089,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console",
  "fs-err",
@@ -4121,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.14"
+version = "0.27.15"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4158,7 +4159,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.14"
+version = "0.26.15"
 dependencies = [
  "ahash",
  "chrono",
@@ -4190,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.47"
+version = "0.2.48"
 dependencies = [
  "chrono",
  "configparser",
@@ -4219,7 +4220,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4249,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.0"
+version = "0.24.1"
 dependencies = [
  "astral-tokio-tar",
  "astral_async_zip",
@@ -4303,7 +4304,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4365,7 +4366,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4381,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4399,7 +4400,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.2.4"
+version = "4.2.5"
 dependencies = [
  "chrono",
  "futures",
@@ -4416,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.9"
+version = "2.3.10"
 dependencies = [
  "archspec",
  "libloading",
@@ -4675,6 +4676,27 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tower-service",
+]
+
+[[package]]
+name = "reqwest-retry"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105747e3a037fe5bf17458d794de91149e575b6183fc72c85623a44abb9683f5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "getrandom 0.2.17",
+ "http 1.4.0",
+ "hyper",
+ "reqwest 0.12.28",
+ "reqwest-middleware",
+ "retry-policies",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "wasmtimer",
 ]
 
 [[package]]

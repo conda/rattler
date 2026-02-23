@@ -19,6 +19,7 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
+    Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
     S3(PyS3Middleware),
@@ -75,6 +76,21 @@ impl PyAuthenticationMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyRetryMiddleware {
+    pub(crate) max_retries: u32,
+}
+
+#[pymethods]
+impl PyRetryMiddleware {
+    #[new]
+    #[pyo3(signature = (max_retries=3))]
+    pub fn __init__(max_retries: u32) -> Self {
+        Self { max_retries }
     }
 }
 

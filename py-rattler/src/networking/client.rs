@@ -9,6 +9,8 @@ use rattler_networking::{
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
+use reqwest_retry::RetryTransientMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
 use std::collections::HashMap;
 
 static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -57,6 +59,12 @@ impl PyClientWithMiddleware {
                         AuthenticationMiddleware::from_env_and_defaults()
                             .map_err(PyRattlerError::from)?,
                     );
+                }
+                PyMiddleware::Retry(middleware) => {
+                    let policy = ExponentialBackoff::builder()
+                        .build_with_max_retries(middleware.max_retries);
+                    client =
+                        client.with(RetryTransientMiddleware::new_with_policy(policy));
                 }
                 PyMiddleware::Oci(middleware) => {
                     client = client.with(OciMiddleware::from(middleware));
