@@ -15,7 +15,7 @@ use crate::{
     record::PyRecord,
 };
 
-// Import the new reporter
+// Import the py_install_reporter
 use crate::py_install_reporter::{PyInstallReporter, SharedError};
 
 #[pyfunction]
@@ -72,7 +72,13 @@ pub fn py_install<'a>(
 
     future_into_py(py, async move {
         let mut installer = Installer::new().with_execute_link_scripts(execute_link_scripts);
-        
+
+        // If a Python progress delegate is provided, wrap it in a PyInstallReporter
+        // and attach it to the installer. We also create a shared error slot
+        // (Arc<Mutex<Option<PyErr>>>) that allows the reporter to capture any
+        // Python-side exception raised during progress callbacks. After the
+        // installation finishes, we check this slot and propagate the error
+        // back to Python. If no delegate we default back to the IndicatifReporter if progress is enabled.
         let delegate_error: Option<SharedError> = if let Some(delegate) = progress_delegate {
             let error: SharedError = std::sync::Arc::new(std::sync::Mutex::new(None));
             let reporter = PyInstallReporter::new(delegate, error.clone());
@@ -120,6 +126,7 @@ pub fn py_install<'a>(
             .await
             .map_err(PyRattlerError::from)?;
 
+        // We inspect the slot and propagate the error back to python if any occurred
         if let Some(error_slot) = delegate_error {
             if let Some(err) = error_slot.lock().unwrap().take() {
                 return Err(err);
