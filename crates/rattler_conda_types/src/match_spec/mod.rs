@@ -733,7 +733,6 @@ mod tests {
 
         // EDGE CASE 1: The Security Boundary
         // In Strict mode (exact_names_only = true), a standalone `*` SHOULD be rejected.
-        // The previous hack used to bypass this. The new architecture catches it.
         let strict_spec = MatchSpec::from_str("*", Strict);
         match strict_spec {
             Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(g)) => {
