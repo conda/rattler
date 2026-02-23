@@ -676,7 +676,7 @@ pip-24.0-pyhd8ed1ab_0
                 &rev,
                 Some("conda install numpy"),
                 Some("24.1.0"),
-                Some(("install", &specs)),
+                Some(("install", &specs[..])),
             )
             .unwrap();
 
