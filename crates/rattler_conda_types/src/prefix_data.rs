@@ -2,16 +2,28 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 use crate::package::ArchiveIdentifier;
 use crate::package_name::PackageName;
 use crate::PrefixRecord;
 
+/// An error that can occur when loading a prefix record
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("io error: {0}")]
+pub struct PrefixDataError(pub Arc<std::io::Error>);
+
+impl From<std::io::Error> for PrefixDataError {
+    fn from(err: std::io::Error) -> Self {
+        PrefixDataError(Arc::new(err))
+    }
+}
+
 /// Internal state for a lazily loaded package record
 struct LazyRecordEntry {
     path: PathBuf,
-    record: OnceLock<Result<PrefixRecord, std::io::Error>>,
+    record: OnceLock<Result<PrefixRecord, PrefixDataError>>,
 }
 
 /// A lazily populated view of the `conda-meta` directory in a prefix.
@@ -75,14 +87,14 @@ impl PrefixData {
     pub fn get(
         &self,
         package_name: &PackageName,
-    ) -> Option<Result<&PrefixRecord, &std::io::Error>> {
+    ) -> Option<Result<&PrefixRecord, &PrefixDataError>> {
         // 1. Check if the file path exists in our initial scan
         let entry = self.records.get(package_name)?;
 
         // 2. Parse the file if we haven't already.
         let record_result = entry
             .record
-            .get_or_init(|| PrefixRecord::from_path(&entry.path));
+            .get_or_init(|| PrefixRecord::from_path(&entry.path).map_err(PrefixDataError::from));
 
         // 3. .as_ref() elegantly converts &Result<T, E> into Result<&T, &E>
         Some(record_result.as_ref())
