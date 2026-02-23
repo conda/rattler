@@ -371,7 +371,7 @@ pub enum PackageData<'a> {
 impl PackageData<'_> {
     fn source_name(&self) -> &str {
         match self {
-            PackageData::Conda(p) => p.record().name.as_source(),
+            PackageData::Conda(p) => p.name().as_source(),
             PackageData::Pypi(p) => p.name.as_ref(),
         }
     }

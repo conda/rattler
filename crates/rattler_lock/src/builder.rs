@@ -48,7 +48,7 @@ impl LockedPackage {
     /// might not be the normalized name.
     pub fn name(&self) -> &str {
         match self {
-            LockedPackage::Conda(data) => data.record().name.as_source(),
+            LockedPackage::Conda(data) => data.name().as_source(),
             LockedPackage::Pypi(data) => data.name.as_ref(),
         }
     }
@@ -115,15 +115,20 @@ pub struct LockFileBuilder {
     /// Metadata about the different environments stored in the lock file.
     environments: IndexMap<String, EnvironmentData>,
 
-    /// A list of all package metadata stored in the lock file.
-    conda_packages: IndexMap<UniqueCondaIdentifier, CondaPackageData>,
+    /// All conda packages stored in the lock file.
+    conda_packages: Vec<CondaPackageData>,
+
+    /// Maps unique binary package identifiers to their index in `conda_packages`.
+    /// Used for deduplication of binary packages.
+    binary_package_indices: HashMap<UniqueBinaryIdentifier, usize>,
+
     pypi_packages: IndexSet<PypiPackageData>,
 }
 
-/// A unique identifier for a conda package. This is used to deduplicate
+/// A unique identifier for a binary conda package. This is used to deduplicate
 /// packages. This only includes the unique identifying aspects of a package.
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct UniqueCondaIdentifier {
+struct UniqueBinaryIdentifier {
     location: UrlOrPath,
     normalized_name: String,
     version: Version,
@@ -131,14 +136,14 @@ struct UniqueCondaIdentifier {
     subdir: String,
 }
 
-impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
-    fn from(value: &'a CondaPackageData) -> Self {
+impl<'a> From<&'a CondaBinaryData> for UniqueBinaryIdentifier {
+    fn from(data: &'a CondaBinaryData) -> Self {
         Self {
-            location: value.location().clone(),
-            normalized_name: value.record().name.as_normalized().to_string(),
-            version: value.record().version.version().clone(),
-            build: value.record().build.clone(),
-            subdir: value.record().subdir.clone(),
+            location: data.location.clone(),
+            normalized_name: data.package_record.name.as_normalized().to_string(),
+            version: data.package_record.version.version().clone(),
+            build: data.package_record.build.clone(),
+            subdir: data.package_record.subdir.clone(),
         }
     }
 }
@@ -317,18 +322,36 @@ impl LockFileBuilder {
                 platform: platform_name.to_string(),
             }
         })?;
-        let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
+        let package_idx = match &locked_package {
+            CondaPackageData::Binary(binary_data) => {
+                let unique_identifier = UniqueBinaryIdentifier::from(binary_data);
 
-        // Add the package to the list of packages.
-        let entry = self.conda_packages.entry(unique_identifier);
-        let package_idx = entry.index();
-        entry
-            .and_modify(|pkg| {
-                if let Cow::Owned(merged_package) = pkg.merge(&locked_package) {
-                    *pkg = merged_package;
+                // Check if we already have this binary package
+                if let Some(&existing_idx) = self.binary_package_indices.get(&unique_identifier) {
+                    // Merge with existing package
+                    if let CondaPackageData::Binary(existing) =
+                        &mut self.conda_packages[existing_idx]
+                    {
+                        if let Cow::Owned(merged) = existing.merge(binary_data) {
+                            *existing = merged;
+                        }
+                    }
+                    existing_idx
+                } else {
+                    // Add new binary package
+                    let idx = self.conda_packages.len();
+                    self.conda_packages.push(locked_package);
+                    self.binary_package_indices.insert(unique_identifier, idx);
+                    idx
                 }
-            })
-            .or_insert(locked_package);
+            }
+            CondaPackageData::Source(_) => {
+                // Source packages are never merged, just appended
+                let idx = self.conda_packages.len();
+                self.conda_packages.push(locked_package);
+                idx
+            }
+        };
 
         // Add the package to the environment that it is intended for.
         self.environment_data(environment)
@@ -441,7 +464,7 @@ impl LockFileBuilder {
             inner: Arc::new(LockFileInner {
                 version: FileFormatVersion::LATEST,
                 platforms: self.platforms,
-                conda_packages: self.conda_packages.into_values().collect(),
+                conda_packages: self.conda_packages,
                 pypi_packages: self.pypi_packages.into_iter().collect(),
                 environments,
                 environment_lookup,
