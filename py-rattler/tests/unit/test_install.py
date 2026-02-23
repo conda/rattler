@@ -32,6 +32,23 @@ class FailingDelegate:
         raise RuntimeError(f"delegate error on {package_name}")
 
 
+class PartialDelegate:
+    """A delegate that only implements a subset of progress callbacks."""
+
+    def __init__(self) -> None:
+        self.link_starts: list[str] = []
+
+    def on_link_start(self, package_name: str) -> None:
+        self.link_starts.append(package_name)
+
+
+class FailingUnlinkDelegate:
+    """A delegate that raises on unlink_start to test unlink error propagation."""
+
+    def on_unlink_start(self, package_name: str) -> None:
+        raise RuntimeError(f"unlink delegate error on {package_name}")
+
+
 @pytest.mark.asyncio
 async def test_install(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache"
@@ -135,9 +152,7 @@ async def test_reinstall_with_progress_delegate(gateway: Gateway, conda_forge_ch
 
 
 @pytest.mark.asyncio
-async def test_install_delegate_exception_aborts(
-    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
-) -> None:
+async def test_install_delegate_exception_aborts(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
@@ -151,3 +166,47 @@ async def test_install_delegate_exception_aborts(
     delegate = FailingDelegate()
     with pytest.raises(RuntimeError, match="delegate error"):
         await install(solved_data, env_dir, cache_dir, progress_delegate=delegate)
+
+
+@pytest.mark.asyncio
+async def test_install_with_partial_progress_delegate(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    env_dir = tmp_path / "env"
+
+    solved_data = await solve(
+        [conda_forge_channel],
+        ["conda-forge-pinning"],
+        platforms=["noarch"],
+        gateway=gateway,
+    )
+
+    delegate = PartialDelegate()
+    await install(solved_data, env_dir, cache_dir, progress_delegate=delegate)
+
+    assert "conda-forge-pinning" in delegate.link_starts
+    assert os.path.exists(env_dir / "conda_build_config.yaml")
+
+
+@pytest.mark.asyncio
+async def test_reinstall_unlink_delegate_exception_aborts(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    env_dir = tmp_path / "env"
+
+    solved_data = await solve(
+        [conda_forge_channel],
+        ["conda-forge-pinning"],
+        platforms=["noarch"],
+        gateway=gateway,
+    )
+
+    await install(solved_data, env_dir, cache_dir)
+
+    delegate = FailingUnlinkDelegate()
+    with pytest.raises(RuntimeError, match="unlink delegate error"):
+        await install(
+            solved_data,
+            env_dir,
+            cache_dir,
+            reinstall_packages={"conda-forge-pinning"},
+            progress_delegate=delegate,
+        )
