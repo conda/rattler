@@ -152,7 +152,9 @@ async def test_reinstall_with_progress_delegate(gateway: Gateway, conda_forge_ch
 
 
 @pytest.mark.asyncio
-async def test_install_delegate_exception_aborts(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
+async def test_install_delegate_exception_aborts(
+    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
+) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
@@ -169,7 +171,9 @@ async def test_install_delegate_exception_aborts(gateway: Gateway, conda_forge_c
 
 
 @pytest.mark.asyncio
-async def test_install_with_partial_progress_delegate(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
+async def test_install_with_partial_progress_delegate(
+    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
+) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
@@ -188,7 +192,9 @@ async def test_install_with_partial_progress_delegate(gateway: Gateway, conda_fo
 
 
 @pytest.mark.asyncio
-async def test_reinstall_unlink_delegate_exception_aborts(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
+async def test_reinstall_unlink_delegate_exception_aborts(
+    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
+) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
