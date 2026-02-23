@@ -91,6 +91,7 @@ hex-literal = { workspace = true }
 http = { workspace = true }
 http-cache-semantics = { workspace = true, features = ["serde"] }
 insta = { workspace = true, features = ["yaml"] }
+memmap2 = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
 regex = { workspace = true }
 rmp-serde = { workspace = true }

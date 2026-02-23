@@ -175,9 +175,10 @@ async fn repodata_from_file(
 /// doing a HEAD request to the respective URLs. The result of these are cached.
 ///
 /// On Windows, replacing a memory-mapped file fails with "access denied". When
-/// concurrent fetches race to write the same cache path we rename the existing
-/// file aside before placing the new one. Left-over renamed files are cleaned
-/// up on the next call while the exclusive lock is held.
+/// the persist fails (e.g. because the target is still memory-mapped), the
+/// existing file is moved into a `.trash` subdirectory and the persist is
+/// retried. Left-over trashed files are cleaned up eagerly on subsequent
+/// fetches while the exclusive lock is held.
 #[instrument(err(level = Level::INFO), skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
@@ -448,36 +449,46 @@ pub async fn fetch_repo_data(
     }
 
     // Persist the file to its final destination. On Windows, overwriting a
-    // memory-mapped file fails with "access denied", so we rename the existing
-    // copy aside before writing and clean up afterwards.
+    // memory-mapped file fails with "access denied", so if the initial persist
+    // fails we move the existing file into a `.trash` subdirectory and retry.
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
-        // Clean up leftovers from any previous concurrent write.
-        cleanup_deprecated_repodata_files(&repo_data_destination_path);
+        // Clean up any leftovers in the .trash directory from previous runs.
+        cleanup_trash_dir(&repo_data_destination_path);
 
-        // Move the existing file aside so the persist below doesn't fail on Windows.
-        if repo_data_destination_path.exists() {
-            let deprecated = deprecated_repodata_path(&repo_data_destination_path);
-            if let Err(err) = std::fs::rename(&repo_data_destination_path, &deprecated) {
-                tracing::warn!(
-                    "failed to move existing repodata cache aside before \
-                     replacing it ({}); attempting an in-place replace instead",
-                    err
+        // First attempt: just try to persist directly.
+        let file = match temp_file.persist(&repo_data_destination_path) {
+            Ok(f) => f,
+            Err(err) => {
+                // On Windows the target may still be memory-mapped. Move the
+                // existing file into a `.trash` subdirectory and retry.
+                tracing::debug!(
+                    "initial persist failed ({}); moving existing cache file \
+                     into .trash and retrying",
+                    err.error
                 );
+
+                if let Err(trash_err) =
+                    move_to_trash(&repo_data_destination_path)
+                {
+                    tracing::warn!(
+                        "failed to move existing cache file into .trash: {}",
+                        trash_err
+                    );
+                }
+
+                // Retry the persist with the original temp file.
+                err.file.persist(&repo_data_destination_path).map_err(|e| {
+                    FetchRepoDataError::FailedToPersistTemporaryFile(
+                        e,
+                        repo_data_destination_path.clone(),
+                    )
+                })?
             }
-        }
+        };
 
-        let file = temp_file
-            .persist(repo_data_destination_path.clone())
-            .map_err(|e| {
-                FetchRepoDataError::FailedToPersistTemporaryFile(
-                    e,
-                    repo_data_destination_path.clone(),
-                )
-            })?;
-
-        // Best-effort: try to remove the file we just renamed aside.
-        cleanup_deprecated_repodata_files(&repo_data_destination_path);
+        // Best-effort: clean up the .trash directory again.
+        cleanup_trash_dir(&repo_data_destination_path);
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding
@@ -727,9 +738,19 @@ async fn check_valid_download_target(url: &Url, client: &LazyClient) -> bool {
     }
 }
 
-/// Sidestep path used to park an existing cache file before a new one is written.
-/// A nanosecond timestamp keeps the name unique when multiple writers race.
-fn deprecated_repodata_path(json_path: &std::path::Path) -> std::path::PathBuf {
+/// Returns the path to the `.trash` subdirectory next to the given cache file.
+fn trash_dir_for(json_path: &std::path::Path) -> Option<std::path::PathBuf> {
+    json_path.parent().map(|dir| dir.join(".trash"))
+}
+
+/// Moves the existing cache file into a `.trash` subdirectory with a unique
+/// name. This allows the new file to be written to the canonical location even
+/// when the old file is still memory-mapped on Windows.
+fn move_to_trash(json_path: &std::path::Path) -> std::io::Result<()> {
+    let trash = trash_dir_for(json_path)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no parent directory"))?;
+    std::fs::create_dir_all(&trash)?;
+
     let suffix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -738,41 +759,31 @@ fn deprecated_repodata_path(json_path: &std::path::Path) -> std::path::PathBuf {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("repodata.json");
-    json_path.with_file_name(format!("{file_name}.deprecated.{suffix}"))
+    let dest = trash.join(format!("{file_name}.{suffix}"));
+    std::fs::rename(json_path, dest)
 }
 
-/// Removes any `.deprecated.*` files left behind by a previous concurrent writer.
-/// Deletion is best-effort since a file may still be memory-mapped on Windows.
-fn cleanup_deprecated_repodata_files(json_path: &std::path::Path) {
-    let Some(dir) = json_path.parent() else {
+/// Removes all files from the `.trash` subdirectory and then removes the
+/// directory itself. Deletion is best-effort since a file may still be
+/// memory-mapped on Windows.
+fn cleanup_trash_dir(json_path: &std::path::Path) {
+    let Some(trash) = trash_dir_for(json_path) else {
         return;
     };
-    let Some(file_name) = json_path.file_name().and_then(|n| n.to_str()) else {
+    let Ok(entries) = std::fs::read_dir(&trash) else {
         return;
     };
-    let prefix = format!("{file_name}.deprecated.");
-    match std::fs::read_dir(dir) {
-        Ok(entries) => {
-            for entry in entries.flatten() {
-                if entry.file_name().to_string_lossy().starts_with(&prefix) {
-                    if let Err(err) = std::fs::remove_file(entry.path()) {
-                        tracing::debug!(
-                            "could not remove deprecated repodata cache file {:?}: {}",
-                            entry.path(),
-                            err
-                        );
-                    }
-                }
-            }
-        }
-        Err(err) => {
+    for entry in entries.flatten() {
+        if let Err(err) = std::fs::remove_file(entry.path()) {
             tracing::debug!(
-                "could not read cache directory {:?} during deprecated file cleanup: {}",
-                dir,
+                "could not remove trashed cache file {:?}: {}",
+                entry.path(),
                 err
             );
         }
     }
+    // Try to remove the directory itself (will only succeed if empty).
+    let _ = std::fs::remove_dir(&trash);
 }
 
 // Ensures that the URL contains a trailing slash. This is important for the
@@ -1565,6 +1576,10 @@ mod test {
     // Regression test for https://github.com/conda/rattler/issues/1952.
     // Concurrent fetches for the same uncached channel must all succeed even
     // though every task tries to persist to the same cache path.
+    //
+    // The test memory-maps the cache file after the first fetch so that on
+    // Windows the file cannot simply be deleted, exercising the `.trash`
+    // move-aside fallback.
     #[tracing_test::traced_test]
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_concurrent_fetch_no_cache_headers() {
@@ -1586,9 +1601,43 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let cache_path = cache_dir.path().to_owned();
 
-        // Spawn all fetches concurrently. Drop the result inside each task so
-        // the lock is released before the JoinHandle is awaited; holding it
-        // across the await would serialize the tasks and defeat the test.
+        let cache_key =
+            crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
+        let json_path = cache_path.join(format!("{cache_key}.json"));
+
+        // Do an initial fetch so the cache file exists on disk.
+        let initial = fetch_repo_data(
+            server_url.clone(),
+            LazyClient::default(),
+            cache_path.clone(),
+            FetchRepoDataOptions {
+                bz2_enabled: false,
+                zstd_enabled: false,
+                ..FetchRepoDataOptions::default()
+            },
+            None,
+        )
+        .await
+        .expect("initial fetch should succeed");
+        // Release the lock from the initial fetch.
+        drop(initial);
+
+        // Memory-map the cache file. On Windows this prevents deletion until
+        // the mapping is dropped, which is exactly the scenario that triggers
+        // "access denied" (OS error 5).
+        let mmap = {
+            let file = std::fs::File::open(&json_path)
+                .expect("cache file must exist after initial fetch");
+            unsafe { memmap2::Mmap::map(&file) }
+                .expect("memory mapping should succeed")
+        };
+        // Verify the mmap is valid (holds the file open).
+        assert!(!mmap.is_empty(), "memory-mapped file must not be empty");
+
+        // Now spawn concurrent fetches while the file is still memory-mapped.
+        // Drop the result inside each task so the lock is released before the
+        // JoinHandle is awaited; holding it across the await would serialize
+        // the tasks and defeat the test.
         let fetches: Vec<_> = (0..4)
             .map(|_| {
                 let url = server_url.clone();
@@ -1618,26 +1667,26 @@ mod test {
                 .expect("fetch should succeed even when concurrent writers race");
         }
 
-        // Canonical file must exist and no deprecated leftovers should remain.
-        let cache_key =
-            crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
-        let json_path = cache_path.join(format!("{cache_key}.json"));
+        // Drop the memory map so cleanup can proceed.
+        drop(mmap);
+
+        // Canonical file must exist.
         assert!(
             json_path.exists(),
             "canonical repodata.json cache file must exist"
         );
-        let deprecated_count = std::fs::read_dir(&cache_path)
-            .unwrap()
-            .flatten()
-            .filter(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .contains(".json.deprecated.")
-            })
-            .count();
-        assert_eq!(
-            deprecated_count, 0,
-            "all deprecated files should have been cleaned up"
-        );
+
+        // The .trash directory should either not exist or be empty.
+        let trash_dir = cache_path.join(".trash");
+        if trash_dir.exists() {
+            let trash_count = std::fs::read_dir(&trash_dir)
+                .unwrap()
+                .flatten()
+                .count();
+            assert_eq!(
+                trash_count, 0,
+                "all trashed files should have been cleaned up"
+            );
+        }
     }
 }
