@@ -682,7 +682,7 @@ impl Installer {
                 transaction.unchanged_packages(),
                 &prefix,
             )
-            .unwrap();
+            .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
 
         // Wait for all transaction operations to finish
         while let Some(result) = pending_link_futures.next().await {
