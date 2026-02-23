@@ -468,9 +468,7 @@ pub async fn fetch_repo_data(
                     err.error
                 );
 
-                if let Err(trash_err) =
-                    move_to_trash(&repo_data_destination_path)
-                {
+                if let Err(trash_err) = move_to_trash(&repo_data_destination_path) {
                     tracing::warn!(
                         "failed to move existing cache file into .trash: {}",
                         trash_err
@@ -747,8 +745,8 @@ fn trash_dir_for(json_path: &std::path::Path) -> Option<std::path::PathBuf> {
 /// name. This allows the new file to be written to the canonical location even
 /// when the old file is still memory-mapped on Windows.
 fn move_to_trash(json_path: &std::path::Path) -> std::io::Result<()> {
-    let trash = trash_dir_for(json_path)
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no parent directory"))?;
+    let trash =
+        trash_dir_for(json_path).ok_or_else(|| std::io::Error::other("no parent directory"))?;
     std::fs::create_dir_all(&trash)?;
 
     let suffix = std::time::SystemTime::now()
@@ -1626,10 +1624,9 @@ mod test {
         // the mapping is dropped, which is exactly the scenario that triggers
         // "access denied" (OS error 5).
         let mmap = {
-            let file = std::fs::File::open(&json_path)
-                .expect("cache file must exist after initial fetch");
-            unsafe { memmap2::Mmap::map(&file) }
-                .expect("memory mapping should succeed")
+            let file =
+                std::fs::File::open(&json_path).expect("cache file must exist after initial fetch");
+            unsafe { memmap2::Mmap::map(&file) }.expect("memory mapping should succeed")
         };
         // Verify the mmap is valid (holds the file open).
         assert!(!mmap.is_empty(), "memory-mapped file must not be empty");
@@ -1679,10 +1676,7 @@ mod test {
         // The .trash directory should either not exist or be empty.
         let trash_dir = cache_path.join(".trash");
         if trash_dir.exists() {
-            let trash_count = std::fs::read_dir(&trash_dir)
-                .unwrap()
-                .flatten()
-                .count();
+            let trash_count = std::fs::read_dir(&trash_dir).unwrap().flatten().count();
             assert_eq!(
                 trash_count, 0,
                 "all trashed files should have been cleaned up"
