@@ -76,9 +76,7 @@ async def test_reinstall(gateway: Gateway, conda_forge_channel: Channel, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_install_with_progress_delegate(
-    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
-) -> None:
+async def test_install_with_progress_delegate(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
@@ -102,9 +100,7 @@ async def test_install_with_progress_delegate(
 
 
 @pytest.mark.asyncio
-async def test_reinstall_with_progress_delegate(
-    gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path
-) -> None:
+async def test_reinstall_with_progress_delegate(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 

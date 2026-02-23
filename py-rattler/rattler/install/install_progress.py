@@ -1,5 +1,6 @@
 from typing import Protocol, runtime_checkable
 
+
 @runtime_checkable
 class InstallProgressDelegate(Protocol):
     """Protocol for objects that receive install progress events.
