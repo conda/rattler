@@ -207,8 +207,10 @@ impl PyLockFile {
             let pkg_data = PypiPackageData {
                 name: pep508_rs::PackageName::from_str(&name)
                     .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
-                version: pep440_rs::Version::from_str(&version)
-                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+                version: Some(
+                    pep440_rs::Version::from_str(&version)
+                        .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+                ),
                 location: Verbatim::<UrlOrPath>::from_str(&location)
                     .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
                 hash: None,
@@ -706,7 +708,7 @@ impl PyLockedPackage {
 
     #[getter]
     pub fn pypi_version(&self) -> String {
-        self.as_pypi().version.to_string()
+        self.as_pypi().version_string()
     }
 
     // Hashes of the file pointed to by `url`.
@@ -817,7 +819,7 @@ impl PyPypiPackageData {
     /// The version of the package.
     #[getter]
     pub fn version(&self) -> String {
-        self.inner.version.clone().to_string()
+        self.inner.version_string()
     }
 
     /// The URL that points to where the artifact can be downloaded from.
