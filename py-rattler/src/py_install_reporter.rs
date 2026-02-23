@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
+use pyo3::types::PyAnyMethods;
 use pyo3::{Py, PyAny, Python};
 use rattler::install::{Reporter, Transaction};
 use rattler_conda_types::{PrefixRecord, RepoDataRecord};
-use pyo3::types::PyAnyMethods;
+use std::sync::{Arc, Mutex};
 
 /// Shared error state between the reporter and the caller so that a delegate
 /// exception can be propagated after `install()` returns.
@@ -68,10 +68,16 @@ impl PyInstallReporter {
 impl Reporter for PyInstallReporter {
     fn on_transaction_start(&self, _transaction: &Transaction<PrefixRecord, RepoDataRecord>) {}
     fn on_transaction_operation_start(&self, _operation: usize) {}
-    fn on_populate_cache_start(&self, _operation: usize, _record: &RepoDataRecord) -> usize { 0 }
-    fn on_validate_start(&self, _cache_entry: usize) -> usize { 0 }
+    fn on_populate_cache_start(&self, _operation: usize, _record: &RepoDataRecord) -> usize {
+        0
+    }
+    fn on_validate_start(&self, _cache_entry: usize) -> usize {
+        0
+    }
     fn on_validate_complete(&self, _validate_idx: usize) {}
-    fn on_download_start(&self, _cache_entry: usize) -> usize { 0 }
+    fn on_download_start(&self, _cache_entry: usize) -> usize {
+        0
+    }
     fn on_download_progress(&self, _download_idx: usize, _progress: u64, _total: Option<u64>) {}
     fn on_download_completed(&self, _download_idx: usize) {}
     fn on_populate_cache_complete(&self, _cache_entry: usize) {}
@@ -107,8 +113,12 @@ impl Reporter for PyInstallReporter {
 
     fn on_transaction_operation_complete(&self, _operation: usize) {}
     fn on_transaction_complete(&self) {}
-    fn on_post_link_start(&self, _package_name: &str, _script_path: &str) -> usize { 0 }
+    fn on_post_link_start(&self, _package_name: &str, _script_path: &str) -> usize {
+        0
+    }
     fn on_post_link_complete(&self, _index: usize, _success: bool) {}
-    fn on_pre_unlink_start(&self, _package_name: &str, _script_path: &str) -> usize { 0 }
+    fn on_pre_unlink_start(&self, _package_name: &str, _script_path: &str) -> usize {
+        0
+    }
     fn on_pre_unlink_complete(&self, _index: usize, _success: bool) {}
 }
