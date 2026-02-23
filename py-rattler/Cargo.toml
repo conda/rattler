@@ -54,7 +54,9 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 ] }
 rattler_index = { path = "../crates/rattler_index" }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
-rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
+rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false, features = [
+  "reqwest",
+] }
 pyo3 = { version = "0.25.1", features = [
     "abi3-py38",
     "extension-module",

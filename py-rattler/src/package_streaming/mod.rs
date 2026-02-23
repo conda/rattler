@@ -1,11 +1,15 @@
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
+use rattler_conda_types::package::{AboutJson, IndexJson};
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use url::Url;
 
-use crate::{networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes};
+use crate::{
+    about_json::PyAboutJson, index_json::PyIndexJson, networking::client::PyClientWithMiddleware,
+    utils::sha256_from_pybytes,
+};
 
 fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject) {
     let sha256_bytes = PyBytes::new(py, &result.sha256);
@@ -78,5 +82,51 @@ pub fn download_and_extract<'a>(
     };
 
     // Convert the future to a Python awaitable
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn fetch_index_json_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = Url::parse(&url).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+    })?;
+
+    let future = async move {
+        rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<IndexJson>(
+            client.into(),
+            url,
+        )
+        .await
+        .map(PyIndexJson::from)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn fetch_about_json_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = Url::parse(&url).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+    })?;
+
+    let future = async move {
+        rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<AboutJson>(
+            client.into(),
+            url,
+        )
+        .await
+        .map(PyAboutJson::from)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+    };
+
     future_into_py(py, future)
 }
