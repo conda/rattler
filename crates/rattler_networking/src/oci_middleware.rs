@@ -13,12 +13,15 @@ use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use url::{ParseError, Url};
 
-use crate::mirror_middleware::create_404_response;
+use crate::{mirror_middleware::create_404_response, LazyClient};
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    #[error("Reqwest middleware error: {0}")]
+    ReqwestMiddleware(#[from] reqwest_middleware::Error),
 
     #[error("URL parse error: {0}")]
     ParseError(#[from] ParseError),
@@ -35,13 +38,15 @@ enum OciMiddlewareError {
 pub struct OciMiddleware {
     /// Shared HTTP client reused across all OCI requests to avoid creating a
     /// new connection pool on every token fetch or manifest pull.
-    client: reqwest::Client,
+    client: LazyClient,
 }
 
 impl OciMiddleware {
     /// Create a new [`OciMiddleware`] reusing the provided HTTP client.
-    pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+    pub fn new(client: impl Into<LazyClient>) -> Self {
+        Self {
+            client: client.into(),
+        }
     }
 }
 
@@ -72,13 +77,13 @@ impl Display for OciAction {
 
 // [oci://ghcr.io/channel-mirrors/conda-forge]/[osx-arm64/xtensor]
 async fn get_token(
-    client: &reqwest::Client,
+    client: &LazyClient,
     url: &OCIUrl,
     action: OciAction,
 ) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
 
-    let response = client.get(token_url.clone()).send().await?;
+    let response = client.client().get(token_url.clone()).send().await?;
 
     match response.error_for_status() {
         Ok(response) => {
@@ -189,7 +194,7 @@ impl OCIUrl {
     }
 
     pub async fn get_blob_url(
-        client: &reqwest::Client,
+        client: &LazyClient,
         req: &mut Request,
     ) -> Result<(), OciMiddlewareError> {
         let oci_url = OCIUrl::new(req.url())?;
@@ -213,6 +218,7 @@ impl OCIUrl {
             let manifest_url = oci_url.manifest_url()?; // TODO: handle error
 
             let manifest = client
+                .client()
                 .get(manifest_url)
                 .bearer_auth(&token)
                 .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
