@@ -8,6 +8,10 @@ use std::{ffi::OsStr, io::Read, path::Path};
 use tempfile::SpooledTempFile;
 use zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
 
+/// The minimum safe timestamp (1980-01-01T00:00:00 UTC) for filesystems like exFAT
+/// that do not support timestamps before 1980.
+const SAFE_MTIME_FLOOR: u64 = 315_532_800;
+
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
 /// extract the files from it, or perform introspection.
 pub fn stream_tar_bz2(reader: impl Read) -> tar::Archive<impl Read + Sized> {
@@ -30,7 +34,8 @@ pub fn extract_tar_bz2(
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
     process_with_hashing(reader, |reader| {
-        stream_tar_bz2(reader).unpack(destination)?;
+        let mut archive = stream_tar_bz2(reader);
+        unpack_tar_archive_sync(&mut archive, destination)?;
         Ok(())
     })
 }
@@ -92,7 +97,8 @@ fn extract_zipfile<R: std::io::Read>(
         .map(OsStr::to_string_lossy)
         .is_some_and(|file_name| file_name.ends_with(".tar.zst"))
     {
-        stream_tar_zst(&mut *file)?.unpack(destination)?;
+        let mut archive = stream_tar_zst(&mut *file)?;
+        unpack_tar_archive_sync(&mut archive, destination)?;
     } else {
         // Manually read to the end of the stream if that didn't happen.
         std::io::copy(&mut *file, &mut std::io::sink())?;
@@ -102,6 +108,60 @@ fn extract_zipfile<R: std::io::Read>(
     let _ = ManuallyDrop::into_inner(file);
 
     Ok(())
+}
+
+/// Unpacks a tar archive while handling mtime-setting failures gracefully.
+///
+/// Disables the tar crate's automatic mtime preservation and instead sets
+/// mtimes manually with clamping (to `SAFE_MTIME_FLOOR`) and error handling.
+/// This prevents fatal extraction failures on filesystems like exFAT that
+/// do not support timestamps before 1980-01-01.
+fn unpack_tar_archive_sync<R: Read>(
+    archive: &mut tar::Archive<R>,
+    destination: &Path,
+) -> Result<(), ExtractError> {
+    archive.set_preserve_mtime(false);
+
+    for entry in archive.entries().map_err(ExtractError::IoError)? {
+        let mut entry = entry.map_err(ExtractError::IoError)?;
+        let mtime = entry.header().mtime().unwrap_or(0);
+        let entry_type = entry.header().entry_type();
+        let path = entry.path().map_err(ExtractError::IoError)?.into_owned();
+
+        let unpacked = entry
+            .unpack_in(destination)
+            .map_err(ExtractError::IoError)?;
+
+        if unpacked {
+            let full_path = destination.join(&path);
+            set_mtime_safe(&full_path, mtime, entry_type.is_symlink());
+        }
+    }
+
+    Ok(())
+}
+
+/// Sets the modification time on a file, clamping to a safe minimum and
+/// logging a warning on failure instead of propagating the error.
+fn set_mtime_safe(path: &Path, mtime: u64, is_symlink: bool) {
+    let clamped = std::cmp::max(mtime, SAFE_MTIME_FLOOR);
+    let file_time = filetime::FileTime::from_unix_time(clamped as i64, 0);
+
+    let result = if is_symlink {
+        filetime::set_symlink_file_times(path, file_time, file_time)
+    } else {
+        filetime::set_file_mtime(path, file_time)
+    };
+
+    if let Err(e) = result {
+        tracing::warn!(
+            "Failed to set mtime for '{}': {}. \
+             The target filesystem may not support this timestamp. \
+             This does not affect package integrity.",
+            path.display(),
+            e
+        );
+    }
 }
 
 // Define a custom reader to track file size

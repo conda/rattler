@@ -13,6 +13,7 @@ readme.workspace = true
 [dependencies]
 bzip2 = { workspace = true }
 chrono = { workspace = true }
+filetime = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }
 futures-util = { workspace = true }

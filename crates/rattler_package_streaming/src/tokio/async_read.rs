@@ -39,11 +39,11 @@ pub async fn extract_tar_bz2(
     let decoder = BzDecoder::new(buf_reader);
 
     // Build archive with optimized settings for faster extraction:
-    // - Skip mtime preservation to avoid extra syscalls
+    // - Skip automatic mtime preservation (we set mtimes manually with safe clamping)
     // - Skip automatic permission handling (we'll set executable bits manually)
     // - Skip extended attributes for better performance
     let archive = tokio_tar::ArchiveBuilder::new(decoder)
-        .set_preserve_mtime(true)
+        .set_preserve_mtime(false)
         .set_preserve_permissions(false)
         .set_unpack_xattrs(false)
         .build();
