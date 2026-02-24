@@ -1,4 +1,5 @@
 use opendal::Error as OpendalError;
+use rattler_package_streaming::ExtractError;
 use std::io;
 use thiserror::Error;
 
@@ -32,4 +33,24 @@ pub enum RepodataError {
     /// A generic error.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+}
+
+/// Errors that can occur when reading and parsing a single package file.
+#[derive(Debug, Error)]
+pub enum PackageReadError {
+    /// An I/O error occurred while reading or parsing the package.
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    /// Failed to extract a `.conda` archive (e.g. corrupt zip).
+    #[error("failed to read conda archive")]
+    CondaArchive(#[from] ExtractError),
+
+    /// Failed to read the package file from storage.
+    #[error("failed to read package from storage")]
+    Storage(#[from] OpendalError),
+
+    /// The archive type is not supported for indexing.
+    #[error("unsupported archive type: {0}")]
+    UnsupportedArchiveType(String),
 }
