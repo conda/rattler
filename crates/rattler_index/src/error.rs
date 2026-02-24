@@ -43,11 +43,11 @@ pub enum PackageReadError {
     Io(#[from] io::Error),
 
     /// Failed to extract a `.conda` archive (e.g. corrupt zip).
-    #[error("failed to read conda archive")]
+    #[error("failed to read conda archive: {0}")]
     CondaArchive(#[from] ExtractError),
 
     /// Failed to read the package file from storage.
-    #[error("failed to read package from storage")]
+    #[error("failed to read package from storage: {0}")]
     Storage(#[from] OpendalError),
 
     /// The archive type is not supported for indexing.
