@@ -586,8 +586,7 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
 impl Matches<GenericVirtualPackage> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
     fn matches(&self, other: &GenericVirtualPackage) -> bool {
-        let name = &self.name;
-        if !name.matches(&other.name) {
+        if !self.name.matches(&other.name) {
             return false;
         }
 

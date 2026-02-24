@@ -855,23 +855,23 @@ pub(crate) fn matchspec_parser(
 
     // 4. Parse as url
     if nameless_match_spec.url.is_none() {
+        // 4. Parse as url
         if let Some(url) = parse_url_like(&input)? {
             let archive = CondaArchiveIdentifier::try_from_url(&url);
             let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
-            // TODO: This should also work without a proper name from the url filename
-            if name.is_none() {
+            if let Some(name) = name {
+                return Ok(MatchSpec::from_nameless(
+                    NamelessMatchSpec {
+                        url: Some(url),
+                        ..Default::default()
+                    },
+                    name,
+                ));
+            } else {
+                // If we can't figure out the name from the URL, return an error
                 return Err(ParseMatchSpecError::MissingPackageName);
             }
-
-            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-            // information. e.g. when a version is provided in the url is not the
-            // actual version this might be a problem when solving.
-            return Ok(MatchSpec {
-                url: Some(url),
-                name: name.unwrap(),
-                ..MatchSpec::default()
-            });
         }
     }
 
