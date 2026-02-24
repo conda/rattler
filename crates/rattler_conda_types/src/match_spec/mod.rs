@@ -136,7 +136,7 @@ use parse::escape_bracket_value;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: PackageNameMatcher,
@@ -170,6 +170,29 @@ pub struct MatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
+}
+
+impl Default for MatchSpec {
+    fn default() -> Self {
+        Self {
+            // We must explicitly set the name to "*" because PackageNameMatcher has no default
+            name: "*".parse().expect("wildcard always parses"),
+            version: None,
+            build: None,
+            build_number: None,
+            file_name: None,
+            extras: None,
+            channel: None,
+            subdir: None,
+            namespace: None,
+            md5: None,
+            sha256: None,
+            url: None,
+            license: None,
+            condition: None,
+            track_features: None,
+        }
+    }
 }
 
 impl Display for MatchSpec {

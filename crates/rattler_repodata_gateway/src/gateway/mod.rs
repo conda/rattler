@@ -661,7 +661,7 @@ mod test {
             Strict,
         )
         .unwrap();
-        matchspec.name = rattler_conda_types::PackageNameMatcher::default();
+        matchspec.name = "*".parse().expect("wildcard always parses");
 
         let gateway_error = gateway
             .query(
