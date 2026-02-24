@@ -82,10 +82,10 @@ async def install(
                 If `None`, the `requested_specs` field will remain empty.
         progress_delegate: An optional object that receives progress callbacks during the
                 install process.  The delegate may implement any subset of the methods defined
-                in `InstallProgressDelegate`: ``on_unlink_start(package_name)``,
-                ``on_unlink_complete(package_name)``, ``on_link_start(package_name)``, and
-                ``on_link_complete(package_name)``.  When a delegate is provided,
-                ``show_progress`` is ignored and the built-in progress bar is disabled.
+                in `InstallProgressDelegate`: `on_unlink_start(package_name)`,
+                `on_unlink_complete(package_name)`, `on_link_start(package_name)`, and
+                `on_link_complete(package_name)`.  When a delegate is provided,
+                `show_progress` is ignored and the built-in progress bar is disabled.
                 If a callback raises an exception the install will fail and the exception is
                 re-raised to the caller.
     """
