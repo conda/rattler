@@ -144,6 +144,7 @@ self_cell::self_cell!(
 /// process/thread can rename or delete the file while it is still mapped.
 /// On Unix no special flags are needed since unlinking an open file is always
 /// allowed.
+#[cfg(any(unix, windows))]
 fn open_for_mmap(path: &Path) -> io::Result<std::fs::File> {
     #[cfg(windows)]
     {
