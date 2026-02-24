@@ -47,7 +47,8 @@ impl PyClientWithMiddleware {
             client_builder = client_builder.user_agent(RATTLER_USER_AGENT);
         }
 
-        let mut client = reqwest_middleware::ClientBuilder::new(client_builder.build().unwrap());
+        let reqwest_client = client_builder.build().unwrap();
+        let mut client = reqwest_middleware::ClientBuilder::new(reqwest_client.clone());
 
         for middleware in middlewares {
             match middleware {
@@ -60,13 +61,8 @@ impl PyClientWithMiddleware {
                             .map_err(PyRattlerError::from)?,
                     );
                 }
-                PyMiddleware::Retry(middleware) => {
-                    let policy = ExponentialBackoff::builder()
-                        .build_with_max_retries(middleware.max_retries);
-                    client = client.with(RetryTransientMiddleware::new_with_policy(policy));
-                }
-                PyMiddleware::Oci(middleware) => {
-                    client = client.with(OciMiddleware::from(middleware));
+                PyMiddleware::Oci(_middleware) => {
+                    client = client.with(OciMiddleware::new(reqwest_client.clone()));
                 }
                 PyMiddleware::Gcs(middleware) => {
                     client = client.with(GCSMiddleware::from(middleware));
