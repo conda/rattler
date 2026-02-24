@@ -5,7 +5,6 @@ use pyo3::{
 };
 use rattler_networking::{
     mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
-    OciMiddleware,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
@@ -104,12 +103,6 @@ impl PyOciMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
-    }
-}
-
-impl From<PyOciMiddleware> for OciMiddleware {
-    fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
     }
 }
 
