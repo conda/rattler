@@ -59,19 +59,10 @@ pub struct S3CredentialsOpts {
     /// How to address the bucket
     #[arg(long, env = "S3_ADDRESSING_STYLE", requires_all = ["region", "endpoint_url"], help_heading = "S3 Credentials", conflicts_with="force_path_style", default_value_t=S3AddressingStyleOpts::default())]
     pub addressing_style: S3AddressingStyleOpts,
-
-    /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE", requires_all = ["region", "endpoint_url"], help_heading = "S3 Credentials", conflicts_with="addressing_style", hide = true, help = "[deprecated] Whether to use path-style S3 URLs")]
-    pub force_path_style: Option<bool>,
 }
 
 impl From<S3CredentialsOpts> for Option<S3Credentials> {
-    fn from(mut value: S3CredentialsOpts) -> Self {
-        if value.force_path_style.is_some() {
-            tracing::warn!("The `--force-path-style` option is deprecated, please use `--addressing-style=path` instead.");
-            value.addressing_style = S3AddressingStyleOpts::Path;
-        }
-
+    fn from(value: S3CredentialsOpts) -> Self {
         if let (Some(endpoint_url), Some(region)) = (value.endpoint_url, value.region) {
             Some(S3Credentials {
                 endpoint_url,
