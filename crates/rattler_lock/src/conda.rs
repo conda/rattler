@@ -397,20 +397,12 @@ impl CondaPackageData {
 
 impl Matches<MatchSpec> for CondaPackageData {
     fn matches(&self, spec: &MatchSpec) -> bool {
-        // Check if the name matches
-        {
-            let name = &spec.name;
-            if !name.matches(&self.record().name) {
-                return false;
-            }
-        }
-
         // Check if the channel matches
         if let Some(channel) = &spec.channel {
             match self {
                 CondaPackageData::Binary(binary) => {
                     if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
+                        if channel.base_url != *record_channel {
                             return false;
                         }
                     }
