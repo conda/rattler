@@ -5,6 +5,8 @@ from rattler.networking.middleware import (
     AuthenticationMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
+    OciMiddleware,
+    RetryMiddleware,
     S3Middleware,
 )
 
@@ -14,8 +16,10 @@ __all__ = [
     "CacheAction",
     "Client",
     "AddHeadersMiddleware",
-    "MirrorMiddleware",
     "AuthenticationMiddleware",
+    "RetryMiddleware",
+    "MirrorMiddleware",
+    "OciMiddleware",
     "S3Middleware",
     "GCSMiddleware",
 ]
