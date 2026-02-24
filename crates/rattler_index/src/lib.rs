@@ -76,16 +76,16 @@ impl PreconditionChecks {
 }
 
 /// A package that was skipped during indexing due to an error.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SkippedPackage {
     /// The filename of the skipped package
     pub filename: String,
-    /// The error message describing why the package was skipped
-    pub error: String,
+    /// The error that caused the package to be skipped
+    pub error: std::io::Error,
 }
 
 /// Statistics for a single subdir indexing operation
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct SubdirIndexStats {
     /// Number of packages added to the index
     pub packages_added: usize,
@@ -98,7 +98,7 @@ pub struct SubdirIndexStats {
 }
 
 /// Statistics for the entire indexing operation
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct IndexStats {
     /// Statistics per subdir
     pub subdirs: HashMap<Platform, SubdirIndexStats>,
@@ -764,10 +764,7 @@ async fn index_subdir_inner(
             Ok(Ok(result)) => results.push(result),
             Ok(Err((filename, e))) => {
                 tracing::warn!("Skipping invalid package {} in {}: {}", filename, subdir, e);
-                packages_skipped.push(SkippedPackage {
-                    filename,
-                    error: e.to_string(),
-                });
+                packages_skipped.push(SkippedPackage { filename, error: e });
                 pb.inc(1);
             }
             Err(join_err) => {
@@ -778,7 +775,7 @@ async fn index_subdir_inner(
                 );
                 packages_skipped.push(SkippedPackage {
                     filename: "unknown".to_string(),
-                    error: join_err.to_string(),
+                    error: std::io::Error::other(join_err),
                 });
                 pb.inc(1);
             }
