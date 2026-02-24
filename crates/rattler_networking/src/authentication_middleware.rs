@@ -28,6 +28,9 @@ struct TokenRefreshResponse {
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
+    /// Shared HTTP client reused across all OAuth token refresh requests to
+    /// avoid constructing a new connection pool on every refresh.
+    client: reqwest::Client,
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -76,7 +79,10 @@ impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the given authentication
     /// storage
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
-        Self { auth_storage }
+        Self {
+            auth_storage,
+            client: reqwest::Client::default(),
+        }
     }
 
     /// Create a new authentication middleware with the default authentication
@@ -84,6 +90,7 @@ impl AuthenticationMiddleware {
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
+            client: reqwest::Client::default(),
         })
     }
 
@@ -200,14 +207,13 @@ impl AuthenticationMiddleware {
 
         tracing::debug!("OAuth token expired, attempting refresh");
 
-        let client = reqwest::Client::new();
         let params = [
             ("grant_type", "refresh_token"),
             ("refresh_token", refresh_token_val),
             ("client_id", client_id),
         ];
 
-        let response = match client
+        let response = match self.client
             .post(token_endpoint.as_str())
             .form(&params)
             .send()
