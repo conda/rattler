@@ -22,8 +22,8 @@ use crate::{
 /// This type is used for packages identified by the `- source:` key.
 /// Unlike `CondaPackageDataModel` (for binary packages), this type:
 /// - Always converts to `CondaPackageData::Source`
-/// - Does not include binary-specific fields (file_name, channel, hashes)
-/// - Includes source-specific fields (variants, package_build_source, sources)
+/// - Does not include binary-specific fields (`file_name`, `channel`, `hashes`)
+/// - Includes source-specific fields (`variants`, `package_build_source`, `sources`)
 /// - Uses `SourceIdentifier` format: `name[hash] @ location`
 ///
 /// The `source` field contains a unique identifier that includes:
