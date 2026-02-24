@@ -443,19 +443,54 @@ pub async fn fetch_repo_data(
     }
 
     // Persist the file to its final destination.
+    //
+    // On Windows, replacing a file that is still held open by another
+    // process/thread (e.g. memory-mapped) can fail with "Access Denied".
+    // We retry a handful of times with a short delay before giving up.
+    // If all retries fail but the destination file already exists (another
+    // concurrent writer won the race), we fall back to its metadata so the
+    // caller can continue.
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
-        let file = temp_file
-            .persist(repo_data_destination_path.clone())
-            .map_err(|e| {
-                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
-            })?;
+        let mut temp_file = temp_file;
+        let mut last_err = None;
 
-        // Determine the last modified date and size of the repodata.json file. We store
-        // these values in the cache to link the cache to the corresponding
-        // repodata.json file.
-        file.metadata()
-            .map_err(FetchRepoDataError::FailedToGetMetadata)
+        for attempt in 0..5u32 {
+            match temp_file.persist(&repo_data_destination_path) {
+                Ok(file) => {
+                    return file
+                        .metadata()
+                        .map_err(FetchRepoDataError::FailedToGetMetadata);
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        attempt,
+                        error = %e.error,
+                        "persist to cache path failed, retrying"
+                    );
+                    temp_file = e.file;
+                    last_err = Some(e.error);
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        }
+
+        // All retries exhausted. If the destination already exists (another
+        // writer won the race), use its metadata instead of failing.
+        if repo_data_destination_path.exists() {
+            tracing::debug!("persist retries exhausted; falling back to existing cache file");
+            std::fs::metadata(&repo_data_destination_path)
+                .map_err(FetchRepoDataError::FailedToGetMetadata)
+        } else {
+            Err(FetchRepoDataError::FailedToGetMetadata(
+                last_err.unwrap_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "failed to persist repodata cache file after retries",
+                    )
+                }),
+            ))
+        }
     })
     .await??;
 
