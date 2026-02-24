@@ -490,26 +490,39 @@ impl<'a> CondaDependencyProvider<'a> {
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
+                        let priority_channel_name = first_channel
+                            .as_ref()
+                            .map_or("unknown channel", |ch| ch.as_str());
                         if let Some(channel) = &record.channel {
                             tracing::debug!(
-                                "Ignoring '{}' from '{}' because of strict channel priority.",
+                                "Ignoring '{}' from '{}' because of strict channel priority (higher priority channel: '{}').",
                                 &record.package_record.name.as_normalized(),
-                                channel
+                                channel,
+                                priority_channel_name
                             );
                             candidates.excluded.push((
                                 solvable_id,
                                 pool.intern_string(format!(
-                                    "due to strict channel priority not using this option from: '{channel}'",
+                                    "due to strict channel priority not using this option from: \
+                                    '{channel}' (package '{package_name}' found in higher priority \
+                                    channel '{priority_channel_name}')",
+                                    package_name = record.package_record.name.as_normalized(),
                                 )),
                             ));
                         } else {
                             tracing::debug!(
-                                    "Ignoring '{}' without a channel because of strict channel priority.",
+                                    "Ignoring '{}' without a channel because of strict channel priority (higher priority channel: '{}').",
                                     &record.package_record.name.as_normalized(),
+                                    priority_channel_name
                                 );
                             candidates.excluded.push((
                                 solvable_id,
-                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                                pool.intern_string(format!(
+                                    "due to strict channel priority not using from an unknown \
+                                    channel (package '{package_name}' found in higher priority \
+                                    channel '{priority_channel_name}')",
+                                    package_name = record.package_record.name.as_normalized(),
+                                )),
                             ));
                         }
                     }

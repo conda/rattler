@@ -1319,7 +1319,9 @@ fn channel_priority_strict() {
     expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"The following packages \
     are incompatible\\n└─ pytorch-cpu ==0.4.1 py36_cpu_1 cannot be installed because there are no \
     viable options:\\n   └─ pytorch-cpu 0.4.1 is excluded because due to strict channel priority \
-    not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
+    not using this option from: 'https://conda.anaconda.org/pytorch/' (package 'pytorch-cpu' \
+    found in higher priority channel \
+    'https://conda.anaconda.org/conda-forge/')\\n\"])"
 )]
 fn channel_priority_strict_panic() {
     let repodata = vec![
