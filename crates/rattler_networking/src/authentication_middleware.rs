@@ -213,7 +213,8 @@ impl AuthenticationMiddleware {
             ("client_id", client_id),
         ];
 
-        let response = match self.client
+        let response = match self
+            .client
             .post(token_endpoint.as_str())
             .form(&params)
             .send()
