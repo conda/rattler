@@ -1087,11 +1087,8 @@ mod tests {
         let specs = vec![
             MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
             // Create a nameless spec by removing the name
-            MatchSpec {
-                name: PackageNameMatcher::default(),
-                version: Some(">=1.0".parse().unwrap()),
-                ..Default::default()
-            },
+            MatchSpec::from_str("*", rattler_conda_types::ParseStrictness::Lenient)
+                .expect("wildcard always passes"),
         ];
 
         let mapping = create_spec_mapping(&specs);
