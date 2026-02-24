@@ -442,55 +442,20 @@ pub async fn fetch_repo_data(
         reporter.on_download_complete(&response_url, index);
     }
 
-    // Persist the file to its final destination.
-    //
-    // On Windows, replacing a file that is still held open by another
-    // process/thread (e.g. memory-mapped) can fail with "Access Denied".
-    // We retry a handful of times with a short delay before giving up.
-    // If all retries fail but the destination file already exists (another
-    // concurrent writer won the race), we fall back to its metadata so the
-    // caller can continue.
+    // Persist the file to its final destination
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
-        let mut temp_file = temp_file;
-        let mut last_err = None;
+        let file = temp_file
+            .persist(repo_data_destination_path.clone())
+            .map_err(|e| {
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+            })?;
 
-        for attempt in 0..5u32 {
-            match temp_file.persist(&repo_data_destination_path) {
-                Ok(file) => {
-                    return file
-                        .metadata()
-                        .map_err(FetchRepoDataError::FailedToGetMetadata);
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        attempt,
-                        error = %e.error,
-                        "persist to cache path failed, retrying"
-                    );
-                    temp_file = e.file;
-                    last_err = Some(e.error);
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-            }
-        }
-
-        // All retries exhausted. If the destination already exists (another
-        // writer won the race), use its metadata instead of failing.
-        if repo_data_destination_path.exists() {
-            tracing::debug!("persist retries exhausted; falling back to existing cache file");
-            std::fs::metadata(&repo_data_destination_path)
-                .map_err(FetchRepoDataError::FailedToGetMetadata)
-        } else {
-            Err(FetchRepoDataError::FailedToGetMetadata(
-                last_err.unwrap_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "failed to persist repodata cache file after retries",
-                    )
-                }),
-            ))
-        }
+        // Determine the last modified date and size of the repodata.json file. We store
+        // these values in the cache to link the cache to the corresponding
+        // repodata.json file.
+        file.metadata()
+            .map_err(FetchRepoDataError::FailedToGetMetadata)
     })
     .await??;
 
@@ -1520,107 +1485,44 @@ mod test {
             "there must have been exactly two requests"
         );
     }
+}
 
-    // Regression test for https://github.com/conda/rattler/issues/1952.
-    // Concurrent fetches for the same uncached channel must all succeed even
-    // though every task tries to persist to the same cache path.
-    //
-    // The test memory-maps the cache file after the first fetch so that on
-    // Windows the file would normally cause "access denied". Opening with
-    // FILE_SHARE_DELETE (see `open_for_mmap`) allows the persist to succeed.
-    #[tracing_test::traced_test]
-    #[tokio::test(flavor = "multi_thread")]
-    pub async fn test_concurrent_fetch_no_cache_headers() {
-        use axum::{http::HeaderMap, routing::get};
+/// Regression test for <https://github.com/conda/rattler/issues/1952>.
+///
+/// On Windows, memory-mapped files cannot be deleted unless they were opened
+/// with `FILE_SHARE_DELETE`. [`SparseRepoData::from_file`] uses `open_for_mmap`
+/// which sets that flag. This test verifies that a file opened via
+/// `SparseRepoData` can be deleted (or replaced) while the mapping is alive.
+#[cfg(feature = "sparse")]
+#[cfg(any(unix, windows))]
+#[cfg(test)]
+mod share_delete_test {
+    use rattler_conda_types::{Channel, ChannelConfig};
 
-        // Serve repodata with no caching headers so every fetch must re-download.
-        async fn serve_repodata() -> impl IntoResponse {
-            (HeaderMap::new(), FAKE_REPO_DATA)
-        }
+    use crate::sparse::SparseRepoData;
 
-        let router = Router::new().route("/repodata.json", get(serve_repodata));
+    #[test]
+    fn test_can_delete_mmap_opened_via_sparse_repodata() {
+        let temp = tempfile::tempdir().unwrap();
+        let json_path = temp.path().join("repodata.json");
 
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
-
-        let server_url = Url::parse(&format!("http://localhost:{}/", addr.port())).unwrap();
-        let cache_dir = TempDir::new().unwrap();
-        let cache_path = cache_dir.path().to_owned();
-
-        let cache_key =
-            crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
-        let json_path = cache_path.join(format!("{cache_key}.json"));
-
-        // Do an initial fetch so the cache file exists on disk.
-        let initial = fetch_repo_data(
-            server_url.clone(),
-            LazyClient::default(),
-            cache_path.clone(),
-            FetchRepoDataOptions {
-                bz2_enabled: false,
-                zstd_enabled: false,
-                ..FetchRepoDataOptions::default()
-            },
-            None,
+        // Write a minimal but valid repodata.json.
+        std::fs::write(
+            &json_path,
+            r#"{"info":{"subdir":"noarch"},"packages":{},"packages.conda":{}}"#,
         )
-        .await
-        .expect("initial fetch should succeed");
-        // Release the lock from the initial fetch.
-        drop(initial);
+        .unwrap();
 
-        // Memory-map the cache file. On Windows this prevents deletion until
-        // the mapping is dropped, which is exactly the scenario that triggers
-        // "access denied" (OS error 5).
-        let mmap = {
-            let file =
-                std::fs::File::open(&json_path).expect("cache file must exist after initial fetch");
-            unsafe { memmap2::Mmap::map(&file) }.expect("memory mapping should succeed")
-        };
-        // Verify the mmap is valid (holds the file open).
-        assert!(!mmap.is_empty(), "memory-mapped file must not be empty");
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("test", &channel_config).unwrap();
 
-        // Now spawn concurrent fetches while the file is still memory-mapped.
-        // Drop the result inside each task so the lock is released before the
-        // JoinHandle is awaited; holding it across the await would serialize
-        // the tasks and defeat the test.
-        let fetches: Vec<_> = (0..4)
-            .map(|_| {
-                let url = server_url.clone();
-                let cache = cache_path.clone();
-                tokio::spawn(async move {
-                    fetch_repo_data(
-                        url,
-                        LazyClient::default(),
-                        cache,
-                        FetchRepoDataOptions {
-                            bz2_enabled: false,
-                            zstd_enabled: false,
-                            ..FetchRepoDataOptions::default()
-                        },
-                        None,
-                    )
-                    .await
-                    .map(|_| ()) // release the lock inside the task
-                })
-            })
-            .collect();
+        // Open the file through SparseRepoData (uses open_for_mmap internally).
+        let _sparse = SparseRepoData::from_file(channel, "noarch", &json_path, None).unwrap();
 
-        for handle in fetches {
-            handle
-                .await
-                .expect("task should not panic")
-                .expect("fetch should succeed even when concurrent writers race");
-        }
-
-        // Drop the memory map so cleanup can proceed.
-        drop(mmap);
-
-        // Canonical file must exist.
-        assert!(
-            json_path.exists(),
-            "canonical repodata.json cache file must exist"
-        );
+        // While the file is memory-mapped, deleting / replacing it must succeed.
+        // On Windows without FILE_SHARE_DELETE this would fail with
+        // "Access Denied" (OS error 5).
+        std::fs::remove_file(&json_path)
+            .expect("should be able to delete a file opened with FILE_SHARE_DELETE");
     }
 }

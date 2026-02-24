@@ -43,7 +43,6 @@ pin_project! {
 }
 
 impl<S, E> BytesCollect<S, E> {
-    #[allow(dead_code)]
     pub fn new(stream: S) -> Self {
         Self {
             stream,
