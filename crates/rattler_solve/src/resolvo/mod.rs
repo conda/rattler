@@ -450,8 +450,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        Some(&spec.name)
-                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                        Option::<PackageName>::from(spec.name.clone())
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
