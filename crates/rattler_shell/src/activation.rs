@@ -609,12 +609,66 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
-    /// Runs the activation script and returns the environment variables changed
-    /// in the environment after running the script.
-    ///
-    /// If the `environment` parameter is not `None`, then it will overwrite the
-    /// parent environment variables when running the activation script.
-    pub fn run_activation(
+    fn compute_activation_env(&self, variables: &ActivationVariables) -> HashMap<String, String> {
+        let mut env = variables.current_env.clone();
+
+        let current_shlvl = variables
+            .current_env
+            .get("CONDA_SHLVL")
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(0);
+
+        env.insert("CONDA_SHLVL".to_string(), (current_shlvl + 1).to_string());
+
+        env.insert(
+            "CONDA_PREFIX".to_string(),
+            self.target_prefix.to_string_lossy().to_string(),
+        );
+
+        let mut new_paths = self.paths.clone();
+
+        if let Some(existing_paths) = &variables.path {
+            new_paths.extend(existing_paths.clone());
+        }
+
+        let joined_path = std::env::join_paths(new_paths)
+            .expect("Failed to join PATH during activation")
+            .to_string_lossy()
+            .to_string();
+
+        env.insert("PATH".to_string(), joined_path);
+
+        for (key, value) in &self.env_vars {
+            env.insert(key.clone(), value.clone());
+        }
+        for (key, value) in &self.post_activation_env_vars {
+            env.insert(key.clone(), value.clone());
+        }
+        env
+    }
+
+    /// Fast path activation when there are no activation scripts and no conda prefix to deactivate.
+    /// This avoids spawning a shell by directly computing the environment variable changes.
+    fn run_activation_fast_path(
+        &self,
+        variables: &ActivationVariables,
+        environment: Option<&HashMap<&OsStr, &OsStr>>,
+    ) -> HashMap<String, String> {
+        let mut env = self.compute_activation_env(variables);
+
+        if let Some(env_overrides) = environment {
+            for (k, v) in env_overrides {
+                env.insert(
+                    k.to_string_lossy().to_string(),
+                    v.to_string_lossy().to_string(),
+                );
+            }
+        }
+
+        env
+    }
+
+    fn run_activation_slow_path(
         &self,
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
@@ -686,6 +740,23 @@ impl<T: Shell + Clone> Activator<T> {
             .filter(|(key, _)| !key.is_empty())
             .map(|(key, value)| (key.to_owned(), value.to_owned()))
             .collect())
+    }
+
+    /// Runs the activation script and returns the environment variables changed
+    /// in the environment after running the script.
+    ///
+    /// If the `environment` parameter is not `None`, then it will overwrite the
+    /// parent environment variables when running the activation script.
+    pub fn run_activation(
+        &self,
+        variables: ActivationVariables,
+        environment: Option<HashMap<&OsStr, &OsStr>>,
+    ) -> Result<HashMap<String, String>, ActivationError> {
+        if variables.conda_prefix.is_none() && self.activation_scripts.is_empty() {
+            return Ok(self.run_activation_fast_path(&variables, environment.as_ref()));
+        }
+
+        self.run_activation_slow_path(variables, environment)
     }
 }
 
@@ -1033,7 +1104,7 @@ mod tests {
             .unwrap();
 
         // Diff with the current environment
-        let current_env = std::env::vars().collect::<HashMap<_, _>>();
+        let current_env = ActivationVariables::default().current_env.clone();
 
         let mut env_diff = activation_env
             .into_iter()
@@ -1048,6 +1119,55 @@ mod tests {
         env_diff.remove("LINENO");
 
         insta::assert_yaml_snapshot!("after_activation", env_diff);
+    }
+
+    #[allow(dead_code)]
+    fn test_run_activation_fast_path(shell: ShellEnum, with_unicode: bool) {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+
+        let env = if with_unicode {
+            environment_dir.path().join("🦀")
+        } else {
+            environment_dir.path().to_path_buf()
+        };
+
+        let state_path = env.join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let quotes = r#"{"env_vars": {"STATE": "Hello, world!"}}"#;
+        fs::write(&state_path, quotes).unwrap();
+
+        let content_pkg_1 = r#"{"PKG1": "Hello, world!"}"#;
+        let content_pkg_2 = r#"{"PKG2": "Hello, world!"}"#;
+
+        let env_var_d = env.join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+
+        let pkg1 = env_var_d.join("pkg1.json");
+        let pkg2 = env_var_d.join("pkg2.json");
+
+        fs::write(pkg1, content_pkg_1).unwrap();
+        fs::write(pkg2, content_pkg_2).unwrap();
+
+        let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
+        assert!(activator.activation_scripts.is_empty());
+
+        let activation_env = activator
+            .run_activation(ActivationVariables::default(), None)
+            .unwrap();
+
+        let current_env = ActivationVariables::default().current_env.clone();
+
+        let mut env_diff = activation_env
+            .into_iter()
+            .filter(|(key, value)| current_env.get(key) != Some(value))
+            .collect::<BTreeMap<_, _>>();
+
+        env_diff.remove("CONDA_PREFIX");
+        env_diff.remove("Path");
+        env_diff.remove("PATH");
+        env_diff.remove("LINENO");
+
+        insta::assert_yaml_snapshot!("after_activation_fast_path", env_diff);
     }
 
     #[test]
@@ -1068,6 +1188,18 @@ mod tests {
     #[cfg(unix)]
     fn test_run_activation_bash() {
         test_run_activation(crate::shell::Bash.into(), false);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_fast_activation_bash() {
+        test_run_activation_fast_path(crate::shell::Bash.into(), false);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_fast_path_bash_unicode() {
+        test_run_activation_fast_path(crate::shell::Bash.into(), true);
     }
 
     #[test]
@@ -1401,5 +1533,117 @@ mod tests {
                 script_contents
             );
         }
+    }
+
+    /// Test that `run_activation_fast_path` and `run_activation` produce equivalent results
+    /// when there are no activation scripts.
+    #[test]
+    fn test_fast_path_vs_normal_activation_no_scripts() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let env = environment_dir.path().to_path_buf();
+
+        // Setup environment with env vars but no activation scripts
+        let state_path = env.join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let quotes = r#"{"env_vars": {"STATE": "Hello, world!", "FOO": "bar"}}"#;
+        fs::write(&state_path, quotes).unwrap();
+
+        // Add package-specific env vars
+        let env_var_d = env.join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+        let pkg1 = env_var_d.join("pkg1.json");
+        fs::write(pkg1, r#"{"PKG1": "value1"}"#).unwrap();
+
+        // Create activation directory but leave it empty (no scripts)
+        let activation_script_dir = env.join("etc/conda/activate.d");
+        fs::create_dir_all(&activation_script_dir).unwrap();
+
+        // Test with bash shell
+        let shell = shell::Bash;
+        let activator = Activator::from_path(&env, shell, Platform::current()).unwrap();
+
+        // Ensure there are no activation scripts
+        assert!(
+            activator.activation_scripts.is_empty(),
+            "This test requires no activation scripts"
+        );
+
+        // Create test activation variables
+        let test_env = HashMap::from([
+            ("EXISTING_VAR".to_string(), "existing_value".to_string()),
+            ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+        ]);
+
+        let variables = ActivationVariables {
+            conda_prefix: None,
+            path: Some(vec![PathBuf::from("/usr/bin"), PathBuf::from("/bin")]),
+            path_modification_behavior: PathModificationBehavior::Prepend,
+            current_env: test_env.clone(),
+        };
+
+        // Run both methods
+        let fast_path_result = activator.run_activation_fast_path(&variables, None);
+        let normal_result = activator.run_activation(variables, None).unwrap();
+
+        assert_eq!(fast_path_result, normal_result);
+    }
+
+    /// Test that `run_activation_fast_path` and `run_activation` produce equivalent results
+    /// when using post-activation environment variables and environment overrides.
+    #[test]
+    fn test_fast_path_vs_normal_activation_with_post_env_vars_and_overrides() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let env = environment_dir.path().to_path_buf();
+
+        // Setup base state
+        let state_path = env.join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        fs::write(&state_path, r#"{"env_vars": {"BASE_VAR": "base_value"}}"#).unwrap();
+
+        // Create empty activation directory (no scripts)
+        let activation_script_dir = env.join("etc/conda/activate.d");
+        fs::create_dir_all(&activation_script_dir).unwrap();
+
+        let shell = shell::Bash;
+        let mut activator = Activator::from_path(&env, shell, Platform::current()).unwrap();
+
+        assert!(activator.activation_scripts.is_empty());
+
+        // Add regular env vars
+        let mut env_vars = IndexMap::new();
+        env_vars.insert("PRE_VAR".to_string(), "pre_value".to_string());
+        activator.env_vars = env_vars;
+
+        // Add post-activation env vars
+        let mut post_env_vars = IndexMap::new();
+        post_env_vars.insert("POST_VAR".to_string(), "post_value".to_string());
+        activator.post_activation_env_vars = post_env_vars;
+
+        let test_env = HashMap::from([
+            ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+            ("OVERRIDE_ME".to_string(), "original".to_string()),
+        ]);
+
+        let variables = ActivationVariables {
+            conda_prefix: None,
+            path: Some(vec![PathBuf::from("/usr/bin"), PathBuf::from("/bin")]),
+            path_modification_behavior: PathModificationBehavior::Prepend,
+            current_env: test_env,
+        };
+
+        // Create environment overrides
+        let override_key = OsStr::new("OVERRIDE_ME");
+        let override_val = OsStr::new("overridden");
+        let extra_key = OsStr::new("EXTRA_VAR");
+        let extra_val = OsStr::new("extra_value");
+
+        let env_overrides = HashMap::from([(override_key, override_val), (extra_key, extra_val)]);
+
+        let fast = activator.run_activation_fast_path(&variables, Some(&env_overrides));
+        let normal = activator
+            .run_activation(variables, Some(env_overrides))
+            .unwrap();
+
+        assert_eq!(fast, normal);
     }
 }
