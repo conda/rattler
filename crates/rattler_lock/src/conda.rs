@@ -397,7 +397,7 @@ impl CondaPackageData {
 
 impl Matches<MatchSpec> for CondaPackageData {
     fn matches(&self, spec: &MatchSpec) -> bool {
-        // 1. Fast Name Check
+        // Check if the name matches
         if !spec.name.matches(&self.record().name) {
             return false;
         }
