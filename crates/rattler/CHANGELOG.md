@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.14](https://github.com/conda/rattler/compare/rattler-v0.39.13...rattler-v0.39.14) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.39.13](https://github.com/conda/rattler/compare/rattler-v0.39.12...rattler-v0.39.13) - 2026-02-19
+
+### Added
+
+- add OAuth/OIDC authentication support ([#2049](https://github.com/conda/rattler/pull/2049))
+
+### Fixed
+
+- tolerate already-deleted conda-meta files during concurrent unlink ([#2060](https://github.com/conda/rattler/pull/2060))
+
+### Other
+
+- bump rust to 1.93.1 ([#2072](https://github.com/conda/rattler/pull/2072))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.39.12](https://github.com/conda/rattler/compare/rattler-v0.39.11...rattler-v0.39.12) - 2026-02-10
 
 ### Other

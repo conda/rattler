@@ -1651,13 +1651,13 @@ mod test {
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
 
-    /// Test that ensures run_exports fallback works when run_exports.json exists
+    /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
     /// but doesn't contain all packages (out-of-sync scenario).
     ///
-    /// This test creates a channel that has an empty run_exports.json file,
-    /// simulating the case where the run_exports.json file is out of sync with
+    /// This test creates a channel that has an empty `run_exports.json` file,
+    /// simulating the case where the `run_exports.json` file is out of sync with
     /// the actual packages. The test verifies that the system correctly falls
-    /// back to extracting run_exports from the actual package files.
+    /// back to extracting `run_exports` from the actual package files.
     #[tokio::test]
     async fn test_ensure_run_exports_fallback_when_out_of_sync() {
         // Use a minimal repodata with just one openssl package, and add a base_url

@@ -40,6 +40,7 @@ use std::{
 };
 
 pub use apple_codesign::AppleCodeSignBehavior;
+pub use clobber_registry::ClobberMode;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
@@ -55,7 +56,7 @@ use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
-    package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
     prefix_record, Platform,
 };
@@ -186,7 +187,7 @@ pub struct InstallOptions {
 
     /// Whether or not to use symbolic links where possible. If this is set to
     /// `Some(false)` symlinks are disabled, if set to `Some(true)` symbolic
-    /// links are always used when specified in the [`info/paths.json`] file
+    /// links are always used when specified in the `info/paths.json` file
     /// even if this is not supported. If the value is set to `None`
     /// symbolic links are only used if they are supported.
     ///
@@ -196,7 +197,7 @@ pub struct InstallOptions {
     /// Whether or not to use hard links where possible. If this is set to
     /// `Some(false)` the use of hard links is disabled, if set to
     /// `Some(true)` hard links are always used when specified
-    /// in the [`info/paths.json`] file even if this is not supported. If the
+    /// in the `info/paths.json` file even if this is not supported. If the
     /// value is set to `None` hard links are only used if they are
     /// supported. A dummy hardlink is created to determine support.
     ///
@@ -207,7 +208,7 @@ pub struct InstallOptions {
     /// Whether or not to use ref links where possible. If this is set to
     /// `Some(false)` the use of hard links is disabled, if set to
     /// `Some(true)` ref links are always used when hard links are specified
-    /// in the [`info/paths.json`] file even if this is not supported. If the
+    /// in the `info/paths.json` file even if this is not supported. If the
     /// value is set to `None` ref links are only used if they are
     /// supported.
     ///
@@ -258,6 +259,24 @@ struct LinkPath {
     clobber_path: Option<PathBuf>,
 }
 
+/// Find a timestamp to put on all files we modify. Use `info/about.json`, as a base. This
+/// file is always written after all the packaged data is already stored.
+///
+/// We add 1s to make sure our modification time is strictly bigger than any timestamp
+/// seen in the package data, even on systems that do not have nanosecond timestamps.
+///
+/// Fall back to `now()` if we can not detect a file time.
+fn modification_time(package_dir: &Path) -> filetime::FileTime {
+    if let Ok(info_metadata) = fs_err::symlink_metadata(package_dir.join(AboutJson::package_path()))
+    {
+        let info_time = filetime::FileTime::from_last_modification_time(&info_metadata);
+
+        filetime::FileTime::from_unix_time(info_time.unix_seconds() + 1, info_time.nanoseconds())
+    } else {
+        filetime::FileTime::now()
+    }
+}
+
 /// Given an extracted package archive (`package_dir`), installs its files to
 /// the `target_dir`.
 ///
@@ -285,6 +304,8 @@ pub async fn link_package(
     let paths_json = read_paths_json(package_dir, driver, options.paths_json);
     let index_json = read_index_json(package_dir, driver, options.index_json);
     let (paths_json, index_json) = tokio::try_join!(paths_json, index_json)?;
+
+    let modification_time = modification_time(package_dir);
 
     // Error out if this is a noarch python package but the python information is
     // missing.
@@ -420,6 +441,7 @@ pub async fn link_package(
                     allow_ref_links && !cloned_entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
+                    modification_time,
                 )
             })
             .await
@@ -618,6 +640,7 @@ pub fn link_package_sync(
         },
         Ok,
     )?;
+    let modification_time = modification_time(package_dir);
 
     // Error out if this is a noarch python package but the python information is
     // missing.
@@ -842,6 +865,7 @@ pub fn link_package_sync(
                     allow_ref_links && !entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
+                    modification_time,
                 );
 
                 let result = match link_result {

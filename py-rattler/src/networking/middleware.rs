@@ -5,7 +5,6 @@ use pyo3::{
 };
 use rattler_networking::{
     mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
-    OciMiddleware,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
@@ -19,6 +18,7 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
+    Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
     S3(PyS3Middleware),
@@ -79,6 +79,21 @@ impl PyAuthenticationMiddleware {
 }
 
 #[pyclass]
+#[derive(Clone)]
+pub struct PyRetryMiddleware {
+    pub(crate) max_retries: u32,
+}
+
+#[pymethods]
+impl PyRetryMiddleware {
+    #[new]
+    #[pyo3(signature = (max_retries=3))]
+    pub fn __init__(max_retries: u32) -> Self {
+        Self { max_retries }
+    }
+}
+
+#[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyOciMiddleware {}
@@ -88,12 +103,6 @@ impl PyOciMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
-    }
-}
-
-impl From<PyOciMiddleware> for OciMiddleware {
-    fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
     }
 }
 
