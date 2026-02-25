@@ -898,6 +898,7 @@ pub(crate) fn matchspec_parser(
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input, options.exact_names_only())?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
+
     // Step 7. Otherwise, sort our version + build
     let input = input.trim();
     if !input.is_empty() {
