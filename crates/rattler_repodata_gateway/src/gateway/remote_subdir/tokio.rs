@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTime,
 };
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     },
     Reporter,
 };
+use cache_control::{Cachability, CacheControl};
 use rattler_conda_types::{Channel, Platform};
 use rattler_networking::LazyClient;
 
@@ -25,7 +27,7 @@ impl RemoteSubdirClient {
         cache_dir: PathBuf,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Self, GatewayError> {
+    ) -> Result<(Self, Option<SystemTime>), GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
         // Fetch the repodata from the remote server
@@ -53,6 +55,11 @@ impl RemoteSubdirClient {
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
+        let expires_at = cache_expires_at(
+            repodata.cache_state.cache_headers.cache_control.as_deref(),
+            repodata.cache_state.cache_last_modified,
+        );
+
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
         let sparse = simple_spawn_blocking::tokio::run_blocking_task(move || {
@@ -64,7 +71,7 @@ impl RemoteSubdirClient {
         })
         .await?;
 
-        Ok(Self { sparse })
+        Ok((Self { sparse }, expires_at))
     }
 
     /// Clears the on-disk cache for the given channel and platform.
@@ -111,5 +118,26 @@ impl RemoteSubdirClient {
         }
 
         Ok(())
+    }
+}
+
+fn cache_expires_at(
+    cache_control: Option<&str>,
+    cache_last_modified: SystemTime,
+) -> Option<SystemTime> {
+    let cache_control = match cache_control.and_then(CacheControl::from_value) {
+        Some(cache_control) => cache_control,
+        None => return Some(SystemTime::now()),
+    };
+
+    match cache_control {
+        CacheControl {
+            cachability: Some(Cachability::Public),
+            max_age: Some(duration),
+            ..
+        } => cache_last_modified
+            .checked_add(duration)
+            .or(Some(SystemTime::now())),
+        _ => Some(SystemTime::now()),
     }
 }

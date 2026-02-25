@@ -25,7 +25,7 @@ impl RemoteSubdirClient {
         client: LazyClient,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<Self, GatewayError> {
+    ) -> Result<(Self, Option<std::time::SystemTime>), GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
         // Fetch the repodata from the remote server
@@ -56,6 +56,6 @@ impl RemoteSubdirClient {
         let sparse =
             LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
 
-        Ok(Self { sparse })
+        Ok((Self { sparse }, None))
     }
 }
