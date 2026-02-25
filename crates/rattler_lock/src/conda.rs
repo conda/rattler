@@ -407,7 +407,7 @@ impl Matches<MatchSpec> for CondaPackageData {
             match self {
                 CondaPackageData::Binary(binary) => {
                     if let Some(record_channel) = &binary.channel {
-                        if channel.base_url != *record_channel {
+                        if &channel.base_url != record_channel {
                             return false;
                         }
                     }
