@@ -19,10 +19,10 @@ mod subdir_builder;
 use std::{collections::HashSet, sync::Arc, time::SystemTime};
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
-use coalesced_map::PendingOrFetched;
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
+use coalesced_map::PendingOrFetched;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
@@ -1161,8 +1161,7 @@ mod test {
         std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
 
         let server =
-            CacheControlChannelServer::new(channel_dir.path(), "max-age=1, must-revalidate")
-                .await;
+            CacheControlChannelServer::new(channel_dir.path(), "max-age=1, must-revalidate").await;
         let channel = server.channel();
 
         let cache_dir = tempfile::tempdir().unwrap();
@@ -1224,7 +1223,8 @@ mod test {
         std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
 
         // Start the CacheControlChannelServer with a long max-age so memory cache doesn't expire immediately
-        let server = CacheControlChannelServer::new(channel_dir.path(), "public, max-age=3600").await;
+        let server =
+            CacheControlChannelServer::new(channel_dir.path(), "public, max-age=3600").await;
         let channel = server.channel();
 
         // Create a temporary cache directory
