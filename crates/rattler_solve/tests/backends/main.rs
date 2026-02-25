@@ -195,7 +195,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let names = specs
         .iter()
-        .filter_map(|s| Some(&s.name).and_then(|n| Option::<PackageName>::from(n.clone())));
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1084,7 +1084,7 @@ fn compare_solve(task: CompareTask<'_>) {
 
     let names = specs
         .iter()
-        .filter_map(|s| Some(&s.name).and_then(|n| Option::<PackageName>::from(n.clone())));
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1222,7 +1222,7 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let specs = vec![spec.clone()];
     let names = specs
         .iter()
-        .filter_map(|s| Some(&s.name).and_then(|n| Option::<PackageName>::from(n.clone())));
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
 
     let available_packages = SparseRepoData::load_records_recursive(
         repo_data,

@@ -62,8 +62,8 @@ impl PyMatchSpec {
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageNameMatcher> {
-        Some(self.inner.name.clone().into())
+    pub fn name(&self) -> PyPackageNameMatcher {
+        self.inner.name.clone().into()
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)

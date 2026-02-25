@@ -402,7 +402,7 @@ impl Matches<MatchSpec> for CondaPackageData {
             return false;
         }
 
-        // 2. Channel Check
+        // 2. Check if the channel matches
         if let Some(channel) = &spec.channel {
             match self {
                 CondaPackageData::Binary(binary) => {
@@ -417,7 +417,7 @@ impl Matches<MatchSpec> for CondaPackageData {
                 }
             }
         }
-        // 3. Full Spec Check
+        // Check if the record matches
         spec.matches(self.record())
     }
 }
