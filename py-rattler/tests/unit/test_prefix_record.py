@@ -149,7 +149,7 @@ def test_repodata_record_setters_update_backend() -> None:
     as_dict = json.loads(repodata_record.to_json())
     assert as_dict["url"] == "https://example.com/updated.tar.bz2"
     assert as_dict["channel"] == "https://example.com/osx-64"
-    assert as_dict["file_name"] == "updated-1.0-0.tar.bz2"
+    assert as_dict["fn"] == "updated-1.0-0.tar.bz2"
 
 
 def test_prefix_paths() -> None:
