@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.0...rattler_package_streaming-v0.24.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.26...rattler_package_streaming-v0.24.0) - 2026-02-19
+
+### Fixed
+
+- retry at least three times during install ([#2068](https://github.com/conda/rattler/pull/2068))
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.23.26](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.25...rattler_package_streaming-v0.23.26) - 2026-02-10
 
 ### Other
