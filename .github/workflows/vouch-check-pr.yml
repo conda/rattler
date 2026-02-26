@@ -23,7 +23,7 @@ jobs:
         with:
           pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
           auto-close: true
-          repo: prefix-dev/vouched
+          vouched-repo: prefix-dev/vouched
           require-vouch: false
           dry-run: true
         env:
