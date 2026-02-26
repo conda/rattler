@@ -3697,7 +3697,6 @@ dependencies = [
  "rattler_virtual_packages",
  "reqwest 0.12.28",
  "reqwest-middleware",
- "reqwest-retry",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
@@ -4676,27 +4675,6 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tower-service",
-]
-
-[[package]]
-name = "reqwest-retry"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "105747e3a037fe5bf17458d794de91149e575b6183fc72c85623a44abb9683f5"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "getrandom 0.2.17",
- "http 1.4.0",
- "hyper",
- "reqwest 0.12.28",
- "reqwest-middleware",
- "retry-policies",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "wasmtimer",
 ]
 
 [[package]]
