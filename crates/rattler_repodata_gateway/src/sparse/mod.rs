@@ -12,7 +12,7 @@ use std::{
 };
 
 use bytes::Bytes;
-#[cfg(any(not(windows), test))]
+#[cfg(not(windows))]
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
