@@ -90,7 +90,7 @@ struct LoginArgs {
     #[clap(long, requires_all = ["oauth", "artifactory_provider_name"], help_heading = "Artifactory OIDC")]
     artifactory_m2m: bool,
 
-    /// Artifactory OIDC provider name (matches JFrog OIDC integration)
+    /// Artifactory OIDC provider name (matches `JFrog` OIDC integration)
     #[cfg(feature = "oauth")]
     #[clap(long, requires = "oauth", help_heading = "Artifactory OIDC")]
     artifactory_provider_name: Option<String>,
@@ -312,10 +312,10 @@ fn normalize_artifactory_registry_url(
 
 #[cfg(feature = "oauth")]
 async fn get_github_actions_oidc_token(audience: &str) -> Result<String, AuthenticationCLIError> {
-    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|_| {
+    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|_error| {
         AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_URL)
     })?;
-    let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|_| {
+    let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|_error| {
         AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_TOKEN)
     })?;
 
@@ -368,8 +368,7 @@ async fn exchange_artifactory_oidc_token(
     let body = response.text().await?;
     if !status.is_success() {
         return Err(AuthenticationCLIError::ArtifactoryOidcExchange(format!(
-            "HTTP {}: {}",
-            status, body
+            "HTTP {status}: {body}"
         )));
     }
 
@@ -445,8 +444,7 @@ async fn login(
 
             let target_for_base = normalized_registry_url
                 .as_ref()
-                .map(Url::as_str)
-                .unwrap_or(args.host.as_str());
+                .map_or(args.host.as_str(), Url::as_str);
             let base_url = derive_artifactory_base_url(target_for_base)?;
 
             let id_token = get_github_actions_oidc_token(audience).await?;
@@ -491,8 +489,7 @@ async fn login(
         {
             let target_for_base = normalized_registry_url
                 .as_ref()
-                .map(Url::as_str)
-                .unwrap_or(args.host.as_str());
+                .map_or(args.host.as_str(), Url::as_str);
             let base_url = derive_artifactory_base_url(target_for_base)?;
             base_url.join("access")?.to_string()
         } else {
