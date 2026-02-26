@@ -24,6 +24,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
           auto-close: true
           vouched-repo: prefix-dev/vouched
+          vouched-file: VOUCHED.td
           require-vouch: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
