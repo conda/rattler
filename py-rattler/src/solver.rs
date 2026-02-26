@@ -6,6 +6,7 @@ use pyo3::{
     types::PyAnyMethods, Bound, FromPyObject, PyAny, PyErr, PyResult, Python,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
+use rattler_conda_types::PackageName;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     resolvo::Solver, MinimumAgeConfig, RepoDataIter, SolveStrategy, SolverImpl, SolverTask,
