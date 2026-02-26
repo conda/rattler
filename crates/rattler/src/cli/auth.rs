@@ -248,8 +248,9 @@ fn parse_url_or_host(input: &str) -> Result<Url, AuthenticationCLIError> {
 fn derive_artifactory_base_url(input: &str) -> Result<Url, AuthenticationCLIError> {
     let mut url = parse_url_or_host(input)?;
 
-    if let Some(index) = url.path().find("/artifactory") {
-        url.set_path(&url.path()[..index]);
+    let current_path = url.path().to_string();
+    if let Some(index) = current_path.find("/artifactory") {
+        url.set_path(&current_path[..index]);
     } else {
         url.set_path("");
     }
@@ -310,11 +311,10 @@ fn normalize_artifactory_registry_url(
 }
 
 #[cfg(feature = "oauth")]
-async fn get_github_actions_oidc_token(
-    audience: &str,
-) -> Result<String, AuthenticationCLIError> {
-    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL)
-        .map_err(|_| AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_URL))?;
+async fn get_github_actions_oidc_token(audience: &str) -> Result<String, AuthenticationCLIError> {
+    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|_| {
+        AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_URL)
+    })?;
     let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|_| {
         AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_TOKEN)
     })?;
@@ -369,8 +369,7 @@ async fn exchange_artifactory_oidc_token(
     if !status.is_success() {
         return Err(AuthenticationCLIError::ArtifactoryOidcExchange(format!(
             "HTTP {}: {}",
-            status,
-            body
+            status, body
         )));
     }
 
@@ -420,16 +419,17 @@ async fn login(
     // OAuth flow (when --oauth is set)
     #[cfg(feature = "oauth")]
     if args.oauth {
-        let normalized_registry_url = if let Some(registry_url) = args.artifactory_registry_url.as_deref() {
-            let normalized = normalize_artifactory_registry_url(
-                registry_url,
-                args.artifactory_repository_type.as_deref(),
-            )?;
-            eprintln!("Using Artifactory registry URL: {normalized}");
-            Some(normalized)
-        } else {
-            None
-        };
+        let normalized_registry_url =
+            if let Some(registry_url) = args.artifactory_registry_url.as_deref() {
+                let normalized = normalize_artifactory_registry_url(
+                    registry_url,
+                    args.artifactory_repository_type.as_deref(),
+                )?;
+                eprintln!("Using Artifactory registry URL: {normalized}");
+                Some(normalized)
+            } else {
+                None
+            };
 
         if args.artifactory_m2m {
             let provider_name = args.artifactory_provider_name.as_deref().ok_or(
@@ -438,7 +438,10 @@ async fn login(
                 ),
             )?;
 
-            let audience = args.artifactory_audience.as_deref().unwrap_or("api://default");
+            let audience = args
+                .artifactory_audience
+                .as_deref()
+                .unwrap_or("api://default");
 
             let target_for_base = normalized_registry_url
                 .as_ref()
@@ -447,7 +450,8 @@ async fn login(
             let base_url = derive_artifactory_base_url(target_for_base)?;
 
             let id_token = get_github_actions_oidc_token(audience).await?;
-            let exchanged = exchange_artifactory_oidc_token(&base_url, provider_name, &id_token).await?;
+            let exchanged =
+                exchange_artifactory_oidc_token(&base_url, provider_name, &id_token).await?;
 
             let expires_at = exchanged.expires_in.map(|seconds| {
                 std::time::SystemTime::now()
@@ -467,7 +471,10 @@ async fn login(
             };
 
             let storage_key = if let Some(registry) = normalized_registry_url {
-                registry.host_str().unwrap_or(args.host.as_str()).to_string()
+                registry
+                    .host_str()
+                    .unwrap_or(args.host.as_str())
+                    .to_string()
             } else {
                 normalize_storage_host(&args.host)?
             };
@@ -512,7 +519,10 @@ async fn login(
 
         let auth = oauth::perform_oauth_login(config).await?;
         let host = if let Some(registry) = normalized_registry_url {
-            registry.host_str().unwrap_or(args.host.as_str()).to_string()
+            registry
+                .host_str()
+                .unwrap_or(args.host.as_str())
+                .to_string()
         } else {
             normalize_storage_host(&args.host)?
         };
@@ -966,8 +976,8 @@ mod tests {
     #[cfg(feature = "oauth")]
     #[test]
     fn test_normalize_storage_host_from_url() {
-        let host = normalize_storage_host("https://my-org.jfrog.io/artifactory/api/npm/repo/")
-            .unwrap();
+        let host =
+            normalize_storage_host("https://my-org.jfrog.io/artifactory/api/npm/repo/").unwrap();
         assert_eq!(host, "my-org.jfrog.io");
     }
 
@@ -990,10 +1000,7 @@ mod tests {
 
         let result = async_with_vars(
             [
-                (
-                    ACTIONS_ID_TOKEN_REQUEST_URL,
-                    Some(oidc_url.as_str()),
-                ),
+                (ACTIONS_ID_TOKEN_REQUEST_URL, Some(oidc_url.as_str())),
                 (ACTIONS_ID_TOKEN_REQUEST_TOKEN, Some("request-token")),
             ],
             async { get_github_actions_oidc_token("jfrog-github").await },
