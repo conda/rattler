@@ -30,6 +30,15 @@ pub enum RepodataError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
+    /// Some packages could not be indexed and were skipped.
+    /// The indexing completed for valid packages, but the caller should
+    /// handle these failures.
+    #[error("{} packages were skipped due to errors", .stats.total_skipped())]
+    SkippedPackages {
+        /// The full indexing statistics, including details of each skipped package.
+        stats: super::IndexStats,
+    },
+
     /// A generic error.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -53,4 +62,8 @@ pub enum PackageReadError {
     /// The archive type is not supported for indexing.
     #[error("unsupported archive type: {0}")]
     UnsupportedArchiveType(String),
+
+    /// A background task panicked while processing the package.
+    #[error("task panicked: {0}")]
+    Join(#[from] tokio::task::JoinError),
 }

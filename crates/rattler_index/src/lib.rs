@@ -104,6 +104,16 @@ pub struct IndexStats {
     pub subdirs: HashMap<Platform, SubdirIndexStats>,
 }
 
+impl IndexStats {
+    /// Returns the total number of packages skipped across all subdirs.
+    pub fn total_skipped(&self) -> usize {
+        self.subdirs
+            .values()
+            .map(|s| s.packages_skipped.len())
+            .sum()
+    }
+}
+
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
@@ -774,7 +784,7 @@ async fn index_subdir_inner(
                 );
                 packages_skipped.push(SkippedPackage {
                     filename: "unknown".to_string(),
-                    error: std::io::Error::other(join_err).into(),
+                    error: join_err.into(),
                 });
                 pb.inc(1);
             }
@@ -785,14 +795,6 @@ async fn index_subdir_inner(
         console::style("Finished").green(),
         subdir.as_str()
     ));
-
-    if !packages_skipped.is_empty() {
-        tracing::warn!(
-            "{} packages in {} were skipped due to errors.",
-            packages_skipped.len(),
-            subdir
-        );
-    }
 
     tracing::info!(
         "Successfully added {} packages to subdir {}.",
@@ -1290,6 +1292,11 @@ pub async fn index(
             }
         }
     }
+
+    if stats.total_skipped() > 0 {
+        return Err(RepodataError::SkippedPackages { stats }.into());
+    }
+
     Ok(stats)
 }
 
