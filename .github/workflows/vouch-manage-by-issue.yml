@@ -16,6 +16,10 @@ permissions:
 jobs:
   manage:
     runs-on: ubuntu-latest
+    if: >-
+      !github.event.issue.pull_request &&
+      (contains(github.event.comment.body, 'vouch') ||
+        contains(github.event.comment.body, 'denounce'))
     steps:
       - name: Obtain GitHub app token
         id: generate-token
