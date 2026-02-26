@@ -60,6 +60,14 @@ impl Subdir {
             Subdir::NotFound => None,
         }
     }
+
+    /// Returns `true` if the local cache has expired and needs to be re-fetched.
+    pub fn has_expired(&self) -> bool {
+        match self {
+            Subdir::Found(subdir) => subdir.has_expired(),
+            Subdir::NotFound => false,
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -107,6 +115,11 @@ impl SubdirData {
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
+
+    /// Returns `true` if the local cache has expired.
+    pub fn has_expired(&self) -> bool {
+        self.client.has_expired()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -123,4 +136,10 @@ pub trait SubdirClient: Send + Sync {
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;
+
+    /// Returns `true` if this cache has expired and the data should be re-fetched.
+    /// By default this returns false.
+    fn has_expired(&self) -> bool {
+        false
+    }
 }

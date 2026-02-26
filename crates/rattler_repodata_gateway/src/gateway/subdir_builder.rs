@@ -11,7 +11,7 @@ use crate::{
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
         subdir::{Subdir, SubdirData},
-        CachedSubdir, GatewayInner,
+        GatewayInner,
     },
     GatewayError, Reporter, SourceConfig,
 };
@@ -39,7 +39,7 @@ impl<'g> SubdirBuilder<'g> {
         }
     }
 
-    pub async fn build(self) -> Result<CachedSubdir, GatewayError> {
+    pub async fn build(self) -> Result<Subdir, GatewayError> {
         let url = self.channel.platform_url(self.platform);
 
         let subdir_data = if url.scheme() == "file" {
@@ -90,7 +90,7 @@ impl<'g> SubdirBuilder<'g> {
         };
 
         match subdir_data {
-            Ok((client, expires_at)) => Ok(CachedSubdir::new(Subdir::Found(client), expires_at)),
+            Ok(client) => Ok(Subdir::Found(client)),
             Err(GatewayError::SubdirNotFoundError(err)) if self.platform != Platform::NoArch => {
                 // If the subdir was not found and the platform is not `noarch` we assume its
                 // just empty.
@@ -99,7 +99,7 @@ impl<'g> SubdirBuilder<'g> {
                     err.subdir,
                     err.channel.canonical_name()
                 );
-                Ok(CachedSubdir::new(Subdir::NotFound, None))
+                Ok(Subdir::NotFound)
             }
             Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
                 Err(Box::new(SubdirNotFoundError {
@@ -116,8 +116,8 @@ impl<'g> SubdirBuilder<'g> {
     async fn build_generic(
         &self,
         source_config: &SourceConfig,
-    ) -> Result<(SubdirData, Option<std::time::SystemTime>), GatewayError> {
-        let (client, expires_at) = remote_subdir::RemoteSubdirClient::new(
+    ) -> Result<SubdirData, GatewayError> {
+        let client = remote_subdir::RemoteSubdirClient::new(
             self.channel.clone(),
             self.platform,
             self.gateway.client.clone(),
@@ -127,13 +127,13 @@ impl<'g> SubdirBuilder<'g> {
             self.reporter.clone(),
         )
         .await?;
-        Ok((SubdirData::from_client(client), expires_at))
+        Ok(SubdirData::from_client(client))
     }
 
     async fn build_sharded(
         &self,
         _source_config: &SourceConfig,
-    ) -> Result<(SubdirData, Option<std::time::SystemTime>), GatewayError> {
+    ) -> Result<SubdirData, GatewayError> {
         let client = sharded_subdir::ShardedSubdir::new(
             self.channel.clone(),
             self.platform.to_string(),
@@ -147,13 +147,13 @@ impl<'g> SubdirBuilder<'g> {
         )
         .await?;
 
-        Ok((SubdirData::from_client(client), None))
+        Ok(SubdirData::from_client(client))
     }
 
     async fn build_local(
         &self,
         path: &Path,
-    ) -> Result<(SubdirData, Option<std::time::SystemTime>), GatewayError> {
+    ) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
         let path = path.join("repodata.json");
@@ -165,6 +165,6 @@ impl<'g> SubdirBuilder<'g> {
         #[cfg(not(target_arch = "wasm32"))]
         let client = simple_spawn_blocking::tokio::run_blocking_task(build_client).await?;
 
-        Ok((SubdirData::from_client(client), None))
+        Ok(SubdirData::from_client(client))
     }
 }

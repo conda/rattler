@@ -16,7 +16,7 @@ mod source;
 mod subdir;
 mod subdir_builder;
 
-use std::{collections::HashSet, sync::Arc, time::SystemTime};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
@@ -72,28 +72,6 @@ pub enum SubdirSelection {
 
     /// Select these specific subdirectories
     Some(HashSet<String>),
-}
-
-#[derive(Clone)]
-struct CachedSubdir {
-    subdir: Arc<Subdir>,
-    expires_at: Option<SystemTime>,
-}
-
-impl CachedSubdir {
-    fn new(subdir: Subdir, expires_at: Option<SystemTime>) -> Self {
-        Self {
-            subdir: Arc::new(subdir),
-            expires_at,
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        match self.expires_at {
-            Some(expires_at) => SystemTime::now() >= expires_at,
-            None => false,
-        }
-    }
 }
 
 impl SubdirSelection {
@@ -305,7 +283,7 @@ impl Gateway {
 
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
-    subdirs: CoalescedMap<(Channel, Platform), CachedSubdir>,
+    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -348,21 +326,25 @@ impl GatewayInner {
         let channel = channel.clone();
 
         if let Some(cached) = self.subdirs.get(&key) {
-            if cached.is_expired() {
-                self.subdirs.retain(|existing_key, entry| {
-                    if existing_key != &key {
-                        return true;
+            if cached.has_expired() {
+                // Determine if we are the ones to remove it. E.g if another concurrent request
+                // was already triggered, we should wait on it rather than trying to init it again.
+                // We use remove over retain to avoid scanning the entire map.
+                if let Some(PendingOrFetched::Fetched(c)) = self.subdirs.remove(&key) {
+                    if !Arc::ptr_eq(&c, &cached) {
+                        // We removed a different underlying entry, we should probably
+                        // put it back and we can just wait for the pending request.
+                        // However we can't easily insert without `.get_or_try_init`, so we
+                        // actually just drop the remove, and it will be caught in the block below.
                     }
-
-                    matches!(entry, PendingOrFetched::Pending(_))
-                });
+                }
             }
         }
 
         self.subdirs
             .get_or_try_init(key, || async move {
                 let subdir = self.create_subdir(&channel, platform, reporter).await?;
-                Ok(subdir)
+                Ok(Arc::new(subdir))
             })
             .await
             .map_err(|e| match e {
@@ -372,7 +354,6 @@ impl GatewayInner {
                     std::io::ErrorKind::Other.into(),
                 ),
             })
-            .map(|cached| cached.subdir)
     }
 
     async fn create_subdir(
@@ -380,7 +361,7 @@ impl GatewayInner {
         channel: &Channel,
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<CachedSubdir, GatewayError> {
+    ) -> Result<Subdir, GatewayError> {
         SubdirBuilder::new(self, channel.clone(), platform, reporter)
             .build()
             .await
@@ -448,103 +429,6 @@ mod test {
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
         .await
-    }
-
-    #[derive(Clone)]
-    struct CacheControlState {
-        root: PathBuf,
-        cache_control: String,
-    }
-
-    struct CacheControlChannelServer {
-        local_addr: std::net::SocketAddr,
-        shutdown_sender: Option<oneshot::Sender<()>>,
-    }
-
-    impl CacheControlChannelServer {
-        fn url(&self) -> Url {
-            Url::parse(&format!("http://localhost:{}", self.local_addr.port())).unwrap()
-        }
-
-        fn channel(&self) -> Channel {
-            Channel::from_url(self.url())
-        }
-
-        async fn new(path: impl AsRef<Path>, cache_control: &str) -> Self {
-            let state = CacheControlState {
-                root: path.as_ref().to_path_buf(),
-                cache_control: cache_control.to_string(),
-            };
-
-            let app = Router::new()
-                .route(
-                    "/linux-64/repodata.json",
-                    get(|State(state): State<CacheControlState>| async move {
-                        let repodata_path = state.root.join("linux-64/repodata.json");
-                        let bytes = match tokio::fs::read(&repodata_path).await {
-                            Ok(bytes) => bytes,
-                            Err(_) => return Err(StatusCode::NOT_FOUND),
-                        };
-
-                        let response = Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "application/json")
-                            .header(header::CACHE_CONTROL, state.cache_control)
-                            .body(Body::from(bytes))
-                            .expect("repodata response is valid");
-
-                        Ok(response)
-                    }),
-                )
-                .route(
-                    "/noarch/repodata.json",
-                    get(|State(state): State<CacheControlState>| async move {
-                        let repodata_path = state.root.join("noarch/repodata.json");
-                        let bytes = match tokio::fs::read(&repodata_path).await {
-                            Ok(bytes) => bytes,
-                            Err(_) => return Err(StatusCode::NOT_FOUND),
-                        };
-
-                        let response = Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "application/json")
-                            .header(header::CACHE_CONTROL, state.cache_control)
-                            .body(Body::from(bytes))
-                            .expect("repodata response is valid");
-
-                        Ok(response)
-                    }),
-                )
-                .fallback_service(get_service(ServeDir::new(path).precompressed_gzip()))
-                .with_state(state);
-
-            let addr = std::net::SocketAddr::new([127, 0, 0, 1].into(), 0);
-            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-            let local_addr = listener.local_addr().unwrap();
-            let (tx, rx) = oneshot::channel();
-
-            let server = axum::serve(listener, app)
-                .with_graceful_shutdown(async {
-                    rx.await.ok();
-                })
-                .into_future();
-
-            let future = tokio::spawn(server);
-            std::mem::drop(future);
-
-            Self {
-                local_addr,
-                shutdown_sender: Some(tx),
-            }
-        }
-    }
-
-    impl Drop for CacheControlChannelServer {
-        fn drop(&mut self) {
-            if let Some(tx) = self.shutdown_sender.take() {
-                let _ = tx.send(());
-            }
-        }
     }
 
     #[tokio::test]
@@ -900,8 +784,11 @@ mod test {
         std::fs::write(subdir_path.join("repodata.json"), &repodata).unwrap();
         std::fs::write(noarch_path.join("repodata.json"), &repodata).unwrap();
 
-        let server =
-            CacheControlChannelServer::new(channel_dir.path(), "public, max-age=3600").await;
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("public, max-age=3600"),
+        )
+        .await;
         let local_channel = server.channel();
 
         // Create a gateway with a custom channel configuration that disables caching.
@@ -1160,8 +1047,11 @@ mod test {
         let repodata_v1 = make_repodata("testpkg", "1.0.0");
         std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
 
-        let server =
-            CacheControlChannelServer::new(channel_dir.path(), "max-age=1, must-revalidate").await;
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("max-age=1, must-revalidate"),
+        )
+        .await;
         let channel = server.channel();
 
         let cache_dir = tempfile::tempdir().unwrap();
@@ -1222,9 +1112,12 @@ mod test {
         let repodata_v1 = make_repodata("testpkg", "1.0.0");
         std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
 
-        // Start the CacheControlChannelServer with a long max-age so memory cache doesn't expire immediately
-        let server =
-            CacheControlChannelServer::new(channel_dir.path(), "public, max-age=3600").await;
+        // Start the server with a long max-age so memory cache doesn't expire immediately
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("public, max-age=3600"),
+        )
+        .await;
         let channel = server.channel();
 
         // Create a temporary cache directory

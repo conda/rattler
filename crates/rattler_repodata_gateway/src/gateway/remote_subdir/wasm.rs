@@ -16,6 +16,7 @@ use crate::{
 
 pub struct RemoteSubdirClient {
     pub(super) sparse: LocalSubdirClient,
+    pub(super) expires_at: Option<std::time::SystemTime>,
 }
 
 impl RemoteSubdirClient {
@@ -25,7 +26,7 @@ impl RemoteSubdirClient {
         client: LazyClient,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<(Self, Option<std::time::SystemTime>), GatewayError> {
+    ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
         // Fetch the repodata from the remote server
@@ -56,6 +57,6 @@ impl RemoteSubdirClient {
         let sparse =
             LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
 
-        Ok((Self { sparse }, None))
+        Ok(Self { sparse, expires_at: None })
     }
 }

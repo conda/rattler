@@ -11,12 +11,12 @@ use crate::{
     },
     Reporter,
 };
-use cache_control::{Cachability, CacheControl};
 use rattler_conda_types::{Channel, Platform};
 use rattler_networking::LazyClient;
 
 pub struct RemoteSubdirClient {
     pub(super) sparse: LocalSubdirClient,
+    pub(super) expires_at: Option<SystemTime>,
 }
 
 impl RemoteSubdirClient {
@@ -27,7 +27,7 @@ impl RemoteSubdirClient {
         cache_dir: PathBuf,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
-    ) -> Result<(Self, Option<SystemTime>), GatewayError> {
+    ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
         // Fetch the repodata from the remote server
@@ -71,7 +71,7 @@ impl RemoteSubdirClient {
         })
         .await?;
 
-        Ok((Self { sparse }, expires_at))
+        Ok(Self { sparse, expires_at })
     }
 
     /// Clears the on-disk cache for the given channel and platform.
@@ -125,19 +125,29 @@ fn cache_expires_at(
     cache_control: Option<&str>,
     cache_last_modified: SystemTime,
 ) -> Option<SystemTime> {
-    let cache_control = match cache_control.and_then(CacheControl::from_value) {
-        Some(cache_control) => cache_control,
-        None => return Some(SystemTime::now()),
-    };
+    use http::Response;
+    use http_cache_semantics::CachePolicy;
+    
+    // Construct a dummy request
+    let req = http::Request::builder()
+        .uri("http://localhost")
+        .method("GET")
+        .body(())
+        .unwrap();
 
-    match cache_control {
-        CacheControl {
-            cachability: Some(Cachability::Public),
-            max_age: Some(duration),
-            ..
-        } => cache_last_modified
-            .checked_add(duration)
-            .or(Some(SystemTime::now())),
-        _ => Some(SystemTime::now()),
+    // Construct a dummy response
+    let mut res = Response::builder().status(200);
+    if let Some(cc) = cache_control {
+        res = res.header(http::header::CACHE_CONTROL, cc);
+    }
+    let res = res.body(()).unwrap();
+
+    let policy = CachePolicy::new(&req, &res);
+    let ttl = policy.time_to_live(cache_last_modified);
+    
+    if ttl > std::time::Duration::from_secs(0) {
+        cache_last_modified.checked_add(ttl).or_else(|| Some(SystemTime::now()))
+    } else {
+        Some(SystemTime::now())
     }
 }
