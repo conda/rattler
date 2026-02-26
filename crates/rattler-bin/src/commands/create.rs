@@ -183,7 +183,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
     ));
     #[cfg(feature = "gcs")]
-    let download_client = download_client.with(rattler_networking::GCSMiddleware);
+    let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
     let download_client = download_client.build();
 
     // Get the package names from the matchspecs so we can only load the package
