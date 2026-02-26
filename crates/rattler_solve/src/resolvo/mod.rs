@@ -310,7 +310,7 @@ impl<'a> CondaDependencyProvider<'a> {
         // Compute the direct dependencies
         let direct_dependencies = match_specs
             .iter()
-            .filter_map(|spec| spec.name.as_ref())
+            .map(|spec| &spec.name)
             .filter_map(|name| Option::<PackageName>::from(name.clone()))
             .map(|name| pool.intern_package_name(&name))
             .collect();
@@ -450,9 +450,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        spec.name
-                            .as_ref()
-                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                        Option::<PackageName>::from(spec.name.clone())
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
@@ -952,8 +950,7 @@ impl super::SolverImpl for Solver {
             .constraints
             .iter()
             .map(|spec| {
-                let (Some(PackageNameMatcher::Exact(name)), spec) = spec.clone().into_nameless()
-                else {
+                let (PackageNameMatcher::Exact(name), spec) = spec.clone().into_nameless() else {
                     unimplemented!("only exact package names are supported");
                 };
                 let name_id = provider.pool.intern_package_name(&name);
@@ -1039,7 +1036,7 @@ fn version_sets_for_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec: MatchSpec,
 ) -> Vec<VersionSetId> {
-    let (Some(PackageNameMatcher::Exact(name)), spec) = spec.into_nameless() else {
+    let (PackageNameMatcher::Exact(name), spec) = spec.into_nameless() else {
         unimplemented!("only exact package names are supported");
     };
 

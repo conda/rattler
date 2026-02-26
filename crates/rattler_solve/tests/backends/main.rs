@@ -193,11 +193,9 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .and_then(|n| Option::<PackageName>::from(n.clone()))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1084,11 +1082,9 @@ fn compare_solve(task: CompareTask<'_>) {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .and_then(|n| Option::<PackageName>::from(n.clone()))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1224,11 +1220,9 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .and_then(|n| Option::<PackageName>::from(n.clone()))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| Option::<PackageName>::from(s.name.clone()));
 
     let available_packages = SparseRepoData::load_records_recursive(
         repo_data,
@@ -1246,12 +1240,9 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
 
     let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().records;
 
-    let record = result.iter().find(|record| {
-        spec.name
-            .as_ref()
-            .unwrap()
-            .matches(&record.package_record.name)
-    });
+    let record = result
+        .iter()
+        .find(|record| spec.name.matches(&record.package_record.name));
     assert_eq!(record.unwrap().channel, Some(expected_channel.to_string()));
 }
 

@@ -10,7 +10,7 @@ use resolvo::SolverCache;
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
     let match_spec =
         MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
-    let package_name = Option::<PackageName>::from(match_spec.name.clone().unwrap()).unwrap();
+    let package_name = Option::<PackageName>::from(match_spec.name.clone()).unwrap();
 
     let repodata = SparseRepoData::load_records_recursive(
         [sparse_repo_data],

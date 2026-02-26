@@ -236,11 +236,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 .collect::<Result<Vec<_>, _>>()?;
 
             let package_names = specs.iter().filter_map(|match_spec| {
-                match_spec
-                    .inner
-                    .name
-                    .as_ref()
-                    .and_then(|n| Option::<PackageName>::from(n.clone()))
+                Option::<rattler_conda_types::PackageName>::from(match_spec.inner.name.clone())
             });
 
             let available_packages = SparseRepoData::load_records_recursive(

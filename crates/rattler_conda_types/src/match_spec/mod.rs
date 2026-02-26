@@ -12,7 +12,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
@@ -92,35 +91,35 @@ use parse::escape_bracket_value;
 ///
 /// let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 /// let spec = MatchSpec::from_str("foo 1.0.* py27_0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo ==1.0 py27_0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 ///
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo >=1.0[subdir="linux-64"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 /// assert_eq!(spec, MatchSpec::from_str("conda-forge/linux-64::foo >=1.0", Strict).unwrap());
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo >=1.0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("*", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
+/// assert_eq!(spec.name, PackageNameMatcher::Exact(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
@@ -137,10 +136,10 @@ use parse::escape_bracket_value;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
-    pub name: Option<PackageNameMatcher>,
+    pub name: PackageNameMatcher,
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
@@ -173,6 +172,29 @@ pub struct MatchSpec {
     pub track_features: Option<Vec<String>>,
 }
 
+impl Default for MatchSpec {
+    fn default() -> Self {
+        Self {
+            // We must explicitly set the name to "*" because PackageNameMatcher has no default
+            name: "*".parse().expect("wildcard always parses"),
+            version: None,
+            build: None,
+            build_number: None,
+            file_name: None,
+            extras: None,
+            channel: None,
+            subdir: None,
+            namespace: None,
+            md5: None,
+            sha256: None,
+            url: None,
+            license: None,
+            condition: None,
+            track_features: None,
+        }
+    }
+}
+
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
@@ -190,10 +212,7 @@ impl Display for MatchSpec {
             write!(f, "::")?;
         }
 
-        match &self.name {
-            Some(name) => write!(f, "{name}")?,
-            None => write!(f, "*")?,
-        }
+        write!(f, "{}", self.name)?;
 
         if let Some(version) = &self.version {
             write!(f, " {version}")?;
@@ -255,7 +274,7 @@ impl Display for MatchSpec {
 
 impl MatchSpec {
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
-    pub fn into_nameless(self) -> (Option<PackageNameMatcher>, NamelessMatchSpec) {
+    pub fn into_nameless(self) -> (PackageNameMatcher, NamelessMatchSpec) {
         (
             self.name,
             NamelessMatchSpec {
@@ -282,11 +301,11 @@ impl MatchSpec {
     /// Not having a package name is considered not virtual.
     /// Matching both virtual and non-virtual packages is considered not virtual.
     pub fn is_virtual(&self) -> bool {
-        self.name.as_ref().is_some_and(|name| match name {
+        match &self.name {
             PackageNameMatcher::Exact(name) => name.as_normalized().starts_with("__"),
             PackageNameMatcher::Glob(pattern) => pattern.as_str().starts_with("__"),
             PackageNameMatcher::Regex(regex) => regex.as_str().starts_with(r"^__"),
-        })
+        }
     }
 }
 
@@ -294,7 +313,7 @@ impl MatchSpec {
 impl From<PackageName> for MatchSpec {
     fn from(value: PackageName) -> Self {
         Self {
-            name: Some(PackageNameMatcher::Exact(value)),
+            name: PackageNameMatcher::Exact(value),
             ..Default::default()
         }
     }
@@ -396,7 +415,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
 
 impl MatchSpec {
     /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
-    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageNameMatcher>) -> Self {
+    pub fn from_nameless(spec: NamelessMatchSpec, name: PackageNameMatcher) -> Self {
         Self {
             name,
             version: spec.version,
@@ -501,10 +520,8 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
 impl Matches<PackageRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`PackageRecord`]
     fn matches(&self, other: &PackageRecord) -> bool {
-        if let Some(name) = self.name.as_ref() {
-            if !name.matches(&other.name) {
-                return false;
-            }
+        if !self.name.matches(&other.name) {
+            return false;
         }
 
         if let Some(spec) = self.version.as_ref() {
@@ -592,10 +609,8 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
 impl Matches<GenericVirtualPackage> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
     fn matches(&self, other: &GenericVirtualPackage) -> bool {
-        if let Some(name) = self.name.as_ref() {
-            if !name.matches(&other.name) {
-                return false;
-            }
+        if !self.name.matches(&other.name) {
+            return false;
         }
 
         if let Some(spec) = self.version.as_ref() {
@@ -648,12 +663,11 @@ impl TryFrom<Url> for MatchSpec {
 
         let archive_identifier = CondaArchiveIdentifier::try_from_filename(filename)
             .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
-
-        spec.name = Some(
-            PackageNameMatcher::from_str(&archive_identifier.identifier.name)
-                .map_err(|e| MatchSpecUrlError::InvalidPackageName(e.to_string()))?,
-        );
-
+        spec.name = archive_identifier
+            .identifier
+            .name
+            .parse::<PackageNameMatcher>()
+            .map_err(|e| MatchSpecUrlError::InvalidPackageName(e.to_string()))?;
         Ok(spec)
     }
 }
@@ -694,7 +708,7 @@ mod tests {
         match_spec::Matches, package::DistArchiveIdentifier,
         parse_mode::ParseStrictnessWithNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
         PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord, StringMatcher,
-        Version, VersionSpec,
+        Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -710,18 +724,66 @@ mod tests {
 
     #[test]
     fn test_name_asterisk() {
+        use crate::match_spec::package_name_matcher::PackageNameMatcher;
+        use crate::{MatchSpec, ParseMatchSpecOptions, ParseStrictness::Lenient, VersionSpec};
+
+        // Explicitly configure the parser to allow glob matching
+        let options = ParseMatchSpecOptions::from(Lenient).with_exact_names_only(false);
+
         // Test that MatchSpec can be created with an asterisk as the package name
-        let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
-        assert_eq!(spec.name, None);
+        let spec = MatchSpec::from_str("*[license=MIT]", options).unwrap();
+
+        // It should now correctly be identified as a Glob instead of None!
+        assert_eq!(spec.name, PackageNameMatcher::from_str("*").unwrap());
         assert_eq!(spec.license, Some("MIT".to_string()));
 
-        // Test with a version
-        let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
-        assert_eq!(spec.name, None);
+        let spec = MatchSpec::from_str("* >=1.0", options).unwrap();
+        assert_eq!(spec.name, PackageNameMatcher::from_str("*").unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
         );
+    }
+
+    #[test]
+    fn test_name_asterisk_edge_cases() {
+        use crate::match_spec::package_name_matcher::PackageNameMatcher;
+        use crate::{
+            MatchSpec, ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::Strict,
+            VersionSpec,
+        };
+
+        // EDGE CASE 1: The Security Boundary
+        // In Strict mode (exact_names_only = true), a standalone `*` SHOULD be rejected.
+        let strict_spec = MatchSpec::from_str("*", Strict);
+        match strict_spec {
+            Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(g)) => {
+                assert_eq!(g, "*");
+            }
+            other => panic!("Strict mode failed to block the glob! Got: {other:?}"),
+        }
+
+        // EDGE CASE 2: The Kitchen Sink
+        // Testing `*` as a glob buried inside a highly complex spec string
+        let complex_str = "conda-forge/linux-64::*[version=\">=2.0\", build=\"*_cpython\"]";
+
+        // We explicitly allow globs for this specific parse
+        let options = ParseMatchSpecOptions::from(Strict).with_exact_names_only(false);
+        let spec =
+            MatchSpec::from_str(complex_str, options).expect("Failed to parse complex glob spec");
+
+        // Verify every single piece was parsed correctly around the `*`
+        assert_eq!(
+            spec.name,
+            PackageNameMatcher::from_str("*").expect("invalid package name matcher")
+        );
+        assert_eq!(spec.channel.unwrap().name(), "conda-forge");
+        assert_eq!(spec.subdir, Some("linux-64".to_string()));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str(">=2.0", Strict).expect("invalid version spec"))
+        );
+        assert!(spec.build.is_some(), "Build string matcher was dropped");
     }
 
     #[test]
@@ -1042,8 +1104,10 @@ mod tests {
         let spec = MatchSpec::from_str("__virtual_name >=12", Strict).unwrap();
         assert!(spec.is_virtual());
 
-        let spec =
-            MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
+        let spec = MatchSpec::from_nameless(
+            NamelessMatchSpec::from_str(">=12", Strict).unwrap(),
+            "dummy".parse().unwrap(),
+        );
         assert!(!spec.is_virtual());
 
         let spec = MatchSpec::from_str(
