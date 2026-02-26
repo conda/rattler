@@ -257,50 +257,12 @@ impl WindowsMenu {
 
                 Ok(command)
             }
-        } else if !self.command.terminal.unwrap_or(false) {
-            // activate: false, terminal: false
-            // Write a wrapper script and launch it hidden via PowerShell to suppress the
-            // console window that would otherwise appear for console-subsystem executables.
-            let script_path = self.path_for_script();
-            self.write_script(&script_path)?;
-
-            let system_root = std::env::var("SystemRoot").unwrap_or("C:\\Windows".to_string());
-            let system32 = Path::new(&system_root).join("system32");
-            let cmd_exe = system32.join("cmd.exe").to_string_lossy().to_string();
-            let powershell = system32
-                .join("WindowsPowerShell")
-                .join("v1.0")
-                .join("powershell.exe")
-                .to_string_lossy()
-                .to_string();
-
-            let arg1 = if with_arg1 { "%1 " } else { "" };
-
-            let mut command = [
-                &cmd_exe,
-                "/D",
-                "/C",
-                "START",
-                "/MIN",
-                "\"\"",
-                &powershell,
-                "-WindowStyle",
-                "hidden",
-            ]
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
-
-            command.push(format!(
-                "\"start '{}' {}-WindowStyle hidden\"",
-                script_path.to_string_lossy(),
-                arg1
-            ));
-
-            Ok(command)
         } else {
-            // activate: false, terminal: true
-            // Run the command directly so the terminal window stays visible.
+            // activate: false
+            // Run the command directly. Note: if the target exe is a console-subsystem
+            // application, Windows will show a console window. Properly suppressing it
+            // would require a GUI-subsystem proxy binary (similar to conda's cwp.py
+            // launched via pythonw.exe).
             let mut command = Vec::new();
             for elem in self.command.command.iter() {
                 command.push(elem.resolve(&self.placeholders));

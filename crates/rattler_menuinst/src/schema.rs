@@ -63,8 +63,9 @@ pub struct BasePlatformSpecific {
     /// Whether to run the program in a terminal/console.
     ///
     /// ### Platform-specific behavior
-    /// - `Windows`: When `false`, the console window is suppressed for GUI applications
-    ///   launched from console-subsystem executables.
+    /// - `Windows`: Only has an effect if `activate` is true. Suppressing the console
+    ///   window for console-subsystem executables when `activate` is false would require
+    ///   a GUI-subsystem proxy binary (similar to conda's `cwp.py` via `pythonw.exe`).
     /// - `MacOS`: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
