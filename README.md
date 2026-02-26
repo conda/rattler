@@ -48,9 +48,7 @@ You can invoke `rattler` from Python or Javascript via our powerful bindings to 
 To install the Python bindings, you can use pip or conda:
 
 ```bash
-pip install py-rattler
-# or
-conda install -c conda-forge py-rattler
+pip add py-rattler
 ```
 
 You can find the extensive documentation for the Python bindings [here](https://conda.github.io/rattler/py-rattler/).
