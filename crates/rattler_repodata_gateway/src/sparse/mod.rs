@@ -159,7 +159,7 @@ fn open_for_mmap(path: &Path) -> io::Result<std::fs::File> {
     }
     #[cfg(not(windows))]
     {
-        fs::File::open(path).map(Into::into)
+        fs::File::open(path)
     }
 }
 
