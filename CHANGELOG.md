@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Added Artifactory-specific OIDC support to `rattler auth`, including GitHub Actions M2M login and interactive browser login with Artifactory URL normalization ([#2028](https://github.com/conda/rattler/issues/2028))
+
 # [0.18.0] - 2024-02-13
 
 ### 📃 Details

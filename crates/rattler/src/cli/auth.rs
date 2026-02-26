@@ -8,6 +8,8 @@ use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
 use reqwest::{header::CONTENT_TYPE, Client};
+#[cfg(feature = "oauth")]
+use serde::Deserialize;
 use serde_json::json;
 use thiserror;
 use url::Url;
@@ -82,6 +84,31 @@ struct LoginArgs {
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_scopes: Vec<String>,
+
+    /// Use Artifactory machine-to-machine login with GitHub Actions OIDC
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires_all = ["oauth", "artifactory_provider_name"], help_heading = "Artifactory OIDC")]
+    artifactory_m2m: bool,
+
+    /// Artifactory OIDC provider name (matches JFrog OIDC integration)
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "Artifactory OIDC")]
+    artifactory_provider_name: Option<String>,
+
+    /// Audience to request from GitHub Actions OIDC endpoint
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "Artifactory OIDC")]
+    artifactory_audience: Option<String>,
+
+    /// Optional Artifactory registry URL for login target normalization
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "Artifactory OIDC")]
+    artifactory_registry_url: Option<String>,
+
+    /// Repository type used when normalizing shorthand Artifactory registry URLs
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", value_parser = ["npm", "conda", "pypi", "maven", "nuget", "generic"], help_heading = "Artifactory OIDC")]
+    artifactory_repository_type: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -165,6 +192,193 @@ pub enum AuthenticationCLIError {
     #[cfg(feature = "oauth")]
     #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
+
+    /// A required environment variable for GitHub OIDC was not found.
+    #[cfg(feature = "oauth")]
+    #[error("Environment variable {0} not set. For GitHub Actions OIDC ensure `permissions: id-token: write` is configured")]
+    MissingGitHubOidcEnvVar(&'static str),
+
+    /// Artifactory OIDC token exchange failed.
+    #[cfg(feature = "oauth")]
+    #[error("Artifactory OIDC token exchange failed: {0}")]
+    ArtifactoryOidcExchange(String),
+}
+
+#[cfg(feature = "oauth")]
+const ACTIONS_ID_TOKEN_REQUEST_URL: &str = "ACTIONS_ID_TOKEN_REQUEST_URL";
+#[cfg(feature = "oauth")]
+const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
+
+#[cfg(feature = "oauth")]
+#[derive(Debug, Deserialize)]
+struct GitHubOidcTokenResponse {
+    value: String,
+}
+
+#[cfg(feature = "oauth")]
+#[derive(Debug, Deserialize)]
+struct ArtifactoryOidcTokenResponse {
+    access_token: String,
+    #[serde(default)]
+    expires_in: Option<i64>,
+    #[serde(default)]
+    refresh_token: Option<String>,
+}
+
+#[cfg(feature = "oauth")]
+fn normalize_storage_host(input: &str) -> Result<String, AuthenticationCLIError> {
+    if input.contains("://") {
+        let parsed = Url::parse(input)?;
+        if let Some(host) = parsed.host_str() {
+            return Ok(host.to_string());
+        }
+    }
+    Ok(input.to_string())
+}
+
+#[cfg(feature = "oauth")]
+fn parse_url_or_host(input: &str) -> Result<Url, AuthenticationCLIError> {
+    if input.contains("://") {
+        return Url::parse(input).map_err(AuthenticationCLIError::from);
+    }
+    Url::parse(&format!("https://{input}")).map_err(AuthenticationCLIError::from)
+}
+
+#[cfg(feature = "oauth")]
+fn derive_artifactory_base_url(input: &str) -> Result<Url, AuthenticationCLIError> {
+    let mut url = parse_url_or_host(input)?;
+
+    if let Some(index) = url.path().find("/artifactory") {
+        url.set_path(&url.path()[..index]);
+    } else {
+        url.set_path("");
+    }
+
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url)
+}
+
+#[cfg(feature = "oauth")]
+fn normalize_artifactory_registry_url(
+    input: &str,
+    repo_type: Option<&str>,
+) -> Result<Url, AuthenticationCLIError> {
+    let mut url = parse_url_or_host(input)?;
+    let path = url.path().trim_matches('/');
+    let segments: Vec<&str> = if path.is_empty() {
+        Vec::new()
+    } else {
+        path.split('/').collect()
+    };
+
+    if segments.len() >= 4
+        && segments[0] == "artifactory"
+        && segments[1] == "api"
+        && !segments[2].is_empty()
+        && !segments[3].is_empty()
+    {
+        url.set_path(&format!(
+            "/artifactory/api/{}/{}/",
+            segments[2], segments[3]
+        ));
+        return Ok(url);
+    }
+
+    if segments.len() == 2 && segments[0] == "artifactory" {
+        let normalized_type = repo_type.unwrap_or("npm");
+        url.set_path(&format!(
+            "/artifactory/api/{}/{}/",
+            normalized_type, segments[1]
+        ));
+        return Ok(url);
+    }
+
+    let known_repository_types = ["npm", "conda", "pypi", "maven", "nuget", "generic"];
+    if segments.len() == 3
+        && segments[0] == "artifactory"
+        && known_repository_types.contains(&segments[1])
+    {
+        url.set_path(&format!(
+            "/artifactory/api/{}/{}/",
+            segments[1], segments[2]
+        ));
+        return Ok(url);
+    }
+
+    Ok(url)
+}
+
+#[cfg(feature = "oauth")]
+async fn get_github_actions_oidc_token(
+    audience: &str,
+) -> Result<String, AuthenticationCLIError> {
+    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL)
+        .map_err(|_| AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_URL))?;
+    let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|_| {
+        AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+    })?;
+
+    let mut url = Url::parse(&request_url)?;
+    url.query_pairs_mut().append_pair("audience", audience);
+
+    let response = Client::new()
+        .get(url)
+        .bearer_auth(request_token)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let body: GitHubOidcTokenResponse = response.json().await?;
+    Ok(body.value)
+}
+
+#[cfg(feature = "oauth")]
+async fn exchange_artifactory_oidc_token(
+    artifactory_base_url: &Url,
+    provider_name: &str,
+    id_token: &str,
+) -> Result<ArtifactoryOidcTokenResponse, AuthenticationCLIError> {
+    let exchange_url = artifactory_base_url.join("access/api/v1/oidc/token")?;
+
+    let payload = json!({
+        "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+        "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+        "subject_token": id_token,
+        "provider_name": provider_name,
+        "project_key": std::env::var("JF_PROJECT").unwrap_or_default(),
+        "gh_job_id": std::env::var("GITHUB_JOB").unwrap_or_default(),
+        "gh_run_id": std::env::var("GITHUB_RUN_ID").unwrap_or_default(),
+        "gh_repo": std::env::var("GITHUB_REPOSITORY").unwrap_or_default(),
+        "gh_revision": std::env::var("GITHUB_SHA").unwrap_or_default(),
+        "gh_branch": std::env::var("GITHUB_REF_NAME").unwrap_or_default(),
+        "repo": std::env::var("GITHUB_REPOSITORY").ok(),
+        "revision": std::env::var("GITHUB_SHA").ok(),
+        "branch": std::env::var("GITHUB_REF_NAME").ok(),
+    });
+
+    let response = Client::new()
+        .post(exchange_url.clone())
+        .header(CONTENT_TYPE, "application/json")
+        .json(&payload)
+        .send()
+        .await?;
+
+    let status = response.status();
+    let body = response.text().await?;
+    if !status.is_success() {
+        return Err(AuthenticationCLIError::ArtifactoryOidcExchange(format!(
+            "HTTP {}: {}",
+            status,
+            body
+        )));
+    }
+
+    serde_json::from_str::<ArtifactoryOidcTokenResponse>(&body).map_err(|e| {
+        AuthenticationCLIError::ArtifactoryOidcExchange(format!(
+            "failed to parse exchange response: {e}; body: {body}"
+        ))
+    })
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -206,9 +420,79 @@ async fn login(
     // OAuth flow (when --oauth is set)
     #[cfg(feature = "oauth")]
     if args.oauth {
-        let issuer_url = args
-            .oauth_issuer_url
-            .unwrap_or_else(|| format!("https://{}", args.host));
+        let normalized_registry_url = if let Some(registry_url) = args.artifactory_registry_url.as_deref() {
+            let normalized = normalize_artifactory_registry_url(
+                registry_url,
+                args.artifactory_repository_type.as_deref(),
+            )?;
+            eprintln!("Using Artifactory registry URL: {normalized}");
+            Some(normalized)
+        } else {
+            None
+        };
+
+        if args.artifactory_m2m {
+            let provider_name = args.artifactory_provider_name.as_deref().ok_or(
+                AuthenticationCLIError::ArtifactoryOidcExchange(
+                    "--artifactory-provider-name is required for --artifactory-m2m".to_string(),
+                ),
+            )?;
+
+            let audience = args.artifactory_audience.as_deref().unwrap_or("api://default");
+
+            let target_for_base = normalized_registry_url
+                .as_ref()
+                .map(Url::as_str)
+                .unwrap_or(args.host.as_str());
+            let base_url = derive_artifactory_base_url(target_for_base)?;
+
+            let id_token = get_github_actions_oidc_token(audience).await?;
+            let exchanged = exchange_artifactory_oidc_token(&base_url, provider_name, &id_token).await?;
+
+            let expires_at = exchanged.expires_in.map(|seconds| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+                    + seconds
+            });
+
+            let auth = Authentication::OAuth {
+                access_token: exchanged.access_token,
+                refresh_token: exchanged.refresh_token,
+                expires_at,
+                token_endpoint: base_url.join("access/api/v1/oidc/token")?.to_string(),
+                revocation_endpoint: None,
+                client_id: provider_name.to_string(),
+            };
+
+            let storage_key = if let Some(registry) = normalized_registry_url {
+                registry.host_str().unwrap_or(args.host.as_str()).to_string()
+            } else {
+                normalize_storage_host(&args.host)?
+            };
+
+            storage.store(&storage_key, &auth)?;
+            eprintln!(
+                "Artifactory OIDC credentials stored for {storage_key} (machine-to-machine)."
+            );
+            return Ok(());
+        }
+
+        let default_issuer = if args.artifactory_provider_name.is_some()
+            || args.artifactory_registry_url.is_some()
+        {
+            let target_for_base = normalized_registry_url
+                .as_ref()
+                .map(Url::as_str)
+                .unwrap_or(args.host.as_str());
+            let base_url = derive_artifactory_base_url(target_for_base)?;
+            base_url.join("access")?.to_string()
+        } else {
+            format!("https://{}", args.host)
+        };
+
+        let issuer_url = args.oauth_issuer_url.unwrap_or(default_issuer);
         let client_id = args
             .oauth_client_id
             .unwrap_or_else(|| "rattler".to_string());
@@ -227,8 +511,11 @@ async fn login(
         };
 
         let auth = oauth::perform_oauth_login(config).await?;
-        // OAuth credentials are issuer-specific, skip wildcard conversion
-        let host = args.host.clone();
+        let host = if let Some(registry) = normalized_registry_url {
+            registry.host_str().unwrap_or(args.host.as_str()).to_string()
+        } else {
+            normalize_storage_host(&args.host)?
+        };
         storage.store(&host, &auth)?;
         eprintln!("Credentials stored for {host}.");
         return Ok(());
@@ -449,6 +736,16 @@ mod tests {
             oauth_flow: None,
             #[cfg(feature = "oauth")]
             oauth_scopes: vec![],
+            #[cfg(feature = "oauth")]
+            artifactory_m2m: false,
+            #[cfg(feature = "oauth")]
+            artifactory_provider_name: None,
+            #[cfg(feature = "oauth")]
+            artifactory_audience: None,
+            #[cfg(feature = "oauth")]
+            artifactory_registry_url: None,
+            #[cfg(feature = "oauth")]
+            artifactory_repository_type: None,
         }
     }
 
@@ -636,5 +933,96 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_normalize_artifactory_registry_url_from_shorthand_repo() {
+        let normalized = normalize_artifactory_registry_url(
+            "https://my-org.jfrog.io/artifactory/npmtest-npm",
+            Some("npm"),
+        )
+        .unwrap();
+        assert_eq!(
+            normalized.as_str(),
+            "https://my-org.jfrog.io/artifactory/api/npm/npmtest-npm/"
+        );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_normalize_artifactory_registry_url_from_kind_and_repo() {
+        let normalized = normalize_artifactory_registry_url(
+            "https://my-org.jfrog.io/artifactory/conda/conda-local",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            normalized.as_str(),
+            "https://my-org.jfrog.io/artifactory/api/conda/conda-local/"
+        );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_normalize_storage_host_from_url() {
+        let host = normalize_storage_host("https://my-org.jfrog.io/artifactory/api/npm/repo/")
+            .unwrap();
+        assert_eq!(host, "my-org.jfrog.io");
+    }
+
+    #[cfg(feature = "oauth")]
+    #[tokio::test]
+    async fn test_get_github_actions_oidc_token() {
+        let mut server = Server::new_async().await;
+        let oidc_url = format!("{}/oidc", server.url());
+        let mock = server
+            .mock("GET", "/oidc")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "audience".into(),
+                "jfrog-github".into(),
+            ))
+            .match_header("authorization", "Bearer request-token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"value":"jwt-token"}"#)
+            .create();
+
+        let result = async_with_vars(
+            [
+                (
+                    ACTIONS_ID_TOKEN_REQUEST_URL,
+                    Some(oidc_url.as_str()),
+                ),
+                (ACTIONS_ID_TOKEN_REQUEST_TOKEN, Some("request-token")),
+            ],
+            async { get_github_actions_oidc_token("jfrog-github").await },
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "jwt-token");
+        mock.assert();
+    }
+
+    #[cfg(feature = "oauth")]
+    #[tokio::test]
+    async fn test_exchange_artifactory_oidc_token() {
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/access/api/v1/oidc/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"access_token":"art-token","expires_in":3600}"#)
+            .create();
+
+        let base_url = Url::parse(&server.url()).unwrap();
+        let result = exchange_artifactory_oidc_token(&base_url, "my-provider", "id-token").await;
+
+        assert!(result.is_ok());
+        let token = result.unwrap();
+        assert_eq!(token.access_token, "art-token");
+        assert_eq!(token.expires_in, Some(3600));
+        mock.assert();
     }
 }
