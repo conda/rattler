@@ -25,6 +25,5 @@ jobs:
           auto-close: true
           vouched-repo: prefix-dev/vouched
           require-vouch: false
-          dry-run: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
