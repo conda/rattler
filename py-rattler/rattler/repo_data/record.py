@@ -51,7 +51,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_url(value)
+        self._record.url = value
 
     @property
     def channel(self) -> str:
@@ -92,7 +92,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_channel(value)
+        self._record.channel = value
 
     @property
     def file_name(self) -> str:
@@ -131,7 +131,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_file_name(value)
+        self._record.file_name = value
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:
