@@ -127,7 +127,7 @@ fn cache_expires_at(
 ) -> Option<SystemTime> {
     use http::Response;
     use http_cache_semantics::CachePolicy;
-    
+
     // Construct a dummy request
     let req = http::Request::builder()
         .uri("http://localhost")
@@ -144,9 +144,11 @@ fn cache_expires_at(
 
     let policy = CachePolicy::new(&req, &res);
     let ttl = policy.time_to_live(cache_last_modified);
-    
+
     if ttl > std::time::Duration::from_secs(0) {
-        cache_last_modified.checked_add(ttl).or_else(|| Some(SystemTime::now()))
+        cache_last_modified
+            .checked_add(ttl)
+            .or_else(|| Some(SystemTime::now()))
     } else {
         Some(SystemTime::now())
     }

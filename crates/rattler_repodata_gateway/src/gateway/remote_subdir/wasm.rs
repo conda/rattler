@@ -57,6 +57,9 @@ impl RemoteSubdirClient {
         let sparse =
             LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
 
-        Ok(Self { sparse, expires_at: None })
+        Ok(Self {
+            sparse,
+            expires_at: None,
+        })
     }
 }

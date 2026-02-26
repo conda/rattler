@@ -35,18 +35,23 @@ impl SimpleChannelServer {
         let service = get_service(ServeDir::new(path).precompressed_gzip());
 
         let cache_control = cache_control.map(String::from);
-        
+
         // Create a router that will serve the static files from the channel.
         let app = axum::Router::new().fallback_service(service);
         let app = if let Some(cache_control) = cache_control {
-            app.layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
-                let cc = cache_control.clone();
-                async move {
-                    let mut res = next.run(req).await;
-                    res.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_str(&cc).unwrap());
-                    res
-                }
-            }))
+            app.layer(axum::middleware::from_fn(
+                move |req, next: axum::middleware::Next| {
+                    let cc = cache_control.clone();
+                    async move {
+                        let mut res = next.run(req).await;
+                        res.headers_mut().insert(
+                            axum::http::header::CACHE_CONTROL,
+                            axum::http::HeaderValue::from_str(&cc).unwrap(),
+                        );
+                        res
+                    }
+                },
+            ))
         } else {
             app
         };

@@ -150,10 +150,7 @@ impl<'g> SubdirBuilder<'g> {
         Ok(SubdirData::from_client(client))
     }
 
-    async fn build_local(
-        &self,
-        path: &Path,
-    ) -> Result<SubdirData, GatewayError> {
+    async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
         let platform = self.platform;
         let path = path.join("repodata.json");

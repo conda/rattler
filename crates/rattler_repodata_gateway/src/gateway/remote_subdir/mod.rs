@@ -28,6 +28,7 @@ impl SubdirClient for RemoteSubdirClient {
     }
 
     fn has_expired(&self) -> bool {
-        self.expires_at.map(|exp| std::time::SystemTime::now() >= exp).unwrap_or(false)
+        self.expires_at
+            .is_some_and(|exp| std::time::SystemTime::now() >= exp)
     }
 }

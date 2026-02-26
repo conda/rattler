@@ -376,7 +376,6 @@ fn force_sharded_repodata(url: &Url) -> bool {
 #[cfg(test)]
 mod test {
     use std::{
-        future::IntoFuture,
         path::{Path, PathBuf},
         str::FromStr,
         sync::Arc,
@@ -384,13 +383,6 @@ mod test {
     };
 
     use assert_matches::assert_matches;
-    use axum::{
-        body::Body,
-        extract::State,
-        http::{header, Response, StatusCode},
-        routing::{get, get_service},
-        Router,
-    };
     use dashmap::DashSet;
     use rattler_cache::{default_cache_dir, package_cache::PackageCache};
     use rattler_conda_types::{
@@ -399,8 +391,6 @@ mod test {
         Platform, RepoDataRecord,
     };
     use rstest::rstest;
-    use tokio::sync::oneshot;
-    use tower_http::services::ServeDir;
     use url::Url;
 
     use crate::{
