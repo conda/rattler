@@ -195,8 +195,12 @@ pub enum AuthenticationCLIError {
 
     /// A required environment variable for GitHub OIDC was not found.
     #[cfg(feature = "oauth")]
-    #[error("Environment variable {0} not set. For GitHub Actions OIDC ensure `permissions: id-token: write` is configured")]
-    MissingGitHubOidcEnvVar(&'static str),
+    #[error("Environment variable {name} not set ({source}). For GitHub Actions OIDC ensure `permissions: id-token: write` is configured")]
+    MissingGitHubOidcEnvVar {
+        name: &'static str,
+        #[source]
+        source: std::env::VarError,
+    },
 
     /// Artifactory OIDC token exchange failed.
     #[cfg(feature = "oauth")]
@@ -312,11 +316,17 @@ fn normalize_artifactory_registry_url(
 
 #[cfg(feature = "oauth")]
 async fn get_github_actions_oidc_token(audience: &str) -> Result<String, AuthenticationCLIError> {
-    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|_error| {
-        AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_URL)
+    let request_url = std::env::var(ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|error| {
+        AuthenticationCLIError::MissingGitHubOidcEnvVar {
+            name: ACTIONS_ID_TOKEN_REQUEST_URL,
+            source: error,
+        }
     })?;
-    let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|_error| {
-        AuthenticationCLIError::MissingGitHubOidcEnvVar(ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+    let request_token = std::env::var(ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|error| {
+        AuthenticationCLIError::MissingGitHubOidcEnvVar {
+            name: ACTIONS_ID_TOKEN_REQUEST_TOKEN,
+            source: error,
+        }
     })?;
 
     let mut url = Url::parse(&request_url)?;
