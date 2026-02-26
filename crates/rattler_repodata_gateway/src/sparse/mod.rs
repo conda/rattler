@@ -428,6 +428,7 @@ impl SparseRepoData {
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
+            let matcher = PackageNameMatcher::from(next_package.clone());
             for (i, repo_data) in repo_data.iter().enumerate() {
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
                 let base_url = repo_data_packages
@@ -436,7 +437,6 @@ impl SparseRepoData {
                     .and_then(|i| i.base_url.as_deref());
 
                 // Get all records from the repodata
-                let matcher = PackageNameMatcher::from(next_package.clone());
                 let mut records = parse_records(
                     Some(&matcher),
                     &repo_data_packages.packages,
@@ -1525,9 +1525,7 @@ mod test {
     fn test_regex_package_name_query() {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
-        let regex_options = ParseMatchSpecOptions::lenient()
-            .with_exact_names_only(false)
-            .with_package_name_matcher(PackageNameMatcher::Regex);
+        let regex_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
         let records = sparse
             .load_matching_records(
                 vec![MatchSpec::from_str("^foo.*$", regex_options).unwrap()],
