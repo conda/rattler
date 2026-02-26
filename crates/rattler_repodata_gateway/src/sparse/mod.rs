@@ -1520,4 +1520,33 @@ mod test {
         xbar-1-xxx.tar.bz2
         "###);
     }
+
+    #[test]
+    fn test_regex_package_name_query() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let regex_options = ParseMatchSpecOptions::lenient()
+            .with_exact_names_only(false)
+            .with_package_name_matcher(PackageNameMatcher::Regex);
+        let records = sparse
+            .load_matching_records(
+                vec![MatchSpec::from_str("^foo.*$", regex_options).unwrap()],
+                PackageFormatSelection::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|record| record.identifier.to_file_name())
+            .sorted()
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        foo-3.0.2-py36h1af98f8_1.conda
+        foo-3.0.2-py36h1af98f8_1.tar.bz2
+        foo-3.0.2-py36h1af98f8_2.conda
+        foo-3.0.2-py36h1af98f8_3.conda
+        foo-4.0.2-py36h1af98f8_2.tar.bz2
+        foobar-2.0-bla_1.conda
+        foobar-2.1-bla_1.tar.bz2
+        "###);
+    }
 }
