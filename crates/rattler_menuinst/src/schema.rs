@@ -63,7 +63,8 @@ pub struct BasePlatformSpecific {
     /// Whether to run the program in a terminal/console.
     ///
     /// ### Platform-specific behavior
-    /// - `Windows`: Only has an effect if `activate` is true
+    /// - `Windows`: When `false`, the console window is suppressed for GUI applications
+    ///   launched from console-subsystem executables.
     /// - `MacOS`: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
