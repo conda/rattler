@@ -14,7 +14,7 @@ readme.workspace = true
 default = ["rustls-tls", "system-integration"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
-gcs = ["google-cloud-auth"]
+gcs = ["google-cloud-auth", "dep:tokio", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 
@@ -57,6 +57,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["sync"] }
 tracing = { workspace = true }
 url = { workspace = true }
 rattler_config = { workspace = true, optional = true }
