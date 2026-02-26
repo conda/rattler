@@ -197,7 +197,9 @@ pub enum AuthenticationCLIError {
     #[cfg(feature = "oauth")]
     #[error("Environment variable {name} not set ({source}). For GitHub Actions OIDC ensure `permissions: id-token: write` is configured")]
     MissingGitHubOidcEnvVar {
+        /// The name of the missing GitHub Actions OIDC environment variable.
         name: &'static str,
+        /// The original environment variable lookup error.
         #[source]
         source: std::env::VarError,
     },
