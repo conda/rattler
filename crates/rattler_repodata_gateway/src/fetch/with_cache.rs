@@ -1485,28 +1485,19 @@ mod test {
             "there must have been exactly two requests"
         );
     }
-}
 
-/// Regression test for <https://github.com/conda/rattler/issues/1952>.
-///
-/// On Windows, memory-mapped files cannot be deleted unless they were opened
-/// with `FILE_SHARE_DELETE`. [`SparseRepoData::from_file`] uses `open_for_mmap`
-/// which sets that flag. This test verifies that a file opened via
-/// `SparseRepoData` can be deleted (or replaced) while the mapping is alive.
-#[cfg(feature = "sparse")]
-#[cfg(any(unix, windows))]
-#[cfg(test)]
-mod share_delete_test {
-    use rattler_conda_types::{Channel, ChannelConfig};
-
-    use crate::sparse::SparseRepoData;
-
+    /// Regression test for <https://github.com/conda/rattler/issues/1952>.
+    ///
+    /// On Windows, memory-mapped files cannot be deleted unless they were
+    /// opened with `FILE_SHARE_DELETE`.  `SparseRepoData::from_file` sets
+    /// that flag.  This verifies the file can be deleted while mapped.
     #[test]
+    #[cfg(feature = "sparse")]
     fn test_can_delete_mmap_opened_via_sparse_repodata() {
-        let temp = tempfile::tempdir().unwrap();
-        let json_path = temp.path().join("repodata.json");
+        use rattler_conda_types::{Channel, ChannelConfig};
 
-        // Write a minimal but valid repodata.json.
+        let temp = TempDir::new().unwrap();
+        let json_path = temp.path().join("repodata.json");
         std::fs::write(
             &json_path,
             r#"{"info":{"subdir":"noarch"},"packages":{},"packages.conda":{}}"#,
@@ -1516,12 +1507,10 @@ mod share_delete_test {
         let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
         let channel = Channel::from_str("test", &channel_config).unwrap();
 
-        // Open the file through SparseRepoData (uses open_for_mmap internally).
-        let _sparse = SparseRepoData::from_file(channel, "noarch", &json_path, None).unwrap();
+        let _sparse =
+            crate::sparse::SparseRepoData::from_file(channel, "noarch", &json_path, None).unwrap();
 
-        // While the file is memory-mapped, deleting / replacing it must succeed.
-        // On Windows without FILE_SHARE_DELETE this would fail with
-        // "Access Denied" (OS error 5).
+        // Must succeed even while the file is memory-mapped.
         std::fs::remove_file(&json_path)
             .expect("should be able to delete a file opened with FILE_SHARE_DELETE");
     }
