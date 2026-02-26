@@ -407,12 +407,12 @@ region = eu-central-1
             )
             .await
             .unwrap();
-        assert_eq!(
-            presigned.path(),
-            "/channel/noarch/repodata.json"
-        );
+        assert_eq!(presigned.path(), "/channel/noarch/repodata.json");
         assert_eq!(presigned.scheme(), "http");
-        assert_eq!(presigned.host_str().unwrap(), "rattler-s3-testing.localhost");
+        assert_eq!(
+            presigned.host_str().unwrap(),
+            "rattler-s3-testing.localhost"
+        );
         assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
     }
 
