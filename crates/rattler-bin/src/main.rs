@@ -40,6 +40,7 @@ struct Opt {
 
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Command {
     Auth(commands::auth::Opt),
     Create(commands::create::Opt),
