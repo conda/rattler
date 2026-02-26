@@ -20,8 +20,8 @@ use rattler_conda_types::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
     },
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    UrlOrPath, WhlPackageRecord,
+    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageNameMatcher, PackageRecord,
+    RepoDataRecord, UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -336,9 +336,8 @@ impl SparseRepoData {
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
         for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
-            // TODO: support glob/regex package names
             let mut parsed_records = parse_records(
-                package_name.and_then(Option::<PackageName>::from).as_ref(),
+                package_name.as_ref(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 &repo_data.experimental_v3,
@@ -367,8 +366,9 @@ impl SparseRepoData {
     ) -> io::Result<Vec<RepoDataRecord>> {
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
+        let matcher = PackageNameMatcher::from(package_name.clone());
         parse_records(
-            Some(package_name),
+            Some(&matcher),
             &repo_data.packages,
             &repo_data.conda_packages,
             &repo_data.experimental_v3,
@@ -436,8 +436,9 @@ impl SparseRepoData {
                     .and_then(|i| i.base_url.as_deref());
 
                 // Get all records from the repodata
+                let matcher = PackageNameMatcher::from(next_package.clone());
                 let mut records = parse_records(
-                    Some(&next_package),
+                    Some(&matcher),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
                     &repo_data_packages.experimental_v3,
@@ -547,22 +548,43 @@ enum RecordKind {
 }
 
 /// Returns an iterator over the packages in the slice that match the given
-/// package name.
+/// package name matcher.
 fn find_package_in_slice<'a, 'i: 'a>(
     slice: &'a [(PackageFilename<'i>, &'i RawValue)],
-    package_name: Option<&PackageName>,
+    package_name: Option<&'a PackageNameMatcher>,
     record_kind: RecordKind,
 ) -> impl Iterator<Item = (PackageFilename<'i>, &'i RawValue, RecordKind)> + 'a {
-    let range = match package_name {
-        None => 0..slice.len(),
-        Some(package_name) => {
-            slice.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()))
+    match package_name {
+        None => itertools::Either::Left(itertools::Either::Left(
+            slice
+                .iter()
+                .map(move |(filename, raw_json)| (*filename, *raw_json, record_kind)),
+        )),
+        Some(PackageNameMatcher::Exact(name)) => {
+            let range =
+                slice.equal_range_by(|(package, _)| package.package.cmp(name.as_normalized()));
+            itertools::Either::Left(itertools::Either::Right(
+                slice[range]
+                    .iter()
+                    .map(move |(filename, raw_json)| (*filename, *raw_json, record_kind)),
+            ))
         }
-    };
+        Some(matcher) => itertools::Either::Right(
+            slice
+                .iter()
+                .filter(move |(filename, _)| matches_normalized_name(matcher, filename.package))
+                .map(move |(filename, raw_json)| (*filename, *raw_json, record_kind)),
+        ),
+    }
+}
 
-    slice[range]
-        .iter()
-        .map(move |(filename, raw_json)| (*filename, *raw_json, record_kind))
+/// Check if a normalized package name string matches a [`PackageNameMatcher`].
+fn matches_normalized_name(matcher: &PackageNameMatcher, normalized_name: &str) -> bool {
+    match matcher {
+        PackageNameMatcher::Exact(s) => s.as_normalized() == normalized_name,
+        PackageNameMatcher::Glob(glob) => glob.matches(normalized_name),
+        PackageNameMatcher::Regex(regex) => regex.is_match(normalized_name).unwrap_or(false),
+    }
 }
 
 /// Takes an iterator over package filenames and raw json values and returns an
@@ -587,7 +609,7 @@ fn add_stripped_filename<'i>(
 /// Parse the records for the specified package from the raw index
 #[allow(clippy::too_many_arguments)]
 fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
-    package_name: Option<&PackageName>,
+    package_name: Option<&PackageNameMatcher>,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
     v3: &LazyV3Packages<'i>,
@@ -1066,7 +1088,8 @@ mod test {
     use fs_err as fs;
     use itertools::Itertools;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseMatchSpecOptions, ParseStrictness,
+        RepoData, RepoDataRecord,
     };
     use rstest::rstest;
 
@@ -1445,5 +1468,56 @@ mod test {
             .collect::<Vec<_>>();
 
         insta::assert_snapshot!(records.join("\n"), @"cuda-version-12.5-hd4f0392_3.conda");
+    }
+
+    #[test]
+    fn test_glob_package_name_query() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let glob_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
+        let records = sparse
+            .load_matching_records(
+                vec![MatchSpec::from_str("foo*", glob_options).unwrap()],
+                PackageFormatSelection::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|record| record.identifier.to_file_name())
+            .sorted()
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        foo-3.0.2-py36h1af98f8_1.conda
+        foo-3.0.2-py36h1af98f8_1.tar.bz2
+        foo-3.0.2-py36h1af98f8_2.conda
+        foo-3.0.2-py36h1af98f8_3.conda
+        foo-4.0.2-py36h1af98f8_2.tar.bz2
+        foobar-2.0-bla_1.conda
+        foobar-2.1-bla_1.tar.bz2
+        "###);
+    }
+
+    #[test]
+    fn test_glob_suffix_query() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let glob_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
+        let records = sparse
+            .load_matching_records(
+                vec![MatchSpec::from_str("*bar", glob_options).unwrap()],
+                PackageFormatSelection::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|record| record.identifier.to_file_name())
+            .sorted()
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        bar-1.0-unix_py36h1af98f8_2.tar.bz2
+        foobar-2.0-bla_1.conda
+        foobar-2.1-bla_1.tar.bz2
+        xbar-1-xxx.tar.bz2
+        "###);
     }
 }
