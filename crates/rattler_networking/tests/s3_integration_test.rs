@@ -97,8 +97,7 @@ async fn test_r2_download_repodata(r2_host: String, r2_credentials: Option<(Stri
             "rattler-s3-testing".into(),
             S3Config::Custom {
                 endpoint_url: Url::parse(&r2_host).unwrap(),
-                region: "auto".into(),
-                force_path_style: true,
+                region: "auto".into()
             },
         )]),
         auth_storage.clone(),

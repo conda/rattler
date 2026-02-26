@@ -150,18 +150,17 @@ class S3Config:
     """
 
     def __init__(
-        self, endpoint_url: str | None = None, region: str | None = None, force_path_style: bool | None = None
+        self, endpoint_url: str | None = None, region: str | None = None
     ) -> None:
-        self._config = PyS3Config(endpoint_url, region, force_path_style)
-        if (endpoint_url is None) != (region is None) or (endpoint_url is None) != (force_path_style is None):
+        if (endpoint_url is None) != (region is None):
             raise ValueError("Invalid arguments for S3Config")
+        self._config = PyS3Config(endpoint_url, region)
         self._endpoint_url = endpoint_url
         self._region = region
-        self._force_path_style = force_path_style
 
     def __repr__(self) -> str:
         inner = (
-            f"{self._endpoint_url}, {self._region}, {self._force_path_style}"
+            f"{self._endpoint_url}, {self._region}"
             if self._endpoint_url is not None
             else "aws sdk"
         )

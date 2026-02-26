@@ -213,7 +213,7 @@ mod tests {
         config
             .set(
                 "s3-options.mybucket",
-                Some(r#"{"endpoint-url": "https://s3.example.com", "region": "us-west-2", "force-path-style": true}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.example.com", "region": "us-west-2"}"#.to_string()),
             )
             .unwrap();
 
@@ -225,7 +225,6 @@ mod tests {
             Url::parse("https://s3.example.com").unwrap()
         );
         assert_eq!(bucket_config.region, "us-west-2");
-        assert!(bucket_config.force_path_style);
 
         // Test editing individual bucket properties
         config
@@ -246,14 +245,6 @@ mod tests {
             config.s3_options.0["mybucket"].endpoint_url,
             Url::parse("https://s3.eu-central-1.amazonaws.com").unwrap()
         );
-
-        config
-            .set(
-                "s3-options.mybucket.force-path-style",
-                Some("false".to_string()),
-            )
-            .unwrap();
-        assert!(!config.s3_options.0["mybucket"].force_path_style);
     }
 
     #[test]
@@ -324,21 +315,21 @@ mod tests {
         config
             .set(
                 "s3-options.production",
-                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1", "force-path-style": false}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#.to_string()),
             )
             .unwrap();
 
         config
             .set(
                 "s3-options.development",
-                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "dev-region", "force-path-style": true}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "dev-region"}"#.to_string()),
             )
             .unwrap();
 
         config
             .set(
                 "s3-options.staging",
-                Some(r#"{"endpoint-url": "https://s3.staging.example.com", "region": "us-west-2", "force-path-style": false}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.staging.example.com", "region": "us-west-2"}"#.to_string()),
             )
             .unwrap();
 
@@ -349,7 +340,6 @@ mod tests {
 
         // Verify different configurations
         assert_eq!(config.s3_options.0["production"].region, "us-east-1");
-        assert!(config.s3_options.0["development"].force_path_style);
         assert_eq!(
             config.s3_options.0["staging"].endpoint_url,
             Url::parse("https://s3.staging.example.com").unwrap()
@@ -522,13 +512,13 @@ mod tests {
         config
             .set(
                 "s3-options.production-bucket",
-                Some(r#"{"endpoint-url": "https://s3.us-east-1.amazonaws.com", "region": "us-east-1", "force-path-style": false}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.us-east-1.amazonaws.com", "region": "us-east-1"}"#.to_string()),
             )
             .unwrap();
         config
             .set(
                 "s3-options.dev-bucket",
-                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "us-west-2", "force-path-style": true}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "us-west-2"}"#.to_string()),
             )
             .unwrap();
 
@@ -598,7 +588,7 @@ mod tests {
         config
             .set(
                 "s3-options.company-bucket",
-                Some(r#"{"endpoint-url": "https://s3.company.com", "region": "company-region", "force-path-style": true}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.company.com", "region": "company-region"}"#.to_string()),
             )
             .unwrap();
         config
@@ -630,7 +620,7 @@ mod tests {
         original_config
             .set(
                 "s3-options.test-bucket",
-                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1", "force-path-style": false}"#.to_string()),
+                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#.to_string()),
             )
             .unwrap();
 

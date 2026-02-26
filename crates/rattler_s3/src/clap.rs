@@ -57,7 +57,7 @@ pub struct S3CredentialsOpts {
     pub session_token: Option<String>,
 
     /// How to address the bucket
-    #[arg(long, env = "S3_ADDRESSING_STYLE", requires_all = ["region", "endpoint_url"], help_heading = "S3 Credentials", conflicts_with="force_path_style", default_value_t=S3AddressingStyleOpts::default())]
+    #[arg(long, env = "S3_ADDRESSING_STYLE", requires_all = ["region", "endpoint_url"], help_heading = "S3 Credentials", default_value_t=S3AddressingStyleOpts::default())]
     pub addressing_style: S3AddressingStyleOpts,
 }
 

@@ -25,8 +25,6 @@ pub enum S3Config {
         endpoint_url: Url,
         /// The region to use for the S3 client.
         region: String,
-        /// Whether to force path style for the S3 client.
-        force_path_style: bool,
     },
 }
 
@@ -44,8 +42,7 @@ where
                 k,
                 S3Config::Custom {
                     endpoint_url: v.endpoint_url,
-                    region: v.region,
-                    force_path_style: v.force_path_style,
+                    region: v.region
                 },
             )
         })
@@ -128,7 +125,6 @@ impl S3 {
         if let S3Config::Custom {
             endpoint_url,
             region,
-            force_path_style,
         } = self
             .config
             .get(bucket_name)
@@ -147,7 +143,6 @@ impl S3 {
                 ) => aws_sdk_s3::config::Builder::from(sdk_config)
                     .endpoint_url(endpoint_url)
                     .region(aws_sdk_s3::config::Region::new(region))
-                    .force_path_style(force_path_style)
                     .credentials_provider(aws_sdk_s3::config::Credentials::new(
                         access_key_id,
                         secret_access_key,
@@ -170,18 +165,6 @@ impl S3 {
             // Set the region from the default provider chain.
             s3_config_builder.set_region(sdk_config.region().cloned());
 
-            // Infer if we expect path-style addressing from the endpoint URL.
-            if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                // If the endpoint URL is localhost, we probably have to use path-style
-                // addressing. xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
-                if endpoint_url.starts_with("http://localhost") {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
-                }
-                // same with cloudflare R2
-                if endpoint_url.starts_with("r2.cloudflarestorage.com") {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
-                }
-            }
             Ok(aws_sdk_s3::Client::from_conf(s3_config_builder.build()))
         }
     }
@@ -411,8 +394,7 @@ region = eu-central-1
                 "rattler-s3-testing".into(),
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
-                    region: "eu-central-1".into(),
-                    force_path_style: true,
+                    region: "eu-central-1".into()
                 },
             )]),
             store,
@@ -441,8 +423,7 @@ region = eu-central-1
                 "rattler-s3-testing".into(),
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
-                    region: "eu-central-1".into(),
-                    force_path_style: true,
+                    region: "eu-central-1".into()
                 },
             )]),
             AuthenticationStorage::empty(),

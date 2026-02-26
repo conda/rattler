@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_config/src/lib.rs
+assertion_line: 600
 expression: toml_output
 ---
 default-channels = [
@@ -38,6 +39,5 @@ non-proxy-hosts = [
 [s3-options.company-bucket]
 endpoint-url = "https://s3.company.com/"
 region = "company-region"
-force-path-style = true
 
 [nested]

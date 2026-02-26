@@ -17,9 +17,6 @@ pub struct S3Options {
 
     /// The name of the S3 region
     pub region: String,
-
-    /// Force path style URLs instead of subdomain style
-    pub force_path_style: bool,
 }
 
 impl Config for S3OptionsMap {
@@ -77,16 +74,6 @@ impl Config for S3OptionsMap {
                     bucket_config.region = value.ok_or_else(|| ConfigEditError::MissingValue {
                         key: key.to_string(),
                     })?;
-                }
-                "force-path-style" => {
-                    let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                        key: key.to_string(),
-                    })?;
-                    bucket_config.force_path_style =
-                        value.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })?;
                 }
                 _ => {
                     return Err(ConfigEditError::UnknownKey {

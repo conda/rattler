@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_config/src/lib.rs
+assertion_line: 535
 expression: toml_output
 ---
 tls-no-verify = false
@@ -8,11 +9,9 @@ array_field = []
 [s3-options.production-bucket]
 endpoint-url = "https://s3.us-east-1.amazonaws.com/"
 region = "us-west-1"
-force-path-style = false
 
 [s3-options.dev-bucket]
 endpoint-url = "https://minio.dev.example.com/"
 region = "us-west-2"
-force-path-style = true
 
 [nested]
