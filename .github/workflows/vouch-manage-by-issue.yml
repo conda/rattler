@@ -41,4 +41,4 @@ jobs:
           repo: conda/rattler
           dry-run: true
         env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
