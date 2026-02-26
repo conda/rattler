@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.15](https://github.com/conda/rattler/compare/rattler-v0.39.14...rattler-v0.39.15) - 2026-02-25
+
+### Added
+
+- *(rattler)* make clobber behavior configurable ([#2082](https://github.com/conda/rattler/pull/2082))
+
+### Fixed
+
+- set the modification time of any file we change ([#2096](https://github.com/conda/rattler/pull/2096))
+- *(rattler)* handle cleanup failures without panicking ([#2088](https://github.com/conda/rattler/pull/2088))
+
 ## [0.39.14](https://github.com/conda/rattler/compare/rattler-v0.39.13...rattler-v0.39.14) - 2026-02-20
 
 ### Other
