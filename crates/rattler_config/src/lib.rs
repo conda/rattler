@@ -213,7 +213,10 @@ mod tests {
         config
             .set(
                 "s3-options.mybucket",
-                Some(r#"{"endpoint-url": "https://s3.example.com", "region": "us-west-2"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://s3.example.com", "region": "us-west-2"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 
@@ -315,21 +318,30 @@ mod tests {
         config
             .set(
                 "s3-options.production",
-                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 
         config
             .set(
                 "s3-options.development",
-                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "dev-region"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://minio.dev.example.com", "region": "dev-region"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 
         config
             .set(
                 "s3-options.staging",
-                Some(r#"{"endpoint-url": "https://s3.staging.example.com", "region": "us-west-2"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://s3.staging.example.com", "region": "us-west-2"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 
@@ -518,7 +530,10 @@ mod tests {
         config
             .set(
                 "s3-options.dev-bucket",
-                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "us-west-2"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://minio.dev.example.com", "region": "us-west-2"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 
@@ -588,7 +603,10 @@ mod tests {
         config
             .set(
                 "s3-options.company-bucket",
-                Some(r#"{"endpoint-url": "https://s3.company.com", "region": "company-region"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://s3.company.com", "region": "company-region"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
         config
@@ -620,7 +638,10 @@ mod tests {
         original_config
             .set(
                 "s3-options.test-bucket",
-                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#.to_string()),
+                Some(
+                    r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1"}"#
+                        .to_string(),
+                ),
             )
             .unwrap();
 

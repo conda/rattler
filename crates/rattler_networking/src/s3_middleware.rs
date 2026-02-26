@@ -42,7 +42,7 @@ where
                 k,
                 S3Config::Custom {
                     endpoint_url: v.endpoint_url,
-                    region: v.region
+                    region: v.region,
                 },
             )
         })
@@ -394,7 +394,7 @@ region = eu-central-1
                 "rattler-s3-testing".into(),
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
-                    region: "eu-central-1".into()
+                    region: "eu-central-1".into(),
                 },
             )]),
             store,
@@ -423,7 +423,7 @@ region = eu-central-1
                 "rattler-s3-testing".into(),
                 S3Config::Custom {
                     endpoint_url: Url::parse("http://localhost:9000").unwrap(),
-                    region: "eu-central-1".into()
+                    region: "eu-central-1".into(),
                 },
             )]),
             AuthenticationStorage::empty(),

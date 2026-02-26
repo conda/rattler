@@ -142,15 +142,12 @@ pub(crate) struct PyS3ConfigCustom {
 impl PyS3Config {
     #[new]
     #[pyo3(signature = (endpoint_url=None, region=None))]
-    pub fn __init__(
-        endpoint_url: Option<String>,
-        region: Option<String>
-    ) -> PyResult<Self> {
+    pub fn __init__(endpoint_url: Option<String>, region: Option<String>) -> PyResult<Self> {
         match (endpoint_url, region) {
             (Some(endpoint_url), Some(region)) => Ok(Self {
                 custom: Some(PyS3ConfigCustom {
                     endpoint_url: Url::parse(&endpoint_url).map_err(PyRattlerError::from)?,
-                    region
+                    region,
                 }),
             }),
             (None, None, None) => Ok(Self { custom: None }),
@@ -165,7 +162,7 @@ impl From<PyS3Config> for S3Config {
             None => S3Config::FromAWS,
             Some(custom) => S3Config::Custom {
                 endpoint_url: custom.endpoint_url,
-                region: custom.region
+                region: custom.region,
             },
         }
     }
