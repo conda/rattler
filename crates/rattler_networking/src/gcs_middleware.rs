@@ -1,42 +1,55 @@
 //! Middleware to handle `gcs://` URLs to pull artifacts from an GCS
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use google_cloud_auth::credentials::{
-    Builder as AccessTokenCredentialBuilder, CacheableResource, Credentials,
+    Builder as AccessTokenCredentialBuilder, CacheableResource, Credentials, EntityTag,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use url::Url;
 
-/// Google `OAuth2` tokens are valid for 3600 seconds. We refresh 5 minutes
-/// before expiry so that any in-flight requests that obtained the token just
-/// before the deadline still have plenty of validity left.
-const TOKEN_VALID_FOR: Duration = Duration::from_secs(3600 - 300);
-
-/// A cached GCS bearer-token and the instant at which it should be refreshed.
-struct CachedToken {
+/// The auth headers and the `EntityTag` assigned by the credential library.
+///
+/// The `EntityTag` is an opaque process-local token: the library generates one
+/// per token lifetime and reuses it until the token is refreshed.  Passing it
+/// back to `Credentials::headers()` lets the library confirm our cached copy is
+/// still current (`NotModified`) or hand us a freshly-minted one (`New`).
+struct CachedResource {
+    entity_tag: EntityTag,
     headers: http::HeaderMap,
-    valid_until: Instant,
+}
+
+/// Token-cache state machine.
+enum CacheState {
+    /// No resource has been fetched yet and no refresh is in flight.
+    Empty,
+    /// One task is fetching a new token; others wait on `GCSInner::refresh_done`.
+    Refreshing,
+    /// A valid resource is available.
+    Ready(CachedResource),
 }
 
 /// Shared, ref-counted state owned by every clone of a [`GCSMiddleware`].
 struct GCSInner {
     /// Credential source built once and reused across all requests.
     credential: Mutex<Option<Credentials>>,
-    /// Most-recently-fetched auth headers; reused until near expiry.
-    token: Mutex<Option<CachedToken>>,
+    /// Cache state machine guarded by a mutex.
+    cache: Mutex<CacheState>,
+    /// Woken every time a refresh completes (success or failure) so that
+    /// waiters can re-inspect the cache state.
+    refresh_done: Notify,
 }
 
 /// GCS middleware to authenticate requests.
 ///
-/// A single [`GCSMiddleware`] instance (or any clone of one) shares one `OAuth2`
-/// credential and one token cache, so only one token-endpoint round-trip is
-/// made per token lifetime (~55 minutes) rather than one per package download.
+/// A single [`GCSMiddleware`] instance (or any clone of one) shares one
+/// `OAuth2` credential and one token cache.  At most one token fetch is in
+/// flight at a time regardless of how many concurrent requests are being
+/// processed (singleflight).  Subsequent requests reuse the cached resource
+/// until the credential library signals that the token has changed, at which
+/// point the cache is transparently refreshed.
 #[derive(Clone)]
 pub struct GCSMiddleware {
     inner: Arc<GCSInner>,
@@ -47,7 +60,23 @@ impl Default for GCSMiddleware {
         Self {
             inner: Arc::new(GCSInner {
                 credential: Mutex::new(None),
-                token: Mutex::new(None),
+                cache: Mutex::new(CacheState::Empty),
+                refresh_done: Notify::new(),
+            }),
+        }
+    }
+}
+
+#[cfg(test)]
+impl GCSMiddleware {
+    /// Test-only constructor that pre-seeds the credential so no ADC discovery
+    /// is needed.
+    fn with_credentials(cred: Credentials) -> Self {
+        Self {
+            inner: Arc::new(GCSInner {
+                credential: Mutex::new(Some(cred)),
+                cache: Mutex::new(CacheState::Empty),
+                refresh_done: Notify::new(),
             }),
         }
     }
@@ -87,69 +116,310 @@ impl GCSMiddleware {
         Ok(req)
     }
 
-    /// Return cached auth headers if the token is still valid, otherwise
-    /// obtain a fresh token from Google and update the cache.
+    /// Lazily initialise the `Credentials` object (once per middleware
+    /// lifetime) and return a cheap `Arc`-clone of it.
+    async fn get_credential(&self) -> MiddlewareResult<Credentials> {
+        let mut guard = self.inner.credential.lock().await;
+        if guard.is_none() {
+            let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
+            let c = AccessTokenCredentialBuilder::default()
+                .with_scopes(scopes)
+                .build()
+                .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))?;
+            *guard = Some(c);
+        }
+        // Credentials is Arc-backed; clone is a cheap refcount bump.
+        Ok(guard.as_ref().unwrap().clone())
+    }
+
+    /// Return cached auth headers, refreshing exactly once when necessary.
+    ///
+    /// ## Concurrency model
+    ///
+    /// The cache cycles through three states stored in `GCSInner::cache`:
+    ///
+    /// * **`Empty`** – the first caller atomically transitions to `Refreshing`
+    ///   (under the lock) and performs the network fetch; all other concurrent
+    ///   callers see `Refreshing` and wait on `refresh_done`.
+    /// * **`Refreshing`** – callers subscribe to `refresh_done` *before*
+    ///   releasing the lock (via `Notified::enable`), guaranteeing that the
+    ///   wake-up from `notify_waiters` cannot arrive between the lock release
+    ///   and the subscription.  They then loop to re-read the updated state.
+    /// * **`Ready`** – callers clone the cached `EntityTag` + headers, drop
+    ///   the lock, and ask the credential library whether the token is still
+    ///   current.  The library returns `NotModified` (fast path) or `New`
+    ///   (token was silently refreshed); in the latter case the cache is
+    ///   overwritten.  No lock is ever held across an `await`.
     async fn get_or_refresh_token(&self) -> MiddlewareResult<http::HeaderMap> {
-        // Fast path: reuse the cached token if it has not expired yet.
-        {
-            let guard = self.inner.token.lock().await;
-            if let Some(t) = guard.as_ref() {
-                if t.valid_until > Instant::now() {
-                    return Ok(t.headers.clone());
+        loop {
+            let mut guard = self.inner.cache.lock().await;
+
+            // ── Arm 1: another task is fetching – wait for it ───────────────
+            if matches!(*guard, CacheState::Refreshing) {
+                // Create the notification future and call `enable()` *while the
+                // lock is still held*.  This prevents a window where the
+                // refreshing task calls `notify_waiters()` between our lock
+                // release and our subscription, which would cause us to miss
+                // the notification and hang.
+                let notified = self.inner.refresh_done.notified();
+                let mut notified = std::pin::pin!(notified);
+                notified.as_mut().enable();
+                drop(guard); // release lock before suspending
+                notified.await;
+                continue; // re-inspect state
+            }
+
+            // ── Arm 2: cache is populated – validate via ETag ───────────────
+            // Clone the cached values while the lock is held; the borrow ends
+            // before we call `drop(guard)` so the compiler is satisfied.
+            let cached = match &*guard {
+                CacheState::Ready(r) => Some((r.entity_tag.clone(), r.headers.clone())),
+                _ => None,
+            };
+            if let Some((entity_tag, headers)) = cached {
+                drop(guard); // release lock before the network round-trip
+
+                let cred = self.get_credential().await?;
+                let mut ext = http::Extensions::new();
+                ext.insert(entity_tag);
+
+                return match cred
+                    .headers(ext)
+                    .await
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))?
+                {
+                    // Library confirms our token is still current.
+                    CacheableResource::NotModified => Ok(headers),
+                    // Library silently refreshed the token; update our cache.
+                    CacheableResource::New { entity_tag, data } => {
+                        *self.inner.cache.lock().await = CacheState::Ready(CachedResource {
+                            entity_tag,
+                            headers: data.clone(),
+                        });
+                        Ok(data)
+                    }
+                };
+            }
+
+            // ── Arm 3: cache is empty – claim the refresh slot ──────────────
+            // At this point `*guard` must be `Empty` (the `Refreshing` and
+            // `Ready` arms above have already handled the other cases).
+            *guard = CacheState::Refreshing;
+            drop(guard); // release lock before the network round-trip
+
+            let fetch = async {
+                let cred = self.get_credential().await?;
+                cred.headers(http::Extensions::new())
+                    .await
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
+            }
+            .await;
+
+            match fetch {
+                Ok(CacheableResource::New { entity_tag, data }) => {
+                    let out = data.clone();
+                    *self.inner.cache.lock().await = CacheState::Ready(CachedResource {
+                        entity_tag,
+                        headers: data,
+                    });
+                    self.inner.refresh_done.notify_waiters();
+                    return Ok(out);
+                }
+                // We passed no ETag, so `NotModified` is impossible.
+                Ok(CacheableResource::NotModified) => unreachable!(
+                    "no entity tag was provided in extensions, \
+                     so NotModified cannot be returned"
+                ),
+                Err(e) => {
+                    // Reset to Empty so the next caller can retry.
+                    *self.inner.cache.lock().await = CacheState::Empty;
+                    self.inner.refresh_done.notify_waiters();
+                    return Err(e);
                 }
             }
         }
-
-        // Slow path: lazily build the credential once, then fetch a new token.
-        let cred = {
-            let mut guard = self.inner.credential.lock().await;
-            if guard.is_none() {
-                let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
-                let c = AccessTokenCredentialBuilder::default()
-                    .with_scopes(scopes)
-                    .build()
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))?;
-                *guard = Some(c);
-            }
-            // Credentials is Arc-backed; clone is a cheap refcount bump.
-            guard.as_ref().unwrap().clone()
-        };
-
-        let headers = match cred.headers(http::Extensions::new()).await {
-            Ok(CacheableResource::New { data, .. }) => data,
-            Ok(CacheableResource::NotModified) => {
-                // We never pass a prior entity-tag via extensions, so the
-                // library cannot return NotModified. Treat it as a library
-                // bug and fall back to the fresh-fetch path.
-                unreachable!(
-                    "no entity tag was provided in extensions, \
-                     so NotModified cannot be returned"
-                )
-            }
-            Err(e) => {
-                return Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)));
-            }
-        };
-
-        // Store the token for re-use across subsequent requests.
-        {
-            let mut guard = self.inner.token.lock().await;
-            *guard = Some(CachedToken {
-                headers: headers.clone(),
-                valid_until: Instant::now() + TOKEN_VALID_FOR,
-            });
-        }
-
-        Ok(headers)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    use google_cloud_auth::credentials::{CacheableResource, CredentialsProvider, EntityTag};
+    use google_cloud_auth::errors::CredentialsError;
     use reqwest::Client;
     use tempfile;
+    use tokio::sync::Barrier;
 
     use super::*;
+
+    // ── Mock credential provider ─────────────────────────────────────────────
+
+    /// Shared, externally-controllable "current token version" for the mock.
+    type SharedEtag = Arc<std::sync::Mutex<EntityTag>>;
+
+    /// A fake `CredentialsProvider` that behaves like the real Google library:
+    ///
+    /// * Keeps an internal "current" `EntityTag` (shared so tests can rotate it).
+    /// * Returns `NotModified` when the caller presents the same tag.
+    /// * Returns `New` (with the current tag) otherwise.
+    /// * Counts every call that issues new headers (i.e. not `NotModified`).
+    #[derive(Debug)]
+    struct MockProvider {
+        /// Monotonically-increasing call count for non-`NotModified` responses.
+        refresh_count: Arc<AtomicUsize>,
+        /// The current "token version"; tests rotate it via the shared handle.
+        current_etag: SharedEtag,
+        /// Optional barrier used by concurrency tests to synchronise callers.
+        barrier: Option<Arc<Barrier>>,
+    }
+
+    impl MockProvider {
+        /// Returns the provider, a counter handle, and an etag handle.
+        /// Rotating the etag (via the handle) simulates a server-side token
+        /// refresh so the next caller receives `New` instead of `NotModified`.
+        fn new() -> (Self, Arc<AtomicUsize>, SharedEtag) {
+            let count = Arc::new(AtomicUsize::new(0));
+            let etag: SharedEtag = Arc::new(std::sync::Mutex::new(EntityTag::new()));
+            let p = Self {
+                refresh_count: count.clone(),
+                current_etag: Arc::clone(&etag),
+                barrier: None,
+            };
+            (p, count, etag)
+        }
+
+        fn with_barrier(barrier: Arc<Barrier>) -> (Self, Arc<AtomicUsize>, SharedEtag) {
+            let (mut p, count, etag) = Self::new();
+            p.barrier = Some(barrier);
+            (p, count, etag)
+        }
+    }
+
+    impl CredentialsProvider for MockProvider {
+        async fn headers(
+            &self,
+            extensions: http::Extensions,
+        ) -> Result<CacheableResource<http::HeaderMap>, CredentialsError> {
+            let current = self.current_etag.lock().unwrap().clone();
+
+            // Simulate the library's ETag protocol.
+            if let Some(caller_tag) = extensions.get::<EntityTag>() {
+                if *caller_tag == current {
+                    return Ok(CacheableResource::NotModified);
+                }
+            }
+
+            self.refresh_count.fetch_add(1, Ordering::SeqCst);
+
+            // If a barrier was provided, wait here so concurrent callers pile
+            // up and see the `Refreshing` state while this task is suspended.
+            if let Some(ref b) = self.barrier {
+                b.wait().await;
+            }
+
+            let mut map = http::HeaderMap::new();
+            map.insert(
+                http::header::AUTHORIZATION,
+                "Bearer mock-token".parse().unwrap(),
+            );
+            Ok(CacheableResource::New {
+                entity_tag: current,
+                data: map,
+            })
+        }
+
+        async fn universe_domain(&self) -> Option<String> {
+            None
+        }
+    }
+
+    // ── Unit tests ───────────────────────────────────────────────────────────
+
+    /// The credential provider is called exactly once on the first request; all
+    /// subsequent requests are answered from the cache without hitting the
+    /// provider again.
+    #[tokio::test]
+    async fn test_cache_reuses_valid_token() {
+        let (provider, count, _etag) = MockProvider::new();
+        let mw = GCSMiddleware::with_credentials(Credentials::from(provider));
+
+        let h1 = mw.get_or_refresh_token().await.unwrap();
+        let h2 = mw.get_or_refresh_token().await.unwrap();
+        let h3 = mw.get_or_refresh_token().await.unwrap();
+
+        // Only one actual fetch should have occurred.
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        // All responses carry the same headers.
+        assert_eq!(h1, h2);
+        assert_eq!(h2, h3);
+    }
+
+    /// When the mock rotates its `EntityTag` (simulating a server-side token
+    /// refresh), the middleware transparently picks up the new headers.
+    #[tokio::test]
+    async fn test_cache_refreshes_on_token_change() {
+        let (provider, count, etag_handle) = MockProvider::new();
+        let mw = GCSMiddleware::with_credentials(Credentials::from(provider));
+
+        mw.get_or_refresh_token().await.unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+
+        // Rotate the token – the middleware's next ETag validation will get
+        // `New` back and update the cache.
+        *etag_handle.lock().unwrap() = EntityTag::new();
+
+        mw.get_or_refresh_token().await.unwrap();
+        // A second fetch must have occurred.
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+    }
+
+    /// When many tasks call `get_or_refresh_token` simultaneously from an empty
+    /// cache, exactly one of them reaches the credential provider for the
+    /// initial fetch; the rest wait on the `Notify` and are served from the
+    /// cache once the fetch completes.
+    #[tokio::test]
+    async fn test_singleflight_under_concurrent_load() {
+        const TASKS: usize = 10;
+
+        // The barrier has size 2: the single task that enters `headers()` plus
+        // the test driver.  This lets the driver confirm that exactly one task
+        // is inside the provider before unblocking it, which in turn ensures
+        // all other tasks have had a chance to see the `Refreshing` state.
+        let barrier = Arc::new(Barrier::new(2));
+        let (provider, count, _etag) = MockProvider::with_barrier(Arc::clone(&barrier));
+        let mw = GCSMiddleware::with_credentials(Credentials::from(provider));
+
+        // Spawn all tasks before any of them are awaited.
+        let handles: Vec<_> = (0..TASKS)
+            .map(|_| {
+                let mw = mw.clone();
+                tokio::spawn(async move { mw.get_or_refresh_token().await.unwrap() })
+            })
+            .collect();
+
+        // Rendezvous with the one task that reached the provider, then release
+        // it so the rest can be woken.
+        barrier.wait().await;
+
+        // Collect all results.
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Only one call should have entered the credential provider.
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            1,
+            "expected exactly 1 refresh call, got {}",
+            count.load(Ordering::SeqCst)
+        );
+    }
+
+    // ── Integration test (requires real GCS credentials) ─────────────────────
 
     #[tokio::test]
     async fn test_gcs_middleware() {
