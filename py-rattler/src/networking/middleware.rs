@@ -150,7 +150,7 @@ impl PyS3Config {
                     region,
                 }),
             }),
-            (None, None, None) => Ok(Self { custom: None }),
+            (None, None) => Ok(Self { custom: None }),
             _ => unreachable!("Case handled in python"),
         }
     }
