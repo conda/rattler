@@ -66,12 +66,7 @@ pub struct S3CredentialsOpts {
 }
 
 impl From<S3CredentialsOpts> for Option<S3Credentials> {
-    fn from(mut value: S3CredentialsOpts) -> Self {
-        if value.force_path_style.is_some() {
-            tracing::warn!("The `--force-path-style` option is deprecated, please use `--addressing-style=path` instead.");
-            value.addressing_style = S3AddressingStyleOpts::Path;
-        }
-
+    fn from(value: S3CredentialsOpts) -> Self {
         if let (Some(endpoint_url), Some(region)) = (value.endpoint_url, value.region) {
             Some(S3Credentials {
                 endpoint_url,

@@ -17,6 +17,5 @@ downloads = 50
 [s3-options.test-bucket]
 endpoint-url = "https://s3.amazonaws.com/"
 region = "us-east-1"
-force-path-style = false
 
 [nested]

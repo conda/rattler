@@ -38,6 +38,5 @@ non-proxy-hosts = [
 [s3-options.company-bucket]
 endpoint-url = "https://s3.company.com/"
 region = "company-region"
-force-path-style = true
 
 [nested]

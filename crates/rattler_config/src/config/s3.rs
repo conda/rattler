@@ -78,16 +78,6 @@ impl Config for S3OptionsMap {
                         key: key.to_string(),
                     })?;
                 }
-                "force-path-style" => {
-                    let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                        key: key.to_string(),
-                    })?;
-                    bucket_config.force_path_style =
-                        value.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })?;
-                }
                 _ => {
                     return Err(ConfigEditError::UnknownKey {
                         key: key.to_string(),
