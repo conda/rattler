@@ -5,7 +5,6 @@ on:
     types: [opened, reopened]
   issue_comment:
     types: [created]
-  pull_request:
 
 permissions:
   contents: read
@@ -15,7 +14,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'pull_request' ||
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
@@ -31,9 +29,6 @@ jobs:
           require-vouch: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Status
-        run: echo ${{ steps.check-pr.outputs.status }}
 
       - name: Label PR
         if: steps.check-pr.outputs.status == 'vouched'
