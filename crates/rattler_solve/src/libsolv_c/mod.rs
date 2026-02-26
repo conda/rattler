@@ -263,9 +263,8 @@ impl super::SolverImpl for Solver {
 
             // If the spec includes extras, also add dependencies on the synthetic extra solvables
             if let Some(extras) = extras_opt {
-                let name_matcher = &spec.name;
                 // Only exact package names support extras
-                if let Some(exact_name) = name_matcher.as_exact() {
+                if let Some(exact_name) = spec.name.as_exact() {
                     for extra in extras.iter() {
                         // Create a dependency on the synthetic "package[extra]" solvable
                         // We can't use MatchSpec::from_str or conda_matchspec because brackets

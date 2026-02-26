@@ -136,7 +136,7 @@ use parse::escape_bracket_value;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: PackageNameMatcher,
@@ -170,29 +170,6 @@ pub struct MatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
-}
-
-impl Default for MatchSpec {
-    fn default() -> Self {
-        Self {
-            // We must explicitly set the name to "*" because PackageNameMatcher has no default
-            name: "*".parse().expect("wildcard always parses"),
-            version: None,
-            build: None,
-            build_number: None,
-            file_name: None,
-            extras: None,
-            channel: None,
-            subdir: None,
-            namespace: None,
-            md5: None,
-            sha256: None,
-            url: None,
-            license: None,
-            condition: None,
-            track_features: None,
-        }
-    }
 }
 
 impl Display for MatchSpec {
@@ -727,13 +704,9 @@ mod tests {
         use crate::match_spec::package_name_matcher::PackageNameMatcher;
         use crate::{MatchSpec, ParseMatchSpecOptions, ParseStrictness::Lenient, VersionSpec};
 
-        // Explicitly configure the parser to allow glob matching
         let options = ParseMatchSpecOptions::from(Lenient).with_exact_names_only(false);
 
-        // Test that MatchSpec can be created with an asterisk as the package name
         let spec = MatchSpec::from_str("*[license=MIT]", options).unwrap();
-
-        // It should now correctly be identified as a Glob instead of None!
         assert_eq!(spec.name, PackageNameMatcher::from_str("*").unwrap());
         assert_eq!(spec.license, Some("MIT".to_string()));
 
@@ -753,37 +726,31 @@ mod tests {
             VersionSpec,
         };
 
-        // EDGE CASE 1: The Security Boundary
-        // In Strict mode (exact_names_only = true), a standalone `*` SHOULD be rejected.
+        // In strict mode (exact_names_only = true), a standalone `*` should be rejected.
         let strict_spec = MatchSpec::from_str("*", Strict);
         match strict_spec {
             Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(g)) => {
                 assert_eq!(g, "*");
             }
-            other => panic!("Strict mode failed to block the glob! Got: {other:?}"),
+            other => panic!("Expected glob rejection in strict mode, got: {other:?}"),
         }
 
-        // EDGE CASE 2: The Kitchen Sink
-        // Testing `*` as a glob buried inside a highly complex spec string
-        let complex_str = "conda-forge/linux-64::*[version=\">=2.0\", build=\"*_cpython\"]";
-
-        // We explicitly allow globs for this specific parse
+        // `*` as a glob inside a complex spec string with channel, subdir, version, build
         let options = ParseMatchSpecOptions::from(Strict).with_exact_names_only(false);
-        let spec =
-            MatchSpec::from_str(complex_str, options).expect("Failed to parse complex glob spec");
+        let spec = MatchSpec::from_str(
+            "conda-forge/linux-64::*[version=\">=2.0\", build=\"*_cpython\"]",
+            options,
+        )
+        .unwrap();
 
-        // Verify every single piece was parsed correctly around the `*`
-        assert_eq!(
-            spec.name,
-            PackageNameMatcher::from_str("*").expect("invalid package name matcher")
-        );
+        assert_eq!(spec.name, PackageNameMatcher::from_str("*").unwrap());
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
         assert_eq!(spec.subdir, Some("linux-64".to_string()));
         assert_eq!(
             spec.version,
-            Some(VersionSpec::from_str(">=2.0", Strict).expect("invalid version spec"))
+            Some(VersionSpec::from_str(">=2.0", Strict).unwrap())
         );
-        assert!(spec.build.is_some(), "Build string matcher was dropped");
+        assert!(spec.build.is_some());
     }
 
     #[test]

@@ -310,9 +310,8 @@ impl<'a> CondaDependencyProvider<'a> {
         // Compute the direct dependencies
         let direct_dependencies = match_specs
             .iter()
-            .map(|spec| &spec.name)
-            .filter_map(|name| Option::<PackageName>::from(name.clone()))
-            .map(|name| pool.intern_package_name(&name))
+            .filter_map(|spec| spec.name.as_exact())
+            .map(|name| pool.intern_package_name(name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -450,7 +449,8 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        Option::<PackageName>::from(spec.name.clone())
+                        spec.name
+                            .as_exact()
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()

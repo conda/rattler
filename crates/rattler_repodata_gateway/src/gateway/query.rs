@@ -184,7 +184,7 @@ impl QueryExecutor {
         // pending_pattern_specs
         for spec in specs {
             if let Some(url) = spec.url.clone() {
-                let name = Option::<PackageName>::from(spec.name.clone()).ok_or(
+                let name = spec.name.clone().into_exact().ok_or(
                     GatewayError::MatchSpecWithoutExactName(Box::new(spec.clone())),
                 )?;
                 seen.insert(name.as_normalized().to_string(), ());
