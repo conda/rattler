@@ -39,6 +39,5 @@ jobs:
           issue-id: ${{ github.event.issue.number }}
           comment-id: ${{ github.event.comment.id }}
           repo: conda/rattler
-          dry-run: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
