@@ -465,8 +465,14 @@ impl WindowsMenu {
             let extension = extension.resolve(&self.placeholders);
             let identifier = format!("{name}.AssocFile{extension}");
             // Generate a friendly type name from the extension, e.g. ".h5" -> "H5 File"
-            let friendly_name =
-                format!("{} File", extension.trim_start_matches('.').to_uppercase());
+            let ext_no_dot = extension.trim_start_matches('.');
+            let friendly_name = if ext_no_dot.is_empty() {
+                "File".to_string()
+            } else {
+                let mut chars = ext_no_dot.chars();
+                let first = chars.next().unwrap().to_uppercase().to_string();
+                format!("{}{} File", first, chars.as_str())
+            };
             let file_extension = FileExtension {
                 extension: &extension,
                 identifier: &identifier,
