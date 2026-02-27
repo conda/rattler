@@ -1,0 +1,30 @@
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://my-custom-index.example.com/simple
+    packages:
+      linux-64:
+        - pypi: https://my-custom-index.example.com/packages/requests-2.31.0-py3-none-any.whl
+        - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
+        - pypi: ./local-pkg
+packages:
+  - pypi: https://my-custom-index.example.com/packages/requests-2.31.0-py3-none-any.whl
+    name: requests
+    version: 2.31.0
+    index_url: https://my-custom-index.example.com/simple
+    sha256: 942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d1cae1b
+    requires_python: ">=3.7"
+  - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
+    name: numpy
+    version: 1.26.0
+    sha256: f93fc78fe8bf15afe2b8d6b6499f1c73953571c004b3135db0c83b9a5fd4e5e1
+    requires_python: ">=3.9"
+  - pypi: ./local-pkg
+    name: local-pkg
+    version: 0.1.0
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

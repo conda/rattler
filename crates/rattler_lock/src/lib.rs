@@ -627,6 +627,7 @@ mod test {
     #[case::v7_pypi_absolute_url("v7/pypi_absolute_url.yml")]
     #[case::v7_pypi_relative_url("v7/pypi_relative_url.yml")]
     #[case::v7_pypi_relative_outside_url("v7/pypi_relative_outside_url.yml")]
+    #[case::v7_pypi_custom_index("v7/pypi_custom_index.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -758,6 +759,48 @@ mod test {
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
             .has_pypi_packages(osx_arm64));
+    }
+
+    #[test]
+    fn test_pypi_index_url() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/v7/pypi_custom_index.yml");
+        let lock_file = LockFile::from_path(&path).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+        let pypi_packages: Vec<_> = env
+            .packages(linux)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_pypi)
+            .collect();
+
+        // Package from a custom index should have that index_url
+        let requests = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "requests")
+            .expect("requests package");
+        assert_eq!(
+            requests.index_url.as_ref().map(url::Url::as_str),
+            Some("https://my-custom-index.example.com/simple")
+        );
+
+        // Package from pypi.org without explicit index_url
+        // defaults to https://pypi.org/simple
+        let numpy = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "numpy")
+            .expect("numpy package");
+        assert_eq!(
+            numpy.index_url.as_ref().map(url::Url::as_str),
+            Some("https://pypi.org/simple")
+        );
+
+        // Path-based package has no index_url
+        let local_pkg = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "local-pkg")
+            .expect("local-pkg package");
+        assert!(local_pkg.index_url.is_none());
     }
 
     #[test]
