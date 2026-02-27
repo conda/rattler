@@ -486,7 +486,7 @@ impl Installer {
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
             )
         });
-      let driver = InstallDriver::builder()
+       let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
             .with_io_concurrency_semaphore(
                 self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
