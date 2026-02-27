@@ -101,6 +101,10 @@ pub enum LinkFileError {
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary,
 
+    /// The symlink target escapes the target prefix directory.
+    #[error("symlink target escapes the target prefix")]
+    SymlinkTargetEscapesPrefix,
+
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
@@ -283,7 +287,7 @@ pub fn link_file(
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        symlink_to_destination(&source_path, &destination_path)?
+        symlink_to_destination(&source_path, &destination_path, target_dir.path())?
     } else {
         copy_to_destination(&source_path, &destination_path)?
     };
@@ -468,10 +472,34 @@ fn hardlink_to_destination(
 fn symlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
+    target_prefix: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
+
+    // Resolve the symlink target relative to the destination's parent and
+    // verify it stays inside the target prefix.
+    let resolved = destination_path
+        .parent()
+        .unwrap_or(destination_path)
+        .join(&linked_path);
+
+    let mut normalized = PathBuf::new();
+    for component in resolved.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normalized.push(other),
+        }
+    }
+
+    if !normalized.starts_with(target_prefix) {
+        return Err(LinkFileError::SymlinkTargetEscapesPrefix);
+    }
+
     loop {
         match symlink(&linked_path, destination_path) {
             Ok(_) => {

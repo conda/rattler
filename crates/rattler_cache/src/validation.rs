@@ -94,6 +94,10 @@ pub enum PackageEntryValidationError {
     /// The SHA256 hash of the file does not match the expected hash.
     #[error("sha256 hash mismatch, expected '{0}' but file on disk is '{1}'")]
     HashMismatch(String, String),
+
+    /// The symlink target escapes the package directory.
+    #[error("symlink target escapes the package directory")]
+    SymlinkTargetEscapesPackage,
 }
 
 /// Determine whether the files in the specified directory match what is
@@ -173,7 +177,7 @@ fn validate_package_entry(
     // Validate based on the type of path
     match entry.path_type {
         PathType::HardLink => validate_package_hard_link_entry(path, entry, mode),
-        PathType::SoftLink => validate_package_soft_link_entry(path, entry, mode),
+        PathType::SoftLink => validate_package_soft_link_entry(path, entry, mode, package_dir),
         PathType::Directory => validate_package_directory_entry(path, entry, mode),
     }
 }
@@ -251,6 +255,7 @@ fn validate_package_soft_link_entry(
     path: PathBuf,
     entry: &PathsEntry,
     _mode: ValidationMode,
+    package_dir: &Path,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::SoftLink);
 
@@ -258,11 +263,25 @@ fn validate_package_soft_link_entry(
         return Err(PackageEntryValidationError::ExpectedSymlink);
     }
 
-    // TODO: Validate symlink content. Dont validate the SHA256 hash of the file
-    // because since a symlink will most likely point to another file added as a
-    // hardlink by the package this is double work. Instead check that the
-    // symlink is correct e.g. `../a` points to the same file as `b/../../a` but
-    // they are different.
+    // Resolve the symlink target relative to its parent and verify it stays
+    // inside the package directory.
+    let target = std::fs::read_link(&path)?;
+    let resolved = path.parent().unwrap_or(&path).join(&target);
+
+    let mut normalized = std::path::PathBuf::new();
+    for component in resolved.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normalized.push(other),
+        }
+    }
+
+    if !normalized.starts_with(package_dir) {
+        return Err(PackageEntryValidationError::SymlinkTargetEscapesPackage);
+    }
 
     Ok(())
 }
