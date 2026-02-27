@@ -279,6 +279,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The solve strategy.
     pub strategy: SolveStrategy,
+
+    /// Dependency overrides that replace dependencies of matching packages.
+    pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -297,6 +300,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             exclude_newer: None,
             min_age: None,
             strategy: SolveStrategy::default(),
+            dependency_overrides: Vec::new(),
         }
     }
 }
