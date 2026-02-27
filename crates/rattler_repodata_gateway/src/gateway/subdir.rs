@@ -46,7 +46,7 @@ pub(crate) fn extract_unique_deps<'a>(
 
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.
-    NotFound,
+    NotFound(Option<std::time::SystemTime>),
 
     /// A subdirectory and the data associated with it.
     Found(SubdirData),
@@ -57,7 +57,7 @@ impl Subdir {
     pub fn package_names(&self) -> Option<Vec<String>> {
         match self {
             Subdir::Found(subdir) => Some(subdir.package_names()),
-            Subdir::NotFound => None,
+            Subdir::NotFound(_) => None,
         }
     }
 
@@ -65,7 +65,9 @@ impl Subdir {
     pub fn has_expired(&self) -> bool {
         match self {
             Subdir::Found(subdir) => subdir.has_expired(),
-            Subdir::NotFound => false,
+            Subdir::NotFound(expires_at) => {
+                expires_at.is_some_and(|exp| std::time::SystemTime::now() >= exp)
+            }
         }
     }
 }

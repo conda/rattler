@@ -48,7 +48,7 @@ pub async fn fetch_index(
     cache_action: CacheAction,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
-) -> Result<ShardedRepodata, GatewayError> {
+) -> Result<(ShardedRepodata, Option<SystemTime>), GatewayError> {
     async fn from_response(
         mut cache_file: RwLockWriteGuard<File>,
         cache_path: &Path,
@@ -56,7 +56,7 @@ pub async fn fetch_index(
         response: Response,
         reporter: Option<(&dyn DownloadReporter, usize)>,
         permit: Option<tokio::sync::SemaphorePermit<'_>>,
-    ) -> Result<ShardedRepodata, GatewayError> {
+    ) -> Result<(ShardedRepodata, Option<SystemTime>), GatewayError> {
         let response = response.error_for_status()?;
         if !response.status().is_success() {
             let mut url = response.url().clone().redact();
@@ -87,18 +87,21 @@ pub async fn fetch_index(
         drop(permit);
 
         // Write the cache to disk if the policy allows it.
-        let cache_fut =
-            write_shard_index_cache(cache_file.inner_mut(), policy, decoded_bytes.clone())
-                .map_ok(Some)
-                .map_err(|e| {
-                    GatewayError::IoError(
-                        format!(
-                            "failed to create temporary file to cache shard index to {}",
-                            cache_path.display()
-                        ),
-                        e,
-                    )
-                });
+        let cache_fut = write_shard_index_cache(
+            cache_file.inner_mut(),
+            policy.clone(),
+            decoded_bytes.clone(),
+        )
+        .map_ok(Some)
+        .map_err(|e| {
+            GatewayError::IoError(
+                format!(
+                    "failed to create temporary file to cache shard index to {}",
+                    cache_path.display()
+                ),
+                e,
+            )
+        });
 
         // Parse the bytes
         let parse_fut = run_blocking_task(move || {
@@ -115,7 +118,12 @@ pub async fn fetch_index(
         // Parse and write the file to disk concurrently
         let (_, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
 
-        Ok(sharded_index)
+        let ttl = policy.time_to_live(SystemTime::now());
+        let expires_at = SystemTime::now()
+            .checked_add(ttl)
+            .or(Some(SystemTime::now()));
+
+        Ok((sharded_index, expires_at))
     }
 
     // Fetch the sharded repodata from the remote server
@@ -173,7 +181,11 @@ pub async fn fetch_index(
             if cache_action == CacheAction::ForceCacheOnly {
                 if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
                     tracing::debug!("using locally cached shard index for {channel_base_url}");
-                    return Ok(shard_index);
+                    let ttl = cache_header.policy.time_to_live(SystemTime::now());
+                    let expires_at = SystemTime::now()
+                        .checked_add(ttl)
+                        .or(Some(SystemTime::now()));
+                    return Ok((shard_index, expires_at));
                 }
             } else {
                 match cache_header
@@ -185,7 +197,11 @@ pub async fn fetch_index(
                             read_shard_index_from_reader(&mut cache_reader).await
                         {
                             tracing::debug!("shard index cache hit");
-                            return Ok(shard_index);
+                            let ttl = cache_header.policy.time_to_live(SystemTime::now());
+                            let expires_at = SystemTime::now()
+                                .checked_add(ttl)
+                                .or(Some(SystemTime::now()));
+                            return Ok((shard_index, expires_at));
                         }
                     }
                     BeforeRequest::Stale {
@@ -260,7 +276,7 @@ pub async fn fetch_index(
                             &response,
                             SystemTime::now(),
                         ) {
-                            AfterResponse::NotModified(_policy, _) => {
+                            AfterResponse::NotModified(policy, _) => {
                                 // The cached file is still valid
                                 match read_shard_index_from_reader(&mut cache_reader).await {
                                     Ok(shard_index) => {
@@ -270,7 +286,11 @@ pub async fn fetch_index(
                                         }
                                         // If reading the file failed for some reason we'll just
                                         // fetch it again.
-                                        return Ok(shard_index);
+                                        let ttl = policy.time_to_live(SystemTime::now());
+                                        let expires_at = SystemTime::now()
+                                            .checked_add(ttl)
+                                            .or(Some(SystemTime::now()));
+                                        return Ok((shard_index, expires_at));
                                     }
                                     Err(e) => {
                                         tracing::warn!(

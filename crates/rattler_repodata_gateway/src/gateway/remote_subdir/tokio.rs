@@ -55,10 +55,7 @@ impl RemoteSubdirClient {
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
-        let expires_at = cache_expires_at(
-            repodata.cache_state.cache_headers.cache_control.as_deref(),
-            repodata.cache_state.cache_last_modified,
-        );
+        let expires_at = repodata.cache_state.expires_at();
 
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
@@ -118,38 +115,5 @@ impl RemoteSubdirClient {
         }
 
         Ok(())
-    }
-}
-
-fn cache_expires_at(
-    cache_control: Option<&str>,
-    cache_last_modified: SystemTime,
-) -> Option<SystemTime> {
-    use http::Response;
-    use http_cache_semantics::CachePolicy;
-
-    // Construct a dummy request
-    let req = http::Request::builder()
-        .uri("http://localhost")
-        .method("GET")
-        .body(())
-        .unwrap();
-
-    // Construct a dummy response
-    let mut res = Response::builder().status(200);
-    if let Some(cc) = cache_control {
-        res = res.header(http::header::CACHE_CONTROL, cc);
-    }
-    let res = res.body(()).unwrap();
-
-    let policy = CachePolicy::new(&req, &res);
-    let ttl = policy.time_to_live(cache_last_modified);
-
-    if ttl > std::time::Duration::from_secs(0) {
-        cache_last_modified
-            .checked_add(ttl)
-            .or_else(|| Some(SystemTime::now()))
-    } else {
-        Some(SystemTime::now())
     }
 }
