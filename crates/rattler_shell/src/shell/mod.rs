@@ -874,6 +874,62 @@ impl Shell for NuShell {
         )?)
     }
 }
+/// A [`Shell`] implementation for the Sh shell.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sh;
+
+impl Shell for Sh {
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult{
+        validate_env_var_name(env_var)?;
+
+        // Check if the value contains variable references ($)
+        // If so, use double quotes to allow variable expansion, otherwise use shlex quoting
+        if value.contains('$') {
+            // Use double quotes to allow variable expansion, but escape any existing double quotes
+            let escaped_value = value.replace('"', "\\\"");
+            Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
+        } else {
+            // Use shlex quoting for values that don't need variable expansion
+            let quoted_value = shlex::try_quote(value).unwrap_or_else(|_| value.into());
+            Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+        }
+    }
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "unset {env_var}")?)
+    }
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        let lossy_path = path.to_string_lossy();
+        let quoted_path = shlex::try_quote(&lossy_path).unwrap_or_default();
+        Ok(writeln!(f, ". {quoted_path}")?)
+    }
+    fn extension(&self) -> &str {
+        "sh"
+    }
+
+    fn executable(&self) -> &str {
+        "sh"
+    }
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new(self.executable());
+        cmd.arg(path);
+        cmd
+    }
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
+    }
+}
+
 
 /// A generic [`Shell`] implementation for concrete shell types.
 #[enum_dispatch]
@@ -887,6 +943,7 @@ pub enum ShellEnum {
     PowerShell,
     Fish,
     NuShell,
+    Sh,
 }
 
 // The default shell is determined by the current OS.
@@ -948,6 +1005,8 @@ impl ShellEnum {
                 Some(Bash.into())
             } else if parent_process_name.contains("zsh") {
                 Some(Zsh.into())
+            } else if parent_process_name.contains("sh") {
+                Some(Sh.into())
             } else if parent_process_name.contains("xonsh")
                 // xonsh is a python shell, so we need to check if the parent process is python and if it
                 // contains xonsh in the arguments.
@@ -1010,6 +1069,7 @@ impl FromStr for ShellEnum {
             "cmd" => Ok(CmdExe.into()),
             "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
+            "sh" => Ok(Sh.into()),
             _ => Err(ParseShellEnumError(format!(
                 "'{s}' is an unknown shell variant"
             ))),
