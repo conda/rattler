@@ -487,24 +487,10 @@ impl Installer {
             )
         });
 
-        // Optionally acquire a global lock on the package cache for the entire installation.
-        //
-        // Warning: this serializes installs across multiple *processes* sharing the same cache.
-        // Keep it opt-in via an environment variable.
-        let _global_cache_lock = if std::env::var_os("RATTLER_PACKAGE_CACHE_GLOBAL_LOCK")
-            .is_some_and(|v| v != std::ffi::OsStr::new("0"))
-        {
-            Some(
-                package_cache
-                    .acquire_global_lock()
-                    .await
-                    .map_err(InstallerError::FailedToAcquireCacheLock)?,
-            )
-        } else {
-            None
-        };
+       
+       
 
-        // Construct a driver.
+        
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
             .with_io_concurrency_semaphore(
