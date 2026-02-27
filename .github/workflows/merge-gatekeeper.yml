@@ -21,3 +21,4 @@ jobs:
         with:
           timeout: 2700 # 45 minutes
           token: ${{ secrets.GITHUB_TOKEN }}
+          ignored: "merge-gatekeeper"
