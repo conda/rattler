@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/conda/rattler/compare/rattler_solve-v4.2.6...rattler_solve-v5.0.0) - 2026-02-28
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+- add dependency override option to solver ([#2090](https://github.com/conda/rattler/pull/2090))
+
 ## [4.2.6](https://github.com/conda/rattler/compare/rattler_solve-v4.2.5...rattler_solve-v4.2.6) - 2026-02-25
 
 ### Other
