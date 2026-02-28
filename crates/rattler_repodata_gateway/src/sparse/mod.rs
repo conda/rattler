@@ -386,7 +386,11 @@ impl SparseRepoData {
                 &self.channel,
                 &self.subdir,
                 self.patch_record_fn,
-                |record| specs.iter().any(|spec| spec.matches(&record.package_record)),
+                |record| {
+                    specs
+                        .iter()
+                        .any(|spec| spec.matches(&record.package_record))
+                },
             )?;
             result.append(&mut parsed_records);
         }
@@ -414,11 +418,7 @@ impl SparseRepoData {
                 // None matcher means "match all"
                 let matching_specs: Vec<_> = pattern_specs
                     .iter()
-                    .filter(|(matcher, _)| {
-                        matcher
-                            .as_ref()
-                            .map_or(true, |m| m.matches(&name))
-                    })
+                    .filter(|(matcher, _)| matcher.as_ref().map_or(true, |m| m.matches(&name)))
                     .map(|(_, spec)| spec)
                     .collect();
 
