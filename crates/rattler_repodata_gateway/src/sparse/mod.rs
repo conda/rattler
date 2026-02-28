@@ -12,7 +12,6 @@ use std::{
 };
 
 use bytes::Bytes;
-use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url,
@@ -143,6 +142,9 @@ impl SparseRepoData {
     ///
     /// The `patch_function` can be used to patch the package record after it
     /// has been parsed (e.g. to add `pip` to `python`).
+    ///
+    /// On Windows the file is opened with `FILE_SHARE_DELETE` so that another
+    /// process/thread can rename or delete the file while it is still mapped.
     #[cfg(any(unix, windows))]
     pub fn from_file(
         channel: Channel,
@@ -150,7 +152,18 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = fs::File::open(path.as_ref().to_owned())?;
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            const SHARE_ALL: u32 = 0x01 | 0x02 | 0x04; // FILE_SHARE_READ | WRITE | DELETE
+            std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(SHARE_ALL)
+                .open(path.as_ref())?
+        };
+        #[cfg(not(windows))]
+        let file = std::fs::File::from(fs_err::File::open(path.as_ref())?);
+
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInner::Memmapped(MemmappedSparseRepoDataInner::try_new(
@@ -174,7 +187,7 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let bytes = fs::read(path)?;
+        let bytes = fs_err::read(path)?;
         Ok(Self::from_bytes(
             channel,
             subdir,
