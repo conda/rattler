@@ -571,17 +571,15 @@ fn strip_package_name(
 
     let rest = rest.trim();
 
-    // Handle asterisk as a wildcard (no package name)
-    if trimmed_package_name == "*" {
-        return Ok((None, rest));
-    }
-
     let package_name = match PackageNameMatcher::from_str(trimmed_package_name)
         .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?
     {
         PackageNameMatcher::Exact(name) => PackageNameMatcher::Exact(name),
         PackageNameMatcher::Glob(glob) => {
-            if exact_names_only {
+            // Allow the universal matcher "*" even when exact_names_only is true,
+            // since it semantically matches all packages (similar to having no name).
+            // Other glob patterns (like "foo*") are rejected when exact_names_only is set.
+            if exact_names_only && glob.as_str() != "*" {
                 return Err(
                     ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(
                         glob.as_str().to_string(),

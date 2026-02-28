@@ -693,8 +693,8 @@ mod tests {
     use crate::{
         match_spec::Matches, package::DistArchiveIdentifier,
         parse_mode::ParseStrictnessWithNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
-        PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord, StringMatcher,
-        Version, VersionSpec,
+        PackageNameMatcher, PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord,
+        StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -710,18 +710,30 @@ mod tests {
 
     #[test]
     fn test_name_asterisk() {
-        // Test that MatchSpec can be created with an asterisk as the package name
+        // Test that MatchSpec with asterisk name creates a glob pattern matching all packages
         let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
-        assert_eq!(spec.name, None);
+        assert_eq!(
+            spec.name,
+            Some(PackageNameMatcher::Glob(glob::Pattern::new("*").unwrap()))
+        );
         assert_eq!(spec.license, Some("MIT".to_string()));
 
         // Test with a version
         let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
-        assert_eq!(spec.name, None);
+        assert_eq!(
+            spec.name,
+            Some(PackageNameMatcher::Glob(glob::Pattern::new("*").unwrap()))
+        );
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
         );
+
+        // Test roundtrip: parsing * and displaying it should produce *
+        let spec_as_string = spec.to_string();
+        assert!(spec_as_string.starts_with("*"));
+        let roundtrip_spec = MatchSpec::from_str(&spec_as_string, Lenient).unwrap();
+        assert_eq!(spec, roundtrip_spec);
     }
 
     #[test]
