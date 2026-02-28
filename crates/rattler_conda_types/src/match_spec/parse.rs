@@ -817,7 +817,7 @@ fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
     let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().expect("Could not get current directory"),
+        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
     );
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
