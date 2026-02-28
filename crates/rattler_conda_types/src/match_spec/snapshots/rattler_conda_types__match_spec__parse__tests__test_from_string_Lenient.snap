@@ -1,142 +1,36 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
+assertion_line: 1404
 expression: evaluated
 ---
-blas *.* mkl:
-  name: blas
-  version: "*"
-  build: mkl
-"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
-  name: foo
-  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
-foo=1.0=py27_0:
-  name: foo
-  version: "==1.0"
-  build: py27_0
-foo==1.0=py27_0:
-  name: foo
-  version: "==1.0"
-  build: py27_0
-"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
-  name: py-rattler
-  url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
-"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
-  name: boost-cpp
-  url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
-python 3.8.* *_cpython:
-  name: python
-  version: 3.8.*
-  build: "*_cpython"
-pytorch=*=cuda*:
-  name: pytorch
-  version: "*"
-  build: cuda*
-"x264 >=1!164.3095,<1!165":
-  name: x264
-  version: ">=1!164.3095,<1!165"
-/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
-  name: foo
-  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
-"conda-forge::foo[version=1.0.*]":
-  name: foo
-  version: 1.0.*
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
-  name: foo
-  version: 1.0.*
-  build_number: ">6"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-python ==2.7.*.*|>=3.6:
-  name: python
-  version: 2.7.*|>=3.6
-python=3.9:
-  name: python
-  version: 3.9.*
-python=*:
-  name: python
-  version: "*"
-"https://software.repos.intel.com/python/conda::python[version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://software.repos.intel.com/python/conda"
-    name: python/conda
-"https://c.com/p/conda/linux-64::python[version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://c.com/p/conda"
-    name: p/conda
-  subdir: linux-64
-"https://c.com/p/conda::python[version=3.9, subdir=linux-64]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://c.com/p/conda"
-    name: p/conda
-  subdir: linux-64
-"conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-  subdir: linux-64
-"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
-  name: python
-  version: "==3.9"
-  build_number: "==0"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-  subdir: linux-64
-"python ==3.9[channel=conda-forge]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-"python ==3.9[channel=conda-forge/linux-64]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-  subdir: linux-64
-rust ~=1.2.3:
-  name: rust
-  version: ~=1.2.3
-"~/channel/dir::package":
-  name: package
-  channel:
-    base_url: "file://<HOME>/channel/dir"
-    name: ~/channel/dir
+blas *.* mkl: blas * mkl
+"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2": "foo[url=\"file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2\"]"
+foo=1.0=py27_0: foo ==1.0 py27_0
+foo==1.0=py27_0: foo ==1.0 py27_0
+"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda": "py-rattler[url=\"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda\"]"
+"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2": "boost-cpp[url=\"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2\"]"
+python 3.8.* *_cpython: python 3.8.* *_cpython
+pytorch=*=cuda*: pytorch * cuda*
+"x264 >=1!164.3095,<1!165": "x264 >=1!164.3095,<1!165"
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2: "foo[url=\"file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2\"]"
+"conda-forge::foo[version=1.0.*]": "https://conda.anaconda.org/conda-forge::foo 1.0.*"
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]": "https://conda.anaconda.org/conda-forge::foo 1.0.*[build_number=\">6\"]"
+python ==2.7.*.*|>=3.6: python 2.7.*|>=3.6
+python=3.9: python 3.9.*
+python=*: python *
+"https://software.repos.intel.com/python/conda::python[version=3.9]": "https://software.repos.intel.com/python/conda::python ==3.9"
+"https://c.com/p/conda/linux-64::python[version=3.9]": "https://c.com/p/conda/linux-64::python ==3.9"
+"https://c.com/p/conda::python[version=3.9, subdir=linux-64]": "https://c.com/p/conda/linux-64::python ==3.9"
+"conda-forge/linux-32::python[version=3.9, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
+"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
+"python ==3.9[channel=conda-forge]": "https://conda.anaconda.org/conda-forge::python ==3.9"
+"python ==3.9[channel=conda-forge/linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::python ==3.9"
+rust ~=1.2.3: rust ~=1.2.3
+"~/channel/dir::package": "file://<HOME>/channel/dir::package"
 "~\\windows_channel::package":
   error: invalid channel
-"./relative/channel::package":
-  name: package
-  channel:
-    base_url: "file://<CRATE>/relative/channel"
-    name: "./relative/channel"
-"python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/python/conda"
-    name: python/conda
-"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]":
-  name: foobar
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-  subdir: linux-64
-numpy>=2.*.*:
-  name: numpy
-  version: ">=2"
-"bird_tool_utils_python =0.*,>=0.4.1":
-  name: bird_tool_utils_python
-  version: "0.*,>=0.4.1"
+"./relative/channel::package": "file://<CRATE>/relative/channel::package"
+"python[channel=https://conda.anaconda.org/python/conda,version=3.9]": "https://conda.anaconda.org/python/conda::python ==3.9"
+"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]": "https://conda.anaconda.org/conda-forge/linux-64::foobar"
+numpy>=2.*.*: numpy >=2
+"bird_tool_utils_python =0.*,>=0.4.1": "bird_tool_utils_python 0.*,>=0.4.1"
