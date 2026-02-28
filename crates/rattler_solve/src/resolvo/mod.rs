@@ -322,9 +322,8 @@ impl<'a> CondaDependencyProvider<'a> {
         // Compute the direct dependencies
         let direct_dependencies = match_specs
             .iter()
-            .filter_map(|spec| spec.name.as_ref())
-            .filter_map(|name| Option::<PackageName>::from(name.clone()))
-            .map(|name| pool.intern_package_name(&name))
+            .filter_map(|spec| spec.name.as_exact())
+            .map(|name| pool.intern_package_name(name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -463,8 +462,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
                         spec.name
-                            .as_ref()
-                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                            .as_exact()
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
@@ -559,10 +557,8 @@ impl<'a> CondaDependencyProvider<'a> {
         // Build a lookup table for dependency overrides keyed by target package name.
         let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
         for rule in dependency_overrides {
-            if let Some(name) = rule.override_spec.name.as_ref() {
-                if let Some(name) = Option::<PackageName>::from(name.clone()) {
-                    override_map.entry(name).or_default().push(rule);
-                }
+            if let Some(name) = rule.override_spec.name.as_exact() {
+                override_map.entry(name.clone()).or_default().push(rule);
             }
         }
 
@@ -602,9 +598,8 @@ impl<'a> CondaDependencyProvider<'a> {
         record: &RepoDataRecord,
         dep_spec: &MatchSpec,
     ) -> Option<String> {
-        let dep_name = dep_spec.name.as_ref()?;
-        let dep_name = Option::<PackageName>::from(dep_name.clone())?;
-        let rules = self.dependency_overrides.get(&dep_name)?;
+        let dep_name = dep_spec.name.as_exact()?;
+        let rules = self.dependency_overrides.get(dep_name)?;
         for rule in rules {
             if rule.package_matcher.matches(&record.package_record) {
                 return Some(rule.override_spec.to_string());
@@ -1008,8 +1003,7 @@ impl super::SolverImpl for Solver {
             .constraints
             .iter()
             .map(|spec| {
-                let (Some(PackageNameMatcher::Exact(name)), spec) = spec.clone().into_nameless()
-                else {
+                let (PackageNameMatcher::Exact(name), spec) = spec.clone().into_nameless() else {
                     unimplemented!("only exact package names are supported");
                 };
                 let name_id = provider.pool.intern_package_name(&name);
@@ -1095,7 +1089,7 @@ fn version_sets_for_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec: MatchSpec,
 ) -> Vec<VersionSetId> {
-    let (Some(PackageNameMatcher::Exact(name)), spec) = spec.into_nameless() else {
+    let (PackageNameMatcher::Exact(name), spec) = spec.into_nameless() else {
         unimplemented!("only exact package names are supported");
     };
 

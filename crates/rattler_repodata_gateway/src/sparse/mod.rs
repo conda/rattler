@@ -348,17 +348,16 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
 
-        // Separate specs into exact specs and pattern specs (glob/regex/nameless).
+        // Separate specs into exact specs and pattern specs (glob/regex).
         // `name_specs` collects (PackageName -> Vec<MatchSpec>) for all names
         // that need to be parsed – both from exact and pattern matches.
         let mut name_specs: Vec<(PackageName, Vec<MatchSpec>)> = Vec::new();
-        // Pattern specs: Option<PackageNameMatcher> where None means "match all"
-        let mut pattern_specs: Vec<(Option<PackageNameMatcher>, MatchSpec)> = Vec::new();
+        let mut pattern_specs: Vec<(PackageNameMatcher, MatchSpec)> = Vec::new();
 
         for s in spec {
             let s = s.borrow().clone();
             match &s.name {
-                Some(PackageNameMatcher::Exact(name)) => {
+                PackageNameMatcher::Exact(name) => {
                     // Find existing group or create new one
                     if let Some(group) = name_specs.iter_mut().find(|(n, _)| n == name) {
                         group.1.push(s);
@@ -366,12 +365,8 @@ impl SparseRepoData {
                         name_specs.push((name.clone(), vec![s]));
                     }
                 }
-                Some(matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_))) => {
-                    pattern_specs.push((Some(matcher.clone()), s));
-                }
-                None => {
-                    // Specs without name match all packages (represented as None)
-                    pattern_specs.push((None, s));
+                matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)) => {
+                    pattern_specs.push((matcher.clone(), s));
                 }
             }
         }
@@ -388,7 +383,7 @@ impl SparseRepoData {
 
                 let matching: Vec<MatchSpec> = pattern_specs
                     .iter()
-                    .filter(|(matcher, _)| matcher.as_ref().is_none_or(|m| m.matches(&name)))
+                    .filter(|(matcher, _)| matcher.matches(&name))
                     .map(|(_, spec)| spec.clone())
                     .collect();
 
@@ -1507,7 +1502,7 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
             .load_matching_records(
-                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
                 PackageFormatSelection::default(),
             )
             .unwrap()

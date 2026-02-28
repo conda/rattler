@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
 use rattler_conda_types::ParseStrictness::Strict;
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, PackageName};
+use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{SolverImpl, SolverTask};
 use std::hint::black_box;
@@ -55,9 +55,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         read_sparse_repodata(&json_file_noarch),
     ];
 
-    let names = specs
-        .iter()
-        .map(|s| Option::<PackageName>::from(s.name.clone().unwrap()).unwrap());
+    let names = specs.iter().map(|s| s.name.as_exact().unwrap().clone());
     let available_packages = SparseRepoData::load_records_recursive(
         &sparse_repo_data,
         names,
