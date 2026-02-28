@@ -338,7 +338,7 @@ impl SparseRepoData {
         }
     }
 
-    /// Returns all the records that matches any of the specified match spec.
+    /// Returns all the records that match any of the specified match specs.
     pub fn load_matching_records(
         &self,
         spec: impl IntoIterator<Item = impl Borrow<MatchSpec>>,
@@ -374,6 +374,12 @@ impl SparseRepoData {
             }
         }
 
+        // Collect exact names upfront so we can skip them during pattern
+        // processing. Note: if both an exact and a pattern spec overlap on the
+        // same package name, only the exact spec's filter is applied.
+        let exact_names: HashSet<PackageName> =
+            exact_specs.iter().map(|(name, _)| name.clone()).collect();
+
         // Process exact specs efficiently using binary search
         for (package_name, specs) in exact_specs {
             let mut parsed_records = parse_records(
@@ -397,12 +403,6 @@ impl SparseRepoData {
 
         // Process pattern specs by iterating over all package names
         if !pattern_specs.is_empty() {
-            // Track which package names we've already processed with exact specs
-            let exact_names: HashSet<_> = result
-                .iter()
-                .map(|r| r.package_record.name.clone())
-                .collect();
-
             // Iterate over all unique package names in the repodata
             for name_str in self.package_names(variant_consolidation) {
                 let Ok(name) = PackageName::try_from(name_str) else {
@@ -1157,7 +1157,8 @@ mod test {
     use fs_err as fs;
     use itertools::Itertools;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness,
+        ParseStrictnessWithNameMatcher, RepoData, RepoDataRecord,
     };
     use rstest::rstest;
 
@@ -1540,12 +1541,10 @@ mod test {
 
     #[test]
     fn test_glob_pattern_query() {
-        use rattler_conda_types::ParseStrictnessWithNameMatcher;
-
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
 
-        // Query with glob pattern "foo*" - should match "foo" and "foobar"
+        // Glob pattern "foo*" should match "foo" and "foobar"
         let records = sparse
             .load_matching_records(
                 vec![MatchSpec::from_str(
@@ -1565,29 +1564,18 @@ mod test {
             .sorted()
             .collect::<Vec<_>>();
 
-        // Should match both "foo" and "foobar"
-        assert!(
-            records.contains(&"foo".to_string()),
-            "glob pattern foo* should match 'foo', got: {records:?}"
-        );
-        assert!(
-            records.contains(&"foobar".to_string()),
-            "glob pattern foo* should match 'foobar', got: {records:?}"
-        );
-        assert!(
-            !records.contains(&"bar".to_string()),
-            "glob pattern foo* should NOT match 'bar', got: {records:?}"
-        );
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        foo
+        foobar
+        "###);
     }
 
     #[test]
     fn test_glob_pattern_suffix() {
-        use rattler_conda_types::ParseStrictnessWithNameMatcher;
-
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
 
-        // Query with glob pattern "*bar" - should match packages ending with "bar"
+        // Glob pattern "*bar" should match packages ending with "bar"
         let records = sparse
             .load_matching_records(
                 vec![MatchSpec::from_str(
@@ -1607,34 +1595,19 @@ mod test {
             .sorted()
             .collect::<Vec<_>>();
 
-        // Should match "bar", "foobar", and "xbar"
-        assert!(
-            records.contains(&"bar".to_string()),
-            "glob pattern *bar should match 'bar', got: {records:?}"
-        );
-        assert!(
-            records.contains(&"foobar".to_string()),
-            "glob pattern *bar should match 'foobar', got: {records:?}"
-        );
-        assert!(
-            records.contains(&"xbar".to_string()),
-            "glob pattern *bar should match 'xbar', got: {records:?}"
-        );
-        // Should NOT match foo
-        assert!(
-            !records.contains(&"foo".to_string()),
-            "glob pattern *bar should NOT match 'foo', got: {records:?}"
-        );
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        bar
+        foobar
+        xbar
+        "###);
     }
 
     #[test]
     fn test_regex_pattern_query() {
-        use rattler_conda_types::ParseStrictnessWithNameMatcher;
-
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
 
-        // Query with regex pattern "^b.*$" - should match packages starting with "b"
+        // Regex pattern "^b.*$" should match packages starting with "b"
         let records = sparse
             .load_matching_records(
                 vec![MatchSpec::from_str(
@@ -1654,40 +1627,23 @@ mod test {
             .sorted()
             .collect::<Vec<_>>();
 
-        // Should match "bar", "baz", and "bors"
-        assert!(
-            records.contains(&"bar".to_string()),
-            "regex pattern ^b.*$ should match 'bar', got: {records:?}"
-        );
-        assert!(
-            records.contains(&"baz".to_string()),
-            "regex pattern ^b.*$ should match 'baz', got: {records:?}"
-        );
-        assert!(
-            records.contains(&"bors".to_string()),
-            "regex pattern ^b.*$ should match 'bors', got: {records:?}"
-        );
-        // Should NOT match foo
-        assert!(
-            !records.contains(&"foo".to_string()),
-            "regex pattern ^b.*$ should NOT match 'foo', got: {records:?}"
-        );
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        bar
+        baz
+        bors
+        "###);
     }
 
     #[test]
     fn test_mixed_exact_and_pattern_query() {
-        use rattler_conda_types::ParseStrictnessWithNameMatcher;
-
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
 
-        // Mix of exact and glob specs
+        // Combine an exact spec with a glob pattern
         let records = sparse
             .load_matching_records(
                 vec![
-                    // Exact match
                     MatchSpec::from_str("bors", ParseStrictness::Strict).unwrap(),
-                    // Glob pattern
                     MatchSpec::from_str(
                         "foo*",
                         ParseStrictnessWithNameMatcher {
@@ -1706,18 +1662,10 @@ mod test {
             .sorted()
             .collect::<Vec<_>>();
 
-        // Should match "bors" (exact), "foo" and "foobar" (glob)
-        assert!(
-            records.contains(&"bors".to_string()),
-            "should match 'bors' via exact spec, got: {records:?}"
-        );
-        assert!(
-            records.contains(&"foo".to_string()),
-            "should match 'foo' via glob pattern, got: {records:?}"
-        );
-        assert!(
-            records.contains(&"foobar".to_string()),
-            "should match 'foobar' via glob pattern, got: {records:?}"
-        );
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        bors
+        foo
+        foobar
+        "###);
     }
 }
