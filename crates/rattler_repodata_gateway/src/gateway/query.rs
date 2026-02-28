@@ -350,7 +350,7 @@ impl QueryExecutor {
                             .get_or_fetch_package_records(&package_name, reporter)
                             .await
                             .map(|pkg| (result_index, specs, pkg)),
-                        Subdir::NotFound => Ok((result_index, specs, PackageRecords::default())),
+                        Subdir::NotFound(_) => Ok((result_index, specs, PackageRecords::default())),
                     }
                 }));
             }

@@ -19,7 +19,7 @@ pub async fn fetch_index(
     channel_base_url: &Url,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
-) -> Result<ShardedRepodata, GatewayError> {
+) -> Result<(ShardedRepodata, Option<std::time::SystemTime>), GatewayError> {
     // Determine the actual URL to use for the request
     let shards_url = channel_base_url
         .join(REPODATA_SHARDS_FILENAME)
@@ -77,5 +77,5 @@ pub async fn fetch_index(
             )
         })?;
 
-    Ok(sharded_index)
+    Ok((sharded_index, None))
 }

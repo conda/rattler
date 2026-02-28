@@ -16,6 +16,7 @@ use crate::{
 
 pub struct RemoteSubdirClient {
     pub(super) sparse: LocalSubdirClient,
+    pub(super) expires_at: Option<std::time::SystemTime>,
 }
 
 impl RemoteSubdirClient {
@@ -56,6 +57,9 @@ impl RemoteSubdirClient {
         let sparse =
             LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
 
-        Ok(Self { sparse })
+        Ok(Self {
+            sparse,
+            expires_at: None,
+        })
     }
 }

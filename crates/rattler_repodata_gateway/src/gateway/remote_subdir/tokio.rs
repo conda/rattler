@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTime,
 };
 
 use crate::{
@@ -15,6 +16,7 @@ use rattler_networking::LazyClient;
 
 pub struct RemoteSubdirClient {
     pub(super) sparse: LocalSubdirClient,
+    pub(super) expires_at: Option<SystemTime>,
 }
 
 impl RemoteSubdirClient {
@@ -53,6 +55,8 @@ impl RemoteSubdirClient {
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
+        let expires_at = repodata.cache_state.expires_at();
+
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
         let sparse = simple_spawn_blocking::tokio::run_blocking_task(move || {
@@ -64,7 +68,7 @@ impl RemoteSubdirClient {
         })
         .await?;
 
-        Ok(Self { sparse })
+        Ok(Self { sparse, expires_at })
     }
 
     /// Clears the on-disk cache for the given channel and platform.

@@ -46,7 +46,7 @@ pub(crate) fn extract_unique_deps<'a>(
 
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.
-    NotFound,
+    NotFound(Option<std::time::SystemTime>),
 
     /// A subdirectory and the data associated with it.
     Found(SubdirData),
@@ -57,7 +57,17 @@ impl Subdir {
     pub fn package_names(&self) -> Option<Vec<String>> {
         match self {
             Subdir::Found(subdir) => Some(subdir.package_names()),
-            Subdir::NotFound => None,
+            Subdir::NotFound(_) => None,
+        }
+    }
+
+    /// Returns `true` if the local cache has expired and needs to be re-fetched.
+    pub fn has_expired(&self) -> bool {
+        match self {
+            Subdir::Found(subdir) => subdir.has_expired(),
+            Subdir::NotFound(expires_at) => {
+                expires_at.is_some_and(|exp| std::time::SystemTime::now() >= exp)
+            }
         }
     }
 }
@@ -107,6 +117,11 @@ impl SubdirData {
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
+
+    /// Returns `true` if the local cache has expired.
+    pub fn has_expired(&self) -> bool {
+        self.client.has_expired()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -123,4 +138,10 @@ pub trait SubdirClient: Send + Sync {
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;
+
+    /// Returns `true` if this cache has expired and the data should be re-fetched.
+    /// By default this returns false.
+    fn has_expired(&self) -> bool {
+        false
+    }
 }
