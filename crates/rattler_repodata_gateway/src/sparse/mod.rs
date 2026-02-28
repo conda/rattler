@@ -353,7 +353,7 @@ impl SparseRepoData {
         // Pattern specs: Option<PackageNameMatcher> where None means "match all"
         let mut pattern_specs: Vec<(Option<PackageNameMatcher>, MatchSpec)> = Vec::new();
 
-        for s in spec.into_iter() {
+        for s in spec {
             let s = s.borrow().clone();
             match &s.name {
                 Some(PackageNameMatcher::Exact(name)) => {
@@ -418,7 +418,7 @@ impl SparseRepoData {
                 // None matcher means "match all"
                 let matching_specs: Vec<_> = pattern_specs
                     .iter()
-                    .filter(|(matcher, _)| matcher.as_ref().map_or(true, |m| m.matches(&name)))
+                    .filter(|(matcher, _)| matcher.as_ref().is_none_or(|m| m.matches(&name)))
                     .map(|(_, spec)| spec)
                     .collect();
 
@@ -1568,18 +1568,15 @@ mod test {
         // Should match both "foo" and "foobar"
         assert!(
             records.contains(&"foo".to_string()),
-            "glob pattern foo* should match 'foo', got: {:?}",
-            records
+            "glob pattern foo* should match 'foo', got: {records:?}"
         );
         assert!(
             records.contains(&"foobar".to_string()),
-            "glob pattern foo* should match 'foobar', got: {:?}",
-            records
+            "glob pattern foo* should match 'foobar', got: {records:?}"
         );
         assert!(
             !records.contains(&"bar".to_string()),
-            "glob pattern foo* should NOT match 'bar', got: {:?}",
-            records
+            "glob pattern foo* should NOT match 'bar', got: {records:?}"
         );
     }
 
@@ -1613,24 +1610,20 @@ mod test {
         // Should match "bar", "foobar", and "xbar"
         assert!(
             records.contains(&"bar".to_string()),
-            "glob pattern *bar should match 'bar', got: {:?}",
-            records
+            "glob pattern *bar should match 'bar', got: {records:?}"
         );
         assert!(
             records.contains(&"foobar".to_string()),
-            "glob pattern *bar should match 'foobar', got: {:?}",
-            records
+            "glob pattern *bar should match 'foobar', got: {records:?}"
         );
         assert!(
             records.contains(&"xbar".to_string()),
-            "glob pattern *bar should match 'xbar', got: {:?}",
-            records
+            "glob pattern *bar should match 'xbar', got: {records:?}"
         );
         // Should NOT match foo
         assert!(
             !records.contains(&"foo".to_string()),
-            "glob pattern *bar should NOT match 'foo', got: {:?}",
-            records
+            "glob pattern *bar should NOT match 'foo', got: {records:?}"
         );
     }
 
@@ -1664,24 +1657,20 @@ mod test {
         // Should match "bar", "baz", and "bors"
         assert!(
             records.contains(&"bar".to_string()),
-            "regex pattern ^b.*$ should match 'bar', got: {:?}",
-            records
+            "regex pattern ^b.*$ should match 'bar', got: {records:?}"
         );
         assert!(
             records.contains(&"baz".to_string()),
-            "regex pattern ^b.*$ should match 'baz', got: {:?}",
-            records
+            "regex pattern ^b.*$ should match 'baz', got: {records:?}"
         );
         assert!(
             records.contains(&"bors".to_string()),
-            "regex pattern ^b.*$ should match 'bors', got: {:?}",
-            records
+            "regex pattern ^b.*$ should match 'bors', got: {records:?}"
         );
         // Should NOT match foo
         assert!(
             !records.contains(&"foo".to_string()),
-            "regex pattern ^b.*$ should NOT match 'foo', got: {:?}",
-            records
+            "regex pattern ^b.*$ should NOT match 'foo', got: {records:?}"
         );
     }
 
@@ -1720,18 +1709,15 @@ mod test {
         // Should match "bors" (exact), "foo" and "foobar" (glob)
         assert!(
             records.contains(&"bors".to_string()),
-            "should match 'bors' via exact spec, got: {:?}",
-            records
+            "should match 'bors' via exact spec, got: {records:?}"
         );
         assert!(
             records.contains(&"foo".to_string()),
-            "should match 'foo' via glob pattern, got: {:?}",
-            records
+            "should match 'foo' via glob pattern, got: {records:?}"
         );
         assert!(
             records.contains(&"foobar".to_string()),
-            "should match 'foobar' via glob pattern, got: {:?}",
-            records
+            "should match 'foobar' via glob pattern, got: {records:?}"
         );
     }
 }
