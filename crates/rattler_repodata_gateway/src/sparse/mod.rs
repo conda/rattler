@@ -1443,20 +1443,12 @@ mod test {
 
     #[test]
     fn test_query() {
-        let (channel, platform, path) = dummy_repo_data();
-        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
-        let records = sparse
-            .load_matching_records(
-                vec![
-                    MatchSpec::from_str("bors 1.*", ParseStrictness::Lenient).unwrap(),
-                    MatchSpec::from_str("issue_717", ParseStrictness::Lenient).unwrap(),
-                ],
-                PackageFormatSelection::default(),
-            )
-            .unwrap()
-            .into_iter()
-            .map(|record| record.identifier.to_file_name())
-            .collect::<Vec<_>>();
+        let specs = vec![
+            MatchSpec::from_str("bors 1.*", ParseStrictness::Lenient).unwrap(),
+            MatchSpec::from_str("issue_717", ParseStrictness::Lenient).unwrap(),
+        ];
+        let records =
+            load_matching_file_names(specs, PackageFormatSelection::default(), false);
 
         insta::assert_snapshot!(records.join("\n"), @r###"
         bors-1.0-bla_1.tar.bz2
@@ -1468,36 +1460,44 @@ mod test {
 
     #[test]
     fn test_nameless_query() {
-        let (channel, platform, path) = dummy_repo_data();
-        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
-        let records = sparse
-            .load_matching_records(
-                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
-                PackageFormatSelection::default(),
-            )
-            .unwrap()
-            .into_iter()
-            .map(|record| record.identifier.to_file_name())
-            .collect::<Vec<_>>();
+        let specs = vec![MatchSpec::from_str(
+            "cuda-version 12.5",
+            ParseStrictness::Lenient,
+        )
+        .unwrap()];
+        let records =
+            load_matching_file_names(specs, PackageFormatSelection::default(), false);
 
         insta::assert_snapshot!(records.join("\n"), @"cuda-version-12.5-hd4f0392_3.conda");
     }
 
-    #[test]
-    fn test_glob_package_name_query() {
+    fn dummy_sparse() -> SparseRepoData {
         let (channel, platform, path) = dummy_repo_data();
-        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
-        let glob_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
-        let records = sparse
-            .load_matching_records(
-                vec![MatchSpec::from_str("foo*", glob_options).unwrap()],
-                PackageFormatSelection::default(),
-            )
+        SparseRepoData::from_file(channel, platform, path, None).unwrap()
+    }
+
+    fn load_matching_file_names(
+        specs: Vec<MatchSpec>,
+        format: PackageFormatSelection,
+        sorted: bool,
+    ) -> Vec<String> {
+        let mut names: Vec<String> = dummy_sparse()
+            .load_matching_records(specs, format)
             .unwrap()
             .into_iter()
-            .map(|record| record.identifier.to_file_name())
-            .sorted()
-            .collect::<Vec<_>>();
+            .map(|r| r.identifier.to_file_name())
+            .collect();
+        if sorted {
+            names.sort();
+        }
+        names
+    }
+
+    #[test]
+    fn test_glob_package_name_query() {
+        let glob_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
+        let records =
+            load_matching_file_names(vec![MatchSpec::from_str("foo*", glob_options).unwrap()], PackageFormatSelection::default(), true);
 
         insta::assert_snapshot!(records.join("\n"), @r###"
         foo-3.0.2-py36h1af98f8_1.conda
@@ -1512,19 +1512,9 @@ mod test {
 
     #[test]
     fn test_glob_suffix_query() {
-        let (channel, platform, path) = dummy_repo_data();
-        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let glob_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
-        let records = sparse
-            .load_matching_records(
-                vec![MatchSpec::from_str("*bar", glob_options).unwrap()],
-                PackageFormatSelection::default(),
-            )
-            .unwrap()
-            .into_iter()
-            .map(|record| record.identifier.to_file_name())
-            .sorted()
-            .collect::<Vec<_>>();
+        let records =
+            load_matching_file_names(vec![MatchSpec::from_str("*bar", glob_options).unwrap()], PackageFormatSelection::default(), true);
 
         insta::assert_snapshot!(records.join("\n"), @r###"
         bar-1.0-unix_py36h1af98f8_2.tar.bz2
@@ -1536,19 +1526,9 @@ mod test {
 
     #[test]
     fn test_regex_package_name_query() {
-        let (channel, platform, path) = dummy_repo_data();
-        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let regex_options = ParseMatchSpecOptions::lenient().with_exact_names_only(false);
-        let records = sparse
-            .load_matching_records(
-                vec![MatchSpec::from_str("^foo.*$", regex_options).unwrap()],
-                PackageFormatSelection::default(),
-            )
-            .unwrap()
-            .into_iter()
-            .map(|record| record.identifier.to_file_name())
-            .sorted()
-            .collect::<Vec<_>>();
+        let records =
+            load_matching_file_names(vec![MatchSpec::from_str("^foo.*$", regex_options).unwrap()], PackageFormatSelection::default(), true);
 
         insta::assert_snapshot!(records.join("\n"), @r###"
         foo-3.0.2-py36h1af98f8_1.conda
