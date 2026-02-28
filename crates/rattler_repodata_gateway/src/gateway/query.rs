@@ -184,18 +184,14 @@ impl QueryExecutor {
         // pending_pattern_specs
         for spec in specs {
             if let Some(url) = spec.url.clone() {
-                let name = spec
-                    .name
-                    .clone()
-                    .and_then(Option::<PackageName>::from)
-                    .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
-                        spec.clone(),
-                    )))?;
+                let name = spec.name.clone().into_exact().ok_or(
+                    GatewayError::MatchSpecWithoutExactName(Box::new(spec.clone())),
+                )?;
                 seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
             } else {
                 match &spec.name {
-                    Some(PackageNameMatcher::Exact(name)) => {
+                    PackageNameMatcher::Exact(name) => {
                         seen.insert(name.as_normalized().to_string(), ());
                         let pending = pending_package_specs
                             .entry(name.clone())
@@ -205,14 +201,9 @@ impl QueryExecutor {
                         };
                         input_specs.push(spec);
                     }
-                    Some(
-                        matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)),
-                    ) => {
+                    matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)) => {
                         // Store pattern specs for later expansion
                         pending_pattern_specs.push((matcher.clone(), spec));
-                    }
-                    None => {
-                        return Err(GatewayError::MatchSpecWithoutName(Box::new(spec)));
                     }
                 }
             }

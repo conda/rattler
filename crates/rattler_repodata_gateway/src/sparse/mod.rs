@@ -351,7 +351,7 @@ impl SparseRepoData {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
             // TODO: support glob/regex package names
             let mut parsed_records = parse_records(
-                package_name.and_then(Option::<PackageName>::from).as_ref(),
+                package_name.as_exact(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 &repo_data.experimental_v3,
@@ -1449,7 +1449,7 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
             .load_matching_records(
-                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
                 PackageFormatSelection::default(),
             )
             .unwrap()
