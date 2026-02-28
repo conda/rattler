@@ -43,7 +43,10 @@ use error::{
     PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
     VersionBumpException,
 };
-use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
+use explicit_environment_spec::{
+    PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec, PyExplicitMd5Hash, PyExplicitSha256Hash,
+    PyPackageArchiveHash,
+};
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
@@ -193,6 +196,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
+    m.add_class::<PyPackageArchiveHash>()?;
+    m.add_class::<PyExplicitMd5Hash>()?;
+    m.add_class::<PyExplicitSha256Hash>()?;
 
     // Exceptions
     m.add(
