@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { MatchSpec } from "./MatchSpec";
 import { PackageRecord } from "./PackageRecord";
+import { VersionSpec } from "./VersionSpec";
 
 function makeRecord(
     name: string,
@@ -40,7 +41,17 @@ describe("MatchSpec", () => {
         });
 
         it("should throw on completely invalid input in strict mode", () => {
-            expect(() => new MatchSpec("", "strict")).toThrow();
+            expect(() => new MatchSpec("", { strict: true })).toThrow();
+        });
+
+        it("should allow glob names by default (exactNamesOnly defaults to false)", () => {
+            expect(() => new MatchSpec("foo*")).not.toThrow();
+        });
+
+        it("should reject a glob name when exactNamesOnly is true", () => {
+            expect(
+                () => new MatchSpec("foo*", { exactNamesOnly: true }),
+            ).toThrow();
         });
     });
 
@@ -192,6 +203,116 @@ describe("MatchSpec", () => {
             expect(spec.sha256).toBe(
                 "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             );
+        });
+    });
+
+    describe("setters", () => {
+        it("should update the name via setName()", () => {
+            const spec = new MatchSpec("foo");
+            spec.setName("bar");
+            expect(spec.name).toBe("bar");
+        });
+
+        it("should throw from setName() when the name is invalid", () => {
+            const spec = new MatchSpec("foo");
+            expect(() => spec.setName("invalid name with spaces")).toThrow();
+        });
+
+        it("should update the version via the version setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.version = new VersionSpec(">=2.0");
+            expect(spec.version?.toString()).toBe(">=2.0");
+        });
+
+        it("should clear the version by assigning undefined", () => {
+            const spec = new MatchSpec("foo >=1.0");
+            spec.version = undefined;
+            expect(spec.version).toBeUndefined();
+        });
+
+        it("should update the build string via setBuild()", () => {
+            const spec = new MatchSpec("foo");
+            spec.setBuild("py39_0");
+            expect(spec.build).toBe("py39_0");
+        });
+
+        it("should clear the build string via setBuild(undefined)", () => {
+            const spec = new MatchSpec("foo 1.0 py39_0");
+            spec.setBuild(undefined);
+            expect(spec.build).toBeUndefined();
+        });
+
+        it("should update subdir via the subdir setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.subdir = "linux-64";
+            expect(spec.subdir).toBe("linux-64");
+        });
+
+        it("should clear subdir by assigning undefined", () => {
+            const spec = new MatchSpec('foo[subdir="linux-64"]');
+            spec.subdir = undefined;
+            expect(spec.subdir).toBeUndefined();
+        });
+
+        it("should update namespace via the namespace setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.namespace = "myns";
+            expect(spec.namespace).toBe("myns");
+        });
+
+        it("should update license via the license setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.license = "MIT";
+            expect(spec.license).toBe("MIT");
+        });
+
+        it("should clear license by assigning undefined", () => {
+            const spec = new MatchSpec('foo[license="MIT"]');
+            spec.license = undefined;
+            expect(spec.license).toBeUndefined();
+        });
+
+        it("should update extras via the extras setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.extras = ["bar", "baz"];
+            expect(spec.extras).toEqual(["bar", "baz"]);
+        });
+
+        it("should clear extras by assigning undefined", () => {
+            const spec = new MatchSpec("foo");
+            spec.extras = ["bar"];
+            spec.extras = undefined;
+            expect(spec.extras).toBeUndefined();
+        });
+
+        it("should update trackFeatures via the trackFeatures setter", () => {
+            const spec = new MatchSpec("foo");
+            spec.trackFeatures = ["mkl"];
+            expect(spec.trackFeatures).toEqual(["mkl"]);
+        });
+
+        it("should update url via setUrl()", () => {
+            const spec = new MatchSpec("foo");
+            spec.setUrl(
+                "https://repo.anaconda.com/pkgs/main/linux-64/foo-1.0-py39_0.tar.bz2",
+            );
+            expect(spec.url).toBe(
+                "https://repo.anaconda.com/pkgs/main/linux-64/foo-1.0-py39_0.tar.bz2",
+            );
+        });
+
+        it("should throw from setUrl() when the url is invalid", () => {
+            const spec = new MatchSpec("foo");
+            expect(() => spec.setUrl("not a url")).toThrow();
+        });
+
+        it("should clear the url via setUrl(undefined)", () => {
+            const spec = new MatchSpec("foo");
+            spec.setUrl(
+                "https://repo.anaconda.com/pkgs/main/linux-64/foo-1.0-py39_0.tar.bz2",
+            );
+            spec.setUrl(undefined);
+            expect(spec.url).toBeUndefined();
         });
     });
 
