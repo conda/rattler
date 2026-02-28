@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_lock-v0.26.16...rattler_lock-v0.27.0) - 2026-02-28
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
 ## [0.26.16](https://github.com/conda/rattler/compare/rattler_lock-v0.26.15...rattler_lock-v0.26.16) - 2026-02-25
 
 ### Other
