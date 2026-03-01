@@ -53,3 +53,8 @@ tokio-stream = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
 reqwest-retry = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "concurrent_cache_lock"
+harness = false
