@@ -44,6 +44,14 @@ from rattler.lock import (
     PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.config import (
+    Config,
+    ConcurrencyConfig,
+    ProxyConfig,
+    RepodataConfig,
+    RepodataChannelConfig,
+    S3Options,
+)
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -103,6 +111,12 @@ __all__ = [
     "NoArchLiteral",
     "Link",
     "LinkType",
+    "Config",
+    "ConcurrencyConfig",
+    "ProxyConfig",
+    "RepodataConfig",
+    "RepodataChannelConfig",
+    "S3Options",
 ]
 
 # PTY support - only available on Unix platforms
