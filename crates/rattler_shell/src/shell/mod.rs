@@ -211,10 +211,12 @@ pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> 
         .output();
 
     match output {
-        Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|_err| std::io::Error::other("failed to convert path to Unix style"))?
-            .trim()
-            .to_string()),
+        Ok(output) if output.status.success() => {
+            // Use from_utf8_lossy to handle non-UTF8 output on Windows
+            // where system encoding may not be UTF-8 even if code page is 65001
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(path)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(e),
         Err(e) => Err(std::io::Error::other(format!(
             "failed to convert path to Unix style: {e}"
