@@ -19,6 +19,7 @@ mod platform;
 mod prefix_paths;
 #[cfg(feature = "pty")]
 mod pty;
+mod py_install_reporter;
 mod record;
 mod repo_data;
 mod shell;
