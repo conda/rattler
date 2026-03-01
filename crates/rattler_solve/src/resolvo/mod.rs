@@ -505,7 +505,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     if first_channel != &&record.channel {
                         let shadowed_by = match *first_channel {
                             Some(c) => c.clone(),
-                            //mathced to clippy suggestion to avoid cloning the string when its not necessary
+                            //matched to clippy suggestion to avoid cloning the string when its not necessary
                             None => "an unknown channel".to_string(),
                         };
 
