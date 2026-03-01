@@ -153,6 +153,11 @@ impl From<PackageCacheLayerError> for PackageCacheError {
 }
 
 impl PackageCacheLayer {
+    /// Returns the path of this cache layer.
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
         self.path
@@ -312,6 +317,11 @@ impl PackageCache {
             inner: Arc::new(PackageCacheInner { layers }),
             cache_origin,
         }
+    }
+
+    /// Returns all cache layers in their original insertion order.
+    pub fn layers(&self) -> &[PackageCacheLayer] {
+        &self.inner.layers
     }
 
     /// Returns a tuple containing two sets of layers:
