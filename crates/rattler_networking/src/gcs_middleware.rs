@@ -212,7 +212,10 @@ impl GCSMiddleware {
                 let entity_tag = r.entity_tag.clone();
                 let headers = r.headers.clone();
                 *guard = CacheState::Ready(r);
-                PollResult::Validate { entity_tag, headers }
+                PollResult::Validate {
+                    entity_tag,
+                    headers,
+                }
             }
 
             // ── Empty ────────────────────────────────────────────────────────
@@ -274,7 +277,10 @@ impl GCSMiddleware {
 
                 // ── Validate ─────────────────────────────────────────────────
                 // Check whether the cached token is still current.
-                PollResult::Validate { entity_tag, headers } => {
+                PollResult::Validate {
+                    entity_tag,
+                    headers,
+                } => {
                     let cred = self.get_credential().await?;
                     let mut ext = http::Extensions::new();
                     ext.insert(entity_tag);
