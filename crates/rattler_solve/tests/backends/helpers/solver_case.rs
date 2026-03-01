@@ -22,6 +22,7 @@ pub struct SolverCase<'a> {
     repositories: Vec<Vec<RepoDataRecord>>,
     specs: Vec<MatchSpec>,
     constraints: Vec<MatchSpec>,
+    soft_requirements: Vec<MatchSpec>,
     locked_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
@@ -42,6 +43,7 @@ impl<'a> SolverCase<'a> {
             repositories: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),
+            soft_requirements: Vec::new(),
             locked_packages: Vec::new(),
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
@@ -81,6 +83,25 @@ impl<'a> SolverCase<'a> {
     /// Adds constraints that limit which packages can be selected.
     pub fn constraints(mut self, constraints: impl IntoIterator<Item = &'a str>) -> Self {
         self.constraints = constraints
+            .into_iter()
+            .map(|spec| {
+                MatchSpec::from_str(
+                    spec,
+                    ParseMatchSpecOptions::lenient()
+                        .with_experimental_extras(true)
+                        .with_experimental_conditionals(true),
+                )
+                .unwrap()
+            })
+            .collect();
+        self
+    }
+
+    /// Adds soft requirements that the solver should try to install if possible.
+    /// Unlike regular specs, soft requirements don't cause the solve to fail
+    /// if they cannot be satisfied.
+    pub fn soft_requirements(mut self, soft_reqs: impl IntoIterator<Item = &'a str>) -> Self {
+        self.soft_requirements = soft_reqs
             .into_iter()
             .map(|spec| {
                 MatchSpec::from_str(
@@ -197,6 +218,7 @@ impl<'a> SolverCase<'a> {
         let task = SolverTask {
             specs: self.specs.clone(),
             constraints: self.constraints.clone(),
+            soft_requirements: self.soft_requirements.clone(),
             locked_packages: self.locked_packages.clone(),
             pinned_packages: self.pinned_packages.clone(),
             virtual_packages: self.virtual_packages.clone(),

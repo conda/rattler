@@ -17,6 +17,7 @@ mod conditional_tests;
 mod extras_tests;
 mod helpers;
 mod min_age_tests;
+mod soft_requirements_tests;
 mod solver_case_tests;
 mod strategy_tests;
 
@@ -650,6 +651,26 @@ macro_rules! solver_backend_tests {
         fn test_solve_with_unparsable_dependency() {
             crate::solver_case_tests::solve_with_unparsable_dependency::<$T>();
         }
+
+        #[test]
+        fn test_soft_requirements_basic() {
+            crate::soft_requirements_tests::solve_soft_requirements_basic::<$T>();
+        }
+
+        #[test]
+        fn test_soft_requirements_unsatisfiable() {
+            crate::soft_requirements_tests::solve_soft_requirements_unsatisfiable::<$T>();
+        }
+
+        #[test]
+        fn test_soft_requirements_conflict() {
+            crate::soft_requirements_tests::solve_soft_requirements_conflict::<$T>();
+        }
+
+        #[test]
+        fn test_soft_requirements_versioned() {
+            crate::soft_requirements_tests::solve_soft_requirements_versioned::<$T>();
+        }
     };
 }
 
@@ -703,6 +724,7 @@ mod libsolv_c {
                 available_packages: [libsolv_repodata],
                 specs,
                 constraints: Vec::new(),
+                soft_requirements: Vec::new(),
                 pinned_packages: Vec::new(),
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
