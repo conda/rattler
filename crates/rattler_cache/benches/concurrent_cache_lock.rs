@@ -1,11 +1,15 @@
-// Run: cargo bench -p rattler_cache --bench concurrent_cache_lock
+//! Benchmark: concurrent vs serial package cache fetch.
+//!
+//! Run with: `cargo bench -p rattler_cache --bench concurrent_cache_lock`
+
 use std::path::{Path, PathBuf};
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use rattler_cache::package_cache::PackageCache;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
-fn paths() -> Vec<PathBuf> {
+fn benchmark_package_paths() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
     vec![
         root.join("clobber/clobber-python-0.1.0-cpython.conda"),
@@ -16,37 +20,46 @@ fn paths() -> Vec<PathBuf> {
     ]
 }
 
-fn bench(c: &mut Criterion) {
-    let paths = paths();
+fn criterion_benchmark(c: &mut Criterion) {
+    let package_paths = benchmark_package_paths();
     let rt = Runtime::new().unwrap();
-    let mut g = c.benchmark_group("cache_lock");
-    g.sample_size(10);
+    let mut group = c.benchmark_group("cache_lock");
+    group.sample_size(10);
 
-    g.bench_function("concurrent_per_package_lock", |b| {
+   
+    group.bench_function("concurrent_per_package_lock", |b| {
         b.iter(|| {
             let cache = PackageCache::new(tempdir().unwrap().path());
-            let paths = paths.clone();
+            let paths = package_paths.clone();
             rt.block_on(async {
-                let handles: Vec<_> = paths.iter().map(|p| {
-                    let c = cache.clone();
-                    let p = p.clone();
-                    tokio::spawn(async move { c.get_or_fetch_from_path(&p, None).await })
-                }).collect();
-                for h in handles { h.await.unwrap().unwrap(); }
+                let handles: Vec<_> = paths
+                    .iter()
+                    .map(|path| {
+                        let cache = cache.clone();
+                        let path = path.clone();
+                        tokio::spawn(async move { cache.get_or_fetch_from_path(&path, None).await })
+                    })
+                    .collect();
+                for handle in handles {
+                    handle.await.unwrap().unwrap();
+                }
             })
         });
     });
 
-    g.bench_function("serial_simulating_global_lock", |b| {
+    // Fetch packages one by one (simulates serialisation under a global lock).
+    group.bench_function("serial_simulating_global_lock", |b| {
         b.iter(|| {
             let cache = PackageCache::new(tempdir().unwrap().path());
-            let paths = paths.clone();
+            let paths = package_paths.clone();
             rt.block_on(async {
-                for p in &paths { cache.get_or_fetch_from_path(p, None).await.unwrap(); }
+                for path in &paths {
+                    cache.get_or_fetch_from_path(path, None).await.unwrap();
+                }
             })
         });
     });
 }
 
-criterion_group!(benches, bench);
+criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
