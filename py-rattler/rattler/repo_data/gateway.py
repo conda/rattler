@@ -128,6 +128,7 @@ class Gateway:
         max_concurrent_requests: int = 100,
         client: Optional[Client] = None,
         show_progress: bool = False,
+        timeout: int | None = None,
     ) -> None:
         """
         Arguments:
@@ -141,6 +142,7 @@ class Gateway:
             client: An authenticated client to use for acquiring repodata. If not specified a default
                     client will be used.
             show_progress: Whether to show progress bars when fetching repodata.
+            timeout: The timeout for HTTP requests in seconds. This parameter is only used if no `client` is provided.
 
         Examples
         --------
@@ -159,6 +161,7 @@ class Gateway:
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
             show_progress=show_progress,
+            timeout=timeout,
         )
 
     async def query(

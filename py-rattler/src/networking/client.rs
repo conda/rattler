@@ -23,10 +23,11 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None, headers=None))]
+    #[pyo3(signature = (middlewares=None, headers=None, timeout=None))]
     pub fn new(
         middlewares: Option<Vec<PyMiddleware>>,
         headers: Option<HashMap<String, String>>,
+        timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
 
@@ -43,6 +44,10 @@ impl PyClientWithMiddleware {
             client_builder = client_builder.default_headers(header_map);
         } else {
             client_builder = client_builder.user_agent(RATTLER_USER_AGENT);
+        }
+
+        if let Some(timeout) = timeout {
+            client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
         }
 
         let mut client = reqwest_middleware::ClientBuilder::new(client_builder.build().unwrap());

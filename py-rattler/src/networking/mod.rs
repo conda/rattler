@@ -23,7 +23,7 @@ pub mod middleware;
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
 /// Returns a list of `PyRepoData`.
 #[pyfunction]
-#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None, fetch_options=None))]
+#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None, fetch_options=None, timeout=None))]
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
     channels: Vec<PyChannel>,
@@ -32,9 +32,10 @@ pub fn py_fetch_repo_data<'a>(
     callback: Option<Bound<'a, PyAny>>,
     client: Option<PyClientWithMiddleware>,
     fetch_options: Option<PyFetchRepoDataOptions>,
+    timeout: Option<u64>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
-    let client = client.unwrap_or(PyClientWithMiddleware::new(None, None)?);
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None, None, timeout)?);
     let fetch_options = fetch_options.unwrap_or(PyFetchRepoDataOptions {
         inner: FetchRepoDataOptions::default(),
     });
