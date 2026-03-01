@@ -40,6 +40,7 @@ use std::{
 };
 
 pub use apple_codesign::AppleCodeSignBehavior;
+pub use clobber_registry::ClobberMode;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
@@ -55,7 +56,7 @@ use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
-    package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
     prefix_record, Platform,
 };
@@ -258,6 +259,24 @@ struct LinkPath {
     clobber_path: Option<PathBuf>,
 }
 
+/// Find a timestamp to put on all files we modify. Use `info/about.json`, as a base. This
+/// file is always written after all the packaged data is already stored.
+///
+/// We add 1s to make sure our modification time is strictly bigger than any timestamp
+/// seen in the package data, even on systems that do not have nanosecond timestamps.
+///
+/// Fall back to `now()` if we can not detect a file time.
+fn modification_time(package_dir: &Path) -> filetime::FileTime {
+    if let Ok(info_metadata) = fs_err::symlink_metadata(package_dir.join(AboutJson::package_path()))
+    {
+        let info_time = filetime::FileTime::from_last_modification_time(&info_metadata);
+
+        filetime::FileTime::from_unix_time(info_time.unix_seconds() + 1, info_time.nanoseconds())
+    } else {
+        filetime::FileTime::now()
+    }
+}
+
 /// Given an extracted package archive (`package_dir`), installs its files to
 /// the `target_dir`.
 ///
@@ -285,6 +304,8 @@ pub async fn link_package(
     let paths_json = read_paths_json(package_dir, driver, options.paths_json);
     let index_json = read_index_json(package_dir, driver, options.index_json);
     let (paths_json, index_json) = tokio::try_join!(paths_json, index_json)?;
+
+    let modification_time = modification_time(package_dir);
 
     // Error out if this is a noarch python package but the python information is
     // missing.
@@ -420,6 +441,7 @@ pub async fn link_package(
                     allow_ref_links && !cloned_entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
+                    modification_time,
                 )
             })
             .await
@@ -618,6 +640,7 @@ pub fn link_package_sync(
         },
         Ok,
     )?;
+    let modification_time = modification_time(package_dir);
 
     // Error out if this is a noarch python package but the python information is
     // missing.
@@ -842,6 +865,7 @@ pub fn link_package_sync(
                     allow_ref_links && !entry.no_link,
                     platform,
                     options.apple_codesign_behavior,
+                    modification_time,
                 );
 
                 let result = match link_result {

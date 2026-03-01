@@ -73,6 +73,15 @@ impl PackageNameMatcher {
         }
     }
 
+    /// Consumes self and returns the inner [`PackageName`] if this is an exact
+    /// match.
+    pub fn into_exact(self) -> Option<PackageName> {
+        match self {
+            PackageNameMatcher::Exact(name) => Some(name),
+            _ => None,
+        }
+    }
+
     /// Returns the inner glob pattern if this is a glob match.
     pub fn as_glob(&self) -> Option<&glob::Pattern> {
         match self {
@@ -87,6 +96,12 @@ impl PackageNameMatcher {
             PackageNameMatcher::Regex(regex) => Some(regex),
             _ => None,
         }
+    }
+}
+
+impl Default for PackageNameMatcher {
+    fn default() -> Self {
+        PackageNameMatcher::Glob(glob::Pattern::new("*").expect("wildcard glob is always valid"))
     }
 }
 
@@ -105,15 +120,6 @@ impl From<glob::Pattern> for PackageNameMatcher {
 impl From<fancy_regex::Regex> for PackageNameMatcher {
     fn from(value: fancy_regex::Regex) -> Self {
         PackageNameMatcher::Regex(value)
-    }
-}
-
-impl From<PackageNameMatcher> for Option<PackageName> {
-    fn from(value: PackageNameMatcher) -> Self {
-        match value {
-            PackageNameMatcher::Exact(s) => Some(s),
-            _ => None,
-        }
     }
 }
 
@@ -207,14 +213,6 @@ impl<'de> Deserialize<'de> for PackageNameMatcher {
         let s = Cow::<'de, str>::deserialize(deserializer)?;
         PackageNameMatcher::from_str(&s).map_err(serde::de::Error::custom)
     }
-}
-
-/// Error when converting a [`PackageNameMatcher`] to a [`PackageName`]
-#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
-pub enum IntoPackageNameError {
-    /// The package name matcher is not an exact package name
-    #[error("not an exact package name")]
-    NotExact,
 }
 
 #[cfg(test)]
