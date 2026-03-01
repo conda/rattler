@@ -27,6 +27,7 @@ mod utils;
 mod version;
 mod virtual_package;
 
+mod exceptions;
 mod index_json;
 mod run_exports_json;
 
@@ -34,14 +35,16 @@ use std::ops::Deref;
 
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
-use error::{
-    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, ExtractException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
-    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
-    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
-    VersionBumpException,
+use error::PyRattlerError;
+use exceptions::{
+    ActivationError, AuthenticationStorageError, CacheDirError, ConversionError,
+    ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError, FetchRepoDataError,
+    InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
+    InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
+    IoError, LinkError, PackageNameMatcherParseError, ParseArchError, ParseCondaLockError,
+    ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError, ShellError,
+    SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
+    VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -82,8 +85,6 @@ use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
 #[cfg(feature = "pty")]
 use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
-
-use crate::error::GatewayException;
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
@@ -195,68 +196,80 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyExplicitEnvironmentEntry>()?;
 
     // Exceptions
-    m.add(
-        "InvalidVersionError",
-        py.get_type::<InvalidVersionException>(),
-    )?;
+    m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
     m.add(
         "InvalidVersionSpecError",
-        py.get_type::<InvalidVersionSpecException>(),
+        py.get_type::<InvalidVersionSpecError>(),
     )?;
     m.add(
         "InvalidMatchSpecError",
-        py.get_type::<InvalidMatchSpecException>(),
-    )?;
-    m.add(
-        "PackageNameMatcherParseError",
-        py.get_type::<PackageNameMatcherParseException>(),
+        py.get_type::<InvalidMatchSpecError>(),
     )?;
     m.add(
         "InvalidPackageNameError",
-        py.get_type::<InvalidPackageNameException>(),
+        py.get_type::<InvalidPackageNameError>(),
     )?;
-    m.add("InvalidUrlError", py.get_type::<InvalidUrlException>())?;
     m.add(
-        "InvalidChannelError",
-        py.get_type::<InvalidChannelException>(),
+        "PackageNameMatcherParseError",
+        py.get_type::<PackageNameMatcherParseError>(),
     )?;
-    m.add("ActivationError", py.get_type::<ActivationException>())?;
-    m.add(
-        "ParsePlatformError",
-        py.get_type::<ParsePlatformException>(),
-    )?;
-    m.add("ParseArchError", py.get_type::<ParseArchException>())?;
-    m.add("SolverError", py.get_type::<SolverException>())?;
-    m.add("TransactionError", py.get_type::<TransactionException>())?;
-    m.add("LinkError", py.get_type::<LinkException>())?;
-    m.add("IoError", py.get_type::<IoException>())?;
+    m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
+    m.add("InvalidChannelError", py.get_type::<InvalidChannelError>())?;
+    m.add("ActivationError", py.get_type::<ActivationError>())?;
+    m.add("ParsePlatformError", py.get_type::<ParsePlatformError>())?;
+    m.add("ParseArchError", py.get_type::<ParseArchError>())?;
+    m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
+    m.add("CacheDirError", py.get_type::<CacheDirError>())?;
     m.add(
         "DetectVirtualPackageError",
-        py.get_type::<DetectVirtualPackageException>(),
+        py.get_type::<DetectVirtualPackageError>(),
     )?;
-    m.add("CacheDirError", py.get_type::<CacheDirException>())?;
-    m.add(
-        "FetchRepoDataError",
-        py.get_type::<FetchRepoDataException>(),
-    )?;
-    m.add(
-        "ConvertSubdirError",
-        py.get_type::<ConvertSubdirException>(),
-    )?;
-    m.add("VersionBumpError", py.get_type::<VersionBumpException>())?;
-
+    m.add("IoError", py.get_type::<IoError>())?;
+    m.add("SolverError", py.get_type::<SolverError>())?;
+    m.add("TransactionError", py.get_type::<TransactionError>())?;
+    m.add("LinkError", py.get_type::<LinkError>())?;
+    m.add("ConvertSubdirError", py.get_type::<ConvertSubdirError>())?;
+    m.add("VersionBumpError", py.get_type::<VersionBumpError>())?;
+    m.add("VersionExtendError", py.get_type::<VersionExtendError>())?;
+    m.add("ParseCondaLockError", py.get_type::<ParseCondaLockError>())?;
+    m.add("ConversionError", py.get_type::<ConversionError>())?;
+    m.add("RequirementError", py.get_type::<RequirementError>())?;
     m.add(
         "EnvironmentCreationError",
-        py.get_type::<EnvironmentCreationException>(),
+        py.get_type::<EnvironmentCreationError>(),
     )?;
-
-    m.add("ExtractError", py.get_type::<ExtractException>())?;
-
-    m.add("GatewayError", py.get_type::<GatewayException>())?;
-
     m.add(
-        "ValidatePackageRecordsException",
-        py.get_type::<ValidatePackageRecordsException>(),
+        "ExtractError",
+        py.get_type::<crate::exceptions::ExtractError>(),
+    )?;
+    m.add(
+        "GatewayError",
+        py.get_type::<crate::exceptions::GatewayError>(),
+    )?;
+    m.add(
+        "InstallerError",
+        py.get_type::<crate::exceptions::InstallerError>(),
+    )?;
+    m.add(
+        "ParseExplicitEnvironmentSpecError",
+        py.get_type::<ParseExplicitEnvironmentSpecError>(),
+    )?;
+    m.add(
+        "ValidatePackageRecordsError",
+        py.get_type::<ValidatePackageRecordsError>(),
+    )?;
+    m.add(
+        "AuthenticationStorageError",
+        py.get_type::<AuthenticationStorageError>(),
+    )?;
+    m.add("ShellError", py.get_type::<ShellError>())?;
+    m.add(
+        "InvalidHeaderNameError",
+        py.get_type::<InvalidHeaderNameError>(),
+    )?;
+    m.add(
+        "InvalidHeaderValueError",
+        py.get_type::<InvalidHeaderValueError>(),
     )?;
 
     Ok(())

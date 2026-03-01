@@ -1,7 +1,7 @@
 use std::{error::Error, io};
 
 use pyo3::exceptions::PyValueError;
-use pyo3::{create_exception, exceptions::PyException, PyErr};
+use pyo3::PyErr;
 use rattler::install::TransactionError;
 use rattler_conda_types::{
     version_spec::ParseVersionSpecError, ConvertSubdirError, InvalidPackageNameError,
@@ -108,137 +108,110 @@ impl From<PyRattlerError> for PyErr {
     fn from(value: PyRattlerError) -> Self {
         match value {
             PyRattlerError::InvalidVersion(err) => {
-                InvalidVersionException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidVersionError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidVersionSpec(err) => {
-                InvalidVersionSpecException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidVersionSpecError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidMatchSpec(err) => {
-                InvalidMatchSpecException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidMatchSpecError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidPackageName(err) => {
-                InvalidPackageNameException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidPackageNameError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::PackageNameMatcherParseError(err) => {
-                PackageNameMatcherParseException::new_err(pretty_print_error(&err))
+                crate::exceptions::PackageNameMatcherParseError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidUrl(err) => {
-                InvalidUrlException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidUrlError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidChannel(err) => {
-                InvalidChannelException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidChannelError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ActivationError(err) => {
-                ActivationException::new_err(pretty_print_error(&err))
+                crate::exceptions::ActivationError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParsePlatformError(err) => {
-                ParsePlatformException::new_err(pretty_print_error(&err))
+                crate::exceptions::ParsePlatformError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseArchError(err) => {
-                ParseArchException::new_err(pretty_print_error(&err))
+                crate::exceptions::ParseArchError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FetchRepoDataError(err) => {
-                FetchRepoDataException::new_err(pretty_print_error(&err))
+                crate::exceptions::FetchRepoDataError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::CacheDirError(err) => {
-                CacheDirException::new_err(pretty_print_error(err.as_ref()))
+                crate::exceptions::CacheDirError::new_err(pretty_print_error(err.as_ref()))
             }
             PyRattlerError::DetectVirtualPackageError(err) => {
-                DetectVirtualPackageException::new_err(pretty_print_error(&err))
+                crate::exceptions::DetectVirtualPackageError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::IoError(err) => IoException::new_err(pretty_print_error(&err)),
-            PyRattlerError::SolverError(err) => SolverException::new_err(pretty_print_error(&err)),
+            PyRattlerError::IoError(err) => {
+                crate::exceptions::IoError::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::SolverError(err) => {
+                crate::exceptions::SolverError::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::TransactionError(err) => {
-                TransactionException::new_err(pretty_print_error(&err))
+                crate::exceptions::TransactionError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::LinkError(err) => LinkException::new_err(err),
+            PyRattlerError::LinkError(err) => crate::exceptions::LinkError::new_err(err),
             PyRattlerError::ConvertSubdirError(err) => {
-                ConvertSubdirException::new_err(pretty_print_error(&err))
+                crate::exceptions::ConvertSubdirError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::VersionBumpError(err) => {
-                VersionBumpException::new_err(pretty_print_error(&err))
+                crate::exceptions::VersionBumpError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::VersionExtendError(err) => {
-                VersionExtendException::new_err(pretty_print_error(&err))
+                crate::exceptions::VersionExtendError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseCondaLockError(err) => {
-                ParseCondaLockException::new_err(pretty_print_error(&err))
+                crate::exceptions::ParseCondaLockError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ConversionError(err) => {
-                ConversionException::new_err(pretty_print_error(&err))
+                crate::exceptions::ConversionError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::RequirementError(err) => RequirementException::new_err(err),
+            PyRattlerError::RequirementError(err) => {
+                crate::exceptions::RequirementError::new_err(err)
+            }
             PyRattlerError::EnvironmentCreationError(err) => {
-                EnvironmentCreationException::new_err(err)
+                crate::exceptions::EnvironmentCreationError::new_err(err)
             }
             PyRattlerError::ExtractError(err) => {
-                ExtractException::new_err(pretty_print_error(&err))
+                crate::exceptions::ExtractError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::GatewayError(err) => {
-                GatewayException::new_err(pretty_print_error(&err))
+                crate::exceptions::GatewayError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InstallerError(err) => {
-                InstallerException::new_err(pretty_print_error(&err))
+                crate::exceptions::InstallerError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
-                ParseExplicitEnvironmentSpecException::new_err(pretty_print_error(&err))
+                crate::exceptions::ParseExplicitEnvironmentSpecError::new_err(pretty_print_error(
+                    &err,
+                ))
             }
             PyRattlerError::ValidatePackageRecordsError(err) => {
-                ValidatePackageRecordsException::new_err(pretty_print_error(&err))
+                crate::exceptions::ValidatePackageRecordsError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::AuthenticationStorageError(err) => {
-                AuthenticationStorageException::new_err(pretty_print_error(&err))
+                crate::exceptions::AuthenticationStorageError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ShellError(err) => ShellException::new_err(pretty_print_error(&err)),
+            PyRattlerError::ShellError(err) => {
+                crate::exceptions::ShellError::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::MatchSpecUrlError(err) => {
-                InvalidMatchSpecException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidMatchSpecError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidHeaderNameError(err) => {
-                InvalidHeaderNameException::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidHeaderNameError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidHeaderValueError(err) => {
-                InvalidHeaderValueError::new_err(pretty_print_error(&err))
+                crate::exceptions::InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
         }
     }
 }
 
-create_exception!(exceptions, InvalidVersionException, PyException);
-create_exception!(exceptions, InvalidVersionSpecException, PyException);
-create_exception!(exceptions, InvalidMatchSpecException, PyException);
-create_exception!(exceptions, InvalidPackageNameException, PyException);
-create_exception!(exceptions, PackageNameMatcherParseException, PyException);
-create_exception!(exceptions, InvalidUrlException, PyException);
-create_exception!(exceptions, InvalidChannelException, PyException);
-create_exception!(exceptions, ActivationException, PyException);
-create_exception!(exceptions, ParsePlatformException, PyException);
-create_exception!(exceptions, ParseArchException, PyException);
-create_exception!(exceptions, FetchRepoDataException, PyException);
-create_exception!(exceptions, CacheDirException, PyException);
-create_exception!(exceptions, DetectVirtualPackageException, PyException);
-create_exception!(exceptions, IoException, PyException);
-create_exception!(exceptions, SolverException, PyException);
-create_exception!(exceptions, TransactionException, PyException);
-create_exception!(exceptions, LinkException, PyException);
-create_exception!(exceptions, ConvertSubdirException, PyException);
-create_exception!(exceptions, VersionBumpException, PyException);
-create_exception!(exceptions, VersionExtendException, PyException);
-create_exception!(exceptions, ParseCondaLockException, PyException);
-create_exception!(exceptions, ConversionException, PyException);
-create_exception!(exceptions, RequirementException, PyException);
-create_exception!(exceptions, EnvironmentCreationException, PyException);
-create_exception!(exceptions, ExtractException, PyException);
-create_exception!(exceptions, ActivationScriptFormatException, PyException);
-create_exception!(exceptions, GatewayException, PyException);
-create_exception!(exceptions, InstallerException, PyException);
-create_exception!(
-    exceptions,
-    ParseExplicitEnvironmentSpecException,
-    PyException
-);
-create_exception!(exceptions, ValidatePackageRecordsException, PyException);
-create_exception!(exceptions, AuthenticationStorageException, PyException);
-create_exception!(exceptions, ShellException, PyException);
-create_exception!(exceptions, InvalidHeaderNameException, PyException);
-create_exception!(exceptions, InvalidHeaderValueError, PyException);
+// No exception definitions here, they are in exceptions.rs
