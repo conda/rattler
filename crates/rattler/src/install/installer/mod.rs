@@ -722,6 +722,12 @@ async fn link_package(
     let cached_package_dir = cached_package_dir.to_path_buf();
     let clobber_registry = driver.clobber_registry.clone();
 
+    let _io_permit = driver.acquire_io_permit().await.map_err(|_err| {
+        InstallerError::IoError(
+            "IO semaphore closed".to_string(),
+            std::io::Error::other("semaphore closed"),
+        )
+    })?;
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     // Since we use the `Prefix` type, the conda-meta folder is guaranteed to exist
