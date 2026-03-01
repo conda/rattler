@@ -14,7 +14,13 @@ pub(super) const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 #[cfg(unix)]
 const EXECUTABLE_MODE_BITS: u32 = 0o111;
 
+/// The minimum safe timestamp (1980-01-01T00:00:00 UTC) for filesystems like exFAT
+/// that do not support timestamps before 1980.
+const SAFE_MTIME_FLOOR: u64 = 315_532_800;
+
 /// Unpacks a tar archive, preserving only the executable bit on Unix.
+/// Mtimes are set manually with clamping to avoid fatal failures on
+/// filesystems that do not support pre-1980 timestamps (e.g. exFAT).
 pub(super) async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     mut archive: tokio_tar::Archive<R>,
     destination: &Path,
@@ -42,12 +48,38 @@ pub(super) async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
             continue;
         }
 
+        let mtime = file.header().mtime().unwrap_or(0);
+        let is_symlink = file.header().entry_type().is_symlink();
+
         // Unpack the file into the destination directory
-        #[cfg_attr(not(unix), allow(unused_variables))]
         let unpacked_path = file
             .unpack_in_raw(&destination, &mut memo)
             .await
             .map_err(ExtractError::IoError)?;
+
+        if let Some(ref path) = unpacked_path {
+            // Manually set mtime with clamping to a safe floor.
+            // This avoids fatal errors on filesystems like exFAT that
+            // cannot represent timestamps before 1980-01-01.
+            let clamped = std::cmp::max(mtime, SAFE_MTIME_FLOOR);
+            let file_time = filetime::FileTime::from_unix_time(clamped as i64, 0);
+
+            let result = if is_symlink {
+                filetime::set_symlink_file_times(path, file_time, file_time)
+            } else {
+                filetime::set_file_mtime(path, file_time)
+            };
+
+            if let Err(e) = result {
+                tracing::warn!(
+                    "Failed to set mtime for '{}': {}. \
+                     The target filesystem may not support this timestamp. \
+                     This does not affect package integrity.",
+                    path.display(),
+                    e
+                );
+            }
+        }
 
         // Preserve the executable bit on Unix systems
         #[cfg(unix)]
@@ -98,8 +130,9 @@ pub(super) async fn extract_tar_zst_entry<R: tokio::io::AsyncRead + Unpin>(
     let decoder = ZstdDecoder::new(buf_reader);
 
     // Build archive with optimized settings
+    // Mtime is set manually in unpack_tar_archive with safe clamping
     let archive = tokio_tar::ArchiveBuilder::new(decoder)
-        .set_preserve_mtime(true)
+        .set_preserve_mtime(false)
         .set_preserve_permissions(false)
         .set_unpack_xattrs(false)
         .build();
