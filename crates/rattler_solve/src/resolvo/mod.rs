@@ -500,28 +500,47 @@ impl<'a> CondaDependencyProvider<'a> {
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
-                        if let Some(channel) = &record.channel {
-                            tracing::debug!(
-                                "Ignoring '{}' from '{}' because of strict channel priority.",
-                                &record.package_record.name.as_normalized(),
-                                channel
-                            );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string(format!(
-                                    "due to strict channel priority not using this option from: '{channel}'",
-                                )),
-                            ));
-                        } else {
-                            tracing::debug!(
+                        let reason = match (&record.channel, first_channel) {
+                            (Some(channel), Some(blocked_by)) => {
+                                tracing::debug!(
+                                    "Ignoring '{}' from '{}' because of strict channel priority (blocked by '{}').",
+                                    &record.package_record.name.as_normalized(),
+                                    channel,
+                                    blocked_by
+                                );
+                                format_channel_priority_exclusion(channel, blocked_by)
+                            }
+                            (Some(channel), None) => {
+                                tracing::debug!(
+                                    "Ignoring '{}' from '{}' because of strict channel priority (blocked by a channel without a URL).",
+                                    &record.package_record.name.as_normalized(),
+                                    channel
+                                );
+                                format_channel_priority_exclusion(
+                                    channel,
+                                    "a channel without a URL",
+                                )
+                            }
+                            (None, Some(blocked_by)) => {
+                                tracing::debug!(
+                                    "Ignoring '{}' without a channel because of strict channel priority (blocked by '{}').",
+                                    &record.package_record.name.as_normalized(),
+                                    blocked_by
+                                );
+                                format_channel_priority_exclusion("unknown channel", blocked_by)
+                            }
+                            (None, None) => {
+                                tracing::debug!(
                                     "Ignoring '{}' without a channel because of strict channel priority.",
                                     &record.package_record.name.as_normalized(),
                                 );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
-                            ));
-                        }
+                                "due to strict channel priority not using from an unknown channel"
+                                    .to_string()
+                            }
+                        };
+                        candidates
+                            .excluded
+                            .push((solvable_id, pool.intern_string(reason)));
                     }
                 } else {
                     package_name_found_in_channel.insert(
@@ -1208,4 +1227,10 @@ fn parse_condition(
             pool.intern_condition(condition)
         }
     }
+}
+
+fn format_channel_priority_exclusion(available_from: &str, blocked_by: &str) -> String {
+    format!(
+        "due to strict channel priority\n  available from: {available_from}\n  but blocked by higher-priority channel: {blocked_by}"
+    )
 }
