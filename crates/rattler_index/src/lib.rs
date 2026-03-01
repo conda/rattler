@@ -7,7 +7,7 @@ pub mod cache;
 pub mod error;
 mod utils;
 
-use crate::error::RepodataError;
+use crate::error::{PackageReadError, RepodataError};
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
@@ -75,22 +75,43 @@ impl PreconditionChecks {
     }
 }
 
+/// A package that was skipped during indexing due to an error.
+#[derive(Debug)]
+pub struct SkippedPackage {
+    /// The filename of the skipped package
+    pub filename: String,
+    /// The error that caused the package to be skipped
+    pub error: PackageReadError,
+}
+
 /// Statistics for a single subdir indexing operation
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct SubdirIndexStats {
     /// Number of packages added to the index
     pub packages_added: usize,
     /// Number of packages removed from the index
     pub packages_removed: usize,
+    /// Packages that were skipped due to errors (invalid/corrupt packages)
+    pub packages_skipped: Vec<SkippedPackage>,
     /// Number of retries due to concurrent modifications
     pub retries: usize,
 }
 
 /// Statistics for the entire indexing operation
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct IndexStats {
     /// Statistics per subdir
     pub subdirs: HashMap<Platform, SubdirIndexStats>,
+}
+
+impl IndexStats {
+    /// Returns the total number of packages skipped across all subdirs.
+    pub fn total_skipped(&self) -> usize {
+        self.subdirs
+            .values()
+            .map(|s| s.packages_skipped.len())
+            .sum()
+    }
 }
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
@@ -230,7 +251,7 @@ pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Resu
 /// Extract the package record from a `.conda` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
+pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, PackageReadError> {
     let reader = fs::File::open(file)?;
     package_record_from_conda_reader(BufReader::new(reader))
 }
@@ -262,11 +283,13 @@ fn read_index_json_from_archive(
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
+pub fn package_record_from_conda_reader(
+    reader: impl BufRead,
+) -> Result<PackageRecord, PackageReadError> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-    read_index_json_from_archive(&bytes, &mut archive)
+    let mut archive = seek::stream_conda_info(reader)?;
+    read_index_json_from_archive(&bytes, &mut archive).map_err(Into::into)
 }
 
 /// Parse a package file buffer based on its filename extension.
@@ -279,17 +302,21 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// # Returns
 ///
 /// Returns the parsed `PackageRecord`.
-fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
+fn parse_package_buffer(
+    buffer: opendal::Buffer,
+    filename: &str,
+) -> Result<PackageRecord, PackageReadError> {
     let reader = buffer.reader();
-    let archive_type = DistArchiveType::try_from(filename).unwrap();
+    let archive_type = DistArchiveType::try_from(filename)
+        .ok_or_else(|| PackageReadError::UnsupportedArchiveType(filename.to_string()))?;
     match archive_type {
         DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-            package_record_from_tar_bz2_reader(reader)
+            package_record_from_tar_bz2_reader(reader).map_err(Into::into)
         }
         DistArchiveType::Conda(CondaArchiveType::Conda) => package_record_from_conda_reader(reader),
-        DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
-            "Package type \".whl\" not yet supported.",
-        )),
+        DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+            Err(PackageReadError::UnsupportedArchiveType(".whl".to_string()))
+        }
     }
 }
 
@@ -316,7 +343,7 @@ async fn read_and_parse_package(
     cache: &cache::PackageRecordCache,
     subdir: Platform,
     filename: &str,
-) -> std::io::Result<PackageRecord> {
+) -> Result<PackageRecord, PackageReadError> {
     let file_path = format!("{subdir}/{filename}");
 
     // Try cache or get current metadata
@@ -341,8 +368,7 @@ async fn read_and_parse_package(
                     precondition_checks: PreconditionChecks::Enabled, // Always enabled for cache reads
                 },
             )
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+            .await?;
 
             // Parse package
             let record = parse_package_buffer(buffer, filename)?;
@@ -362,10 +388,7 @@ async fn read_and_parse_package(
         Err(e) => {
             tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
             // Fall back to direct read without cache
-            let buffer = op
-                .read(&file_path)
-                .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            let buffer = op.read(&file_path).await?;
             parse_package_buffer(buffer, filename)
         }
     }
@@ -731,38 +754,39 @@ async fn index_subdir_inner(
                     console::style(&filename).dim()
                 ));
 
-                let record =
-                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
-
-                pb.inc(1);
-                Ok::<(DistArchiveIdentifier, PackageRecord), std::io::Error>((filename, record))
+                let file_name_str = filename.to_file_name();
+                match read_and_parse_package(&op, &cache, subdir, &file_name_str).await {
+                    Ok(record) => {
+                        pb.inc(1);
+                        Ok((filename, record))
+                    }
+                    Err(e) => Err((file_name_str, e)),
+                }
             }
         };
         tasks.push(tokio::spawn(task));
     }
     let mut results = Vec::new();
+    let mut packages_skipped = Vec::new();
     while let Some(join_result) = tasks.next().await {
         match join_result {
             Ok(Ok(result)) => results.push(result),
-            Ok(Err(e)) => {
-                tasks.clear();
-                tracing::error!("Failed to process package: {}", e);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(RepodataError::Other(anyhow::anyhow!(e)));
+            Ok(Err((filename, e))) => {
+                tracing::warn!("Skipping invalid package {} in {}: {}", filename, subdir, e);
+                packages_skipped.push(SkippedPackage { filename, error: e });
+                pb.inc(1);
             }
             Err(join_err) => {
-                tasks.clear();
-                tracing::error!("Task panicked: {}", join_err);
-                pb.abandon_with_message(format!(
-                    "{} {}",
-                    console::style("Failed to index").red(),
-                    console::style(subdir.as_str()).dim()
-                ));
-                return Err(join_err.into());
+                tracing::warn!(
+                    "Skipping package in {} due to unexpected error: {}",
+                    subdir,
+                    join_err
+                );
+                packages_skipped.push(SkippedPackage {
+                    filename: "unknown".to_string(),
+                    error: join_err.into(),
+                });
+                pb.inc(1);
             }
         }
     }
@@ -794,7 +818,9 @@ async fn index_subdir_inner(
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 conda_packages.insert(filename, package);
             }
-            _ => panic!("Unknown archive type"),
+            // Wheel packages are not supported and will have been skipped
+            // during parsing above, so this arm is unreachable in practice.
+            DistArchiveType::Wheel(_) => {}
         }
     }
 
@@ -823,6 +849,7 @@ async fn index_subdir_inner(
     Ok(SubdirIndexStats {
         packages_added: packages_to_add.len(),
         packages_removed: packages_to_delete.len(),
+        packages_skipped,
         retries: 0, // Will be set by index_subdir
     })
 }
@@ -1265,6 +1292,11 @@ pub async fn index(
             }
         }
     }
+
+    if stats.total_skipped() > 0 {
+        return Err(RepodataError::SkippedPackages { stats }.into());
+    }
+
     Ok(stats)
 }
 
