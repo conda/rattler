@@ -81,6 +81,11 @@ async def solve(
 
     Returns:
         Resolved list of `RepoDataRecord`s.
+
+    Raises:
+        SolverError: If dependency resolution fails.
+        IoError: If an I/O error occurs.
+        GatewayError: If a gateway error occurs.
     """
 
     platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
@@ -184,6 +189,11 @@ async def solve_with_sparse_repodata(
 
     Returns:
         Resolved list of `RepoDataRecord`s.
+
+    Raises:
+        SolverError: If dependency resolution fails.
+        IoError: If an I/O error occurs.
+        ValueError: If the sparse repodata is closed.
     """
     return [
         RepoDataRecord._from_py_record(solved_package)

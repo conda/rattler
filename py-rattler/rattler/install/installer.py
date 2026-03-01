@@ -79,6 +79,11 @@ async def install(
         requested_specs: A list of `MatchSpec`s that were originally requested. These will be used
                 to populate the `requested_specs` field in the generated `conda-meta/*.json` files.
                 If `None`, the `requested_specs` field will remain empty.
+
+    Raises:
+        TransactionError: If the transaction fails.
+        InstallerError: If the installation fails.
+        TypeError: If the input cannot be converted to the required type.
     """
 
     await py_install(

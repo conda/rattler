@@ -16,41 +16,50 @@ class LockFile:
 
     def __init__(self, envs: Dict[str, Environment]) -> None:
         """
-        Create a new rattler-lock file.
+            Create a new rattler-lock file.
 
-        `envs` maps each environment to its name.
+            `envs` maps each environment to its name.
+
+        Raises:
+            EnvironmentCreationError: If the environment creation fails.
         """
         self._lock_file = PyLockFile({name: env._env for (name, env) in envs.items()})
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> LockFile:
         """
-        Parses a rattler-lock file from a file.
+            Parses a rattler-lock file from a file.
 
-        Examples
-        --------
-        ```python
-        >>> lock_file = LockFile.from_path("./pixi.lock")
-        >>> lock_file
-        LockFile()
-        >>>
-        ```
+            Examples
+            --------
+            ```python
+            >>> lock_file = LockFile.from_path("./pixi.lock")
+            >>> lock_file
+            LockFile()
+            >>>
+            ```
+
+        Raises:
+            IoError: If an I/O error occurs.
         """
         return LockFile._from_py_lock_file(PyLockFile.from_path(path))
 
     def to_path(self, path: os.PathLike[str]) -> None:
         """
-        Writes the rattler-lock to a file.
+            Writes the rattler-lock to a file.
 
-        Examples
-        --------
-        ```python
-        >>> import tempfile
-        >>> lock_file = LockFile.from_path("./pixi.lock")
-        >>> with tempfile.NamedTemporaryFile() as fp:
-        ...     lock_file.to_path(fp.name)
-        >>>
-        ```
+            Examples
+            --------
+            ```python
+            >>> import tempfile
+            >>> lock_file = LockFile.from_path("./pixi.lock")
+            >>> with tempfile.NamedTemporaryFile() as fp:
+            ...     lock_file.to_path(fp.name)
+            >>>
+            ```
+
+        Raises:
+            IoError: If an I/O error occurs.
         """
         return self._lock_file.to_path(path)
 

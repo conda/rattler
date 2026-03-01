@@ -56,6 +56,9 @@ async def index_fs(
         write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+
+    Raises:
+        IoError: If an I/O error occurs.
     """
     await py_index_fs(
         channel_directory,
@@ -98,6 +101,10 @@ async def index_s3(
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
         precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
+
+    Raises:
+        IoError: If an I/O error occurs.
+        ValueError: If the credentials cannot be resolved.
     """
     await py_index_s3(
         channel_url,

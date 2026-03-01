@@ -44,6 +44,31 @@ from rattler.lock import (
     PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.rattler import (
+    ActivationError,
+    CacheDirError,
+    ConvertSubdirError,
+    DetectVirtualPackageError,
+    EnvironmentCreationError,
+    ExtractError,
+    FetchRepoDataError,
+    GatewayError,
+    InvalidChannelError,
+    InvalidMatchSpecError,
+    InvalidPackageNameError,
+    InvalidUrlError,
+    InvalidVersionError,
+    InvalidVersionSpecError,
+    IoError,
+    LinkError,
+    PackageNameMatcherParseError,
+    ParseArchError,
+    ParsePlatformError,
+    SolverError,
+    TransactionError,
+    VersionBumpError,
+)
+
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -103,6 +128,28 @@ __all__ = [
     "NoArchLiteral",
     "Link",
     "LinkType",
+    "ActivationError",
+    "CacheDirError",
+    "ConvertSubdirError",
+    "DetectVirtualPackageError",
+    "EnvironmentCreationError",
+    "ExtractError",
+    "FetchRepoDataError",
+    "GatewayError",
+    "InvalidChannelError",
+    "InvalidMatchSpecError",
+    "InvalidPackageNameError",
+    "InvalidUrlError",
+    "InvalidVersionError",
+    "InvalidVersionSpecError",
+    "IoError",
+    "LinkError",
+    "PackageNameMatcherParseError",
+    "ParseArchError",
+    "ParsePlatformError",
+    "SolverError",
+    "TransactionError",
+    "VersionBumpError",
 ]
 
 # PTY support - only available on Unix platforms

@@ -141,18 +141,21 @@ class Environment:
 
     def conda_repodata_records(self) -> Dict[Platform, List[RepoDataRecord]]:
         """
-        Returns all conda packages for all platforms.
+            Returns all conda packages for all platforms.
 
-        Examples
-        --------
-        ```python
-        >>> from rattler import LockFile
-        >>> lock_file = LockFile.from_path("../test-data/test.lock")
-        >>> env = lock_file.default_environment()
-        >>> env.conda_repodata_records()
-        {'osx-arm64': [RepoDataRecord(...), ...]}
-        >>>
-        ```
+            Examples
+            --------
+            ```python
+            >>> from rattler import LockFile
+            >>> lock_file = LockFile.from_path("../test-data/test.lock")
+            >>> env = lock_file.default_environment()
+            >>> env.conda_repodata_records()
+            {'osx-arm64': [RepoDataRecord(...), ...]}
+            >>>
+            ```
+
+        Raises:
+            IoError: If an I/O error occurs.
         """
         return {
             platform.name: [RepoDataRecord._from_py_record(r) for r in records]
