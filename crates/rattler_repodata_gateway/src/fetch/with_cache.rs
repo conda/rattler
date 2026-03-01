@@ -1485,4 +1485,33 @@ mod test {
             "there must have been exactly two requests"
         );
     }
+
+    /// Regression test for <https://github.com/conda/rattler/issues/1952>.
+    ///
+    /// On Windows, memory-mapped files cannot be deleted unless they were
+    /// opened with `FILE_SHARE_DELETE`.  `SparseRepoData::from_file` sets
+    /// that flag.  This verifies the file can be deleted while mapped.
+    #[test]
+    #[cfg(feature = "sparse")]
+    fn test_can_delete_mmap_opened_via_sparse_repodata() {
+        use rattler_conda_types::{Channel, ChannelConfig};
+
+        let temp = TempDir::new().unwrap();
+        let json_path = temp.path().join("repodata.json");
+        std::fs::write(
+            &json_path,
+            r#"{"info":{"subdir":"noarch"},"packages":{},"packages.conda":{}}"#,
+        )
+        .unwrap();
+
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("test", &channel_config).unwrap();
+
+        let _sparse =
+            crate::sparse::SparseRepoData::from_file(channel, "noarch", &json_path, None).unwrap();
+
+        // Must succeed even while the file is memory-mapped.
+        std::fs::remove_file(&json_path)
+            .expect("should be able to delete a file opened with FILE_SHARE_DELETE");
+    }
 }
