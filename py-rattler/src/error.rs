@@ -171,7 +171,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ConversionError(err) => {
                 crate::exceptions::ConversionError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::RequirementError(err) => crate::exceptions::RequirementError::new_err(err),
+            PyRattlerError::RequirementError(err) => {
+                crate::exceptions::RequirementError::new_err(err)
+            }
             PyRattlerError::EnvironmentCreationError(err) => {
                 crate::exceptions::EnvironmentCreationError::new_err(err)
             }
@@ -185,9 +187,9 @@ impl From<PyRattlerError> for PyErr {
                 crate::exceptions::InstallerError::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
-                crate::exceptions::ParseExplicitEnvironmentSpecError::new_err(
-                    pretty_print_error(&err),
-                )
+                crate::exceptions::ParseExplicitEnvironmentSpecError::new_err(pretty_print_error(
+                    &err,
+                ))
             }
             PyRattlerError::ValidatePackageRecordsError(err) => {
                 crate::exceptions::ValidatePackageRecordsError::new_err(pretty_print_error(&err))

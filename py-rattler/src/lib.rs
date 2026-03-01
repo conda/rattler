@@ -27,9 +27,9 @@ mod utils;
 mod version;
 mod virtual_package;
 
+mod exceptions;
 mod index_json;
 mod run_exports_json;
-mod exceptions;
 
 use std::ops::Deref;
 
@@ -197,10 +197,22 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
-    m.add("InvalidVersionSpecError", py.get_type::<InvalidVersionSpecError>(),)?;
-    m.add("InvalidMatchSpecError", py.get_type::<InvalidMatchSpecError>(),)?;
-    m.add("InvalidPackageNameError", py.get_type::<InvalidPackageNameError>(),)?;
-    m.add("PackageNameMatcherParseError", py.get_type::<PackageNameMatcherParseError>(),)?;
+    m.add(
+        "InvalidVersionSpecError",
+        py.get_type::<InvalidVersionSpecError>(),
+    )?;
+    m.add(
+        "InvalidMatchSpecError",
+        py.get_type::<InvalidMatchSpecError>(),
+    )?;
+    m.add(
+        "InvalidPackageNameError",
+        py.get_type::<InvalidPackageNameError>(),
+    )?;
+    m.add(
+        "PackageNameMatcherParseError",
+        py.get_type::<PackageNameMatcherParseError>(),
+    )?;
     m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
     m.add("InvalidChannelError", py.get_type::<InvalidChannelError>())?;
     m.add("ActivationError", py.get_type::<ActivationError>())?;
@@ -208,7 +220,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add("ParseArchError", py.get_type::<ParseArchError>())?;
     m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
     m.add("CacheDirError", py.get_type::<CacheDirError>())?;
-    m.add("DetectVirtualPackageError", py.get_type::<DetectVirtualPackageError>(),)?;
+    m.add(
+        "DetectVirtualPackageError",
+        py.get_type::<DetectVirtualPackageError>(),
+    )?;
     m.add("IoError", py.get_type::<IoError>())?;
     m.add("SolverError", py.get_type::<SolverError>())?;
     m.add("TransactionError", py.get_type::<TransactionError>())?;
@@ -219,16 +234,43 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add("ParseCondaLockError", py.get_type::<ParseCondaLockError>())?;
     m.add("ConversionError", py.get_type::<ConversionError>())?;
     m.add("RequirementError", py.get_type::<RequirementError>())?;
-    m.add("EnvironmentCreationError", py.get_type::<EnvironmentCreationError>(),)?;
-    m.add("ExtractError", py.get_type::<crate::exceptions::ExtractError>())?;
-    m.add("GatewayError", py.get_type::<crate::exceptions::GatewayError>())?;
-    m.add("InstallerError", py.get_type::<crate::exceptions::InstallerError>(),)?;
-    m.add("ParseExplicitEnvironmentSpecError", py.get_type::<ParseExplicitEnvironmentSpecError>(),)?;
-    m.add("ValidatePackageRecordsError", py.get_type::<ValidatePackageRecordsError>(),)?;
-    m.add("AuthenticationStorageError", py.get_type::<AuthenticationStorageError>(),)?;
+    m.add(
+        "EnvironmentCreationError",
+        py.get_type::<EnvironmentCreationError>(),
+    )?;
+    m.add(
+        "ExtractError",
+        py.get_type::<crate::exceptions::ExtractError>(),
+    )?;
+    m.add(
+        "GatewayError",
+        py.get_type::<crate::exceptions::GatewayError>(),
+    )?;
+    m.add(
+        "InstallerError",
+        py.get_type::<crate::exceptions::InstallerError>(),
+    )?;
+    m.add(
+        "ParseExplicitEnvironmentSpecError",
+        py.get_type::<ParseExplicitEnvironmentSpecError>(),
+    )?;
+    m.add(
+        "ValidatePackageRecordsError",
+        py.get_type::<ValidatePackageRecordsError>(),
+    )?;
+    m.add(
+        "AuthenticationStorageError",
+        py.get_type::<AuthenticationStorageError>(),
+    )?;
     m.add("ShellError", py.get_type::<ShellError>())?;
-    m.add("InvalidHeaderNameError", py.get_type::<InvalidHeaderNameError>(),)?;
-    m.add("InvalidHeaderValueError", py.get_type::<InvalidHeaderValueError>(),)?;
+    m.add(
+        "InvalidHeaderNameError",
+        py.get_type::<InvalidHeaderNameError>(),
+    )?;
+    m.add(
+        "InvalidHeaderValueError",
+        py.get_type::<InvalidHeaderValueError>(),
+    )?;
 
     Ok(())
 }
