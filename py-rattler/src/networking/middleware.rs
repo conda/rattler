@@ -121,7 +121,7 @@ impl PyGCSMiddleware {
 
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
-        GCSMiddleware
+        GCSMiddleware::default()
     }
 }
 
