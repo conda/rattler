@@ -14,7 +14,7 @@ use rattler_solve::{
 use url::Url;
 
 mod conditional_tests;
-mod extras_tests;  
+mod extras_tests;
 mod helpers;
 mod min_age_tests;
 mod solver_case_tests;
