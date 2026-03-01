@@ -557,7 +557,7 @@ impl<'a> CondaDependencyProvider<'a> {
         // Build a lookup table for dependency overrides keyed by target package name.
         let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
         for rule in dependency_overrides {
-            if let Some(name) = rule.override_spec.name.as_ref() {
+            if let Some(name) = rule.override_spec.name.as_exact() {
                 if let Some(name) = Option::<PackageName>::from(name.clone()) {
                     override_map.entry(name).or_default().push(rule);
                 }
@@ -600,7 +600,7 @@ impl<'a> CondaDependencyProvider<'a> {
         record: &RepoDataRecord,
         dep_spec: &MatchSpec,
     ) -> Option<String> {
-        let dep_name = dep_spec.name.as_ref()?;
+        let dep_name = dep_spec.name.as_exact()?;
         let dep_name = Option::<PackageName>::from(dep_name.clone())?;
         let rules = self.dependency_overrides.get(&dep_name)?;
         for rule in rules {
