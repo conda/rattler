@@ -1,0 +1,26 @@
+[package]
+description = "A crate for glob pattern matching with hash computation and modification time tracking"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+name = "rattler_glob"
+readme.workspace = true
+repository.workspace = true
+version = "0.1.0"
+
+[dependencies]
+dashmap = { workspace = true }
+fs-err = { workspace = true }
+ignore = { workspace = true }
+itertools = { workspace = true }
+parking_lot = { workspace = true }
+rattler_digest = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true, features = ["yaml", "redactions"] }
+rstest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tempfile = { workspace = true }
