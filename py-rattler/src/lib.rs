@@ -28,6 +28,7 @@ mod version;
 mod virtual_package;
 
 mod index_json;
+mod package_cache;
 mod run_exports_json;
 
 use std::ops::Deref;
@@ -39,9 +40,9 @@ use error::{
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
     InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
-    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
-    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
-    VersionBumpException,
+    LinkException, PackageCacheException, PackageNameMatcherParseException, ParseArchException,
+    ParsePlatformException, PyRattlerError,
+    SolverException, TransactionException, ValidatePackageRecordsException, VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -61,6 +62,7 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
+use package_cache::{PyPackageCache, PyValidationMode};
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
@@ -192,6 +194,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
+    m.add_class::<PyPackageCache>()?;
+    m.add_class::<PyValidationMode>()?;
 
     // Exceptions
     m.add(
@@ -257,6 +261,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "ValidatePackageRecordsException",
         py.get_type::<ValidatePackageRecordsException>(),
     )?;
+
+    m.add("PackageCacheError", py.get_type::<PackageCacheException>())?;
 
     Ok(())
 }
