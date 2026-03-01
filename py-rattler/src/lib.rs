@@ -35,13 +35,13 @@ use std::ops::Deref;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
-    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, ExtractException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
-    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
-    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
-    VersionBumpException,
+    ActivationError, CacheDirError, ConvertSubdirError, DetectVirtualPackageError,
+    EnvironmentCreationError, ExtractError, FetchRepoDataError,
+    InvalidChannelError, InvalidMatchSpecError, InvalidPackageNameError,
+    InvalidUrlError, InvalidVersionError, InvalidVersionSpecError, IoError,
+    LinkError, PackageNameMatcherParseError, ParseArchError, ParsePlatformError,
+    PyRattlerError, SolverError, TransactionError, ValidatePackageRecordsError,
+    VersionBumpError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -83,7 +83,7 @@ use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 #[cfg(feature = "pty")]
 use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
 
-use crate::error::GatewayException;
+use crate::error::GatewayError;
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
@@ -197,66 +197,66 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Exceptions
     m.add(
         "InvalidVersionError",
-        py.get_type::<InvalidVersionException>(),
+        py.get_type::<InvalidVersionError>(),
     )?;
     m.add(
         "InvalidVersionSpecError",
-        py.get_type::<InvalidVersionSpecException>(),
+        py.get_type::<InvalidVersionSpecError>(),
     )?;
     m.add(
         "InvalidMatchSpecError",
-        py.get_type::<InvalidMatchSpecException>(),
+        py.get_type::<InvalidMatchSpecError>(),
     )?;
     m.add(
         "PackageNameMatcherParseError",
-        py.get_type::<PackageNameMatcherParseException>(),
+        py.get_type::<PackageNameMatcherParseError>(),
     )?;
     m.add(
         "InvalidPackageNameError",
-        py.get_type::<InvalidPackageNameException>(),
+        py.get_type::<InvalidPackageNameError>(),
     )?;
-    m.add("InvalidUrlError", py.get_type::<InvalidUrlException>())?;
+    m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
     m.add(
         "InvalidChannelError",
-        py.get_type::<InvalidChannelException>(),
+        py.get_type::<InvalidChannelError>(),
     )?;
-    m.add("ActivationError", py.get_type::<ActivationException>())?;
+    m.add("ActivationError", py.get_type::<ActivationError>())?;
     m.add(
         "ParsePlatformError",
-        py.get_type::<ParsePlatformException>(),
+        py.get_type::<ParsePlatformError>(),
     )?;
-    m.add("ParseArchError", py.get_type::<ParseArchException>())?;
-    m.add("SolverError", py.get_type::<SolverException>())?;
-    m.add("TransactionError", py.get_type::<TransactionException>())?;
-    m.add("LinkError", py.get_type::<LinkException>())?;
-    m.add("IoError", py.get_type::<IoException>())?;
+    m.add("ParseArchError", py.get_type::<ParseArchError>())?;
+    m.add("SolverError", py.get_type::<SolverError>())?;
+    m.add("TransactionError", py.get_type::<TransactionError>())?;
+    m.add("LinkError", py.get_type::<LinkError>())?;
+    m.add("IoError", py.get_type::<IoError>())?;
     m.add(
         "DetectVirtualPackageError",
-        py.get_type::<DetectVirtualPackageException>(),
+        py.get_type::<DetectVirtualPackageError>(),
     )?;
-    m.add("CacheDirError", py.get_type::<CacheDirException>())?;
+    m.add("CacheDirError", py.get_type::<CacheDirError>())?;
     m.add(
         "FetchRepoDataError",
-        py.get_type::<FetchRepoDataException>(),
+        py.get_type::<FetchRepoDataError>(),
     )?;
     m.add(
         "ConvertSubdirError",
-        py.get_type::<ConvertSubdirException>(),
+        py.get_type::<ConvertSubdirError>(),
     )?;
-    m.add("VersionBumpError", py.get_type::<VersionBumpException>())?;
+    m.add("VersionBumpError", py.get_type::<VersionBumpError>())?;
 
     m.add(
         "EnvironmentCreationError",
-        py.get_type::<EnvironmentCreationException>(),
+        py.get_type::<EnvironmentCreationError>(),
     )?;
 
-    m.add("ExtractError", py.get_type::<ExtractException>())?;
+    m.add("ExtractError", py.get_type::<ExtractError>())?;
 
-    m.add("GatewayError", py.get_type::<GatewayException>())?;
+    m.add("GatewayError", py.get_type::<GatewayError>())?;
 
     m.add(
-        "ValidatePackageRecordsException",
-        py.get_type::<ValidatePackageRecordsException>(),
+        "ValidatePackageRecordsError",
+        py.get_type::<ValidatePackageRecordsError>(),
     )?;
 
     Ok(())
