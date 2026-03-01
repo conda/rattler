@@ -52,20 +52,6 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(rename = "conda")]
     pub location: UrlOrPath,
 
-    // Unique identifiers go to the top
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<Cow<'a, PackageName>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<Cow<'a, VersionWithSource>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<Cow<'a, str>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build_number: Option<BuildNumber>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subdir: Option<Cow<'a, str>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub noarch: Option<Cow<'a, NoArchType>>,
-
     // Conda-build variants for source packages
     #[serde(default, skip_serializing_if = "skip_variant_serialization")]
     pub variants: Option<Cow<'a, BTreeMap<String, VariantValue>>>,
@@ -127,29 +113,21 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
         let derived = LocationDerivedFields::new(&value.location);
-        let build = value
+        let name = derived
+            .name
+            .ok_or_else(|| ConversionError::Missing("name".to_string()))?;
+        let version = derived
+            .version
+            .ok_or_else(|| ConversionError::Missing("version".to_string()))?;
+        let build = derived
             .build
-            .map(Cow::into_owned)
-            .or_else(|| derived.build.clone())
-            .unwrap_or_default();
-        let build_number = value
-            .build_number
-            .or_else(|| derived_fields::derive_build_number_from_build(&build))
-            .unwrap_or(0);
-        let subdir = value
+            .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
+        let build_number = derived_fields::derive_build_number_from_build(&build)
+            .ok_or_else(|| ConversionError::Missing("build-number".to_string()))?;
+        let subdir = derived
             .subdir
-            .map(Cow::into_owned)
-            .or_else(|| derived.subdir.clone())
             .ok_or_else(|| ConversionError::Missing("subdir".to_string()))?;
-        let noarch = value.noarch.map_or_else(
-            || {
-                derived_fields::derive_noarch_type(
-                    derived.subdir.as_deref().unwrap_or(&subdir),
-                    derived.build.as_deref().unwrap_or(&build),
-                )
-            },
-            Cow::into_owned,
-        );
+        let noarch = derived_fields::derive_noarch_type(&subdir, &build);
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         let package_record = PackageRecord {
@@ -164,11 +142,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             license: value.license.into_owned(),
             license_family: value.license_family.into_owned(),
             md5: value.md5,
-            name: value
-                .name
-                .map(Cow::into_owned)
-                .or(derived.name)
-                .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
+            name,
             noarch,
             arch: derived_arch,
             platform: derived_platform,
@@ -178,11 +152,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             subdir,
             timestamp: value.timestamp.map(Into::into),
             track_features: value.track_features.into_owned(),
-            version: value
-                .version
-                .map(Cow::into_owned)
-                .or(derived.version)
-                .ok_or_else(|| ConversionError::Missing("version".to_string()))?,
+            version,
             run_exports: None,
             python_site_packages_path: value.python_site_packages_path.into_owned(),
         };
