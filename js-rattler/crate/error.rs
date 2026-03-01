@@ -1,8 +1,8 @@
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
-    InvalidPackageNameError, PackageNameMatcherParseError, ParseChannelError, ParseMatchSpecError,
-    ParsePlatformError, ParseVersionError, StringMatcherParseError, VersionBumpError,
-    VersionExtendError,
+    InvalidPackageNameError, PackageNameMatcherParseError, ParseBuildNumberSpecError,
+    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
+    StringMatcherParseError, VersionBumpError, VersionExtendError,
 };
 use rattler_repodata_gateway::GatewayError;
 use rattler_solve::SolveError;
@@ -34,6 +34,8 @@ pub enum JsError {
     Serde(#[from] serde_wasm_bindgen::Error),
     #[error(transparent)]
     PackageNameError(#[from] InvalidPackageNameError),
+    #[error(transparent)]
+    ParseBuildNumberSpecError(#[from] ParseBuildNumberSpecError),
     #[error(transparent)]
     PackageNameMatcherParseError(#[from] PackageNameMatcherParseError),
     #[error(transparent)]

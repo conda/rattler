@@ -2,10 +2,10 @@ use rattler_conda_types::{
     MatchSpec, Matches, PackageNameMatcher, ParseMatchSpecOptions, ParseStrictness, StringMatcher,
 };
 use serde::Deserialize;
-use std::str::FromStr;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
 
+use crate::build_number_spec::JsBuildNumberSpec;
 use crate::{package_record::JsPackageRecord, version_spec::JsVersionSpec, JsResult};
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -26,10 +26,6 @@ export interface MatchSpecOptions {
     experimentalConditionals?: boolean;
 }
 "#;
-
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
 
 fn default_exact_names_only() -> bool {
     false
@@ -157,8 +153,8 @@ impl JsMatchSpec {
 
     /// Returns the build number spec, if present.
     #[wasm_bindgen(getter, js_name = "buildNumber")]
-    pub fn build_number(&self) -> Option<String> {
-        self.inner.build_number.as_ref().map(|bn| bn.to_string())
+    pub fn build_number(&self) -> Option<JsBuildNumberSpec> {
+        self.inner.build_number.clone().map(Into::into)
     }
 
     /// Returns the channel name, if present.
@@ -230,16 +226,13 @@ impl JsMatchSpec {
     /// Returns the MD5 hash as a hex string, if present.
     #[wasm_bindgen(getter)]
     pub fn md5(&self) -> Option<String> {
-        self.inner.md5.as_ref().map(|h| bytes_to_hex(h.as_slice()))
+        self.inner.md5.as_ref().map(|h| format!("{h:x}"))
     }
 
     /// Returns the SHA-256 hash as a hex string, if present.
     #[wasm_bindgen(getter)]
     pub fn sha256(&self) -> Option<String> {
-        self.inner
-            .sha256
-            .as_ref()
-            .map(|h| bytes_to_hex(h.as_slice()))
+        self.inner.sha256.as_ref().map(|h| format!("{h:x}"))
     }
 
     /// Returns the selected optional extras, if present.

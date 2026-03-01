@@ -155,9 +155,12 @@ describe("MatchSpec", () => {
             expect(new MatchSpec("foo").buildNumber).toBeUndefined();
         });
 
-        it("should return the build number spec when specified", () => {
+        it("should return a BuildNumberSpec when specified", () => {
             const spec = new MatchSpec('foo[build_number=">=3"]');
             expect(spec.buildNumber).toBeDefined();
+            expect(spec.buildNumber!.toString()).toBe(">=3");
+            expect(spec.buildNumber!.matches(3)).toBe(true);
+            expect(spec.buildNumber!.matches(2)).toBe(false);
         });
     });
 
