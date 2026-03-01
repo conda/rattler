@@ -1,11 +1,13 @@
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
-    InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParsePlatformError,
-    ParseVersionError, VersionBumpError, VersionExtendError,
+    InvalidPackageNameError, PackageNameMatcherParseError, ParseBuildNumberSpecError,
+    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
+    StringMatcherParseError, VersionBumpError, VersionExtendError,
 };
 use rattler_repodata_gateway::GatewayError;
 use rattler_solve::SolveError;
 use thiserror::Error;
+use url::ParseError as UrlParseError;
 use wasm_bindgen::JsValue;
 
 #[derive(Debug, Error)]
@@ -32,6 +34,14 @@ pub enum JsError {
     Serde(#[from] serde_wasm_bindgen::Error),
     #[error(transparent)]
     PackageNameError(#[from] InvalidPackageNameError),
+    #[error(transparent)]
+    ParseBuildNumberSpecError(#[from] ParseBuildNumberSpecError),
+    #[error(transparent)]
+    PackageNameMatcherParseError(#[from] PackageNameMatcherParseError),
+    #[error(transparent)]
+    StringMatcherParseError(#[from] StringMatcherParseError),
+    #[error(transparent)]
+    UrlParseError(#[from] UrlParseError),
     #[error("{0} is not a valid hex encoded MD5 hash")]
     InvalidHexMd5(String),
     #[error("{0} is not a valid hex encoded SHA256 hash")]

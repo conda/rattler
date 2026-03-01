@@ -77,6 +77,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral_async_zip"
+version = "0.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
+dependencies = [
+ "async-compression",
+ "crc32fast",
+ "futures-lite",
+ "pin-project",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -85,6 +100,7 @@ dependencies = [
  "compression-codecs",
  "compression-core",
  "futures-core",
+ "futures-io",
  "pin-project-lite",
  "tokio",
 ]
@@ -109,6 +125,16 @@ name = "async-once-cell"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
+
+[[package]]
+name = "async-spooled-tempfile"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dd9c58a1dbecfc23aa470d57e5aff60877ab1b459bf05e60e861dd18fcaa5f5"
+dependencies = [
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "async-trait"
@@ -741,6 +767,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
 
 [[package]]
+name = "futures-lite"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
+dependencies = [
+ "fastrand",
+ "futures-core",
+ "futures-io",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "futures-macro"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -872,6 +911,8 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.1.5",
 ]
 
@@ -1776,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.6"
+version = "0.6.14"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1807,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.4"
+version = "0.43.5"
 dependencies = [
  "ahash",
  "chrono",
@@ -1873,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.29"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -1896,13 +1937,16 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.21"
+version = "0.24.2"
 dependencies = [
  "astral-tokio-tar",
+ "astral_async_zip",
  "async-compression",
+ "async-spooled-tempfile",
  "bzip2",
  "chrono",
  "fs-err",
+ "futures",
  "futures-util",
  "getrandom 0.2.16",
  "getrandom 0.3.4",
@@ -1937,8 +1981,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.7"
+version = "0.26.2"
 dependencies = [
+ "ahash",
  "anyhow",
  "async-compression",
  "async-fd-lock",
@@ -1955,6 +2000,7 @@ dependencies = [
  "fs-err",
  "fslock",
  "futures",
+ "hashbrown 0.15.5",
  "hex",
  "http",
  "http-cache-semantics",
@@ -1996,7 +2042,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.1.2"
+version = "4.2.6"
 dependencies = [
  "chrono",
  "futures",
@@ -2862,6 +2908,7 @@ checksum = "14307c986784f72ef81c89db7d9e28d6ac26d16213b109ea501696195e6e3ce5"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",
