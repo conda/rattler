@@ -499,6 +499,49 @@ impl RepodataMetadataCollection {
     }
 }
 
+/// Checks for stale repodata output files that were previously generated
+/// but are no longer being written. Emits a warning if such files are found.
+///
+/// This helps prevent situations where consumers use outdated zst or sharded
+/// repodata files that are no longer being updated by the indexer.
+async fn warn_stale_outputs(op: &Operator, subdir: Platform, write_zst: bool, write_shards: bool) {
+    if !write_zst {
+        let zst_path = format!("{subdir}/{REPODATA}.zst");
+        match op.exists(&zst_path).await {
+            Ok(true) => {
+                tracing::warn!(
+                    "Found stale file '{zst_path}' but zst output is disabled (write_zst=false). \
+                     This file will NOT be updated and may serve outdated data to clients. \
+                     Either re-enable zst output with --write-zst=true, \
+                     or delete the stale file to avoid confusion."
+                );
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::debug!("Could not check for stale zst file at '{zst_path}': {e}");
+            }
+        }
+    }
+
+    if !write_shards {
+        let shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+        match op.exists(&shards_path).await {
+            Ok(true) => {
+                tracing::warn!(
+                    "Found stale file '{shards_path}' but sharded repodata output is disabled \
+                     (write_shards=false). This file will NOT be updated and may serve outdated \
+                     data to clients. Either re-enable sharded output with --write-shards=true, \
+                     or delete the stale file and the '{subdir}/shards/' directory to avoid confusion."
+                );
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::debug!("Could not check for stale shards file at '{shards_path}': {e}");
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
@@ -614,6 +657,9 @@ async fn index_subdir_inner(
         precondition_checks,
     )
     .await?;
+
+    // Check for stale output files when zst or shards are disabled.
+    warn_stale_outputs(&op, subdir, write_zst, write_shards).await;
 
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
