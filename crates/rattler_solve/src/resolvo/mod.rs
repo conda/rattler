@@ -499,27 +499,39 @@ impl<'a> CondaDependencyProvider<'a> {
                     channel_priority,
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
+
+                    //Solving PR "Error message should show channel priority exclusions#2091"
+
                     if first_channel != &&record.channel {
+                        let shadowed_by = match *first_channel {
+                            Some(c) => c.to_string(),
+                            None => "an unknown channel".to_string(),
+                        };
+
                         if let Some(channel) = &record.channel {
                             tracing::debug!(
-                                "Ignoring '{}' from '{}' because of strict channel priority.",
+                                "Ignoring '{}' from '{}' because of strict channel priority. Shadowed by '{}'",
                                 &record.package_record.name.as_normalized(),
-                                channel
+                                channel,
+                                shadowed_by
                             );
                             candidates.excluded.push((
                                 solvable_id,
                                 pool.intern_string(format!(
-                                    "due to strict channel priority not using this option from: '{channel}'",
+                                    "due to strict channel priority not using this option from: '{channel}'. Shadowed by: '{shadowed_by}'",
                                 )),
                             ));
                         } else {
                             tracing::debug!(
-                                    "Ignoring '{}' without a channel because of strict channel priority.",
-                                    &record.package_record.name.as_normalized(),
-                                );
+                                "Ignoring '{}' without a channel because of strict channel priority. Shadowed by '{}'",
+                                &record.package_record.name.as_normalized(),
+                                shadowed_by
+                            );
                             candidates.excluded.push((
                                 solvable_id,
-                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                                pool.intern_string(format!(
+                                    "due to strict channel priority not using from an unknown channel. Shadowed by: '{shadowed_by}'"
+                                )),
                             ));
                         }
                     }
@@ -557,7 +569,7 @@ impl<'a> CondaDependencyProvider<'a> {
         // Build a lookup table for dependency overrides keyed by target package name.
         let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
         for rule in dependency_overrides {
-            if let Some(name) = rule.override_spec.name.as_ref() {
+            if let Some(name) = rule.override_spec.name.as_exact() {
                 if let Some(name) = Option::<PackageName>::from(name.clone()) {
                     override_map.entry(name).or_default().push(rule);
                 }
@@ -600,7 +612,7 @@ impl<'a> CondaDependencyProvider<'a> {
         record: &RepoDataRecord,
         dep_spec: &MatchSpec,
     ) -> Option<String> {
-        let dep_name = dep_spec.name.as_ref()?;
+        let dep_name = dep_spec.name.as_exact()?;
         let dep_name = Option::<PackageName>::from(dep_name.clone())?;
         let rules = self.dependency_overrides.get(&dep_name)?;
         for rule in rules {

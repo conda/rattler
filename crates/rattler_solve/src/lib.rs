@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-#[cfg(feature = "libsolv_c")]
+#[cfg(feature = "libsolv_c")] 
 pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
