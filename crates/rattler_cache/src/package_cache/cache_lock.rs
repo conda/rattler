@@ -9,7 +9,7 @@ use std::{
 use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
 use rattler_conda_types::package::{IndexJson, PathsJson};
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Md5Hash, Sha256Hash};
 
 use crate::package_cache::PackageCacheLayerError;
 
@@ -23,6 +23,8 @@ use crate::package_cache::PackageCacheLayerError;
 pub struct CacheMetadata {
     pub(super) revision: u64,
     pub(super) sha256: Option<Sha256Hash>,
+    pub(super) md5: Option<Md5Hash>,
+    pub(super) size: Option<u64>,
     pub(super) path: PathBuf,
     pub(super) index_json: Option<IndexJson>,
     pub(super) paths_json: Option<PathsJson>,
@@ -34,6 +36,8 @@ impl Debug for CacheMetadata {
             .field("path", &self.path)
             .field("revision", &self.revision)
             .field("sha256", &self.sha256)
+            .field("md5", &self.md5)
+            .field("size", &self.size)
             .finish()
     }
 }
@@ -48,6 +52,21 @@ impl CacheMetadata {
     /// number of times the cache entry has been updated.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Returns the SHA256 hash of the package archive, if known.
+    pub fn sha256(&self) -> Option<&Sha256Hash> {
+        self.sha256.as_ref()
+    }
+
+    /// Returns the MD5 hash of the package archive, if known.
+    pub fn md5(&self) -> Option<&Md5Hash> {
+        self.md5.as_ref()
+    }
+
+    /// Returns the size of the package archive in bytes, if known.
+    pub fn size(&self) -> Option<u64> {
+        self.size
     }
 
     /// Returns the cached `index.json` data if it was read during validation.
