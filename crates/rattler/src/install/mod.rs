@@ -250,6 +250,13 @@ pub struct InstallOptions {
     /// at all), and `--preserve-metadata=entitlements` preserves the original entitlements
     /// from the binary (required for programs that need specific permissions like virtualization).
     pub apple_codesign_behavior: AppleCodeSignBehavior,
+
+    /// Whether to allow symlinks that point outside the target prefix. Some
+    /// packages (e.g. driver packages) legitimately ship symlinks to paths
+    /// outside the environment. When set to `false` (the default), such
+    /// symlinks are rejected. When set to `true`, they are allowed with a
+    /// warning.
+    pub allow_external_symlinks: bool,
 }
 
 #[derive(Debug)]
@@ -442,6 +449,7 @@ pub async fn link_package(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
+                    options.allow_external_symlinks,
                 )
             })
             .await
@@ -866,6 +874,7 @@ pub fn link_package_sync(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
+                    options.allow_external_symlinks,
                 );
 
                 let result = match link_result {
