@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.1...rattler_repodata_gateway-v0.26.2) - 2026-02-25
+
+### Fixed
+
+- *(gateway)* resolve data race in BarrierCell ([#2101](https://github.com/conda/rattler/pull/2101))
+
+### Other
+
+- experimental repodata v3 ([#2093](https://github.com/conda/rattler/pull/2093))
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.0...rattler_repodata_gateway-v0.26.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
 ## [0.26.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.12...rattler_repodata_gateway-v0.26.0) - 2026-02-19
 
 ### Added

@@ -70,21 +70,26 @@ impl<T> BarrierCell<T> {
 
     /// Set the value in the cell, if the cell was already initialized this will return an error.
     pub fn set(&self, value: T) -> Result<(), SetError> {
-        let state = self
+        // Only one thread should be able to transition from Uninitialized to Initializing.
+        if self
             .state
-            .fetch_max(BarrierCellState::Initializing as u8, Ordering::SeqCst);
-
-        // If the state is larger than started writing, then either there is an active writer or
-        // the cell has already been initialized.
-        if state == BarrierCellState::Initialized as u8 {
+            .compare_exchange(
+                BarrierCellState::Uninitialized as u8,
+                BarrierCellState::Initializing as u8,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_err()
+        {
             return Err(SetError::AlreadySet);
-        } else {
-            unsafe { *self.value.get() = MaybeUninit::new(value) };
-            self.state
-                .store(BarrierCellState::Initialized as u8, Ordering::Release);
-
-            self.notify.notify_waiters();
         }
+
+        // Only the thread that successfully transitioned the state can set the value.
+        unsafe { *self.value.get() = MaybeUninit::new(value) };
+        self.state
+            .store(BarrierCellState::Initialized as u8, Ordering::Release);
+
+        self.notify.notify_waiters();
 
         Ok(())
     }
@@ -127,5 +132,34 @@ mod test {
         assert_eq!(Arc::strong_count(&arc), 2);
         drop(barrier);
         assert_eq!(Arc::strong_count(&arc), 1);
+    }
+    #[tokio::test]
+    pub async fn test_barrier_cell_race() {
+        for _ in 0..1000 {
+            let barrier = Arc::new(BarrierCell::new());
+            let barrier_clone1 = barrier.clone();
+            let barrier_clone2 = barrier.clone();
+            let sync_barrier = Arc::new(tokio::sync::Barrier::new(2));
+            let sync_barrier1 = sync_barrier.clone();
+            let sync_barrier2 = sync_barrier.clone();
+
+            let h1 = tokio::spawn(async move {
+                sync_barrier1.wait().await;
+                barrier_clone1.set(vec![1; 10]).is_ok()
+            });
+            let h2 = tokio::spawn(async move {
+                sync_barrier2.wait().await;
+                barrier_clone2.set(vec![2; 10]).is_ok()
+            });
+
+            let r1 = h1.await.unwrap();
+            let r2 = h2.await.unwrap();
+
+            // If both returned true, we have a race!
+            assert!(
+                !(r1 && r2),
+                "Both threads successfully set the BarrierCell! Data race detected."
+            );
+        }
     }
 }

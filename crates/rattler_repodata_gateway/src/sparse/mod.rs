@@ -12,7 +12,6 @@ use std::{
 };
 
 use bytes::Bytes;
-use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url,
@@ -143,6 +142,9 @@ impl SparseRepoData {
     ///
     /// The `patch_function` can be used to patch the package record after it
     /// has been parsed (e.g. to add `pip` to `python`).
+    ///
+    /// On Windows the file is opened with `FILE_SHARE_DELETE` so that another
+    /// process/thread can rename or delete the file while it is still mapped.
     #[cfg(any(unix, windows))]
     pub fn from_file(
         channel: Channel,
@@ -150,7 +152,18 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = fs::File::open(path.as_ref().to_owned())?;
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            const SHARE_ALL: u32 = 0x01 | 0x02 | 0x04; // FILE_SHARE_READ | WRITE | DELETE
+            std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(SHARE_ALL)
+                .open(path.as_ref())?
+        };
+        #[cfg(not(windows))]
+        let file = std::fs::File::from(fs_err::File::open(path.as_ref())?);
+
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInner::Memmapped(MemmappedSparseRepoDataInner::try_new(
@@ -174,7 +187,7 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let bytes = fs::read(path)?;
+        let bytes = fs_err::read(path)?;
         Ok(Self::from_bytes(
             channel,
             subdir,
@@ -219,78 +232,109 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let tar_bz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
-        let whl_packages = repo_data
-            .experimental_whl_packages
+        let v3_tar = repo_data
+            .experimental_v3
+            .tar_bz2
+            .iter()
+            .map(select_package_name);
+        let v3_conda = repo_data
+            .experimental_v3
+            .conda
+            .iter()
+            .map(select_package_name);
+        let v3_whl = repo_data
+            .experimental_v3
+            .whl
             .iter()
             .map(select_package_name);
 
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
                 itertools::Either::Left(itertools::Either::Left(
-                    tar_bz2_packages.merge(conda_packages).dedup(),
+                    tar_bz2_packages
+                        .merge(v3_tar)
+                        .merge(conda_packages.merge(v3_conda))
+                        .dedup(),
                 ))
             }
             PackageFormatSelection::PreferCondaWithWhl => {
                 itertools::Either::Left(itertools::Either::Right(
                     tar_bz2_packages
-                        .merge(whl_packages)
-                        .merge(conda_packages)
+                        .merge(v3_tar)
+                        .merge(v3_whl)
+                        .merge(conda_packages.merge(v3_conda))
                         .dedup(),
                 ))
             }
-            PackageFormatSelection::OnlyTarBz2 => {
-                itertools::Either::Right(itertools::Either::Left(tar_bz2_packages.dedup()))
-            }
-            PackageFormatSelection::OnlyConda => {
-                itertools::Either::Right(itertools::Either::Right(conda_packages.dedup()))
-            }
+            PackageFormatSelection::OnlyTarBz2 => itertools::Either::Right(
+                itertools::Either::Left(tar_bz2_packages.merge(v3_tar).dedup()),
+            ),
+            PackageFormatSelection::OnlyConda => itertools::Either::Right(
+                itertools::Either::Right(conda_packages.merge(v3_conda).dedup()),
+            ),
         }
     }
 
     /// Returns the number of records in this instance.
     pub fn record_count(&self, package_format_selection: PackageFormatSelection) -> usize {
+        let repo_data = self.inner.borrow_repo_data();
         match package_format_selection {
             PackageFormatSelection::PreferConda | PackageFormatSelection::PreferCondaWithWhl => {
-                let repo_data = self.inner.borrow_repo_data();
                 let tar_bz2_packages = repo_data.packages.iter().map(|(filename, _)| {
                     filename
                         .filename
                         .strip_suffix(CondaArchiveType::TarBz2.extension())
                         .unwrap_or(filename.filename)
                 });
+                let v3_tar = repo_data
+                    .experimental_v3
+                    .tar_bz2
+                    .iter()
+                    .map(|(filename, _)| filename.filename);
                 let conda_packages = repo_data.conda_packages.iter().map(|(filename, _)| {
                     filename
                         .filename
                         .strip_suffix(CondaArchiveType::Conda.extension())
                         .unwrap_or(filename.filename)
                 });
-                // Add wheel files if specified
+                let v3_conda = repo_data
+                    .experimental_v3
+                    .conda
+                    .iter()
+                    .map(|(filename, _)| filename.filename);
+
                 if package_format_selection == PackageFormatSelection::PreferCondaWithWhl {
-                    let whl_packages =
-                        repo_data
-                            .experimental_whl_packages
-                            .iter()
-                            .map(|(filename, _)| {
-                                filename
-                                    .filename
-                                    .strip_suffix(WheelArchiveType::Whl.extension())
-                                    .unwrap_or(filename.filename)
-                            });
+                    let v3_whl = repo_data
+                        .experimental_v3
+                        .whl
+                        .iter()
+                        .map(|(filename, _)| filename.filename);
                     conda_packages
-                        .merge(tar_bz2_packages)
-                        .merge(whl_packages)
+                        .merge(v3_conda)
+                        .merge(tar_bz2_packages.merge(v3_tar))
+                        .merge(v3_whl)
                         .dedup()
                         .count()
                 } else {
-                    conda_packages.merge(tar_bz2_packages).dedup().count()
+                    conda_packages
+                        .merge(v3_conda)
+                        .merge(tar_bz2_packages.merge(v3_tar))
+                        .dedup()
+                        .count()
                 }
             }
             PackageFormatSelection::Both => {
-                self.inner.borrow_repo_data().packages.len()
-                    + self.inner.borrow_repo_data().conda_packages.len()
+                repo_data.packages.len()
+                    + repo_data.conda_packages.len()
+                    + repo_data.experimental_v3.tar_bz2.len()
+                    + repo_data.experimental_v3.conda.len()
             }
-            PackageFormatSelection::OnlyTarBz2 => self.inner.borrow_repo_data().packages.len(),
-            PackageFormatSelection::OnlyConda => self.inner.borrow_repo_data().conda_packages.len(),
+            PackageFormatSelection::OnlyTarBz2 => {
+                repo_data.packages.len() + repo_data.experimental_v3.tar_bz2.len()
+            }
+            PackageFormatSelection::OnlyConda => {
+                repo_data.conda_packages.len() + repo_data.experimental_v3.conda.len()
+            }
         }
     }
 
@@ -307,10 +351,10 @@ impl SparseRepoData {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
             // TODO: support glob/regex package names
             let mut parsed_records = parse_records(
-                package_name.and_then(Option::<PackageName>::from).as_ref(),
+                package_name.as_exact(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
-                &repo_data.experimental_whl_packages,
+                &repo_data.experimental_v3,
                 variant_consolidation,
                 base_url,
                 &self.channel,
@@ -340,7 +384,7 @@ impl SparseRepoData {
             Some(package_name),
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_whl_packages,
+            &repo_data.experimental_v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -361,7 +405,7 @@ impl SparseRepoData {
             None,
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_whl_packages,
+            &repo_data.experimental_v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -409,7 +453,7 @@ impl SparseRepoData {
                     Some(&next_package),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
-                    &repo_data_packages.experimental_whl_packages,
+                    &repo_data_packages.experimental_v3,
                     variant_consolidation,
                     base_url,
                     &repo_data.channel,
@@ -467,16 +511,39 @@ struct LazyRepoData<'i> {
     )]
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
-    /// The wheel packages contained in the repodata.json file (under a
-    /// different key for backwards compatibility with previous conda
-    /// versions)
+    /// Packages stored under the `v3` top-level key.
+    #[serde(borrow, default, rename = "v3")]
+    experimental_v3: LazyV3Packages<'i>,
+}
+
+/// Lazily parsed `v3` section of repodata containing sub-maps for each archive
+/// type.
+#[derive(Deserialize, Default)]
+struct LazyV3Packages<'i> {
+    /// v3 tar.bz2 packages
     #[serde(
         borrow,
         default,
         deserialize_with = "deserialize_filename_and_raw_record",
-        rename = "packages.whl"
+        rename = "tar.bz2"
     )]
-    experimental_whl_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
+    tar_bz2: Vec<(PackageFilename<'i>, &'i RawValue)>,
+
+    /// v3 conda packages
+    #[serde(
+        borrow,
+        default,
+        deserialize_with = "deserialize_filename_and_raw_record"
+    )]
+    conda: Vec<(PackageFilename<'i>, &'i RawValue)>,
+
+    /// v3 whl packages
+    #[serde(
+        borrow,
+        default,
+        deserialize_with = "deserialize_filename_and_raw_record"
+    )]
+    whl: Vec<(PackageFilename<'i>, &'i RawValue)>,
 }
 
 /// Defines the type of record
@@ -484,8 +551,12 @@ struct LazyRepoData<'i> {
 enum RecordKind {
     /// This is a regular `packages` or `packages.conda` record.
     CondaOrTarBz2,
-    /// This is a `packages.whl` record.
-    Whl,
+    /// This is a `v3.tar.bz2` record (extension-less key).
+    V3TarBz2,
+    /// This is a `v3.conda` record (extension-less key).
+    V3Conda,
+    /// This is a `v3.whl` record (extension-less key).
+    V3Whl,
 }
 
 /// Returns an iterator over the packages in the slice that match the given
@@ -532,7 +603,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
     package_name: Option<&PackageName>,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
-    whl_packages: &[(PackageFilename<'i>, &'i RawValue)],
+    v3: &LazyV3Packages<'i>,
     variant_consolidation: PackageFormatSelection,
     base_url: Option<&str>,
     channel: &Channel,
@@ -542,22 +613,28 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
 ) -> io::Result<Vec<RepoDataRecord>> {
     match variant_consolidation {
         PackageFormatSelection::PreferConda => {
-            let tar_bz2_packages = add_stripped_filename(
+            let tar_bz2 = add_stripped_filename(
                 find_package_in_slice(tar_bz2_packages, package_name, RecordKind::CondaOrTarBz2),
                 DistArchiveType::from(CondaArchiveType::TarBz2),
             );
-            let conda_packages = add_stripped_filename(
+            let v3_tar = add_stripped_filename(
+                find_package_in_slice(&v3.tar_bz2, package_name, RecordKind::V3TarBz2),
+                DistArchiveType::from(CondaArchiveType::TarBz2),
+            );
+            let all_tar = tar_bz2.merge_by(v3_tar, |(_, _, _, a), (_, _, _, b)| a <= b);
+
+            let conda = add_stripped_filename(
                 find_package_in_slice(conda_packages, package_name, RecordKind::CondaOrTarBz2),
                 DistArchiveType::from(CondaArchiveType::Conda),
             );
-            let deduplicated_packages = conda_packages
-                // Merge the conda and tar.bz2 packages together based on their filename without
-                // extension.
-                .merge_by(tar_bz2_packages, |(_, _, _, left), (_, _, _, right)| {
-                    left <= right
-                })
-                // Deduplicate repeated packages based on their filename without extension. (this
-                // removes the .tar.bz2 in favor of the .conda)
+            let v3_conda_iter = add_stripped_filename(
+                find_package_in_slice(&v3.conda, package_name, RecordKind::V3Conda),
+                DistArchiveType::from(CondaArchiveType::Conda),
+            );
+            let all_conda = conda.merge_by(v3_conda_iter, |(_, _, _, a), (_, _, _, b)| a <= b);
+
+            let deduplicated_packages = all_conda
+                .merge_by(all_tar, |(_, _, _, left), (_, _, _, right)| left <= right)
                 .dedup_by(|(_, _, _, left), (_, _, _, right)| left == right)
                 .map(|(filename, raw_json, record_kind, _)| (filename, raw_json, record_kind));
             parse_records_raw(
@@ -570,29 +647,34 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             )
         }
         PackageFormatSelection::PreferCondaWithWhl => {
-            let tar_bz2_packages = add_stripped_filename(
+            let tar_bz2 = add_stripped_filename(
                 find_package_in_slice(tar_bz2_packages, package_name, RecordKind::CondaOrTarBz2),
                 DistArchiveType::from(CondaArchiveType::TarBz2),
             );
-            let whl_packages = add_stripped_filename(
-                find_package_in_slice(whl_packages, package_name, RecordKind::Whl),
+            let v3_tar = add_stripped_filename(
+                find_package_in_slice(&v3.tar_bz2, package_name, RecordKind::V3TarBz2),
+                DistArchiveType::from(CondaArchiveType::TarBz2),
+            );
+            let all_tar = tar_bz2.merge_by(v3_tar, |(_, _, _, a), (_, _, _, b)| a <= b);
+
+            let whl = add_stripped_filename(
+                find_package_in_slice(&v3.whl, package_name, RecordKind::V3Whl),
                 DistArchiveType::from(WheelArchiveType::Whl),
             );
-            let conda_packages = add_stripped_filename(
+
+            let conda = add_stripped_filename(
                 find_package_in_slice(conda_packages, package_name, RecordKind::CondaOrTarBz2),
                 DistArchiveType::from(CondaArchiveType::Conda),
             );
-            let deduplicated_packages = conda_packages
-                // Merge conda, whl, and tar.bz2 packages together based on their filename without
-                // extension. The order ensures .conda packages override both .whl and .tar.bz2.
-                .merge_by(whl_packages, |(_, _, _, left), (_, _, _, right)| {
-                    left <= right
-                })
-                .merge_by(tar_bz2_packages, |(_, _, _, left), (_, _, _, right)| {
-                    left <= right
-                })
-                // Deduplicate repeated packages based on their filename without extension.
-                // This removes .whl and .tar.bz2 in favor of .conda packages.
+            let v3_conda_iter = add_stripped_filename(
+                find_package_in_slice(&v3.conda, package_name, RecordKind::V3Conda),
+                DistArchiveType::from(CondaArchiveType::Conda),
+            );
+            let all_conda = conda.merge_by(v3_conda_iter, |(_, _, _, a), (_, _, _, b)| a <= b);
+
+            let deduplicated_packages = all_conda
+                .merge_by(whl, |(_, _, _, left), (_, _, _, right)| left <= right)
+                .merge_by(all_tar, |(_, _, _, left), (_, _, _, right)| left <= right)
                 .dedup_by(|(_, _, _, left), (_, _, _, right)| left == right)
                 .map(|(filename, raw_json, kind, _)| (filename, raw_json, kind));
             parse_records_raw(
@@ -605,12 +687,14 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             )
         }
         PackageFormatSelection::Both => {
-            let tar_bz2_packages =
+            let tar_bz2 =
                 find_package_in_slice(tar_bz2_packages, package_name, RecordKind::CondaOrTarBz2);
-            let conda_packages =
+            let conda =
                 find_package_in_slice(conda_packages, package_name, RecordKind::CondaOrTarBz2);
+            let v3_tar = find_package_in_slice(&v3.tar_bz2, package_name, RecordKind::V3TarBz2);
+            let v3_conda_iter = find_package_in_slice(&v3.conda, package_name, RecordKind::V3Conda);
             parse_records_raw(
-                tar_bz2_packages.chain(conda_packages),
+                tar_bz2.chain(conda).chain(v3_tar).chain(v3_conda_iter),
                 base_url,
                 channel,
                 subdir,
@@ -619,10 +703,11 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             )
         }
         PackageFormatSelection::OnlyTarBz2 => {
-            let tar_bz2_packages =
+            let tar_bz2 =
                 find_package_in_slice(tar_bz2_packages, package_name, RecordKind::CondaOrTarBz2);
+            let v3_tar = find_package_in_slice(&v3.tar_bz2, package_name, RecordKind::V3TarBz2);
             parse_records_raw(
-                tar_bz2_packages,
+                tar_bz2.chain(v3_tar),
                 base_url,
                 channel,
                 subdir,
@@ -631,10 +716,11 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             )
         }
         PackageFormatSelection::OnlyConda => {
-            let conda_packages =
+            let conda =
                 find_package_in_slice(conda_packages, package_name, RecordKind::CondaOrTarBz2);
+            let v3_conda_iter = find_package_in_slice(&v3.conda, package_name, RecordKind::V3Conda);
             parse_records_raw(
-                conda_packages,
+                conda.chain(v3_conda_iter),
                 base_url,
                 channel,
                 subdir,
@@ -683,10 +769,47 @@ fn parse_conda_record_raw<'i>(
     })
 }
 
-/// Wheel and conda package records are very similar except for how the URL
-/// is stored. This function parses a wheel package record from its raw json
-/// representation.
-fn parse_whl_record_raw<'i>(
+/// Parses a v3 conda/tar.bz2 record from its raw json representation.
+/// The key is an extension-less `ArchiveIdentifier`.
+fn parse_v3_conda_record_raw<'i>(
+    filename: PackageFilename<'i>,
+    raw_json: &'i RawValue,
+    archive_type: DistArchiveType,
+    base_url: Option<&str>,
+    channel: &Channel,
+    channel_name: Option<String>,
+    subdir: &str,
+) -> io::Result<RepoDataRecord> {
+    let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
+    if package_record.subdir.is_empty() {
+        package_record.subdir = subdir.to_owned();
+    }
+    let archive_id: ArchiveIdentifier = filename.filename.parse().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid archive identifier '{}': {}", filename.filename, e),
+        )
+    })?;
+    let identifier = DistArchiveIdentifier::new(archive_id, archive_type);
+    Ok(RepoDataRecord {
+        url: compute_package_url(
+            &channel
+                .base_url
+                .url()
+                .join(&format!("{subdir}/"))
+                .expect("failed determine repo_base_url"),
+            base_url,
+            &identifier.to_file_name(),
+        ),
+        channel: channel_name,
+        package_record,
+        identifier,
+    })
+}
+
+/// Parses a v3 whl record from its raw json representation.
+/// The key is an extension-less `ArchiveIdentifier`.
+fn parse_v3_whl_record_raw<'i>(
     filename: PackageFilename<'i>,
     raw_json: &'i RawValue,
     base_url: Option<&str>,
@@ -698,16 +821,16 @@ fn parse_whl_record_raw<'i>(
         url,
         mut package_record,
     } = serde_json::from_str(raw_json.get())?;
-    // Overwrite subdir if its empty
     if package_record.subdir.is_empty() {
         package_record.subdir = subdir.to_owned();
     }
-    let identifier: ArchiveIdentifier = filename.filename.parse().map_err(|e| {
+    let archive_id: ArchiveIdentifier = filename.filename.parse().map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("invalid archive identifier '{}': {}", filename.filename, e),
         )
     })?;
+    let identifier = DistArchiveIdentifier::new(archive_id, WheelArchiveType::Whl);
     let url = match url {
         UrlOrPath::Path(path) => compute_package_url(
             &channel
@@ -725,10 +848,7 @@ fn parse_whl_record_raw<'i>(
         url,
         channel: channel_name,
         package_record,
-        identifier: DistArchiveIdentifier {
-            identifier,
-            archive_type: DistArchiveType::Wheel(WheelArchiveType::Whl),
-        },
+        identifier,
     })
 }
 
@@ -744,8 +864,26 @@ fn parse_record_raw<'i>(
         RecordKind::CondaOrTarBz2 => {
             parse_conda_record_raw(filename, raw_json, base_url, channel, channel_name, subdir)?
         }
-        RecordKind::Whl => {
-            parse_whl_record_raw(filename, raw_json, base_url, channel, channel_name, subdir)?
+        RecordKind::V3TarBz2 => parse_v3_conda_record_raw(
+            filename,
+            raw_json,
+            CondaArchiveType::TarBz2.into(),
+            base_url,
+            channel,
+            channel_name,
+            subdir,
+        )?,
+        RecordKind::V3Conda => parse_v3_conda_record_raw(
+            filename,
+            raw_json,
+            CondaArchiveType::Conda.into(),
+            base_url,
+            channel,
+            channel_name,
+            subdir,
+        )?,
+        RecordKind::V3Whl => {
+            parse_v3_whl_record_raw(filename, raw_json, base_url, channel, channel_name, subdir)?
         }
     };
 
@@ -1311,7 +1449,7 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
             .load_matching_records(
-                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
                 PackageFormatSelection::default(),
             )
             .unwrap()

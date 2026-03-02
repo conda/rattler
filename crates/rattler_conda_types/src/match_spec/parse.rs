@@ -556,7 +556,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 fn strip_package_name(
     input: &str,
     exact_names_only: bool,
-) -> Result<(Option<PackageNameMatcher>, &str), ParseMatchSpecError> {
+) -> Result<(PackageNameMatcher, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -570,11 +570,6 @@ fn strip_package_name(
     }
 
     let rest = rest.trim();
-
-    // Handle asterisk as a wildcard (no package name)
-    if trimmed_package_name == "*" {
-        return Ok((None, rest));
-    }
 
     let package_name = match PackageNameMatcher::from_str(trimmed_package_name)
         .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?
@@ -604,7 +599,7 @@ fn strip_package_name(
         }
     };
 
-    Ok((Some(package_name), rest))
+    Ok((package_name, rest))
 }
 
 /// Splits a string into version and build constraints.
@@ -864,19 +859,20 @@ pub(crate) fn matchspec_parser(
             let archive = CondaArchiveIdentifier::try_from_url(&url);
             let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
-            // TODO: This should also work without a proper name from the url filename
-            if name.is_none() {
+            if let Some(name) = name {
+                // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+                // information. e.g. when a version is provided in the url is not the
+                // actual version this might be a problem when solving.
+                return Ok(MatchSpec {
+                    url: Some(url),
+                    name,
+                    ..Default::default()
+                });
+            } else {
+                // TODO: This should also work without a proper name from the url filename
+                // If we can't figure out the name from the URL, return an error
                 return Err(ParseMatchSpecError::MissingPackageName);
             }
-
-            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-            // information. e.g. when a version is provided in the url is not the
-            // actual version this might be a problem when solving.
-            return Ok(MatchSpec {
-                url: Some(url),
-                name,
-                ..MatchSpec::default()
-            });
         }
     }
 
@@ -1150,7 +1146,7 @@ mod tests {
     #[test]
     fn test_match_spec_more() {
         let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]", Strict).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1165,7 +1161,7 @@ mod tests {
         );
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]", Strict).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1184,7 +1180,7 @@ mod tests {
             Strict,
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
@@ -1541,7 +1537,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(spec.namespace, Some("namespace".to_owned()));
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
         assert_eq!(
             spec.url,
@@ -1610,7 +1606,7 @@ mod tests {
     fn test_parsing_license() {
         let spec = MatchSpec::from_str("python[license=MIT]", Strict).unwrap();
 
-        assert_eq!(spec.name, Some("python".parse().unwrap()));
+        assert_eq!(spec.name, "python".parse().unwrap());
         assert_eq!(spec.license, Some("MIT".into()));
     }
 
@@ -1691,7 +1687,7 @@ mod tests {
 
         // complete matchspec to verify that we print all fields
         specs.push(MatchSpec {
-            name: Some("foo".parse().unwrap()),
+            name: "foo".parse().unwrap(),
             version: Some(VersionSpec::from_str("1.0.*", Strict).unwrap()),
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
@@ -1754,7 +1750,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
             "python >=3.6".to_string()
@@ -1769,7 +1765,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("numpy".parse().unwrap()));
+        assert_eq!(spec.name, "numpy".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=2.0", Strict).unwrap())
@@ -1788,7 +1784,7 @@ mod tests {
             ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
         )
         .unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
             "python >=3.6".to_string()
@@ -1884,7 +1880,7 @@ mod tests {
         // when key combined with other bracket keys
         let spec =
             parse_conditional(r#"foo[version=">=1.0", when="python >=3.6", build="py*"]"#).unwrap();
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
