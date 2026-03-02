@@ -311,8 +311,8 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .filter_map(|name| Option::<PackageName>::from(name.clone()))
-            .map(|name| pool.intern_package_name(&name))
+            .filter_map(|name| name.as_exact())
+            .map(|name| pool.intern_package_name(name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -452,7 +452,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
                         spec.name
                             .as_ref()
-                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                            .and_then(|name| name.as_exact())
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
