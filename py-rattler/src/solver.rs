@@ -60,9 +60,9 @@ impl PyMinimumAgeConfig {
     /// Args:
     ///     seconds: The minimum age in seconds that a package must have been
     ///         published before it can be installed.
-    ///     exempt_packages: Optional list of package names that are exempt
+    ///     `exempt_packages`: Optional list of package names that are exempt
     ///         from the minimum age requirement.
-    ///     include_unknown_timestamp: Whether to include packages without a
+    ///     `include_unknown_timestamp`: Whether to include packages without a
     ///         timestamp. Defaults to False (exclude them).
     #[new]
     #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false))]
@@ -236,13 +236,9 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let package_names = specs.iter().filter_map(|match_spec| {
-                match_spec
-                    .inner
-                    .name
-                    .as_ref()
-                    .and_then(|n| Option::<PackageName>::from(n.clone()))
-            });
+            let package_names = specs
+                .iter()
+                .filter_map(|match_spec| match_spec.inner.name.clone().into_exact());
 
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
