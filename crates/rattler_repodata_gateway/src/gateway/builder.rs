@@ -136,10 +136,9 @@ impl GatewayBuilder {
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
-            LazyClient::new(|| {
-                ClientWithMiddleware::from(
-                    Client::builder().user_agent(USER_AGENT).build().unwrap(),
-                )
+            LazyClient::new(move || {
+                let client_builder = Client::builder().user_agent(USER_AGENT);
+                ClientWithMiddleware::from(client_builder.build().unwrap())
             })
         });
 

@@ -401,7 +401,7 @@ mod tests {
             .set("tls-no-verify", Some("true".to_string()))
             .unwrap();
         config
-            .set("concurrency.solves", Some("8".to_string()))
+            .set("concurrency.solves", Some("17".to_string()))
             .unwrap();
 
         // Save the config
@@ -424,7 +424,7 @@ mod tests {
             Some(2)
         );
         assert_eq!(loaded_config.tls_no_verify, Some(true));
-        assert_eq!(loaded_config.concurrency.solves, 8);
+        assert_eq!(loaded_config.concurrency.solves, 17);
     }
 
     #[test]

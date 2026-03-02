@@ -88,7 +88,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
 #[pymethods]
 impl PyGateway {
     #[new]
-    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false)
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false, timeout=None)
     )]
     pub fn new(
         max_concurrent_requests: usize,
@@ -97,6 +97,7 @@ impl PyGateway {
         cache_dir: Option<PathBuf>,
         client: Option<PyClientWithMiddleware>,
         show_progress: bool,
+        timeout: Option<u64>,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
@@ -113,6 +114,7 @@ impl PyGateway {
             .with_max_concurrent_requests(max_concurrent_requests)
             .with_channel_config(channel_config);
 
+
         if let Some(cache_dir) = cache_dir {
             gateway.set_cache_dir(cache_dir);
         }
@@ -122,7 +124,7 @@ impl PyGateway {
         } else {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
-            gateway.set_client(PyClientWithMiddleware::new(None, None)?);
+            gateway.set_client(PyClientWithMiddleware::new(None, None, timeout)?);
         }
 
         Ok(Self {

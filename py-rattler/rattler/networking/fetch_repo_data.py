@@ -81,6 +81,7 @@ async def fetch_repo_data(
     callback: Optional[Callable[[int, int], None]],
     client: Optional[Client] = None,
     fetch_options: Optional[FetchRepoDataOptions] = None,
+    timeout: int | None = None,
 ) -> List[SparseRepoData]:
     """
     Returns a list of RepoData for given channels and platform.
@@ -94,6 +95,7 @@ async def fetch_repo_data(
         callback: A `Callable[[int, int], None]` to report the download
                   progress of repo data.
         client: A `Client` to use for fetching the repo data.
+        timeout: The timeout for HTTP requests in seconds. This parameter is only used if no `client` is provided.
 
     Returns:
         A list of `SparseRepoData` for requested channels and platforms.
@@ -106,6 +108,7 @@ async def fetch_repo_data(
         callback,
         client._client if client else None,
         fetch_options._into_py(),
+        timeout,
     )
 
     return [SparseRepoData._from_py_sparse_repo_data(repo_data) for repo_data in repo_data_list]

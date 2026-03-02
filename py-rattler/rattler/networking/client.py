@@ -32,9 +32,12 @@ class Client:
             | None
         ) = None,
         headers: dict[str, str] | None = None,
+        timeout: int | None = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
-            [middleware._middleware for middleware in middlewares] if middlewares else None, headers
+            [middleware._middleware for middleware in middlewares] if middlewares else None,
+            headers,
+            timeout,
         )
 
     @classmethod

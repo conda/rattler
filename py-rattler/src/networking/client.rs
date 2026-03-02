@@ -25,10 +25,11 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None, headers=None))]
+    #[pyo3(signature = (middlewares=None, headers=None, timeout=None))]
     pub fn new(
         middlewares: Option<Vec<PyMiddleware>>,
         headers: Option<HashMap<String, String>>,
+        timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
 
