@@ -722,7 +722,7 @@ mod tests {
 
         let activator = Activator {
             target_prefix: temp_dir.path().to_path_buf(),
-            shell_type: shell::Bash,
+            shell_type: shell::Bash::default(),
             paths: vec![temp_dir.path().join("bin")],
             activation_scripts: vec![script_path.clone()],
             deactivation_scripts: vec![],
@@ -785,7 +785,7 @@ mod tests {
         fs::write(&script2, "").unwrap();
         fs::write(&script3, "").unwrap();
 
-        let shell_type = shell::Bash;
+        let shell_type = shell::Bash::default();
 
         let scripts = collect_scripts(&path, &shell_type).unwrap();
         assert_eq!(scripts.len(), 3);
@@ -917,11 +917,11 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_activation_script_bash() {
-        let script = get_script(shell::Bash, PathModificationBehavior::Append);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Append);
         insta::assert_snapshot!("test_activation_script_bash_append", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Replace);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Replace);
         insta::assert_snapshot!("test_activation_script_bash_replace", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Prepend);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Prepend);
         insta::assert_snapshot!("test_activation_script_bash_prepend", script);
     }
 
@@ -1067,7 +1067,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash.into(), false);
+        test_run_activation(crate::shell::Bash::default().into(), false);
     }
 
     #[test]
@@ -1102,7 +1102,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1159,7 +1159,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1224,7 +1224,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1347,7 +1347,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),

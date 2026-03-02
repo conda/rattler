@@ -266,9 +266,28 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
 
 type ShellResult = Result<(), ShellError>;
 
-/// A [`Shell`] implementation for the Bash shell.
+/// The flavor of the Bash-compatible shell.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Bash;
+pub enum BashFlavor {
+    /// The default Bash shell.
+    #[default]
+    Bash,
+    /// The `sh` shell.
+    Sh,
+    /// The Debian Almquist shell.
+    Dash,
+    /// The KornShell.
+    Ksh,
+    /// BusyBox shell.
+    BusyBox,
+}
+
+/// A [`Shell`] implementation for the Bash shell
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Bash {
+    /// The shell variant.
+    pub flavor: BashFlavor,
+}
 
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
@@ -895,7 +914,7 @@ impl Default for ShellEnum {
         if cfg!(windows) {
             CmdExe.into()
         } else {
-            Bash.into()
+            Bash::default().into()
         }
     }
 }
@@ -945,7 +964,7 @@ impl ShellEnum {
             let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
-                Some(Bash.into())
+                Some(Bash::default().into())
             } else if parent_process_name.contains("zsh") {
                 Some(Zsh.into())
             } else if parent_process_name.contains("xonsh")
@@ -972,12 +991,14 @@ impl ShellEnum {
                 )
             } else if parent_process_name.contains("cmd.exe") {
                 Some(CmdExe.into())
-            } else if parent_process_name.contains("dash")
-                || parent_process_name.contains("ksh")
-                || parent_process_name == "sh"
-                || parent_process_name == "busybox"
-            {
-                Some(Bash.into())
+            } else if parent_process_name.contains("dash") {
+                Some(Bash { flavor: BashFlavor::Dash }.into())
+            } else if parent_process_name.contains("ksh") {
+                Some(Bash { flavor: BashFlavor::Ksh }.into())
+            } else if parent_process_name.contains("busybox") {
+                Some(Bash { flavor: BashFlavor::BusyBox }.into())
+            } else if parent_process_name.contains("sh") {
+                Some(Bash { flavor: BashFlavor::Sh }.into())
             } else {
                 None
             };
@@ -1009,14 +1030,17 @@ impl FromStr for ShellEnum {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "bash" => Ok(Bash.into()),
+            "bash" => Ok(Bash::default().into()),
             "zsh" => Ok(Zsh.into()),
             "xonsh" => Ok(Xonsh.into()),
             "fish" => Ok(Fish.into()),
             "cmd" => Ok(CmdExe.into()),
             "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
-            "sh" | "dash" | "busybox" | "ksh" => Ok(Bash.into()),
+            "sh" => Ok(Bash { flavor: BashFlavor::Sh }.into()),
+            "dash" => Ok(Bash { flavor: BashFlavor::Dash }.into()),
+            "ksh" => Ok(Bash { flavor: BashFlavor::Ksh }.into()),
+            "busybox" => Ok(Bash { flavor: BashFlavor::BusyBox }.into()),
             _ => Err(ParseShellEnumError(format!(
                 "'{s}' is an unknown shell variant"
             ))),
@@ -1165,7 +1189,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
 
         let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
 
@@ -1249,7 +1273,7 @@ mod tests {
 
     #[test]
     fn test_path_separator() {
-        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1258,7 +1282,7 @@ mod tests {
             .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
 
-        let mut script = ShellScript::new(Bash, Platform::Win64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Win64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
