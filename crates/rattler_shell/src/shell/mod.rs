@@ -992,13 +992,33 @@ impl ShellEnum {
             } else if parent_process_name.contains("cmd.exe") {
                 Some(CmdExe.into())
             } else if parent_process_name.contains("dash") {
-                Some(Bash { flavor: BashFlavor::Dash }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Dash,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("ksh") {
-                Some(Bash { flavor: BashFlavor::Ksh }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Ksh,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("busybox") {
-                Some(Bash { flavor: BashFlavor::BusyBox }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::BusyBox,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("sh") {
-                Some(Bash { flavor: BashFlavor::Sh }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Sh,
+                    }
+                    .into(),
+                )
             } else {
                 None
             };
@@ -1037,10 +1057,22 @@ impl FromStr for ShellEnum {
             "cmd" => Ok(CmdExe.into()),
             "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
-            "sh" => Ok(Bash { flavor: BashFlavor::Sh }.into()),
-            "dash" => Ok(Bash { flavor: BashFlavor::Dash }.into()),
-            "ksh" => Ok(Bash { flavor: BashFlavor::Ksh }.into()),
-            "busybox" => Ok(Bash { flavor: BashFlavor::BusyBox }.into()),
+            "sh" => Ok(Bash {
+                flavor: BashFlavor::Sh,
+            }
+            .into()),
+            "dash" => Ok(Bash {
+                flavor: BashFlavor::Dash,
+            }
+            .into()),
+            "ksh" => Ok(Bash {
+                flavor: BashFlavor::Ksh,
+            }
+            .into()),
+            "busybox" => Ok(Bash {
+                flavor: BashFlavor::BusyBox,
+            }
+            .into()),
             _ => Err(ParseShellEnumError(format!(
                 "'{s}' is an unknown shell variant"
             ))),
