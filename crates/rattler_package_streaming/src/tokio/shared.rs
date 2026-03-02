@@ -102,6 +102,7 @@ pub(super) async fn extract_tar_zst_entry<R: tokio::io::AsyncRead + Unpin>(
         .set_preserve_mtime(true)
         .set_preserve_permissions(false)
         .set_unpack_xattrs(false)
+        .set_allow_external_symlinks(false)
         .build();
 
     // Unpack the tar archive
