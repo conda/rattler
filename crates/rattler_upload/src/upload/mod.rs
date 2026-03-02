@@ -21,6 +21,9 @@ use url::Url;
 
 use crate::upload::package::{sha256_sum, ExtractedPackage};
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 mod anaconda;
 #[cfg(feature = "sigstore-sign")]
 pub mod attestation;
@@ -394,4 +397,112 @@ async fn send_request(
     );
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod test {
+    use axum::{http::StatusCode, Router};
+    use rattler_networking::AuthenticationStorage;
+
+    use crate::upload::test_utils::{start_test_server, test_package_path};
+    use crate::upload::opt::{ArtifactoryData, QuetzData};
+
+    async fn ok_with_api_key(headers: axum::http::HeaderMap) -> StatusCode {
+        assert!(headers.get("x-api-key").is_some());
+        StatusCode::OK
+    }
+
+    async fn ok_with_bearer(headers: axum::http::HeaderMap) -> StatusCode {
+        let auth = headers.get("authorization").unwrap().to_str().unwrap();
+        assert!(auth.starts_with("Bearer "));
+        StatusCode::OK
+    }
+
+    async fn unauthorized() -> StatusCode {
+        StatusCode::UNAUTHORIZED
+    }
+
+    async fn conflict() -> StatusCode {
+        StatusCode::CONFLICT
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_success() {
+        let router = Router::new().fallback(ok_with_api_key);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-api-key".to_string()),
+        );
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_auth_failure() {
+        let router = Router::new().fallback(unauthorized);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data =
+            QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_conflict() {
+        let router = Router::new().fallback(conflict);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-key".to_string()),
+        );
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_success() {
+        let router = Router::new().fallback(ok_with_bearer);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-token".to_string()),
+        );
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_auth_failure() {
+        let router = Router::new().fallback(unauthorized);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(
+            url,
+            "test-channel".to_string(),
+            Some("bad-token".to_string()),
+        );
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_err());
+    }
 }

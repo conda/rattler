@@ -367,3 +367,68 @@ pub async fn upload_package_to_prefix(
     info!("Packages successfully uploaded to prefix.dev server");
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use axum::{http::StatusCode, Router};
+    use rattler_networking::AuthenticationStorage;
+
+    use super::upload_package_to_prefix;
+    use crate::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
+    use crate::upload::test_utils::{start_test_server, test_package_path};
+
+    async fn ok_with_bearer(headers: axum::http::HeaderMap) -> StatusCode {
+        let auth = headers.get("authorization").unwrap().to_str().unwrap();
+        assert!(auth.starts_with("Bearer "));
+        StatusCode::OK
+    }
+
+    async fn conflict() -> StatusCode {
+        StatusCode::CONFLICT
+    }
+
+    fn make_prefix_data(url: url::Url, skip_existing: bool) -> PrefixData {
+        PrefixData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-token".to_string()),
+            AttestationSource::NoAttestation,
+            SkipExisting(skip_existing),
+            ForceOverwrite(false),
+            false,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_success() {
+        let router = Router::new().fallback(ok_with_bearer);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, false);
+        let result =
+            upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_skip_existing() {
+        let router = Router::new().fallback(conflict);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, true);
+        let result =
+            upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_conflict_without_skip() {
+        let router = Router::new().fallback(conflict);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, false);
+        let result =
+            upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
+        assert!(result.is_err());
+    }
+}

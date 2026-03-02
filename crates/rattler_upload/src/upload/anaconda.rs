@@ -468,3 +468,136 @@ impl Anaconda {
         Ok(true)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::net::SocketAddr;
+
+    use axum::{
+        http::StatusCode,
+        routing::{get, post},
+        Router,
+    };
+    use url::Url;
+
+    use crate::upload::test_utils::test_package_path;
+    use super::Anaconda;
+    use crate::upload::opt::ForceOverwrite;
+    use crate::upload::package::ExtractedPackage;
+
+    #[tokio::test]
+    async fn test_anaconda_create_package() {
+        let router = Router::new().route(
+            "/package/{owner}/{name}",
+            get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
+        );
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let result = anaconda
+            .create_or_update_package("test-owner", &package)
+            .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_update_existing_package() {
+        let router = Router::new().route(
+            "/package/{owner}/{name}",
+            get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
+        );
+        let url = crate::upload::test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let result = anaconda
+            .create_or_update_package("test-owner", &package)
+            .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_file_full_flow() {
+        // Bind the listener first so we know the port for the stage response's post_url
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url: Url = format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let stage_handler = {
+            let base_url = base_url.clone();
+            move || {
+                let base_url = base_url.clone();
+                async move {
+                    let post_url = base_url.join("s3-upload").unwrap();
+                    let body = serde_json::json!({
+                        "post_url": post_url.to_string(),
+                        "form_data": {"key": "value"},
+                        "dist_id": "test-dist-id"
+                    });
+                    (
+                        StatusCode::OK,
+                        [("content-type", "application/json")],
+                        body.to_string(),
+                    )
+                }
+            }
+        };
+
+        let router = Router::new()
+            .route(
+                "/package/{owner}/{name}",
+                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
+            )
+            .route(
+                "/release/{owner}/{name}/{version}",
+                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
+            )
+            .route(
+                "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
+                post(stage_handler),
+            )
+            .route("/s3-upload", post(|| async { StatusCode::OK }))
+            .route(
+                "/commit/{owner}/{name}/{version}/{subdir}/{filename}",
+                post(|| async { StatusCode::OK }),
+            );
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        let anaconda = Anaconda::new("test-token".to_string(), base_url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        anaconda
+            .create_or_update_package("test-owner", &package)
+            .await
+            .expect("create_or_update_package failed");
+
+        anaconda
+            .create_or_update_release("test-owner", &package)
+            .await
+            .expect("create_or_update_release failed");
+
+        let result = anaconda
+            .upload_file(
+                "test-owner",
+                &["main".to_string()],
+                ForceOverwrite(false),
+                &package,
+            )
+            .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert!(result.unwrap(), "upload_file should return true on success");
+    }
+}
