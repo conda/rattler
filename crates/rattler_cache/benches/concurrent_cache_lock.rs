@@ -36,9 +36,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     .map(|path| {
                         let cache = cache.clone();
                         let path = path.clone();
-                        tokio::spawn(
-                            async move { cache.get_or_fetch_from_path(&path, None).await },
-                        )
+                        tokio::spawn(async move { cache.get_or_fetch_from_path(&path, None).await })
                     })
                     .collect();
                 for handle in handles {
