@@ -133,7 +133,6 @@ impl GatewayBuilder {
         self
     }
 
-
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
