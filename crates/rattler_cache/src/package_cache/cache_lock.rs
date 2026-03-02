@@ -18,8 +18,9 @@ use crate::package_cache::PackageCacheLayerError;
 /// This struct represents a cache entry that has been validated and is ready for use.
 /// It holds the cache entry's path, revision number, and optional SHA256 hash.
 ///
-/// Note: Concurrent access is coordinated via the global cache lock mechanism
-/// (see [`CacheGlobalLock`]). Individual cache entries do not hold locks.
+/// Note: Concurrent access to a cache entry is coordinated by taking an
+/// exclusive lock on the cache entry's metadata lock file (the `*.lock` file
+/// next to the package directory).
 pub struct CacheMetadata {
     pub(super) revision: u64,
     pub(super) sha256: Option<Sha256Hash>,
@@ -131,8 +132,8 @@ impl CacheGlobalLock {
 /// A handle to a cache metadata file.
 ///
 /// This struct manages access to a `.lock` file that stores metadata about a cache entry,
-/// including its revision number and optional SHA256 hash. It does not provide filesystem
-/// locking - concurrent access should be coordinated via [`CacheGlobalLock`].
+/// including its revision number and optional SHA256 hash. It acquires an exclusive OS file
+/// lock to coordinate concurrent access across processes.
 pub struct CacheMetadataFile {
     file: Arc<std::fs::File>,
 }
@@ -140,13 +141,13 @@ pub struct CacheMetadataFile {
 impl CacheMetadataFile {
     /// Acquires a handle to the cache metadata file.
     ///
-    /// Opens the file with both read and write permissions. Since concurrent access
-    /// is coordinated via [`CacheGlobalLock`], this single method is sufficient for
-    /// all metadata operations.
+    /// Opens the file with both read and write permissions and acquires an
+    /// exclusive OS file lock on it. This prevents multiple processes from
+    /// concurrently modifying the cache entry on disk.
     pub async fn acquire(path: &Path) -> Result<Self, PackageCacheLayerError> {
         let lock_file_path = path.to_path_buf();
 
-        simple_spawn_blocking::tokio::run_blocking_task(move || {
+        let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .read(true)
@@ -163,11 +164,27 @@ impl CacheMetadataFile {
                     )
                 })?;
 
+            file.lock_exclusive().map_err(|e| {
+                PackageCacheLayerError::LockError(
+                    format!(
+                        "failed to acquire exclusive lock on cache metadata file: '{}'",
+                        lock_file_path.display()
+                    ),
+                    e,
+                )
+            })?;
+
             Ok(CacheMetadataFile {
                 file: Arc::new(file),
             })
-        })
-        .await
+        });
+
+        tokio::select!(
+            lock = acquire_lock_fut => lock,
+            _ = warn_timeout_future(
+                "Blocking waiting for cache entry lock file".to_string()
+            ) => unreachable!("warn_timeout_future should never finish")
+        )
     }
 }
 
@@ -291,6 +308,12 @@ impl CacheMetadataFile {
             }
         }
         Ok(Some(GenericArray::clone_from_slice(&buf)))
+    }
+}
+
+impl Drop for CacheMetadataFile {
+    fn drop(&mut self) {
+        let _ = fs4::fs_std::FileExt::unlock(&*self.file);
     }
 }
 
