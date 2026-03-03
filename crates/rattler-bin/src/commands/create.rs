@@ -246,13 +246,13 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
                 })
                 .collect::<miette::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::detect(
-                &rattler_virtual_packages::VirtualPackageOverrides::default(),
+            rattler_virtual_packages::VirtualPackages::detect_for_platform(
+                install_platform,
+                &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
             )
             .map(|vpkgs| {
                 vpkgs
-                    .iter()
-                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
+                    .into_generic_virtual_packages()
                     .collect::<Vec<_>>()
             })
             .into_diagnostic()
