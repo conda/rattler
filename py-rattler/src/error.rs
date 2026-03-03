@@ -213,4 +213,3 @@ impl From<PyRattlerError> for PyErr {
         }
     }
 }
-

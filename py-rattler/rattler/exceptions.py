@@ -1,5 +1,7 @@
 try:
     from rattler.rattler import (
+        ActivationError,
+        ActivationScriptFormatError,
         AuthenticationStorageError,
         CacheDirError,
         ConversionError,
