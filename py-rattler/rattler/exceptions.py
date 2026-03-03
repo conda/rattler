@@ -22,6 +22,7 @@ try:
         ExtractError,
         GatewayError,
         ValidatePackageRecordsException,
+        PackageCacheError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -93,6 +94,9 @@ except ImportError:
     class ValidatePackageRecordsException(Exception):  # type: ignore[no-redef]
         """An error when validating package records."""
 
+    class PackageCacheError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when interacting with the package cache."""
+
 
 __all__ = [
     "ActivationError",
@@ -117,4 +121,5 @@ __all__ = [
     "ExtractError",
     "GatewayError",
     "ValidatePackageRecordsException",
+    "PackageCacheError",
 ]
