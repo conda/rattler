@@ -317,6 +317,110 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);
 }
 
+/// Test that extracting a tar archive containing entries with mtime=1
+/// (Unix epoch + 1 second, a common sentinel value) completes without error.
+/// This verifies the fix for exFAT filesystems that cannot represent
+/// timestamps before 1980-01-01.
+#[test]
+fn test_extract_tar_with_pre_1980_mtime() {
+    use std::io::Cursor;
+
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    let target_dir = temp_dir.join("pre_1980_mtime_test");
+
+    // Build a tar archive in memory with mtime=1 (sentinel value)
+    let mut builder = tar::Builder::new(Vec::new());
+
+    let content = b"hello world";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1); // Unix epoch + 1 second (1970-01-01T00:00:01Z)
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "test_file.txt", &content[..])
+        .unwrap();
+
+    let tar_data = builder.into_inner().unwrap();
+
+    // Wrap in bzip2 to create a .tar.bz2
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    std::io::Write::write_all(&mut encoder, &tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    // Extract — this should succeed even though mtime=1 is pre-1980
+    let result = extract_tar_bz2(Cursor::new(bz2_data), &target_dir);
+    assert!(
+        result.is_ok(),
+        "Extraction should not fail due to mtime=1: {:?}",
+        result.err()
+    );
+
+    // Verify the file was actually extracted
+    let extracted_file = target_dir.join("test_file.txt");
+    assert!(extracted_file.exists(), "Extracted file should exist");
+
+    let mut extracted_content = Vec::new();
+    File::open(&extracted_file)
+        .unwrap()
+        .read_to_end(&mut extracted_content)
+        .unwrap();
+    assert_eq!(extracted_content, content);
+}
+
+/// Same test but for the async extraction path.
+#[tokio::test]
+async fn test_extract_tar_with_pre_1980_mtime_async() {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    let target_dir = temp_dir.join("pre_1980_mtime_test_async");
+
+    // Build a tar archive in memory with mtime=1 (sentinel value)
+    let mut builder = tar::Builder::new(Vec::new());
+
+    let content = b"hello world async";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1); // Unix epoch + 1 second (1970-01-01T00:00:01Z)
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "test_file_async.txt", &content[..])
+        .unwrap();
+
+    let tar_data = builder.into_inner().unwrap();
+
+    // Wrap in bzip2 to create a .tar.bz2
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    std::io::Write::write_all(&mut encoder, &tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    // Write to a temp file so we can use tokio::fs::File as AsyncRead
+    tokio::fs::create_dir_all(&temp_dir).await.unwrap();
+    let archive_path = temp_dir.join("pre_1980_mtime_test.tar.bz2");
+    tokio::fs::write(&archive_path, &bz2_data).await.unwrap();
+
+    // Extract using the async path
+    let file = tokio_fs::File::open(&archive_path).await.unwrap();
+    let result =
+        rattler_package_streaming::tokio::async_read::extract_tar_bz2(file, &target_dir).await;
+    assert!(
+        result.is_ok(),
+        "Async extraction should not fail due to mtime=1: {:?}",
+        result.err()
+    );
+
+    // Verify the file was actually extracted
+    let extracted_file = target_dir.join("test_file_async.txt");
+    assert!(extracted_file.exists(), "Extracted file should exist");
+
+    let extracted_content = tokio::fs::read(&extracted_file).await.unwrap();
+    assert_eq!(extracted_content, content);
+}
+
 struct FlakyReader<R: Read> {
     reader: R,
     cutoff: usize,
