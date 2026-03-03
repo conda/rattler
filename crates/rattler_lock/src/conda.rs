@@ -263,6 +263,10 @@ pub struct CondaSourceData {
     /// The input hash of the package
     pub input: Option<InputHash>,
 
+    /// A timestamp associated with the source package.
+    /// Added in lock file format V7.
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
     /// Information about packages that should be built from source instead of binary.
     /// This maps from a normalized package name to location of the source.
     pub sources: BTreeMap<String, SourceLocation>,

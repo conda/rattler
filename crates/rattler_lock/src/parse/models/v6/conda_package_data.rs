@@ -240,6 +240,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     hash: input.hash,
                     globs: input.globs.into_owned(),
                 }),
+                timestamp: value.timestamp,
                 sources: value.sources,
             }))
         }
@@ -305,7 +306,10 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
+            timestamp: value
+                .as_source()
+                .and_then(|source| source.timestamp)
+                .or_else(|| package_record.timestamp.map(TimestampMs::into_datetime)),
             features: Cow::Borrowed(&package_record.features),
             track_features: Cow::Borrowed(&package_record.track_features),
             license: Cow::Borrowed(&package_record.license),

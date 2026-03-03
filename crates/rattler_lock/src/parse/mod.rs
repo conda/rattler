@@ -100,7 +100,7 @@ mod test {
         .err()
         .unwrap();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 6 is supported");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 7 is supported");
     }
 
     // This test verifies the deterministic ordering of lock files. It does so by
