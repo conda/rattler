@@ -167,6 +167,7 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                 variants: data.variants,
                 package_build_source: data.package_build_source,
                 sources: data.sources,
+                identifier_hash: None,
             }),
         }
     }

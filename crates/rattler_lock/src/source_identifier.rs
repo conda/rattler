@@ -1,11 +1,10 @@
+use rattler_conda_types::PackageName;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use std::hash::{Hash, Hasher};
 use std::{
-    fmt::{Display, Formatter, Write as _},
+    fmt::{Display, Formatter},
     str::FromStr,
 };
-
-use rattler_conda_types::PackageName;
-use rattler_digest::{Sha256, Sha256Hash};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use crate::{CondaSourceData, UrlOrPath};
@@ -57,12 +56,15 @@ impl SourceIdentifier {
 
     /// Creates a source identifier from a `CondaSourceData`.
     ///
-    /// The hash is computed from the package record fields that uniquely identify
-    /// the package configuration (name, version, build, `build_number`, subdir, and variants).
-    /// If the package record is not present, only the name and variants are used.
+    /// If [`CondaSourceData::identifier_hash`] is `Some`, that value is reused
+    /// verbatim. Otherwise the hash is computed from the package record fields
+    /// that uniquely identify the package configuration (name, version, build,
+    /// `build_number`, subdir, and variants).
     pub fn from_source_data(source_data: &CondaSourceData) -> Self {
-        let hash = compute_source_hash(source_data);
-        let short_hash = format_short_hash(&hash);
+        let short_hash = source_data
+            .identifier_hash
+            .clone()
+            .unwrap_or_else(|| format_short_hash(compute_source_hash(source_data)));
 
         Self {
             name: source_data.name.clone(),
@@ -132,57 +134,49 @@ pub enum ParseSourceIdentifierError {
     EmptyHash,
 }
 
-/// Computes a SHA-256 hash from the source package data.
-///
-/// The hash is computed from fields that uniquely identify the package configuration:
-/// - name (always included)
-/// - version (if package record present)
-/// - build (if package record present)
-/// - `build_number` (if package record present)
-/// - subdir (if package record present)
-/// - variants (sorted for determinism)
-// TODO: This hash computation is fragile - any changes to the hashed fields or
-// their string representations will invalidate existing lock files. Consider a
-// more stable approach (e.g., versioned hashing) if this becomes a problem.
-fn compute_source_hash(source_data: &CondaSourceData) -> Sha256Hash {
-    use rattler_digest::digest::Digest;
+/// Computes a unique, relatively stable, hash from the source package data.
+fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
+    let mut hasher = xxhash_rust::xxh3::Xxh3::default();
 
-    let mut hasher = Sha256::default();
+    let CondaSourceData {
+        package_build_source,
+        variants,
+        package_record,
+        sources,
 
-    // Always hash the name
-    hasher.update(source_data.name.as_normalized().as_bytes());
-    hasher.update(b"\0");
+        // These fields are already recorded in the source identifier, and so they are not used for the hash here.
+        location: _,
+        name: _,
+        identifier_hash: _,
+    } = source_data;
 
     // Hash package record fields if present
-    if let Some(record) = &source_data.package_record {
-        hasher.update(record.version.to_string().as_bytes());
-        hasher.update(b"\0");
-        hasher.update(record.build.as_bytes());
-        hasher.update(b"\0");
-        hasher.update(record.build_number.to_string().as_bytes());
-        hasher.update(b"\0");
-        hasher.update(record.subdir.as_bytes());
-        hasher.update(b"\0");
+    if let Some(record) = &package_record {
+        b"package_record".hash(&mut hasher);
+        record.hash(&mut hasher);
     }
 
-    // Hash variants (sorted for determinism)
-    for (key, value) in &source_data.variants {
-        hasher.update(key.as_bytes());
-        hasher.update(b"=");
-        hasher.update(value.to_string().as_bytes());
-        hasher.update(b"\0");
-    }
+    // Hash the source location
+    b"package_build_source".hash(&mut hasher);
+    package_build_source.hash(&mut hasher);
 
-    hasher.finalize()
+    // Hash the variants
+    b"variants".hash(&mut hasher);
+    variants.hash(&mut hasher);
+
+    // Hash which packages should be taken from source
+    b"sources".hash(&mut hasher);
+    sources.hash(&mut hasher);
+
+    hasher.finish()
 }
 
-/// Formats a SHA-256 hash as a short hex string.
-fn format_short_hash(hash: &Sha256Hash) -> String {
-    let mut result = String::with_capacity(SHORT_HASH_LENGTH);
-    for byte in hash.iter().take(SHORT_HASH_LENGTH / 2) {
-        write!(result, "{byte:02x}").expect("writing to string cannot fail");
-    }
-    result
+/// Formats a hash as a short hex string.
+fn format_short_hash(hash: u64) -> String {
+    format!("{hash:x}")
+        .chars()
+        .take(SHORT_HASH_LENGTH)
+        .collect()
 }
 
 impl FromStr for SourceIdentifier {
@@ -362,6 +356,7 @@ mod tests {
             variants: BTreeMap::new(),
             package_build_source: None,
             sources: BTreeMap::new(),
+            identifier_hash: None,
         };
 
         let id = SourceIdentifier::from_source_data(&source_data);
@@ -408,6 +403,7 @@ mod tests {
             variants,
             package_build_source: None,
             sources: BTreeMap::new(),
+            identifier_hash: None,
         };
 
         let id = SourceIdentifier::from_source_data(&source_data);
@@ -441,6 +437,7 @@ mod tests {
                 variants: BTreeMap::new(),
                 package_build_source: None,
                 sources: BTreeMap::new(),
+                identifier_hash: None,
             };
 
             let id = SourceIdentifier::from_source_data(&source_data);
@@ -556,6 +553,7 @@ mod tests {
             variants: variants1,
             package_build_source: None,
             sources: BTreeMap::new(),
+            identifier_hash: None,
         };
 
         // Second variant: python 3.11
@@ -572,6 +570,7 @@ mod tests {
             variants: variants2,
             package_build_source: None,
             sources: BTreeMap::new(),
+            identifier_hash: None,
         };
 
         let id1 = SourceIdentifier::from_source_data(&source_data1);
