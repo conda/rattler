@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fs_err::tokio as fs;
-use miette::{miette, IntoDiagnostic};
+use miette::IntoDiagnostic;
 use rattler_conda_types::package::AboutJson;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_conda_types::PackageName;
@@ -17,6 +17,81 @@ use crate::upload::opt::ForceOverwrite;
 
 use super::package::ExtractedPackage;
 use super::VERSION;
+
+/// Errors that can occur during Anaconda.org operations.
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+pub enum AnacondaError {
+    /// A conda token is required but a different authentication type was found.
+    #[error(
+        "conda token required for anaconda.org, but a different authentication type was found"
+    )]
+    WrongAuthenticationType,
+
+    /// No API key was provided and none was found in the keychain.
+    #[error("no anaconda.org API key provided and none found in keychain")]
+    MissingApiKey,
+
+    /// Failed to retrieve authentication from the keychain.
+    #[error("failed to retrieve authentication from keychain: {message}")]
+    KeychainError {
+        /// The error message from the keychain.
+        message: String,
+    },
+
+    /// The server returned an unexpected status code.
+    #[error("unexpected server response (HTTP {status})")]
+    UnexpectedStatus {
+        /// The HTTP status code.
+        status: u16,
+    },
+
+    /// Failed to create or update a package on the server.
+    #[error("failed to create or update package")]
+    PackageMutationFailed(#[source] reqwest::Error),
+
+    /// Failed to create or update a release on the server.
+    #[error("failed to create or update release")]
+    ReleaseMutationFailed(#[source] reqwest::Error),
+
+    /// Failed to remove a file from the server.
+    #[error("failed to remove file")]
+    FileRemovalFailed(#[source] reqwest::Error),
+
+    /// The file already exists and --force was not specified.
+    #[error("file {0} already exists")]
+    #[diagnostic(help("use --force to overwrite"))]
+    FileAlreadyExists(String),
+
+    /// Failed to stage a file on the server.
+    #[error("failed to stage file (HTTP {status})")]
+    StageFailed {
+        /// The HTTP status code.
+        status: u16,
+    },
+
+    /// No channel was selected for upload.
+    #[error("no channel selected for upload")]
+    #[diagnostic(help("specify at least one channel for upload to anaconda.org"))]
+    NoChannel,
+
+    /// The index.json is missing the subdir field.
+    #[error("missing subdir in index.json")]
+    MissingSubdir,
+
+    /// The package file has no filename.
+    #[error("missing filename")]
+    MissingFilename,
+
+    /// An error from an underlying operation (I/O, URL parsing, etc.).
+    #[error("{0}")]
+    Other(miette::Report),
+}
+
+impl From<miette::Report> for AnacondaError {
+    fn from(report: miette::Report) -> Self {
+        AnacondaError::Other(report)
+    }
+}
 
 pub struct Anaconda {
     client: Client,
@@ -81,7 +156,7 @@ impl Anaconda {
         &self,
         owner: &str,
         package: &ExtractedPackage<'_>,
-    ) -> miette::Result<()> {
+    ) -> Result<(), AnacondaError> {
         let package_name = package.package_name();
         debug!("getting package {}/{}", owner, package_name.as_normalized(),);
 
@@ -94,22 +169,15 @@ impl Anaconda {
             ))
             .into_diagnostic()?;
 
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?;
+        let response = self.client.get(url).send().await.into_diagnostic()?;
 
         let exists = match response.status() {
             reqwest::StatusCode::OK => true,
             reqwest::StatusCode::NOT_FOUND => false,
-            _ => {
-                return Err(miette!(
-                    "failed to get existing package: {}",
-                    response.status()
-                ));
+            status => {
+                return Err(AnacondaError::UnexpectedStatus {
+                    status: status.as_u16(),
+                });
             }
         };
 
@@ -154,11 +222,9 @@ impl Anaconda {
         req.json(&payload)
             .send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?
+            .map_err(AnacondaError::PackageMutationFailed)?
             .error_for_status()
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to create package: {}", e))?;
+            .map_err(AnacondaError::PackageMutationFailed)?;
 
         Ok(())
     }
@@ -167,7 +233,7 @@ impl Anaconda {
         &self,
         owner: &str,
         package: &ExtractedPackage<'_>,
-    ) -> miette::Result<()> {
+    ) -> Result<(), AnacondaError> {
         let package_name = package.package_name();
         let package_version = package.package_version();
         debug!(
@@ -187,22 +253,15 @@ impl Anaconda {
             ))
             .into_diagnostic()?;
 
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?;
+        let response = self.client.get(url).send().await.into_diagnostic()?;
 
         let exists = match response.status() {
             reqwest::StatusCode::OK => true,
             reqwest::StatusCode::NOT_FOUND => false,
-            _ => {
-                return Err(miette!(
-                    "failed to get existing release: {}",
-                    response.status()
-                ));
+            status => {
+                return Err(AnacondaError::UnexpectedStatus {
+                    status: status.as_u16(),
+                });
             }
         };
 
@@ -246,11 +305,9 @@ impl Anaconda {
 
         req.send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?
+            .map_err(AnacondaError::ReleaseMutationFailed)?
             .error_for_status()
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to create release: {}", e))?;
+            .map_err(AnacondaError::ReleaseMutationFailed)?;
 
         Ok(())
     }
@@ -259,15 +316,11 @@ impl Anaconda {
         &self,
         owner: &str,
         package: &ExtractedPackage<'_>,
-    ) -> miette::Result<()> {
+    ) -> Result<(), AnacondaError> {
         let package_name = package.package_name();
         let package_version = package.package_version();
-        let subdir = package
-            .subdir()
-            .ok_or(miette!("missing subdir in index.json"))?;
-        let filename = package
-            .filename()
-            .ok_or(miette!("missing filename in index.json"))?;
+        let subdir = package.subdir().ok_or(AnacondaError::MissingSubdir)?;
+        let filename = package.filename().ok_or(AnacondaError::MissingFilename)?;
 
         debug!(
             "removing file {}/{}/{}/{}/{}",
@@ -294,11 +347,9 @@ impl Anaconda {
             .delete(url)
             .send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?
+            .map_err(AnacondaError::FileRemovalFailed)?
             .error_for_status()
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to remove file: {}", e))?;
+            .map_err(AnacondaError::FileRemovalFailed)?;
 
         Ok(())
     }
@@ -309,11 +360,9 @@ impl Anaconda {
         channels: &[String],
         force: ForceOverwrite,
         package: &ExtractedPackage<'_>,
-    ) -> miette::Result<bool> {
+    ) -> Result<bool, AnacondaError> {
         if channels.is_empty() {
-            return Err(miette!(
-                "No channel selected - please specify at least one channel for upload to Anaconda.org"
-            ));
+            return Err(AnacondaError::NoChannel);
         }
 
         let sha256 = package.sha256().into_diagnostic()?;
@@ -326,9 +375,9 @@ impl Anaconda {
         let subdir = index_json
             .subdir
             .as_deref()
-            .ok_or(miette!("missing subdir in index.json"))?;
+            .ok_or(AnacondaError::MissingSubdir)?;
 
-        let filename = package.filename().ok_or(miette!("missing filename"))?;
+        let filename = package.filename().ok_or(AnacondaError::MissingFilename)?;
 
         debug!(
             "uploading file {}/{}/{}/{}/{}",
@@ -365,8 +414,7 @@ impl Anaconda {
             .json(&payload)
             .send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?;
+            .into_diagnostic()?;
 
         match resp.status() {
             reqwest::StatusCode::OK => (),
@@ -383,25 +431,17 @@ impl Anaconda {
                     // package after the deletion of the file.
                     return Ok(false);
                 } else {
-                    return Err(miette!(
-                        "file {} already exists, use --force to overwrite",
-                        filename
-                    ));
+                    return Err(AnacondaError::FileAlreadyExists(filename.to_string()));
                 }
             }
-            _ => {
-                return Err(miette!(
-                    "failed to stage file, server replied with: {}",
-                    resp.status()
-                ));
+            status => {
+                return Err(AnacondaError::StageFailed {
+                    status: status.as_u16(),
+                });
             }
         }
 
-        let parsed_response: FileStageResponse = resp
-            .json()
-            .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to parse response: {}", e))?;
+        let parsed_response: FileStageResponse = resp.json().await.into_diagnostic()?;
 
         debug!("Uploading file to S3 Bucket {}", parsed_response.post_url);
 
@@ -412,7 +452,7 @@ impl Anaconda {
 
         for (key, value) in parsed_response.form_data {
             let serde_json::Value::String(value) = value else {
-                Err(miette!("invalid value in form data: {}", value))?
+                return Err(miette::miette!("invalid value in form data: {}", value).into());
             };
 
             form_data = form_data.text(key, value);
@@ -430,11 +470,9 @@ impl Anaconda {
             .header("Accept", "application/json")
             .send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send request: {}", e))?
+            .into_diagnostic()?
             .error_for_status()
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to upload file, server replied with: {}", e))?;
+            .into_diagnostic()?;
 
         debug!("Committing file {}", filename);
 
@@ -457,11 +495,9 @@ impl Anaconda {
             }))
             .send()
             .await
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to send commit: {}", e))?
+            .into_diagnostic()?
             .error_for_status()
-            .into_diagnostic()
-            .map_err(|e| miette!("failed to commit file, server replied with: {}", e))?;
+            .into_diagnostic()?;
 
         debug!("File {} uploaded successfully", filename);
 
@@ -480,10 +516,10 @@ mod test {
     };
     use url::Url;
 
-    use crate::upload::test_utils::test_package_path;
-    use super::Anaconda;
-    use crate::upload::opt::ForceOverwrite;
+    use super::{Anaconda, AnacondaError};
     use crate::upload::package::ExtractedPackage;
+    use crate::upload::test_utils::test_package_path;
+    use crate::upload::{opt::ForceOverwrite, test_utils};
 
     #[tokio::test]
     async fn test_anaconda_create_package() {
@@ -491,7 +527,7 @@ mod test {
             "/package/{owner}/{name}",
             get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
         );
-        let url = crate::upload::test_utils::start_test_server(router).await;
+        let url = test_utils::start_test_server(router).await;
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -509,7 +545,7 @@ mod test {
             "/package/{owner}/{name}",
             get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
         );
-        let url = crate::upload::test_utils::start_test_server(router).await;
+        let url = test_utils::start_test_server(router).await;
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -519,6 +555,73 @@ mod test {
             .create_or_update_package("test-owner", &package)
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_create_package_server_error() {
+        let router = Router::new().route(
+            "/package/{owner}/{name}",
+            get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+        );
+        let url = test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let err = anaconda
+            .create_or_update_package("test-owner", &package)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AnacondaError::UnexpectedStatus { status: 500 }),
+            "expected UnexpectedStatus(500), got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_file_conflict_without_force() {
+        let router = Router::new().route(
+            "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
+            post(|| async { StatusCode::CONFLICT }),
+        );
+        let url = test_utils::start_test_server(router).await;
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let err = anaconda
+            .upload_file(
+                "test-owner",
+                &["main".to_string()],
+                ForceOverwrite(false),
+                &package,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AnacondaError::FileAlreadyExists(..)),
+            "expected FileAlreadyExists, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_anaconda_upload_file_no_channels() {
+        let package_path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let url: Url = "http://127.0.0.1:1".parse().unwrap();
+        let anaconda = Anaconda::new("test-token".to_string(), url.into());
+
+        let err = anaconda
+            .upload_file("test-owner", &[], ForceOverwrite(false), &package)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AnacondaError::NoChannel),
+            "expected NoChannel, got: {err:?}"
+        );
     }
 
     #[tokio::test]

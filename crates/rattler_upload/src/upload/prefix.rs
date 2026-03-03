@@ -26,6 +26,85 @@ use crate::upload::{
 
 use super::package::sha256_sum;
 
+/// Errors that can occur during prefix.dev package upload.
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+pub enum PrefixUploadError {
+    /// A bearer token is required but a different authentication type was found.
+    #[error("bearer token required for prefix.dev, but a different authentication type was found")]
+    WrongAuthenticationType,
+
+    /// No API key was provided and none was found in the keychain.
+    #[error("no prefix.dev API key provided and none found in keychain")]
+    MissingApiKey,
+
+    /// Failed to retrieve authentication from the keychain.
+    #[error("failed to retrieve authentication from keychain: {message}")]
+    KeychainError {
+        /// The error message from the keychain.
+        message: String,
+    },
+
+    /// Attestation generation was requested but the sigstore-sign feature is not enabled.
+    #[error("attestation generation requested but the sigstore-sign feature is not enabled")]
+    #[diagnostic(help("rebuild with the 'sigstore-sign' feature enabled"))]
+    AttestationNotAvailable,
+
+    /// Attestation was requested but trusted publishing is not configured.
+    #[error("attestation requested but trusted publishing is not configured")]
+    AttestationRequiresTrustedPublishing,
+
+    /// The server returned an authentication error (HTTP 401 or 403).
+    #[error("authentication failed (HTTP {status})")]
+    AuthenticationFailed {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        body: String,
+    },
+
+    /// The package already exists on the server (HTTP 409).
+    #[error("package already exists (HTTP 409)")]
+    Conflict {
+        /// The response body.
+        body: String,
+    },
+
+    /// The server returned an unprocessable entity error (HTTP 422).
+    #[error("unprocessable entity (HTTP 422)")]
+    UnprocessableEntity {
+        /// The response body.
+        body: String,
+    },
+
+    /// The server returned a client error (HTTP 400, 404, or 413).
+    #[error("client error (HTTP {status})")]
+    ClientError {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        body: String,
+    },
+
+    /// The upload failed after exhausting retries.
+    #[error("upload failed after retries (HTTP {status})")]
+    ServerError {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        body: String,
+    },
+
+    /// An error from an underlying operation (I/O, URL parsing, etc.).
+    #[error("{0}")]
+    Other(miette::Report),
+}
+
+impl From<miette::Report> for PrefixUploadError {
+    fn from(report: miette::Report) -> Self {
+        PrefixUploadError::Other(report)
+    }
+}
+
 async fn create_upload_form(
     package_file: &Path,
     filename: &str,
@@ -81,25 +160,14 @@ pub async fn upload_package_to_prefix(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
     prefix_data: PrefixData,
-) -> miette::Result<()> {
-    let check_storage = || {
-        match storage.get_by_url(Url::from(prefix_data.url.clone())) {
-            Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
-            Ok((_, Some(_))) => {
-                Err(miette::miette!("A Conda token is required for authentication with prefix.dev.
-                        Authentication information found in the keychain / auth file, but it was not a Bearer token"))
-            }
-            Ok((_, None)) => {
-                Err(miette::miette!(
-                    "No prefix.dev api key was given and none was found in the keychain / auth file"
-                ))
-            }
-            Err(e) => {
-                Err(miette::miette!(
-                    "Failed to get authentication information from keychain: {e}"
-                ))
-            }
-        }
+) -> Result<(), PrefixUploadError> {
+    let check_storage = || match storage.get_by_url(Url::from(prefix_data.url.clone())) {
+        Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
+        Ok((_, Some(_))) => Err(PrefixUploadError::WrongAuthenticationType),
+        Ok((_, None)) => Err(PrefixUploadError::MissingApiKey),
+        Err(e) => Err(PrefixUploadError::KeychainError {
+            message: e.to_string(),
+        }),
     };
 
     let client = get_client_with_retry().into_diagnostic()?;
@@ -113,10 +181,7 @@ pub async fn upload_package_to_prefix(
     // Check if attestation generation is requested but sigstore feature is not enabled
     #[cfg(not(feature = "sigstore-sign"))]
     if wants_generate {
-        return Err(miette::miette!(
-            "Attestation generation was requested, but the 'sigstore-sign' feature is not enabled.\n\
-             Please rebuild with the 'sigstore-sign' feature enabled."
-        ));
+        return Err(PrefixUploadError::AttestationNotAvailable);
     }
 
     // Check if we're using trusted publishing and if we should generate attestations
@@ -131,18 +196,14 @@ pub async fn upload_package_to_prefix(
             }
             TrustedPublishResult::Skipped => {
                 if wants_attestation {
-                    return Err(miette::miette!(
-                        "Attestation was requested, but trusted publishing is not configured"
-                    ));
+                    return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
                 (check_storage()?, false)
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
-                    return Err(miette::miette!(
-                        "Attestation was requested, but trusted publishing is not configured"
-                    ));
+                    return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
                 (check_storage()?, false)
             }
@@ -156,18 +217,14 @@ pub async fn upload_package_to_prefix(
             TrustedPublishResult::Configured(token) => token.secret().to_string(),
             TrustedPublishResult::Skipped => {
                 if wants_attestation {
-                    return Err(miette::miette!(
-                        "Attestation was requested, but trusted publishing is not configured"
-                    ));
+                    return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
                 check_storage()?
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
-                    return Err(miette::miette!(
-                        "Attestation was requested, but trusted publishing is not configured"
-                    ));
+                    return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
                 check_storage()?
             }
@@ -258,7 +315,8 @@ pub async fn upload_package_to_prefix(
                          2. For GitHub Actions, ensure you have 'id-token: write' permission\n\
                          3. Verify OIDC token is available and valid",
                         filename, e
-                    ));
+                    )
+                    .into());
                 }
             }
         } else if let AttestationSource::Attestation(path) = &prefix_data.attestation {
@@ -310,17 +368,14 @@ pub async fn upload_package_to_prefix(
 
             let status = response.status();
             let body = response.text().await.into_diagnostic()?;
-            let err = miette::miette!(
-                "Failed to upload package file: {}\nStatus: {}\nBody: {}",
-                package_file.display(),
-                status,
-                body
-            );
 
-            // Non-retry status codes (identical to send_request_with_retry)
+            // Non-retry status codes
             match status {
                 StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                    return Err(miette::miette!("Authentication error: {}", err));
+                    return Err(PrefixUploadError::AuthenticationFailed {
+                        status: status.as_u16(),
+                        body,
+                    });
                 }
                 StatusCode::CONFLICT => {
                     // skip if package already exists
@@ -329,21 +384,27 @@ pub async fn upload_package_to_prefix(
                         info!("Skip existing package: {}", filename);
                         return Ok(());
                     } else {
-                        return Err(miette::miette!("Resource conflict: {}", err));
+                        return Err(PrefixUploadError::Conflict { body });
                     }
                 }
                 StatusCode::UNPROCESSABLE_ENTITY => {
-                    return Err(miette::miette!("Resource conflict: {}", err));
+                    return Err(PrefixUploadError::UnprocessableEntity { body });
                 }
                 StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND | StatusCode::PAYLOAD_TOO_LARGE => {
-                    return Err(miette::miette!("Client error: {}", err));
+                    return Err(PrefixUploadError::ClientError {
+                        status: status.as_u16(),
+                        body,
+                    });
                 }
                 _ => {}
             }
 
             match retry_policy.should_retry(request_start, current_try) {
                 RetryDecision::DoNotRetry => {
-                    return Err(err);
+                    return Err(PrefixUploadError::ServerError {
+                        status: status.as_u16(),
+                        body,
+                    });
                 }
                 RetryDecision::Retry { execute_after } => {
                     let sleep_for = execute_after
@@ -373,17 +434,24 @@ mod test {
     use axum::{http::StatusCode, Router};
     use rattler_networking::AuthenticationStorage;
 
-    use super::upload_package_to_prefix;
+    use super::{upload_package_to_prefix, PrefixUploadError};
     use crate::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
     use crate::upload::test_utils::{start_test_server, test_package_path};
 
-    async fn ok_with_bearer(headers: axum::http::HeaderMap) -> StatusCode {
+    async fn ok_with_bearer(
+        headers: axum::http::HeaderMap,
+        _body: axum::body::Bytes,
+    ) -> StatusCode {
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
         assert!(auth.starts_with("Bearer "));
         StatusCode::OK
     }
 
-    async fn conflict() -> StatusCode {
+    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
+        StatusCode::UNAUTHORIZED
+    }
+
+    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
         StatusCode::CONFLICT
     }
 
@@ -427,8 +495,53 @@ mod test {
         let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
         let prefix_data = make_prefix_data(url, false);
-        let result =
-            upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
-        assert!(result.is_err());
+        let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, PrefixUploadError::Conflict { .. }),
+            "expected Conflict, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_auth_failure() {
+        let router = Router::new().fallback(unauthorized);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, false);
+        let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PrefixUploadError::AuthenticationFailed { status: 401, .. }
+            ),
+            "expected AuthenticationFailed, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_missing_api_key() {
+        let router = Router::new().fallback(ok_with_bearer);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = PrefixData::new(
+            url,
+            "test-channel".to_string(),
+            None,
+            AttestationSource::NoAttestation,
+            SkipExisting(false),
+            ForceOverwrite(false),
+            false,
+        );
+        let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, PrefixUploadError::MissingApiKey),
+            "expected MissingApiKey, got: {err:?}"
+        );
     }
 }

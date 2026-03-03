@@ -37,7 +37,8 @@ mod trusted_publishing;
 #[cfg(feature = "s3")]
 pub use s3::upload_package_to_s3;
 
-pub use prefix::upload_package_to_prefix;
+pub use anaconda::AnacondaError;
+pub use prefix::{upload_package_to_prefix, PrefixUploadError};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -216,27 +217,21 @@ pub async fn upload_package_to_anaconda(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
     anaconda_data: AnacondaData,
-) -> miette::Result<()> {
+) -> Result<(), anaconda::AnacondaError> {
     let token = match anaconda_data.api_key {
         Some(token) => token,
         None => match storage.get("anaconda.org") {
             Ok(Some(Authentication::CondaToken(token))) => token,
             Ok(Some(_)) => {
-                return Err(miette::miette!(
-                    "A Conda token is required for authentication with anaconda.org.
-                        Authentication information found in the keychain / auth file, but it was not a Conda token.
-                        Please create a token on anaconda.org"
-                ));
+                return Err(anaconda::AnacondaError::WrongAuthenticationType);
             }
             Ok(None) => {
-                return Err(miette::miette!(
-                    "No anaconda.org api key was given and no token were found in the keychain / auth file. Please create a token on anaconda.org"
-                ));
+                return Err(anaconda::AnacondaError::MissingApiKey);
             }
             Err(e) => {
-                return Err(miette::miette!(
-                    "Failed to get authentication information form keychain: {e}"
-                ));
+                return Err(anaconda::AnacondaError::KeychainError {
+                    message: e.to_string(),
+                });
             }
         },
     };
@@ -404,25 +399,31 @@ mod test {
     use axum::{http::StatusCode, Router};
     use rattler_networking::AuthenticationStorage;
 
-    use crate::upload::test_utils::{start_test_server, test_package_path};
     use crate::upload::opt::{ArtifactoryData, QuetzData};
+    use crate::upload::test_utils::{start_test_server, test_package_path};
 
-    async fn ok_with_api_key(headers: axum::http::HeaderMap) -> StatusCode {
+    async fn ok_with_api_key(
+        headers: axum::http::HeaderMap,
+        _body: axum::body::Bytes,
+    ) -> StatusCode {
         assert!(headers.get("x-api-key").is_some());
         StatusCode::OK
     }
 
-    async fn ok_with_bearer(headers: axum::http::HeaderMap) -> StatusCode {
+    async fn ok_with_bearer(
+        headers: axum::http::HeaderMap,
+        _body: axum::body::Bytes,
+    ) -> StatusCode {
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
         assert!(auth.starts_with("Bearer "));
         StatusCode::OK
     }
 
-    async fn unauthorized() -> StatusCode {
+    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
         StatusCode::UNAUTHORIZED
     }
 
-    async fn conflict() -> StatusCode {
+    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
         StatusCode::CONFLICT
     }
 
