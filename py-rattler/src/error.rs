@@ -214,4 +214,3 @@ impl From<PyRattlerError> for PyErr {
     }
 }
 
-// No exception definitions here, they are in exceptions.rs
