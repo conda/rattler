@@ -1,6 +1,6 @@
 try:
     from rattler.rattler import (
-        ActivationError,
+        AuthenticationStorageError,
         CacheDirError,
         ConversionError,
         ConvertSubdirError,
@@ -9,7 +9,10 @@ try:
         ExtractError,
         FetchRepoDataError,
         GatewayError,
+        InstallerError,
         InvalidChannelError,
+        InvalidHeaderNameError,
+        InvalidHeaderValueError,
         InvalidMatchSpecError,
         InvalidPackageNameError,
         InvalidUrlError,
@@ -23,6 +26,8 @@ try:
         ParseExplicitEnvironmentSpecError,
         ParsePlatformError,
         RequirementError,
+        ShellError,
+        SolverError,
         TransactionError,
         ValidatePackageRecordsError,
         VersionBumpError,
@@ -34,6 +39,12 @@ except ImportError:
 
     class ActivationError(Exception):  # type: ignore[no-redef]
         """Error that can occur when activating a conda environment"""
+
+    class ActivationScriptFormatError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when the activation script has an invalid format"""
+
+    class AuthenticationStorageError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when querying the authentication storage"""
 
     class CacheDirError(Exception):  # type: ignore[no-redef]
         """Error that can occur when querying the cache directory"""
@@ -59,11 +70,20 @@ except ImportError:
     class GatewayError(Exception):  # type: ignore[no-redef]
         """An error that can occur when querying the repodata gateway."""
 
+    class InstallerError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when installing a package"""
+
     class InvalidChannelError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a channel."""
 
     class InvalidMatchSpecError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a MatchSpec"""
+
+    class InvalidHeaderNameError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when an invalid header name is used"""
+
+    class InvalidHeaderValueError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when an invalid header value is used"""
 
     class InvalidPackageNameError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a package name"""
@@ -101,6 +121,12 @@ except ImportError:
     class RequirementError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing a requirement"""
 
+    class ShellError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when interacting with the shell"""
+
+    class SolverError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when solving for an environment"""
+
     class TransactionError(Exception):  # type: ignore[no-redef]
         """An error that can occur when executing a transaction"""
 
@@ -116,6 +142,8 @@ except ImportError:
 
 __all__ = [
     "ActivationError",
+    "ActivationScriptFormatError",
+    "AuthenticationStorageError",
     "CacheDirError",
     "ConversionError",
     "ConvertSubdirError",
@@ -124,7 +152,10 @@ __all__ = [
     "ExtractError",
     "FetchRepoDataError",
     "GatewayError",
+    "InstallerError",
     "InvalidChannelError",
+    "InvalidHeaderNameError",
+    "InvalidHeaderValueError",
     "InvalidMatchSpecError",
     "InvalidPackageNameError",
     "InvalidUrlError",
@@ -138,6 +169,8 @@ __all__ = [
     "ParseExplicitEnvironmentSpecError",
     "ParsePlatformError",
     "RequirementError",
+    "ShellError",
+    "SolverError",
     "TransactionError",
     "ValidatePackageRecordsError",
     "VersionBumpError",

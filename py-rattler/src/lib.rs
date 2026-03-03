@@ -37,13 +37,13 @@ use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::PyRattlerError;
 use exceptions::{
-    ActivationError, AuthenticationStorageError, CacheDirError, ConversionError,
-    ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError, FetchRepoDataError,
-    InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError, InvalidMatchSpecError,
-    InvalidPackageNameError, InvalidUrlError, InvalidVersionError, InvalidVersionSpecError,
-    IoError, LinkError, PackageNameMatcherParseError, ParseArchError, ParseCondaLockError,
-    ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError, ShellError,
-    SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
+    ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
+    ConversionError, ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError,
+    FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
+    InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
+    InvalidVersionSpecError, IoError, LinkError, PackageNameMatcherParseError, ParseArchError,
+    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
+    ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
     VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
@@ -216,6 +216,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
     m.add("InvalidChannelError", py.get_type::<InvalidChannelError>())?;
     m.add("ActivationError", py.get_type::<ActivationError>())?;
+    m.add(
+        "ActivationScriptFormatError",
+        py.get_type::<ActivationScriptFormatError>(),
+    )?;
     m.add("ParsePlatformError", py.get_type::<ParsePlatformError>())?;
     m.add("ParseArchError", py.get_type::<ParseArchError>())?;
     m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
