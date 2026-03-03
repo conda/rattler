@@ -234,7 +234,7 @@ pub enum PackageBuildSource {
 }
 
 /// Information about a source package stored in the lock-file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct CondaSourceData {
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
@@ -261,6 +261,42 @@ pub struct CondaSourceData {
     /// binary. This maps from a normalized package name to the location of the
     /// source.
     pub sources: BTreeMap<String, SourceLocation>,
+
+    /// The short hash that was originally parsed from the [`crate::SourceIdentifier`]
+    /// in the lock file (e.g. the `9f3c2a7b` part of `numba-cuda[9f3c2a7b] @ .`).
+    ///
+    /// When `Some`, [`crate::SourceIdentifier::from_source_data`] reuses this
+    /// value verbatim rather than recomputing the hash. This ensures that
+    /// round-tripping a lock file produces no spurious changes to source
+    /// identifiers even if the hash algorithm or its inputs evolve over time.
+    ///
+    /// This field is intentionally excluded from [`PartialEq`], [`Eq`], and
+    /// [`Hash`] — it carries no semantic meaning about the package itself.
+    pub identifier_hash: Option<String>,
+}
+
+impl PartialEq for CondaSourceData {
+    fn eq(&self, other: &Self) -> bool {
+        self.location == other.location
+            && self.package_build_source == other.package_build_source
+            && self.name == other.name
+            && self.variants == other.variants
+            && self.package_record == other.package_record
+            && self.sources == other.sources
+    }
+}
+
+impl Eq for CondaSourceData {}
+
+impl std::hash::Hash for CondaSourceData {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.location.hash(state);
+        self.package_build_source.hash(state);
+        self.name.hash(state);
+        self.variants.hash(state);
+        self.package_record.hash(state);
+        self.sources.hash(state);
+    }
 }
 
 impl From<CondaSourceData> for CondaPackageData {
