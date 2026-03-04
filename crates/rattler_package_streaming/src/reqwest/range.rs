@@ -118,6 +118,7 @@ async fn fetch_range(
 ) -> Result<RangeRequestResult, ExtractError> {
     debug!("fetching range {range} from {url}");
 
+    // https://www.rfc-editor.org/rfc/rfc7233
     let response = client
         .get(url.clone())
         .header(http::header::RANGE, range)
