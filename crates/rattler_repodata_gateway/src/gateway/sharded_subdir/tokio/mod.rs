@@ -66,6 +66,7 @@ pub struct ShardedSubdir {
 }
 
 impl ShardedSubdir {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         channel: Channel,
         subdir: String,
