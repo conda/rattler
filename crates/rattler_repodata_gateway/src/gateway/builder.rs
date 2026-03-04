@@ -49,6 +49,7 @@ pub struct GatewayBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
     max_concurrent_requests: MaxConcurrency,
+    max_concurrent_io: MaxConcurrency,
 }
 
 impl GatewayBuilder {
@@ -133,6 +134,26 @@ impl GatewayBuilder {
         self
     }
 
+    /// Sets the maximum number of concurrent IO operations (e.g. reading shard
+    /// cache files from disk). This prevents exhausting the OS file-descriptor
+    /// limit when many packages are queried at once.
+    #[must_use]
+    pub fn with_max_concurrent_io(self, max_concurrent_io: impl Into<MaxConcurrency>) -> Self {
+        Self {
+            max_concurrent_io: max_concurrent_io.into(),
+            ..self
+        }
+    }
+
+    /// Sets the maximum number of concurrent IO operations.
+    pub fn set_max_concurrent_io(
+        &mut self,
+        max_concurrent_io: impl Into<MaxConcurrency>,
+    ) -> &mut Self {
+        self.max_concurrent_io = max_concurrent_io.into();
+        self
+    }
+
     /// Apply the shared rattler configuration (see [`rattler_config`]) to
     /// this builder: the channel configuration is derived from
     /// `repodata-config` and the maximum number of concurrent requests from
@@ -188,6 +209,12 @@ impl GatewayBuilder {
             MaxConcurrency::Semaphore(sem) => Some(sem),
         };
 
+        let io_concurrency_semaphore = match self.max_concurrent_io {
+            MaxConcurrency::Unlimited => None,
+            MaxConcurrency::Limited(n) => Some(Arc::new(tokio::sync::Semaphore::new(n))),
+            MaxConcurrency::Semaphore(sem) => Some(sem),
+        };
+
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: CoalescedMap::new(),
@@ -199,6 +226,7 @@ impl GatewayBuilder {
                 package_cache,
                 subdir_run_exports_cache: Arc::default(),
                 concurrent_requests_semaphore,
+                io_concurrency_semaphore,
             }),
         }
     }

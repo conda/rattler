@@ -156,6 +156,7 @@ impl<'g> SubdirBuilder<'g> {
                 missing_shards_are_empty: _source_config.missing_shards_are_empty,
             },
             self.gateway.concurrent_requests_semaphore.clone(),
+            self.gateway.io_concurrency_semaphore.clone(),
             self.reporter.as_deref(),
         )
         .await?;
