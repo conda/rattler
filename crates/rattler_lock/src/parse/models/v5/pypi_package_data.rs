@@ -31,6 +31,7 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
             version: Some(value.version.into_owned()),
             location: Verbatim::new(value.location),
             hash: value.hash.into_owned(),
+            index_url: None,
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
         }
