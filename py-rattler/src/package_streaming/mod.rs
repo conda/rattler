@@ -1,14 +1,14 @@
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
-use rattler_conda_types::package::{AboutJson, IndexJson};
+use rattler_conda_types::package::{AboutJson, IndexJson, PathsJson, RunExportsJson};
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use url::Url;
 
 use crate::{
     about_json::PyAboutJson, index_json::PyIndexJson, networking::client::PyClientWithMiddleware,
-    utils::sha256_from_pybytes,
+    paths_json::PyPathsJson, run_exports_json::PyRunExportsJson, utils::sha256_from_pybytes,
 };
 
 fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject) {
@@ -16,6 +16,20 @@ fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject)
     let md5_bytes = PyBytes::new(py, &result.md5);
 
     (sha256_bytes.into(), md5_bytes.into())
+}
+
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PyPackageFile {
+    Index,
+    About,
+    Paths,
+    RunExports,
+}
+
+fn parse_url(url: &str) -> PyResult<Url> {
+    Url::parse(url)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}")))
 }
 
 #[pyfunction]
@@ -91,21 +105,7 @@ pub fn fetch_index_json_from_url<'a>(
     client: PyClientWithMiddleware,
     url: String,
 ) -> PyResult<Bound<'a, PyAny>> {
-    let url = Url::parse(&url).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
-    })?;
-
-    let future = async move {
-        rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<IndexJson>(
-            client.into(),
-            url,
-        )
-        .await
-        .map(PyIndexJson::from)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
-    };
-
-    future_into_py(py, future)
+    fetch_package_file_from_url(py, client, url, PyPackageFile::Index)
 }
 
 #[pyfunction]
@@ -114,18 +114,60 @@ pub fn fetch_about_json_from_url<'a>(
     client: PyClientWithMiddleware,
     url: String,
 ) -> PyResult<Bound<'a, PyAny>> {
-    let url = Url::parse(&url).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
-    })?;
+    fetch_package_file_from_url(py, client, url, PyPackageFile::About)
+}
 
+#[pyfunction]
+pub fn fetch_package_file_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    package_file: PyPackageFile,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
     let future = async move {
-        rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<AboutJson>(
-            client.into(),
-            url,
-        )
-        .await
-        .map(PyAboutJson::from)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+        match package_file {
+            PyPackageFile::Index => {
+                let index_json =
+                    rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<
+                        IndexJson,
+                    >(client.into(), url)
+                    .await
+                    .map(PyIndexJson::from)
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                Python::with_gil(|py| Ok(Py::new(py, index_json)?.into_any()))
+            }
+            PyPackageFile::About => {
+                let about_json =
+                    rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<
+                        AboutJson,
+                    >(client.into(), url)
+                    .await
+                    .map(PyAboutJson::from)
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                Python::with_gil(|py| Ok(Py::new(py, about_json)?.into_any()))
+            }
+            PyPackageFile::Paths => {
+                let paths_json =
+                    rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<
+                        PathsJson,
+                    >(client.into(), url)
+                    .await
+                    .map(PyPathsJson::from)
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                Python::with_gil(|py| Ok(Py::new(py, paths_json)?.into_any()))
+            }
+            PyPackageFile::RunExports => {
+                let run_exports_json =
+                    rattler_package_streaming::reqwest::range::fetch_package_file_from_url::<
+                        RunExportsJson,
+                    >(client.into(), url)
+                    .await
+                    .map(PyRunExportsJson::from)
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                Python::with_gil(|py| Ok(Py::new(py, run_exports_json)?.into_any()))
+            }
+        }
     };
 
     future_into_py(py, future)

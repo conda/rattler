@@ -1,9 +1,11 @@
+from enum import Enum
 from os import PathLike
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple, Union, overload
 
 from rattler.networking.client import Client
-from rattler.package import AboutJson, IndexJson
+from rattler.package import AboutJson, IndexJson, PathsJson, RunExportsJson
 from rattler.rattler import (
+    PyPackageFile,
     download_and_extract as py_download_and_extract,
 )
 from rattler.rattler import (
@@ -13,11 +15,17 @@ from rattler.rattler import (
     extract_tar_bz2 as py_extract_tar_bz2,
 )
 from rattler.rattler import (
-    fetch_about_json_from_url as py_fetch_about_json_from_url,
+    fetch_package_file_from_url as py_fetch_package_file_from_url,
 )
-from rattler.rattler import (
-    fetch_index_json_from_url as py_fetch_index_json_from_url,
-)
+
+PackageFileResult = Union[IndexJson, AboutJson, PathsJson, RunExportsJson]
+
+
+class PackageFile(Enum):
+    INDEX_JSON = PyPackageFile.Index
+    ABOUT_JSON = PyPackageFile.About
+    PATHS_JSON = PyPackageFile.Paths
+    RUN_EXPORTS_JSON = PyPackageFile.RunExports
 
 
 def extract(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
@@ -37,43 +45,60 @@ async def download_and_extract(
     return await py_download_and_extract(client._client, url, dest, expected_sha)
 
 
+@overload
+async def fetch_package_file_from_url(
+    client: Client, url: str, package_file: Literal[PackageFile.INDEX_JSON]
+) -> IndexJson: ...
+
+
+@overload
+async def fetch_package_file_from_url(
+    client: Client, url: str, package_file: Literal[PackageFile.ABOUT_JSON]
+) -> AboutJson: ...
+
+
+@overload
+async def fetch_package_file_from_url(
+    client: Client, url: str, package_file: Literal[PackageFile.PATHS_JSON]
+) -> PathsJson: ...
+
+
+@overload
+async def fetch_package_file_from_url(
+    client: Client, url: str, package_file: Literal[PackageFile.RUN_EXPORTS_JSON]
+) -> RunExportsJson: ...
+
+
+@overload
+async def fetch_package_file_from_url(client: Client, url: str, package_file: PackageFile) -> PackageFileResult: ...
+
+
+async def fetch_package_file_from_url(client: Client, url: str, package_file: PackageFile) -> PackageFileResult:
+    """
+    Fetch a specific package file from a remote package using HTTP range requests.
+
+    For `.conda` packages, this function fetches only the minimal bytes needed from the package.
+    For `.tar.bz2` packages, it falls back to downloading the entire package.
+    """
+    raw_result = await py_fetch_package_file_from_url(client._client, url, package_file.value)
+    if package_file is PackageFile.INDEX_JSON:
+        return IndexJson._from_py_index_json(raw_result)
+    if package_file is PackageFile.ABOUT_JSON:
+        return AboutJson._from_py_about_json(raw_result)
+    if package_file is PackageFile.PATHS_JSON:
+        return PathsJson._from_py_paths_json(raw_result)
+    return RunExportsJson._from_py_run_exports_json(raw_result)
+
+
 async def fetch_index_json_from_url(client: Client, url: str) -> IndexJson:
     """
-    Fetch the IndexJson from a remote `.conda` or `.tar.bz2` package using HTTP range requests.
-
-    For `.conda` packages, this function fetches only the minimal bytes needed from the package,
-    typically just the `info/` section which is located at the end of the archive.
-    For `.tar.bz2` packages, it falls back to downloading the entire package.
-
-    If the server doesn't support range requests, the function falls back to
-    downloading the entire package.
-
-    Args:
-        client: The HTTP client to use for requests.
-        url: The URL of the package.
-
-    Returns:
-        The parsed IndexJson from the package.
+    Fetch IndexJson from a remote package using HTTP range requests.
     """
-    return await py_fetch_index_json_from_url(client._client, url)
+    return await fetch_package_file_from_url(client, url, PackageFile.INDEX_JSON)
 
 
 async def fetch_about_json_from_url(client: Client, url: str) -> AboutJson:
     """
-    Fetch the AboutJson from a remote `.conda` or `.tar.bz2` package using HTTP range requests.
-
-    For `.conda` packages, this function fetches only the minimal bytes needed from the package,
-    typically just the `info/` section which is located at the end of the archive.
-    For `.tar.bz2` packages, it falls back to downloading the entire package.
-
-    If the server doesn't support range requests, the function falls back to
-    downloading the entire package.
-
-    Args:
-        client: The HTTP client to use for requests.
-        url: The URL of the package.
-
-    Returns:
-        The parsed AboutJson from the package.
+    Fetch AboutJson from a remote package using HTTP range requests.
     """
-    return await py_fetch_about_json_from_url(client._client, url)
+    return await fetch_package_file_from_url(client, url, PackageFile.ABOUT_JSON)
