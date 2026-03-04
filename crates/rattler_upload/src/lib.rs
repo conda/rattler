@@ -43,11 +43,14 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         ServerType::Prefix(prefix_opts) => {
             let prefix_data = PrefixData::from(prefix_opts);
-            upload::upload_package_to_prefix(&store, &args.package_files, prefix_data).await
+            Ok(upload::upload_package_to_prefix(&store, &args.package_files, prefix_data).await?)
         }
         ServerType::Anaconda(anaconda_opts) => {
             let anaconda_data = AnacondaData::from(anaconda_opts);
-            upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data).await
+            Ok(
+                upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data)
+                    .await?,
+            )
         }
         #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
