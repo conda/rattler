@@ -141,7 +141,10 @@ async fn fetch_range(
                 "received {} bytes (range {}-{}/{})",
                 bytes.len(),
                 content_range.start,
-                content_range.start + bytes.len() as u64,
+                content_range
+                    .start
+                    .checked_add(bytes.len() as u64)
+                    .unwrap_or(u64::MAX),
                 content_range.total
             );
 
@@ -170,6 +173,30 @@ async fn fetch_range(
                 .expect_err("non-success status should error");
             Err(ExtractError::ReqwestError(error.into()))
         }
+    }
+}
+
+/// Builds a `Range` header value for a byte segment.
+fn build_range_header(start: u64, len: u64) -> Option<String> {
+    let end = start.checked_add(len)?.checked_sub(1)?;
+    Some(format!("bytes={start}-{end}"))
+}
+
+/// Fetches a fixed byte segment, returning `None` if the server cannot satisfy range requests
+/// or if the requested segment is invalid.
+async fn fetch_range_bytes(
+    client: &ClientWithMiddleware,
+    url: &Url,
+    start: u64,
+    len: u64,
+) -> Result<Option<Bytes>, ExtractError> {
+    let Some(range) = build_range_header(start, len) else {
+        return Ok(None);
+    };
+
+    match fetch_range(client, url, &range).await? {
+        RangeRequestResult::Success(bytes, _) => Ok(Some(bytes)),
+        RangeRequestResult::NotSupported | RangeRequestResult::FullContent(_) => Ok(None),
     }
 }
 
@@ -412,16 +439,25 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     };
 
     // Step 2: Find the EOCD in the tail
-    let (_eocd_offset_in_tail, eocd) = find_eocd(&tail_bytes).ok_or(ExtractError::ZipError(
-        zip::result::ZipError::InvalidArchive(Cow::Borrowed(
-            "could not find End of Central Directory",
-        )),
-    ))?;
+    let (_eocd_offset_in_tail, eocd) = match find_eocd(&tail_bytes) {
+        Some(result) => result,
+        None => {
+            debug!("could not find End of Central Directory in tail bytes, falling back to full download");
+            return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
+        }
+    };
 
     // Calculate where the tail starts in the full file
     // Validate that the response covers from start to the end of the file
     let tail_start_offset = content_range.start;
-    if tail_start_offset + tail_bytes.len() as u64 != content_range.total {
+    let Some(tail_end_offset) = tail_start_offset.checked_add(tail_bytes.len() as u64) else {
+        return Err(ExtractError::ZipError(
+            zip::result::ZipError::InvalidArchive(Cow::Borrowed(
+                "Content-Range overflow while validating response body length",
+            )),
+        ));
+    };
+    if tail_end_offset != content_range.total {
         return Err(ExtractError::ZipError(
             zip::result::ZipError::InvalidArchive(Cow::Borrowed(
                 "Content-Range does not match response body length",
@@ -445,16 +481,11 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     } else {
         // CD is not (fully) in our tail, need to fetch it
         debug!("central directory not in tail, fetching separately");
-        let range = format!(
-            "bytes={}-{}",
-            cd_start_in_file,
-            cd_start_in_file + cd_size - 1
-        );
-        match fetch_range(&client, &url, &range).await? {
-            RangeRequestResult::Success(bytes, _) => bytes,
-            _ => {
+        match fetch_range_bytes(&client, &url, cd_start_in_file, cd_size).await? {
+            Some(bytes) => bytes,
+            None => {
                 return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
-                    .await
+                    .await;
             }
         }
     };
@@ -481,16 +512,13 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     } else {
         // Need to fetch local header
         debug!("local header not in tail, fetching separately");
-        let range = format!(
-            "bytes={}-{}",
-            local_header_offset,
-            local_header_offset + LOCAL_HEADER_SIZE as u64 - 1
-        );
-        match fetch_range(&client, &url, &range).await? {
-            RangeRequestResult::Success(bytes, _) => bytes,
-            _ => {
+        match fetch_range_bytes(&client, &url, local_header_offset, LOCAL_HEADER_SIZE as u64)
+            .await?
+        {
+            Some(bytes) => bytes,
+            None => {
                 return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
-                    .await
+                    .await;
             }
         }
     };
@@ -500,8 +528,13 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
             zip::result::ZipError::InvalidArchive(Cow::Borrowed("invalid local file header")),
         ))?;
 
-    let data_start = local_header_offset + data_offset_from_header;
-    let data_end = data_start + entry.compressed_size;
+    let Some(data_start) = local_header_offset.checked_add(data_offset_from_header) else {
+        return Err(ExtractError::ZipError(
+            zip::result::ZipError::InvalidArchive(Cow::Borrowed(
+                "info archive start offset overflow",
+            )),
+        ));
+    };
 
     // Step 6: Fetch the info archive data (if not already in tail)
     let info_archive_bytes = if let Some(bytes) = slice_from_tail(
@@ -515,12 +548,11 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     } else {
         // Need to fetch the info archive
         debug!("info archive data not in tail, fetching separately");
-        let range = format!("bytes={}-{}", data_start, data_end - 1);
-        match fetch_range(&client, &url, &range).await? {
-            RangeRequestResult::Success(bytes, _) => bytes,
-            _ => {
+        match fetch_range_bytes(&client, &url, data_start, entry.compressed_size).await? {
+            Some(bytes) => bytes,
+            None => {
                 return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
-                    .await
+                    .await;
             }
         }
     };
@@ -581,6 +613,17 @@ mod tests {
     fn test_parse_content_range_invalid() {
         assert!(ContentRange::parse("invalid").is_none());
         assert!(ContentRange::parse("bytes 1000-2000").is_none());
+    }
+
+    #[test]
+    fn test_build_range_header() {
+        assert_eq!(build_range_header(10, 10), Some("bytes=10-19".to_string()));
+    }
+
+    #[test]
+    fn test_build_range_header_invalid() {
+        assert_eq!(build_range_header(0, 0), None);
+        assert_eq!(build_range_header(u64::MAX, 2), None);
     }
 
     #[tokio::test]
