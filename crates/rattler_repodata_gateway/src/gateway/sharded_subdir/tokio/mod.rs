@@ -174,8 +174,17 @@ impl SubdirClient for ShardedSubdir {
         // Check if we already have the shard in the cache.
         let shard_cache_path = self.cache_dir.join(format!("{shard:x}.msgpack"));
 
-        // Read the cached shard
+        // Read the cached shard.
+        // Acquire the IO semaphore permit before opening the file to avoid
+        // exhausting the OS file-descriptor limit when many shards are fetched
+        // concurrently (e.g. when querying for `*`).
         if self.cache_action != CacheAction::NoCache {
+            let _io_permit = OptionFuture::from(
+                self.concurrent_requests_semaphore
+                    .as_deref()
+                    .map(tokio::sync::Semaphore::acquire),
+            )
+            .await;
             match tokio_fs::read(&shard_cache_path).await {
                 Ok(cached_bytes) => {
                     // Decode the cached shard
