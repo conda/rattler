@@ -161,11 +161,13 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                 })
             }
             LegacyCondaPackageData::Source(data) => CondaPackageData::Source(CondaSourceData {
-                package_record: data.package_record,
+                name: data.package_record.name.clone(),
+                package_record: Some(data.package_record),
                 location: data.location,
                 variants: data.variants,
                 package_build_source: data.package_build_source,
                 sources: data.sources,
+                identifier_hash: None,
             }),
         }
     }

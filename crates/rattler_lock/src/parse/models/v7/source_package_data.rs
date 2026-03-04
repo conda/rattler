@@ -38,17 +38,18 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(rename = "source")]
     pub identifier: SourceIdentifier,
 
-    // Version is required (not embedded in identifier)
-    pub version: Cow<'a, VersionWithSource>,
+    // Package record fields are optional: absent means the metadata has not
+    // been evaluated yet and `CondaSourceData::package_record` will be `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<Cow<'a, VersionWithSource>>,
 
-    // Optional identification fields
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub build: Cow<'a, str>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub build_number: BuildNumber,
 
-    // Required subdir
-    pub subdir: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<Cow<'a, str>>,
 
     #[serde(default, skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
@@ -107,47 +108,60 @@ impl<'a> SourcePackageDataModel<'a> {
     ///
     /// This method preserves the deserialized `SourceIdentifier` so it can be used
     /// directly for lookups without recomputing the hash.
+    /// Converts into `(SourceIdentifier, CondaSourceData)`.
+    ///
+    /// This method preserves the deserialized `SourceIdentifier` so it can be
+    /// used directly for lookups without recomputing the hash.
+    ///
+    /// When `version` is absent all package-record fields are ignored and
+    /// `CondaSourceData::package_record` is set to `None`.
     pub fn into_parts(self) -> Result<(SourceIdentifier, CondaSourceData), ConversionError> {
         // Extract name and location from the identifier, preserving the identifier itself
-        let (name, _hash, location) = self.identifier.clone().into_parts();
+        let (name, hash, location) = self.identifier.clone().into_parts();
 
-        let subdir = self.subdir.into_owned();
-        let build = self.build.into_owned();
-        let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
-
-        let package_record = PackageRecord {
-            name,
-            version: self.version.into_owned(),
-            subdir,
-            build,
-            build_number: self.build_number,
-            noarch: self.noarch,
-            arch,
-            platform,
-            constrains: self.constrains.into_owned(),
-            depends: self.depends.into_owned(),
-            experimental_extra_depends: self.experimental_extra_depends.into_owned(),
-            features: self.features.into_owned(),
-            legacy_bz2_md5: None,
-            legacy_bz2_size: None,
-            license: self.license.into_owned(),
-            license_family: self.license_family.into_owned(),
-            md5: None,
-            purls: self.purls.into_owned(),
-            sha256: None,
-            size: self.size.into_owned(),
-            timestamp: self.timestamp.map(Into::into),
-            track_features: self.track_features.into_owned(),
-            run_exports: None,
-            python_site_packages_path: self.python_site_packages_path.into_owned(),
+        // Only build a PackageRecord when version (and subdir) are present.
+        let package_record = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
+            let subdir = subdir.into_owned();
+            let build = self.build.into_owned();
+            let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
+            Some(PackageRecord {
+                name: name.clone(),
+                version: version.into_owned(),
+                subdir,
+                build,
+                build_number: self.build_number,
+                noarch: self.noarch,
+                arch,
+                platform,
+                constrains: self.constrains.into_owned(),
+                depends: self.depends.into_owned(),
+                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                features: self.features.into_owned(),
+                legacy_bz2_md5: None,
+                legacy_bz2_size: None,
+                license: self.license.into_owned(),
+                license_family: self.license_family.into_owned(),
+                md5: None,
+                purls: self.purls.into_owned(),
+                sha256: None,
+                size: self.size.into_owned(),
+                timestamp: self.timestamp.map(Into::into),
+                track_features: self.track_features.into_owned(),
+                run_exports: None,
+                python_site_packages_path: self.python_site_packages_path.into_owned(),
+            })
+        } else {
+            None
         };
 
         let source_data = CondaSourceData {
+            name,
             package_record,
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
             package_build_source: self.package_build_source,
             sources: self.sources,
+            identifier_hash: Some(hash),
         };
 
         Ok((self.identifier, source_data))
@@ -165,33 +179,55 @@ impl<'a> TryFrom<SourcePackageDataModel<'a>> for CondaPackageData {
 
 impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
     fn from(value: &'a CondaSourceData) -> Self {
-        let package_record = &value.package_record;
         let variants = (!value.variants.is_empty()).then_some(Cow::Borrowed(&value.variants));
-
-        // Create the source identifier with computed hash
         let identifier = SourceIdentifier::from_source_data(value);
 
-        Self {
-            identifier,
-            version: Cow::Borrowed(&package_record.version),
-            subdir: Cow::Borrowed(&package_record.subdir),
-            build: Cow::Borrowed(&package_record.build),
-            build_number: package_record.build_number,
-            noarch: package_record.noarch,
-            variants,
-            purls: Cow::Borrowed(&package_record.purls),
-            depends: Cow::Borrowed(&package_record.depends),
-            constrains: Cow::Borrowed(&package_record.constrains),
-            experimental_extra_depends: Cow::Borrowed(&package_record.experimental_extra_depends),
-            size: Cow::Borrowed(&package_record.size),
-            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
-            features: Cow::Borrowed(&package_record.features),
-            track_features: Cow::Borrowed(&package_record.track_features),
-            license: Cow::Borrowed(&package_record.license),
-            license_family: Cow::Borrowed(&package_record.license_family),
-            python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
-            package_build_source: value.package_build_source.clone(),
-            sources: value.sources.clone(),
+        if let Some(r) = value.package_record.as_ref() {
+            Self {
+                identifier,
+                version: Some(Cow::Borrowed(&r.version)),
+                subdir: Some(Cow::Borrowed(&r.subdir)),
+                build: Cow::Borrowed(&r.build),
+                build_number: r.build_number,
+                noarch: r.noarch,
+                variants,
+                purls: Cow::Borrowed(&r.purls),
+                depends: Cow::Borrowed(&r.depends),
+                constrains: Cow::Borrowed(&r.constrains),
+                experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
+                size: Cow::Borrowed(&r.size),
+                timestamp: r.timestamp.map(TimestampMs::into_datetime),
+                features: Cow::Borrowed(&r.features),
+                track_features: Cow::Borrowed(&r.track_features),
+                license: Cow::Borrowed(&r.license),
+                license_family: Cow::Borrowed(&r.license_family),
+                python_site_packages_path: Cow::Borrowed(&r.python_site_packages_path),
+                package_build_source: value.package_build_source.clone(),
+                sources: value.sources.clone(),
+            }
+        } else {
+            Self {
+                identifier,
+                version: None,
+                subdir: None,
+                build: Cow::Borrowed(""),
+                build_number: 0,
+                noarch: NoArchType::default(),
+                variants,
+                purls: Cow::Owned(None),
+                depends: Cow::Borrowed(&[]),
+                constrains: Cow::Borrowed(&[]),
+                experimental_extra_depends: Cow::Owned(BTreeMap::new()),
+                size: Cow::Owned(None),
+                timestamp: None,
+                features: Cow::Owned(None),
+                track_features: Cow::Borrowed(&[]),
+                license: Cow::Owned(None),
+                license_family: Cow::Owned(None),
+                python_site_packages_path: Cow::Owned(None),
+                package_build_source: value.package_build_source.clone(),
+                sources: value.sources.clone(),
+            }
         }
     }
 }
