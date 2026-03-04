@@ -36,6 +36,7 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
     cache_action: CacheAction,
 }
@@ -48,6 +49,7 @@ impl ShardedSubdir {
         cache_dir: PathBuf,
         cache_action: CacheAction,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+        io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
@@ -113,6 +115,7 @@ impl ShardedSubdir {
             cache_dir,
             cache_action,
             concurrent_requests_semaphore,
+            io_concurrency_semaphore,
         })
     }
 
@@ -180,7 +183,7 @@ impl SubdirClient for ShardedSubdir {
         // concurrently (e.g. when querying for `*`).
         if self.cache_action != CacheAction::NoCache {
             let _io_permit = OptionFuture::from(
-                self.concurrent_requests_semaphore
+                self.io_concurrency_semaphore
                     .as_deref()
                     .map(tokio::sync::Semaphore::acquire),
             )
