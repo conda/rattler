@@ -29,13 +29,21 @@
 use std::borrow::Cow;
 use std::io::{Cursor, Read};
 
+use async_zip::base::read::cd::{CentralDirectoryReader, Entry as CentralDirectoryEntryKind};
+use async_zip::base::read::io::locator;
+use async_zip::base::read::io::CombinedCentralDirectoryRecord;
 use async_zip::spec::consts::{
-    CDH_SIGNATURE, EOCDR_LENGTH, EOCDR_SIGNATURE, LFH_SIGNATURE, SIGNATURE_LENGTH,
+    CDH_SIGNATURE, LFH_SIGNATURE, NON_ZIP64_MAX_SIZE, SIGNATURE_LENGTH, ZIP64_EOCDL_LENGTH,
+    ZIP64_EOCDR_SIGNATURE,
 };
 use async_zip::spec::header::{
-    CentralDirectoryRecord, EndOfCentralDirectoryHeader, LocalFileHeader,
+    EndOfCentralDirectoryHeader, LocalFileHeader, Zip64EndOfCentralDirectoryLocator,
+    Zip64EndOfCentralDirectoryRecord,
 };
 use bytes::Bytes;
+use futures::io::{
+    AsyncReadExt as _, AsyncSeekExt as _, Cursor as AsyncCursor, SeekFrom as AsyncSeekFrom,
+};
 use http::StatusCode;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
@@ -51,14 +59,14 @@ use crate::ExtractError;
 /// and often the entire info archive.
 const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 
-/// Minimum size of EOCD record (signature + fixed fields, without comment)
-const EOCD_MIN_SIZE: usize = SIGNATURE_LENGTH + EOCDR_LENGTH;
-
-/// Size of a Central Directory entry header (signature + fixed fields, without variable fields)
-const CD_HEADER_SIZE: usize = SIGNATURE_LENGTH + 42;
-
 /// Size of a Local file header (signature + fixed fields, without variable fields)
 const LOCAL_HEADER_SIZE: usize = SIGNATURE_LENGTH + 26;
+
+/// Size of the ZIP64 EOCD record body (without signature).
+const ZIP64_EOCDR_BODY_SIZE: usize = 52;
+
+/// Size of ZIP64 EOCD record with signature.
+const ZIP64_EOCDR_SIZE: u64 = SIGNATURE_LENGTH as u64 + ZIP64_EOCDR_BODY_SIZE as u64;
 
 /// Information about a zip entry's location in the archive.
 #[derive(Debug)]
@@ -192,96 +200,169 @@ async fn fetch_range_bytes(
     };
 
     match fetch_range(client, url, &range).await? {
-        RangeRequestResult::Success(bytes, _) => Ok(Some(bytes)),
+        RangeRequestResult::Success(bytes, content_range) => {
+            let Some(expected_end) = start.checked_add(len) else {
+                return Ok(None);
+            };
+            let Some(actual_end) = content_range.start.checked_add(bytes.len() as u64) else {
+                return Ok(None);
+            };
+
+            if content_range.start != start || actual_end != expected_end {
+                debug!(
+                    "server returned mismatched range for {range}: got start={}, len={}, expected start={start}, len={len}",
+                    content_range.start,
+                    bytes.len()
+                );
+                return Ok(None);
+            }
+
+            Ok(Some(bytes))
+        }
         RangeRequestResult::NotSupported | RangeRequestResult::FullContent(_) => Ok(None),
     }
 }
 
-/// Find the End of Central Directory record in the tail bytes.
-/// Returns the offset within the tail bytes and the parsed EOCD header.
-fn find_eocd(tail_bytes: &[u8]) -> Option<(usize, EndOfCentralDirectoryHeader)> {
-    // EOCD can have a variable-length comment, so we need to search backwards
-    // Maximum comment length is 65535 bytes, but we limit our search
-    let search_start = tail_bytes.len().saturating_sub(EOCD_MIN_SIZE + 65535);
+/// Parse central-directory metadata from tail bytes, including ZIP64 records.
+/// Returns `None` when metadata cannot be parsed from range requests.
+async fn find_central_directory_record(
+    client: &ClientWithMiddleware,
+    url: &Url,
+    tail_bytes: &Bytes,
+    tail_start_offset: u64,
+) -> Result<Option<CombinedCentralDirectoryRecord>, ExtractError> {
+    let mut cursor = AsyncCursor::new(&tail_bytes[..]);
 
-    for i in (search_start..=tail_bytes.len().saturating_sub(EOCD_MIN_SIZE)).rev() {
-        if tail_bytes.len() < i + SIGNATURE_LENGTH {
-            continue;
-        }
-        let sig = u32::from_le_bytes([
-            tail_bytes[i],
-            tail_bytes[i + 1],
-            tail_bytes[i + 2],
-            tail_bytes[i + 3],
-        ]);
+    let eocdr_offset = match locator::eocdr(&mut cursor).await {
+        Ok(offset) => offset,
+        Err(_) => return Ok(None),
+    };
 
-        if sig == EOCDR_SIGNATURE {
-            // Verify this is a valid EOCD by checking the comment length
-            if tail_bytes.len() >= i + EOCD_MIN_SIZE {
-                // Parse EOCD header using astral_async_zip (after signature)
-                let header_bytes: [u8; EOCDR_LENGTH] = tail_bytes
-                    [i + SIGNATURE_LENGTH..i + EOCD_MIN_SIZE]
-                    .try_into()
-                    .ok()?;
-                let eocd = EndOfCentralDirectoryHeader::from(header_bytes);
-                let expected_end = i + EOCD_MIN_SIZE + eocd.file_comm_length as usize;
-
-                if expected_end <= tail_bytes.len() {
-                    return Some((i, eocd));
-                }
-            }
-        }
+    if cursor
+        .seek(AsyncSeekFrom::Start(eocdr_offset))
+        .await
+        .is_err()
+    {
+        return Ok(None);
     }
-    None
+
+    let eocdr = match EndOfCentralDirectoryHeader::from_reader(&mut cursor).await {
+        Ok(record) => record,
+        Err(_) => return Ok(None),
+    };
+
+    let maybe_zip64 = eocdr.disk_num == u16::MAX
+        || eocdr.start_cent_dir_disk == u16::MAX
+        || eocdr.num_of_entries_disk == u16::MAX
+        || eocdr.num_of_entries == u16::MAX
+        || eocdr.size_cent_dir == NON_ZIP64_MAX_SIZE
+        || eocdr.cent_dir_offset == NON_ZIP64_MAX_SIZE;
+
+    if !maybe_zip64 {
+        return Ok(Some(CombinedCentralDirectoryRecord::from(&eocdr)));
+    }
+
+    let Some(zip64_locator_offset) =
+        eocdr_offset.checked_sub(ZIP64_EOCDL_LENGTH + SIGNATURE_LENGTH as u64)
+    else {
+        return Ok(None);
+    };
+
+    if cursor
+        .seek(AsyncSeekFrom::Start(zip64_locator_offset))
+        .await
+        .is_err()
+    {
+        return Ok(None);
+    }
+
+    let zip64_locator = match Zip64EndOfCentralDirectoryLocator::try_from_reader(&mut cursor).await
+    {
+        Ok(Some(locator)) => locator,
+        _ => return Ok(None),
+    };
+
+    let zip64_record_bytes = if let Some(bytes) = slice_from_tail(
+        tail_bytes,
+        tail_start_offset,
+        zip64_locator.relative_offset,
+        ZIP64_EOCDR_SIZE,
+    ) {
+        bytes
+    } else {
+        let Some(bytes) =
+            fetch_range_bytes(client, url, zip64_locator.relative_offset, ZIP64_EOCDR_SIZE).await?
+        else {
+            return Ok(None);
+        };
+        bytes
+    };
+
+    let Some(zip64_eocdr) = parse_zip64_eocdr(&zip64_record_bytes) else {
+        return Ok(None);
+    };
+
+    Ok(Some(CombinedCentralDirectoryRecord::combine(
+        eocdr,
+        zip64_eocdr,
+    )))
 }
 
 /// Parse Central Directory entries to find the info-*.tar.zst file.
-fn find_info_entry(cd_bytes: &[u8]) -> Option<ZipEntryLocation> {
-    let mut offset = 0;
+async fn find_info_entry(
+    cd_bytes: &[u8],
+    cd_start_in_file: u64,
+    num_entries: u64,
+) -> Option<ZipEntryLocation> {
+    if cd_bytes.len() < SIGNATURE_LENGTH {
+        return None;
+    }
 
-    while offset + CD_HEADER_SIZE <= cd_bytes.len() {
-        let sig = u32::from_le_bytes([
-            cd_bytes[offset],
-            cd_bytes[offset + 1],
-            cd_bytes[offset + 2],
-            cd_bytes[offset + 3],
-        ]);
+    let mut cursor = AsyncCursor::new(cd_bytes);
+    let mut signature = [0; SIGNATURE_LENGTH];
+    cursor.read_exact(&mut signature).await.ok()?;
 
-        if sig != CDH_SIGNATURE {
+    if u32::from_le_bytes(signature) != CDH_SIGNATURE {
+        return None;
+    }
+
+    let mut reader = CentralDirectoryReader::new(&mut cursor, cd_start_in_file);
+
+    for _ in 0..num_entries {
+        let entry = reader.next().await.ok()?;
+        let CentralDirectoryEntryKind::CentralDirectoryEntry(entry) = entry else {
             break;
-        }
+        };
 
-        // Parse CD record using astral_async_zip (42 bytes after signature)
-        let record_bytes: [u8; 42] = cd_bytes[offset + SIGNATURE_LENGTH..offset + CD_HEADER_SIZE]
-            .try_into()
-            .ok()?;
-        let record = CentralDirectoryRecord::from(record_bytes);
-
-        let filename_start = offset + CD_HEADER_SIZE;
-        let filename_end = filename_start + record.file_name_length as usize;
-
-        if filename_end > cd_bytes.len() {
-            break;
-        }
-
-        let filename = String::from_utf8_lossy(&cd_bytes[filename_start..filename_end]);
-
-        // Check if this is the info archive
-        if filename.starts_with("info-") && filename.ends_with(".tar.zst") {
+        let filename = entry.filename().as_bytes();
+        if filename.starts_with(b"info-") && filename.ends_with(b".tar.zst") {
             return Some(ZipEntryLocation {
-                local_header_offset: u64::from(record.lh_offset),
-                compressed_size: u64::from(record.compressed_size),
+                local_header_offset: entry.file_offset(),
+                compressed_size: entry.compressed_size(),
             });
         }
-
-        // Move to next entry
-        offset += CD_HEADER_SIZE
-            + record.file_name_length as usize
-            + record.extra_field_length as usize
-            + record.file_comment_length as usize;
     }
 
     None
+}
+
+/// Parse a ZIP64 EOCD record from bytes that include its signature.
+fn parse_zip64_eocdr(bytes: &[u8]) -> Option<Zip64EndOfCentralDirectoryRecord> {
+    if bytes.len() < ZIP64_EOCDR_SIZE as usize {
+        return None;
+    }
+
+    let signature = u32::from_le_bytes(bytes[0..SIGNATURE_LENGTH].try_into().ok()?);
+    if signature != ZIP64_EOCDR_SIGNATURE {
+        return None;
+    }
+
+    let payload: [u8; ZIP64_EOCDR_BODY_SIZE] = bytes
+        [SIGNATURE_LENGTH..SIGNATURE_LENGTH + ZIP64_EOCDR_BODY_SIZE]
+        .try_into()
+        .ok()?;
+
+    Some(Zip64EndOfCentralDirectoryRecord::from(payload))
 }
 
 /// Calculate the data offset from a local file header.
@@ -323,14 +404,18 @@ fn slice_from_tail(
     offset: u64,
     len: u64,
 ) -> Option<Bytes> {
-    if offset >= tail_start_offset {
-        let start_in_tail = (offset - tail_start_offset) as usize;
-        let end_in_tail = start_in_tail + len as usize;
-        if end_in_tail <= tail_bytes.len() {
-            return Some(tail_bytes.slice(start_in_tail..end_in_tail));
-        }
+    if offset < tail_start_offset {
+        return None;
     }
-    None
+
+    let start_in_tail = usize::try_from(offset - tail_start_offset).ok()?;
+    let len = usize::try_from(len).ok()?;
+    let end_in_tail = start_in_tail.checked_add(len)?;
+    if end_in_tail <= tail_bytes.len() {
+        Some(tail_bytes.slice(start_in_tail..end_in_tail))
+    } else {
+        None
+    }
 }
 
 /// Extract a file from a tar archive bytes.
@@ -435,18 +520,8 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         }
     };
 
-    // Step 2: Find the EOCD in the tail
-    let (_eocd_offset_in_tail, eocd) = if let Some(result) = find_eocd(&tail_bytes) {
-        result
-    } else {
-        debug!(
-            "could not find End of Central Directory in tail bytes, falling back to full download"
-        );
-        return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
-    };
-
-    // Calculate where the tail starts in the full file
-    // Validate that the response covers from start to the end of the file
+    // Calculate where the tail starts in the full file.
+    // Validate that the response covers from start to the end of the file.
     let tail_start_offset = content_range.start;
     let Some(tail_end_offset) = tail_start_offset.checked_add(tail_bytes.len() as u64) else {
         return Err(ExtractError::ZipError(
@@ -463,12 +538,23 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         ));
     }
 
-    // Step 3: Check if Central Directory is in our tail bytes
-    let cd_start_in_file = u64::from(eocd.cent_dir_offset);
-    let cd_size = u64::from(eocd.size_cent_dir);
+    // Step 2: Parse central-directory metadata from the tail (including ZIP64 records).
+    let Some(cd_record) =
+        find_central_directory_record(&client, &url, &tail_bytes, tail_start_offset).await?
+    else {
+        debug!(
+            "could not parse central directory metadata from tail, falling back to full download"
+        );
+        return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
+    };
+
+    // Step 3: Check if Central Directory is in our tail bytes.
+    let cd_start_in_file = cd_record.central_directory_offset();
+    let cd_size = cd_record.directory_size;
+    let num_entries = cd_record.num_entries();
     debug!(
-        "central directory: offset={cd_start_in_file}, size={cd_size}, total_file_size={}",
-        content_range.total
+        "central directory: offset={cd_start_in_file}, size={cd_size}, entries={num_entries}, total_file_size={}",
+        content_range.total,
     );
 
     let cd_bytes = if let Some(bytes) =
@@ -488,8 +574,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         }
     };
 
-    // Step 4: Find the info-*.tar.zst entry in the Central Directory
-    let entry = find_info_entry(&cd_bytes).ok_or(ExtractError::MissingComponent)?;
+    // Step 4: Find the info-*.tar.zst entry in the Central Directory.
+    let entry = find_info_entry(&cd_bytes, cd_start_in_file, num_entries)
+        .await
+        .ok_or(ExtractError::MissingComponent)?;
     debug!(
         "found info archive entry: local_header_offset={}, compressed_size={}",
         entry.local_header_offset, entry.compressed_size
@@ -622,6 +710,27 @@ mod tests {
     fn test_build_range_header_invalid() {
         assert_eq!(build_range_header(0, 0), None);
         assert_eq!(build_range_header(u64::MAX, 2), None);
+    }
+
+    #[test]
+    fn test_parse_zip64_eocdr() {
+        let zip64_eocdr: [u8; 56] = [
+            0x50, 0x4B, 0x06, 0x06, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1E, 0x03,
+            0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2F, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let parsed = parse_zip64_eocdr(&zip64_eocdr).unwrap();
+        assert_eq!(parsed.directory_size, 47);
+        assert_eq!(parsed.offset_of_start_of_directory, 64);
+    }
+
+    #[test]
+    fn test_parse_zip64_eocdr_invalid_signature() {
+        let mut zip64_eocdr = [0u8; 56];
+        zip64_eocdr[0] = 0xAA;
+        assert!(parse_zip64_eocdr(&zip64_eocdr).is_none());
     }
 
     #[tokio::test]
