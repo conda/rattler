@@ -149,9 +149,12 @@ impl OCIUrl {
 
     pub fn new(url: &Url) -> Result<Self, OciMiddlewareError> {
         // get filename (last segment of path)
-        let filename = url.path_segments().and_then(|s| s.last()).ok_or_else(|| {
-            OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
-        })?;
+        let filename = url
+            .path_segments()
+            .and_then(|mut s| s.next_back())
+            .ok_or_else(|| {
+                OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
+            })?;
 
         let mut res = OCIUrl {
             url: url.clone(),
