@@ -89,16 +89,3 @@ async def fetch_package_file_from_url(client: Client, url: str, package_file: Pa
         return PathsJson._from_py_paths_json(raw_result)
     return RunExportsJson._from_py_run_exports_json(raw_result)
 
-
-async def fetch_index_json_from_url(client: Client, url: str) -> IndexJson:
-    """
-    Fetch IndexJson from a remote package using HTTP range requests.
-    """
-    return await fetch_package_file_from_url(client, url, PackageFile.INDEX_JSON)
-
-
-async def fetch_about_json_from_url(client: Client, url: str) -> AboutJson:
-    """
-    Fetch AboutJson from a remote package using HTTP range requests.
-    """
-    return await fetch_package_file_from_url(client, url, PackageFile.ABOUT_JSON)

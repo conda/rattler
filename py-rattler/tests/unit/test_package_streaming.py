@@ -9,8 +9,6 @@ from rattler.package_streaming import (
     download_and_extract,
     extract,
     fetch_package_file_from_url,
-    fetch_about_json_from_url,
-    fetch_index_json_from_url,
 )
 
 
@@ -100,31 +98,6 @@ async def test_fetch_package_file_about_json_from_url() -> None:
         client,
         "https://prefix.dev/conda-forge/noarch/boltons-25.0.0-pyhd8ed1ab_0.conda",
         PackageFile.ABOUT_JSON,
-    )
-
-    assert about_json.license is not None
-    assert "BSD" in about_json.license
-    assert "https://github.com/mahmoud/boltons" in about_json.home
-
-
-@pytest.mark.asyncio
-async def test_fetch_index_json_from_url() -> None:
-    client = Client()
-
-    index_json = await fetch_index_json_from_url(
-        client, "https://prefix.dev/conda-forge/noarch/boltons-25.0.0-pyhd8ed1ab_0.conda"
-    )
-
-    assert index_json.name.normalized == "boltons"
-    assert index_json.build == "pyhd8ed1ab_0"
-
-
-@pytest.mark.asyncio
-async def test_fetch_about_json_from_url() -> None:
-    client = Client()
-
-    about_json = await fetch_about_json_from_url(
-        client, "https://prefix.dev/conda-forge/noarch/boltons-25.0.0-pyhd8ed1ab_0.conda"
     )
 
     assert about_json.license is not None

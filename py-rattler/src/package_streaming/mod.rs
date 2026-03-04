@@ -100,24 +100,6 @@ pub fn download_and_extract<'a>(
 }
 
 #[pyfunction]
-pub fn fetch_index_json_from_url<'a>(
-    py: Python<'a>,
-    client: PyClientWithMiddleware,
-    url: String,
-) -> PyResult<Bound<'a, PyAny>> {
-    fetch_package_file_from_url(py, client, url, PyPackageFile::Index)
-}
-
-#[pyfunction]
-pub fn fetch_about_json_from_url<'a>(
-    py: Python<'a>,
-    client: PyClientWithMiddleware,
-    url: String,
-) -> PyResult<Bound<'a, PyAny>> {
-    fetch_package_file_from_url(py, client, url, PyPackageFile::About)
-}
-
-#[pyfunction]
 pub fn fetch_package_file_from_url<'a>(
     py: Python<'a>,
     client: PyClientWithMiddleware,
