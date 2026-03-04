@@ -31,6 +31,9 @@ enum OciMiddlewareError {
 
     #[error("Layer not found")]
     LayerNotFound,
+
+    #[error("Invalid OCI URL '{0}': {1}")]
+    InvalidUrl(Url, &'static str),
 }
 
 /// Middleware to handle `oci://` URLs
@@ -144,9 +147,12 @@ impl OCIUrl {
         format!("https://{}/v2/{}/blobs/{}", self.host, self.path, sha256).parse()
     }
 
-    pub fn new(url: &Url) -> Result<Self, ParseError> {
+    pub fn new(url: &Url) -> Result<Self, OciMiddlewareError> {
         // get filename (last segment of path)
-        let filename = url.path_segments().unwrap().next_back().unwrap();
+        let filename = url
+            .path_segments()
+            .and_then(|s| s.last())
+            .ok_or_else(|| OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments"))?;
 
         let mut res = OCIUrl {
             url: url.clone(),
@@ -162,14 +168,34 @@ impl OCIUrl {
         // because we don't want to introduce cyclic dependencies
         if let Some(archive_name) = filename.strip_suffix(".conda") {
             let parts = archive_name.rsplitn(3, '-').collect::<Vec<&str>>();
-            computed_filename = parts[2].to_string();
-            res.tag = version_build_tag(&format!("{}-{}", parts[1], parts[0]));
-            res.media_type = "application/vnd.conda.package.v2".to_string();
+            match parts.as_slice() {
+                [build, version, name] => {
+                    computed_filename = name.to_string();
+                    res.tag = version_build_tag(&format!("{version}-{build}"));
+                    res.media_type = "application/vnd.conda.package.v2".to_string();
+                }
+                _ => {
+                    return Err(OciMiddlewareError::InvalidUrl(
+                        url.clone(),
+                        "package filename must have the form name-version-build.conda",
+                    ))
+                }
+            }
         } else if let Some(archive_name) = filename.strip_suffix(".tar.bz2") {
             let parts = archive_name.rsplitn(3, '-').collect::<Vec<&str>>();
-            computed_filename = parts[2].to_string();
-            res.tag = version_build_tag(&format!("{}-{}", parts[1], parts[0]));
-            res.media_type = "application/vnd.conda.package.v1".to_string();
+            match parts.as_slice() {
+                [build, version, name] => {
+                    computed_filename = name.to_string();
+                    res.tag = version_build_tag(&format!("{version}-{build}"));
+                    res.media_type = "application/vnd.conda.package.v1".to_string();
+                }
+                _ => {
+                    return Err(OciMiddlewareError::InvalidUrl(
+                        url.clone(),
+                        "package filename must have the form name-version-build.tar.bz2",
+                    ))
+                }
+            }
         } else if filename.starts_with("repodata.json") {
             computed_filename = "repodata.json".to_string();
             if filename == "repodata.json" {
@@ -188,7 +214,7 @@ impl OCIUrl {
             computed_filename = format!("zzz{computed_filename}");
         }
 
-        res.url = url.join(&computed_filename).unwrap();
+        res.url = url.join(&computed_filename)?;
         res.path = res.url.path().trim_start_matches('/').to_string();
         Ok(res)
     }
