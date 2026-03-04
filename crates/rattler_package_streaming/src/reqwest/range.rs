@@ -452,7 +452,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
+            _ => {
+                return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
+                    .await
+            }
         }
     };
 
@@ -485,7 +488,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
+            _ => {
+                return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
+                    .await
+            }
         }
     };
 
@@ -512,7 +518,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         let range = format!("bytes={}-{}", data_start, data_end - 1);
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
+            _ => {
+                return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda)
+                    .await
+            }
         }
     };
 
