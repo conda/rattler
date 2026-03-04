@@ -92,6 +92,9 @@ pub struct PypiPackageDataRaw {
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
 
+    /// The index url used to retrieve this package.
+    pub index_url: Option<url::Url>,
+
     /// A list of (unparsed!) dependencies on other packages.
     pub requires_dist: Vec<String>,
 
@@ -112,6 +115,7 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
             version: value.version.clone(),
             location: value.location.clone(),
             hash: value.hash.clone(),
+            index_url: value.index_url.clone(),
             requires_dist,
             requires_python: value.requires_python.clone(),
         }
@@ -380,6 +384,7 @@ fn convert_raw_pypi_package(
         name: raw_package.name,
         version: raw_package.version,
         location,
+        index_url: raw_package.index_url,
         hash: raw_package.hash,
         requires_dist,
         requires_python: raw_package.requires_python,

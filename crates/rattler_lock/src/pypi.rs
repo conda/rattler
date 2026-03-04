@@ -18,6 +18,9 @@ pub struct PypiPackageData {
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
 
+    /// The index this came from. Is `None` for source dependencies
+    pub index_url: Option<url::Url>,
+
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
 
