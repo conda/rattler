@@ -214,6 +214,7 @@ impl PyLockFile {
                 location: Verbatim::<UrlOrPath>::from_str(&location)
                     .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
                 hash: None,
+                index_url: None,
                 requires_dist: Vec::new(),
                 requires_python: None,
             };
@@ -835,6 +836,12 @@ impl PyPypiPackageData {
             return Some(hash.into());
         }
         None
+    }
+
+    /// The index this came from. Might be None if the default index was used.
+    #[getter]
+    pub fn index_url(&self) -> Option<String> {
+        self.inner.index_url.as_ref().map(|url| url.to_string())
     }
 
     /// A list of dependencies on other packages.
