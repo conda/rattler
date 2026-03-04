@@ -141,10 +141,7 @@ async fn fetch_range(
                 "received {} bytes (range {}-{}/{})",
                 bytes.len(),
                 content_range.start,
-                content_range
-                    .start
-                    .checked_add(bytes.len() as u64)
-                    .unwrap_or(u64::MAX),
+                content_range.start.saturating_add(bytes.len() as u64),
                 content_range.total
             );
 
@@ -439,12 +436,13 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     };
 
     // Step 2: Find the EOCD in the tail
-    let (_eocd_offset_in_tail, eocd) = match find_eocd(&tail_bytes) {
-        Some(result) => result,
-        None => {
-            debug!("could not find End of Central Directory in tail bytes, falling back to full download");
-            return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
-        }
+    let (_eocd_offset_in_tail, eocd) = if let Some(result) = find_eocd(&tail_bytes) {
+        result
+    } else {
+        debug!(
+            "could not find End of Central Directory in tail bytes, falling back to full download"
+        );
+        return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
     };
 
     // Calculate where the tail starts in the full file
