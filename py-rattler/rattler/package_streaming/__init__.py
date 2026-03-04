@@ -87,5 +87,6 @@ async def fetch_package_file_from_url(client: Client, url: str, package_file: Pa
         return AboutJson._from_py_about_json(raw_result)
     if package_file is PackageFile.PATHS_JSON:
         return PathsJson._from_py_paths_json(raw_result)
-    return RunExportsJson._from_py_run_exports_json(raw_result)
-
+    if package_file is PackageFile.RUN_EXPORTS_JSON:
+        return RunExportsJson._from_py_run_exports_json(raw_result)
+    raise ValueError(f"Unsupported package file: {package_file!r}")
