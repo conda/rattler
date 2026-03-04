@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from rattler import (
@@ -103,6 +104,52 @@ def test_create_prefix_record() -> None:
     assert r.requested_spec is None
 
     print(r.to_json())
+
+
+def test_prefix_record_setters_update_backend() -> None:
+    r = PrefixRecord.from_path(
+        Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
+    )
+
+    r.extracted_package_dir = Path("C:/tmp/new-extracted")
+    r.package_tarball_full_path = Path("C:/tmp/new-archive.tar.bz2")
+    r.files = [Path("foo/bar"), Path("baz/qux")]
+    r.requested_spec = "python"
+    r.requested_specs = ["python >=3.11"]
+
+    as_dict = json.loads(r.to_json())
+    assert as_dict["extracted_package_dir"] == "C:/tmp/new-extracted"
+    assert as_dict["package_tarball_full_path"] == "C:/tmp/new-archive.tar.bz2"
+    assert as_dict["files"] == ["foo/bar", "baz/qux"]
+    assert as_dict["requested_spec"] == "python"
+    assert as_dict["requested_specs"] == ["python >=3.11"]
+
+
+def test_repodata_record_setters_update_backend() -> None:
+    package_record = PackageRecord(
+        name="foobar",
+        version="1.0",
+        build_number=1,
+        build="foo_1",
+        platform="win-64",
+        subdir="win",
+        arch="x86_64",
+    )
+    repodata_record = RepoDataRecord(
+        package_record,
+        file_name="foobar-1.0-abc.tar.bz2",
+        url="https://foobar.com/foobar-1.0-abc.tar.bz2",
+        channel="https://foobar.com/win-64",
+    )
+
+    repodata_record.url = "https://example.com/updated.tar.bz2"
+    repodata_record.channel = "https://example.com/osx-64"
+    repodata_record.file_name = "updated-1.0-0.tar.bz2"
+
+    as_dict = json.loads(repodata_record.to_json())
+    assert as_dict["url"] == "https://example.com/updated.tar.bz2"
+    assert as_dict["channel"] == "https://example.com/osx-64"
+    assert as_dict["fn"] == "updated-1.0-0.tar.bz2"
 
 
 def test_prefix_paths() -> None:

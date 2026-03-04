@@ -14,6 +14,26 @@ use rattler_conda_types::{
 
 pub const CLOBBERS_DIR_NAME: &str = "__clobbers__";
 
+/// Controls how clobbered files are handled during installation.
+///
+/// When multiple packages install the same file, the default behavior is to
+/// rename the "losing" files to a `__clobbers__/` directory. This enum allows
+/// callers to instead raise an error when clobbering is detected.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ClobberMode {
+    /// The default behavior: when multiple packages install the same file,
+    /// the "losing" packages have their files renamed to a `__clobbers__/`
+    /// directory. The file from the highest-priority package "wins".
+    #[default]
+    Rename,
+
+    /// Raise an error if any clobbering is detected during post-processing.
+    /// With this mode, if multiple packages contain the same file path, the
+    /// installation will fail with an error instead of silently renaming
+    /// files.
+    Error,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
     /// The name of the package from which the final file is taken.
@@ -1491,6 +1511,113 @@ mod tests {
         assert_check_files!(
             &target_prefix.path(),
             &["lib/clobber-1.txt", "lib/clobber-2.txt", "lib/clobber.so"],
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clobber_mode_error() {
+        // Create a transaction with packages that clobber each other
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+            unchanged: vec![],
+        };
+
+        // Execute transaction with ClobberMode::Error
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let install_driver = InstallDriver::builder()
+            .clobber_mode(super::ClobberMode::Error)
+            .finish();
+
+        install_driver
+            .pre_process(&transaction, prefix_path.path(), None)
+            .unwrap();
+
+        for op in &transaction.operations {
+            execute_operation(
+                &prefix_path,
+                &LazyClient::default(),
+                &cache,
+                &install_driver,
+                op.clone(),
+                &InstallOptions::default(),
+            )
+            .await;
+        }
+
+        // post_process should return an error because clobbering was detected
+        let result = install_driver.post_process(&transaction, &prefix_path, None);
+        assert!(
+            result.is_err(),
+            "Expected an error due to ClobberMode::Error"
+        );
+
+        let err = result.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::install::driver::PostProcessingError::ClobberingDetected(_)
+            ),
+            "Expected ClobberingDetected error, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clobber_mode_rename_is_default() {
+        // Create a transaction with packages that clobber each other
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+            unchanged: vec![],
+        };
+
+        // Execute transaction with default ClobberMode (Rename)
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let result = execute_transaction(
+            transaction,
+            &prefix_path,
+            &LazyClient::default(),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // Default mode should succeed and report clobbered paths
+        assert!(
+            !result.clobbered_paths.is_empty(),
+            "Expected clobbered paths to be reported"
+        );
+
+        // The files should be clobbered (renamed) as usual
+        assert_check_files!(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "another-clobber.txt",
+                "__clobbers__/clobber-2/clobber.txt",
+                "__clobbers__/clobber-2/another-clobber.txt",
+                "__clobbers__/clobber-3/clobber.txt",
+                "__clobbers__/clobber-3/another-clobber.txt",
+            ],
         );
     }
 }

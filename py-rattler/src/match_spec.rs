@@ -62,8 +62,8 @@ impl PyMatchSpec {
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageNameMatcher> {
-        self.inner.name.clone().map(std::convert::Into::into)
+    pub fn name(&self) -> PyPackageNameMatcher {
+        self.inner.name.clone().into()
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -144,23 +144,23 @@ impl PyMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns a string representation of MatchSpec
+    /// Returns a string representation of `MatchSpec`
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }
 
-    /// Matches a MatchSpec against a PackageRecord
+    /// Matches a `MatchSpec` against a `PackageRecord`
     pub fn matches(&self, record: &PyRecord) -> bool {
         self.inner.matches(record.as_package_record())
     }
 
-    /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
+    /// Constructs a `PyMatchSpec` from a `PyNamelessMatchSpec` and a name.
     #[staticmethod]
     pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> PyResult<Self> {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
+                PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?,
             ),
         })
     }

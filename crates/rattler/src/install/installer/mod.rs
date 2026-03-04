@@ -682,7 +682,7 @@ impl Installer {
                 transaction.unchanged_packages(),
                 &prefix,
             )
-            .unwrap();
+            .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
 
         // Wait for all transaction operations to finish
         while let Some(result) = pending_link_futures.next().await {
@@ -883,7 +883,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
     let mut mapping = std::collections::HashMap::new();
 
     for spec in specs {
-        if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
+        if let PackageNameMatcher::Exact(name) = &spec.name {
             mapping
                 .entry(name.clone())
                 .or_insert_with(Vec::new)
@@ -1087,11 +1087,11 @@ mod tests {
         let specs = vec![
             MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
             // Create a nameless spec by removing the name
-            MatchSpec {
-                name: None,
-                version: Some(">=1.0".parse().unwrap()),
-                ..Default::default()
-            },
+            MatchSpec::from_nameless(
+                rattler_conda_types::NamelessMatchSpec::default(),
+                "*".parse::<rattler_conda_types::PackageNameMatcher>()
+                    .unwrap(),
+            ),
         ];
 
         let mapping = create_spec_mapping(&specs);

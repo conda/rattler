@@ -510,8 +510,16 @@ impl PackageCache {
                             // For context, conda itself only checks one hash.
                             if let Some(sha256) = sha256 {
                                 if sha256 != result.sha256 {
-                                    // Delete the package if the hash does not match
-                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    // Delete the package if the hash does not match.
+                                    // Failure here is non-fatal: the TempDir guard will
+                                    // clean up on drop; log and continue so the retry
+                                    // loop can proceed rather than panicking.
+                                    if let Err(e) = tokio_fs::remove_dir_all(&destination).await {
+                                        tracing::warn!(
+                                            "failed to remove destination on sha256 mismatch \
+                                             (will be cleaned up on drop): {e}"
+                                        );
+                                    }
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),
@@ -522,8 +530,16 @@ impl PackageCache {
                                 }
                             }  else if let Some(md5) = md5 {
                                 if md5 != result.md5 {
-                                    // Delete the package if the hash does not match
-                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    // Delete the package if the hash does not match.
+                                    // Failure here is non-fatal: the TempDir guard will
+                                    // clean up on drop; log and continue so the retry
+                                    // loop can proceed rather than panicking.
+                                    if let Err(e) = tokio_fs::remove_dir_all(&destination).await {
+                                        tracing::warn!(
+                                            "failed to remove destination on md5 mismatch \
+                                             (will be cleaned up on drop): {e}"
+                                        );
+                                    }
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),

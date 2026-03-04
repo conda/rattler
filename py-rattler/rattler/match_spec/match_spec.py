@@ -38,9 +38,9 @@ class MatchSpec:
 
     The rules for constructing a canonical string representation are:
 
-    1. `name` (i.e. "package name") is required, but its value can be '*'. Its
-    position is always outside the key-value brackets.
-    It can also be a glob pattern or a regex if `exact_names_only` is `False`.
+    1. `name` (i.e. "package name") is required. Its position is always outside the
+    key-value brackets. It can also be a glob pattern or a regex if `exact_names_only`
+    is `False`.
     2. If `version` is an exact version, it goes outside the key-value brackets and
     is prepended by `==`. If `version` is a "fuzzy" value (e.g. `1.11.*`), it goes
     outside the key-value brackets with the `.*` left off and is prepended by `=`.
@@ -109,7 +109,7 @@ class MatchSpec:
         MatchSpec("foo*")
         >>> MatchSpec("^foo.*$", strict=True, exact_names_only=True) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        InvalidMatchSpecException: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
+        InvalidMatchSpecError: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
         """
@@ -123,7 +123,7 @@ class MatchSpec:
             )
 
     @property
-    def name(self) -> Optional[PackageNameMatcher]:
+    def name(self) -> PackageNameMatcher:
         """
         The name of the package.
         """
@@ -236,7 +236,7 @@ class MatchSpec:
         MatchSpec("foo ==3.4")
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.PackageNameMatcherParseException
+        exceptions.PackageNameMatcherParseError
         >>>
         ```
         """

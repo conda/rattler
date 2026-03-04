@@ -84,18 +84,18 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .build()
         .expect("failed to create client");
 
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+    let download_client = reqwest_middleware::ClientBuilder::new(download_client.clone())
         .with_arc(Arc::new(
             AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
         ))
-        .with(rattler_networking::OciMiddleware);
+        .with(rattler_networking::OciMiddleware::new(download_client));
     #[cfg(feature = "s3")]
     let download_client = download_client.with(rattler_networking::S3Middleware::new(
         HashMap::new(),
         AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
     ));
     #[cfg(feature = "gcs")]
-    let download_client = download_client.with(rattler_networking::GCSMiddleware);
+    let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
     let download_client = download_client.build();
 
     // Create gateway
