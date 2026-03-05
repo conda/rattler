@@ -1,15 +1,8 @@
-from pathlib import Path
-
 import pytest
-
+from pathlib import Path
+from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
+from rattler.package_streaming import extract, download_and_extract
 from rattler.networking.client import Client
-from rattler.networking.middleware import GCSMiddleware, MirrorMiddleware, OciMiddleware
-from rattler.package_streaming import (
-    PackageFile,
-    download_and_extract,
-    extract,
-    fetch_package_file_from_url,
-)
 
 
 def get_test_data() -> Path:
@@ -74,32 +67,3 @@ async def test_download_from_oci(tmpdir: Path) -> None:
 
 def test_instantiate_gcs_middleware() -> None:
     _client = Client([GCSMiddleware()])
-
-
-@pytest.mark.asyncio
-async def test_fetch_package_file_index_json_from_url() -> None:
-    client = Client()
-
-    index_json = await fetch_package_file_from_url(
-        client,
-        "https://prefix.dev/conda-forge/noarch/boltons-25.0.0-pyhd8ed1ab_0.conda",
-        PackageFile.INDEX_JSON,
-    )
-
-    assert index_json.name.normalized == "boltons"
-    assert index_json.build == "pyhd8ed1ab_0"
-
-
-@pytest.mark.asyncio
-async def test_fetch_package_file_about_json_from_url() -> None:
-    client = Client()
-
-    about_json = await fetch_package_file_from_url(
-        client,
-        "https://prefix.dev/conda-forge/noarch/boltons-25.0.0-pyhd8ed1ab_0.conda",
-        PackageFile.ABOUT_JSON,
-    )
-
-    assert about_json.license is not None
-    assert "BSD" in about_json.license
-    assert "https://github.com/mahmoud/boltons" in about_json.home
