@@ -38,6 +38,21 @@ mod cache_key;
 mod cache_lock;
 mod reporter;
 
+/// Resolves the cache path for a given package, supporting both the new
+/// platform-aware layout and the legacy layout.
+fn resolve_cache_path(base: &Path, key: &CacheKey) -> PathBuf {
+    let new_path = key.cache_path(base);
+    let legacy_path = base.join(key.to_string());
+
+    if new_path.exists() {
+        new_path
+    } else if legacy_path.exists() {
+        legacy_path
+    } else {
+        new_path
+    }
+}
+
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
 ///
 /// The store does not provide an implementation to get the data into the store.
@@ -68,6 +83,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    subdir: Option<String>,
     origin_hash: Option<String>,
 }
 
@@ -77,6 +93,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name,
             version: key.version,
             build_string: key.build_string,
+            subdir: key.subdir,
             origin_hash: key.origin_hash,
         }
     }
@@ -171,7 +188,8 @@ impl PackageCacheLayer {
             .ok_or(PackageCacheLayerError::PackageNotFound)?
             .clone();
         let mut cache_entry = cache_entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_string());
+
+        let cache_path = resolve_cache_path(&self.path, cache_key);
 
         match validate_package_common::<
             fn(PathBuf) -> _,
@@ -215,7 +233,8 @@ impl PackageCacheLayer {
             .clone();
 
         let mut cache_entry = entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_string());
+
+        let cache_path = resolve_cache_path(&self.path, cache_key);
 
         match validate_package_common(
             cache_path,
@@ -358,7 +377,7 @@ impl PackageCache {
         let (_, writable_layers) = self.split_layers();
 
         for layer in self.inner.layers.iter() {
-            let cache_path = layer.path.join(cache_key.to_string());
+            let cache_path = resolve_cache_path(&layer.path, &cache_key);
 
             if cache_path.exists() {
                 match layer.try_validate(&cache_key).await {
@@ -1542,6 +1561,84 @@ mod test {
         assert!(
             should_run.load(Ordering::Relaxed),
             "fetch function should run again"
+        );
+    }
+
+    fn create_key(url: &Url, subdir: &str, sha: &str) -> CacheKey {
+        let mut key = CacheKey::from(CondaArchiveIdentifier::try_from_url(url).unwrap());
+        key.subdir = Some(subdir.to_string());
+        key.with_sha256(parse_digest_from_hex::<Sha256>(sha).unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_cross_platform_package_cache() {
+        let package_url = Url::parse("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2").unwrap();
+        let sha = "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8".to_string();
+
+        let cache_dir = tempdir().unwrap();
+        let cache = PackageCache::new(cache_dir.path());
+
+        let cache_key_linux = create_key(&package_url, "linux-64", &sha);
+        let cache_key_win = create_key(&package_url, "win-64", &sha);
+
+        let tar_archive_path = tools::download_and_cache_file_async(package_url.clone(), &sha)
+            .await
+            .unwrap();
+
+        let path1 = cache
+            .get_or_fetch(
+                cache_key_linux.clone(),
+                move |destination: PathBuf| {
+                    let tar_archive_path = tar_archive_path.clone();
+                    async move {
+                        rattler_package_streaming::tokio::fs::extract(
+                            &tar_archive_path,
+                            &destination,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                },
+                None,
+            )
+            .await
+            .unwrap()
+            .path;
+
+        let tar_archive_path2 = tools::download_and_cache_file_async(package_url, &sha)
+            .await
+            .unwrap();
+
+        let path2 = cache
+            .get_or_fetch(
+                cache_key_win.clone(),
+                move |destination: PathBuf| {
+                    let tar_archive_path = tar_archive_path2.clone();
+                    async move {
+                        rattler_package_streaming::tokio::fs::extract(
+                            &tar_archive_path,
+                            &destination,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                },
+                None,
+            )
+            .await
+            .unwrap()
+            .path;
+
+        assert_ne!(path1, path2);
+
+        assert!(
+            path1.components().any(|c| c.as_os_str() == "linux-64"),
+            "linux cache path should contain linux-64"
+        );
+
+        assert!(
+            path2.components().any(|c| c.as_os_str() == "win-64"),
+            "windows cache path should contain win-64"
         );
     }
 }
