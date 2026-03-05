@@ -520,8 +520,8 @@ fn parse_bracket_vec_into_components(
                     return Err(ParseMatchSpecError::InvalidBracketKey("when".to_string()));
                 }
             }
-            // TODO: Still need to add `features` and `license_family`
-            // to the match spec.
+            "license_family" => match_spec.license_family = Some(value.to_string()),
+            "features" => match_spec.features = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
@@ -1611,6 +1611,51 @@ mod tests {
     }
 
     #[test]
+    fn test_parsing_license_family() {
+        let spec = MatchSpec::from_str("python[license_family=MIT]", Strict).unwrap();
+        assert_eq!(spec.license_family, Some("MIT".into()));
+
+        // Roundtrip: Display -> parse must produce the same spec.
+        let reparsed = MatchSpec::from_str(&spec.to_string(), Strict).unwrap();
+        assert_eq!(reparsed.license_family, Some("MIT".into()));
+    }
+
+    #[test]
+    fn test_parsing_features() {
+        let spec = MatchSpec::from_str("numpy[features=blas]", Strict).unwrap();
+        assert_eq!(spec.features, Some("blas".into()));
+
+        // Roundtrip: Display -> parse must produce the same spec.
+        let reparsed = MatchSpec::from_str(&spec.to_string(), Strict).unwrap();
+        assert_eq!(reparsed.features, Some("blas".into()));
+    }
+
+    #[test]
+    fn test_features_and_license_family_matching() {
+        use crate::{match_spec::Matches, PackageName, PackageRecord, Version};
+
+        let mut record = PackageRecord::new(
+            PackageName::from_str("numpy").unwrap(),
+            Version::from_str("1.24.0").unwrap(),
+            "py310h1234_0".to_string(),
+        );
+        record.features = Some("blas".to_string());
+        record.license_family = Some("MIT".to_string());
+
+        // Both fields match.
+        let spec = MatchSpec::from_str("numpy[license_family=MIT, features=blas]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        // license_family mismatch.
+        let spec = MatchSpec::from_str("numpy[license_family=GPL]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+
+        // features mismatch.
+        let spec = MatchSpec::from_str("numpy[features=openblas]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+    }
+
+    #[test]
     fn test_parsing_track_features() {
         let cases = vec![
             "python[track_features=\"pypy debug\"]",  // Space
@@ -1714,6 +1759,8 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
+            license_family: Some("MIT".into()),
+            features: Some("blas".into()),
             condition: None,
             track_features: None,
         });
