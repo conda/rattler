@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, ops::Not, path::PathBuf, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -817,7 +817,7 @@ fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
     let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().expect("Could not get current directory"),
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
     );
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
