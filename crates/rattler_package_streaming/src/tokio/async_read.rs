@@ -232,7 +232,7 @@ pub async fn extract_conda_via_buffering(
 pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     archive: &mut tokio_tar::Archive<R>,
     file_name: &Path,
-) -> Result<Vec<u8>, ExtractError> {
+) -> Result<Option<Vec<u8>>, ExtractError> {
     let mut entries = archive.entries().map_err(ExtractError::IoError)?;
     while let Some(entry) = entries.next().await {
         let mut entry = entry.map_err(ExtractError::IoError)?;
@@ -244,8 +244,8 @@ pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
                 .read_to_end(&mut buf)
                 .await
                 .map_err(ExtractError::IoError)?;
-            return Ok(buf);
+            return Ok(Some(buf));
         }
     }
-    Err(ExtractError::MissingComponent)
+    Ok(None)
 }

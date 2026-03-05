@@ -54,13 +54,14 @@ const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 /// and tar reader, stopping as soon as the target file is found. Only the bytes
 /// needed to reach the target file are downloaded and decompressed.
 ///
-/// Returns an error if the URL does not point to a `.conda` archive, the server
-/// does not support range requests, or the file is not found.
+/// Returns `Ok(None)` if the file is not found in the archive.
+/// Returns an error if the URL does not point to a `.conda` archive or the
+/// server does not support range requests.
 pub async fn fetch_file_from_remote_conda(
     client: ClientWithMiddleware,
     url: Url,
     target_path: &Path,
-) -> Result<Vec<u8>, ExtractError> {
+) -> Result<Option<Vec<u8>>, ExtractError> {
     debug!("fetching {:?} from remote archive {}", target_path, url);
 
     let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
@@ -121,17 +122,15 @@ pub async fn fetch_file_from_remote_conda(
     //
     // The pipeline borrows zip_reader, so we scope it in a block to release
     // the borrow before accessing the inner reader for debug logging.
-    let result = {
-        let entry_reader = zip_reader.reader_without_entry(index).await?;
+    let entry_reader = zip_reader.reader_without_entry(index).await?;
 
-        // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
-        let tokio_reader = entry_reader.compat();
-        let buf_reader = tokio::io::BufReader::new(tokio_reader);
-        let zstd_decoder = ZstdDecoder::new(buf_reader);
-        let mut tar = tokio_tar::Archive::new(zstd_decoder);
+    // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
+    let tokio_reader = entry_reader.compat();
+    let buf_reader = tokio::io::BufReader::new(tokio_reader);
+    let zstd_decoder = ZstdDecoder::new(buf_reader);
+    let mut tar = tokio_tar::Archive::new(zstd_decoder);
 
-        get_file_from_tar_archive(&mut tar, target_path).await.ok()
-    };
+    let result = get_file_from_tar_archive(&mut tar, target_path).await?;
 
     debug!(
         "Requested ranges: {:?}",
@@ -143,7 +142,7 @@ pub async fn fetch_file_from_remote_conda(
             .await
     );
 
-    result.ok_or(ExtractError::MissingComponent)
+    Ok(result)
 }
 
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
@@ -175,7 +174,9 @@ pub async fn fetch_package_file_sparse<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
-    let bytes = fetch_file_from_remote_conda(client, url, P::package_path()).await?;
+    let bytes = fetch_file_from_remote_conda(client, url, P::package_path())
+        .await?
+        .ok_or(ExtractError::MissingComponent)?;
     P::from_str(&String::from_utf8_lossy(&bytes))
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
@@ -214,7 +215,8 @@ mod tests {
 
         let raw = fetch_file_from_remote_conda(client, url, Path::new("info/index.json"))
             .await
-            .unwrap();
+            .unwrap()
+            .expect("file should exist in archive");
         assert!(!raw.is_empty());
     }
 }
