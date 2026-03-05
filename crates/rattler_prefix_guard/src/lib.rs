@@ -89,9 +89,10 @@ impl AsyncWriteGuard {
     pub async fn finish(mut self) -> io::Result<()> {
         let status = self.state;
 
-        if status == GuardState::Installing
-            && let Some(mut file) = self.file.take()
-        {
+        if status == GuardState::Installing {
+            let Some(mut file) = self.file.take() else {
+                return Ok(());
+            };
             // Write the ready state (in a blocking task)
             tokio::task::spawn_blocking(move || -> io::Result<()> {
                 file.seek(SeekFrom::Start(0))?;
@@ -245,7 +246,7 @@ mod sys {
     use windows_sys::Win32::Foundation::HANDLE;
     use windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_LOCK_VIOLATION};
     use windows_sys::Win32::Storage::FileSystem::{
-        LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFile,
+        LockFileEx, UnlockFile, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
     };
 
     pub fn lock_exclusive(file: &File) -> Result<()> {

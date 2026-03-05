@@ -1,6 +1,6 @@
 [package]
 description = "A prefix guard (file lock) for rattler"
-edition = "2024"
+edition.workspace = true
 license.workspace = true
 name = "rattler_prefix_guard"
 repository.workspace = true
@@ -11,9 +11,9 @@ version = "0.1.0"
 
 [dependencies]
 fs-err = { workspace = true, features = ["tokio"] }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util"] }
+tokio = { workspace = true, features = ["fs", "io-util", "rt"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

@@ -18,8 +18,8 @@ use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
 use crate::{
-    GitError,
     sha::{GitOid, GitSha},
+    GitError,
 };
 
 /// A file indicates that if present, `git reset` has been done and a repo
@@ -723,10 +723,10 @@ fn github_fast_path(
             // but is not a short hash of the found object, it's probably a
             // branch and we also need to get a hash from GitHub, in case
             // the branch has moved.
-            if let Some(ref local_object) = local_object
-                && is_short_hash_of(rev, *local_object)
-            {
-                return Ok(FastPathRev::UpToDate);
+            if let Some(ref local_object) = local_object {
+                if is_short_hash_of(rev, *local_object) {
+                    return Ok(FastPathRev::UpToDate);
+                }
             }
             rev
         }

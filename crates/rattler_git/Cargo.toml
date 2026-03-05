@@ -1,7 +1,7 @@
 [package]
 name = "rattler_git"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Git operations support for rattler-build"
@@ -13,7 +13,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 rattler_prefix_guard = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 reqwest-middleware = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
 tracing = { workspace = true }
