@@ -333,8 +333,22 @@ impl Version {
     }
 
     /// Returns true if this version is compatible with the given `other`.
+    ///
+    /// When `other` has no local version but `self` does, the local part of
+    /// `self` is stripped before the `>=` check.  This mirrors how local
+    /// version segments are handled in packaging ecosystems: a constraint
+    /// like `~=2.0` should match `2.0.0+fastbuild` because the public
+    /// version `2.0.0` is compatible with `2.0`.
     pub fn compatible_with(&self, other: &Self) -> bool {
-        self.ge(other)
+        // Strip local from self when the limit has no local part so that
+        // string-only locals (which sort below bare releases in conda) do
+        // not cause a spurious "less than" result.
+        let effective = if self.has_local() && !other.has_local() {
+            self.strip_local()
+        } else {
+            Cow::Borrowed(self)
+        };
+        effective.as_ref().ge(other)
             && self.epoch() == other.epoch()
             // Remove the last segment from the limit.
             && segments_starts_with(self.segments(), other.segments().rev().skip(1).rev())
