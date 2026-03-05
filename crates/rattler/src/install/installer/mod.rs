@@ -75,7 +75,6 @@ pub struct Installer {
     reinstall_packages: Option<HashSet<PackageName>>,
     ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
-    // TODO: Determine upfront if these are possible.
     link_options: LinkOptions,
 }
 
@@ -729,6 +728,11 @@ async fn link_package(
 
     rayon::spawn_fifo(move || {
         let inner = move || {
+            // Capturing the allow_hard_links option before install_options is moved into
+            // link_package_sync, so we can use it afterwards to record the correct
+            // link type in the PrefixRecord.
+            let allow_hard_links_opt = install_options.allow_hard_links;
+
             // Link the contents of the package into the prefix.
             let paths = crate::install::link_package_sync(
                 &cached_package_dir,
@@ -738,14 +742,22 @@ async fn link_package(
             )
             .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;
 
+            // Determining whether hard links were actually used.
+            let allow_hard_links = allow_hard_links_opt.unwrap_or_else(|| {
+                crate::install::can_create_hardlinks_sync(&target_prefix, &cached_package_dir)
+            });
+            let link_type = if allow_hard_links {
+                LinkType::HardLink
+            } else {
+                LinkType::Copy
+            };
+
             // Construct a PrefixRecord for the package
             let prefix_record = PrefixRecord {
                 extracted_package_dir: Some(cached_package_dir.clone()),
                 link: Some(Link {
                     source: cached_package_dir,
-                    // TODO: compute the right value here based on the options and `can_hard_link`
-                    // ...
-                    link_type: Some(LinkType::HardLink),
+                    link_type: Some(link_type),
                 }),
                 requested_specs,
                 ..PrefixRecord::from_repodata_record(record.clone(), paths)
@@ -1464,6 +1476,56 @@ mod tests {
             result.is_ok(),
             "Installation should succeed when installing noarch packages with noarch platform: {:?}",
             result.err()
+        );
+    }
+
+    /// Test that the recorded `link_type` in the conda-meta `PrefixRecord`
+    /// matches the filesystem capabilities
+    #[tokio::test]
+    async fn test_link_type_recorded_correctly() {
+        use rattler_conda_types::prefix_record::LinkType;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Install with hard links explicitly disabled
+        let installer = Installer::new().with_link_options(LinkOptions {
+            allow_hard_links: Some(false),
+            ..LinkOptions::default()
+        });
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_path = get_meta_file_path(&target_prefix, &repo_record);
+        let prefix_record = read_prefix_record(&meta_path);
+        assert_eq!(
+            prefix_record.link.as_ref().and_then(|l| l.link_type),
+            Some(LinkType::Copy),
+            "link_type should be Copy when hard links are disabled"
+        );
+    }
+
+    /// Test that when hard links are explicitly forced on
+    #[tokio::test]
+    async fn test_link_type_hardlink_when_forced() {
+        use rattler_conda_types::prefix_record::LinkType;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Force hard links on prefix and cache are on the same device in
+        // this test so hard linking should actually succeed.
+        let installer = Installer::new().with_link_options(LinkOptions {
+            allow_hard_links: Some(true),
+            ..LinkOptions::default()
+        });
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_path = get_meta_file_path(&target_prefix, &repo_record);
+        let prefix_record = read_prefix_record(&meta_path);
+        assert_eq!(
+            prefix_record.link.as_ref().and_then(|l| l.link_type),
+            Some(LinkType::HardLink),
+            "link_type should be HardLink when hard links are explicitly enabled"
         );
     }
 }

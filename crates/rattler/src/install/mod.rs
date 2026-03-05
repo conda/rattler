@@ -1173,7 +1173,7 @@ async fn can_create_hardlinks(target_dir: &Prefix, package_dir: &Path) -> bool {
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
+pub(crate) fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 
