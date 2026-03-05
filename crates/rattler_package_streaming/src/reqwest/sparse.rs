@@ -39,7 +39,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::debug;
 use url::Url;
 
-use crate::tokio::async_read::get_file_from_tar_archive;
+use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
 use crate::ExtractError;
 
 /// Default number of bytes to fetch from the end of the file.
@@ -47,8 +47,8 @@ use crate::ExtractError;
 /// and often the entire info archive.
 const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 
-/// Fetch the raw bytes of a single file from a remote `.conda` package's info
-/// section using HTTP range requests.
+/// Fetch the raw bytes of a single file from a remote `.conda` package using
+/// HTTP range requests.
 ///
 /// Streams the zstd data directly from the server through an async decompressor
 /// and tar reader, stopping as soon as the target file is found. Only the bytes
@@ -86,7 +86,8 @@ pub async fn fetch_file_from_remote_conda(
     // Open ZIP (parses EOCD + central directory, data already cached from range request)
     let mut zip_reader = ZipFileReader::new(buf_reader).await?;
 
-    // Find the info-*.tar.zst entry
+    // Find the tar.zst entry that contains the target path
+    let prefix = conda_entry_prefix(target_path);
     let (index, _) = zip_reader
         .file()
         .entries()
@@ -95,7 +96,7 @@ pub async fn fetch_file_from_remote_conda(
         .find(|(_, e)| {
             e.filename()
                 .as_str()
-                .map(|f| f.starts_with("info-") && f.ends_with(".tar.zst"))
+                .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
                 .unwrap_or(false)
         })
         .ok_or(ExtractError::MissingComponent)?;
@@ -218,5 +219,18 @@ mod tests {
             .unwrap()
             .expect("file should exist in archive");
         assert!(!raw.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_pkg_file_sparse() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_file_from_remote_conda(client, url, Path::new("clobber"))
+            .await
+            .unwrap()
+            .expect("file should exist in pkg section");
+        let content = String::from_utf8(raw).unwrap();
+        insta::assert_snapshot!(content, @"clobber-fd-1");
     }
 }

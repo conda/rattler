@@ -224,6 +224,16 @@ pub async fn extract_conda_via_buffering(
     })
 }
 
+/// Returns the ZIP entry prefix (`"info-"` or `"pkg-"`) that contains the
+/// given `target_path` inside a `.conda` archive.
+pub(crate) fn conda_entry_prefix(target_path: &Path) -> &'static str {
+    if target_path.starts_with("info") {
+        "info-"
+    } else {
+        "pkg-"
+    }
+}
+
 /// Async equivalent of [`crate::seek::get_file_from_archive`].
 ///
 /// Iterates entries of a tar archive, returning the contents of the first

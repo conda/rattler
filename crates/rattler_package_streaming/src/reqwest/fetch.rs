@@ -146,6 +146,7 @@ async fn fetch_package_file_full_download<P: PackageFile>(
             let mut zip_reader = ZipFileReader::new(&mut buf_reader);
 
             let mut found: Option<Vec<u8>> = None;
+            let prefix = crate::tokio::async_read::conda_entry_prefix(file_path);
 
             while let Some(mut entry) = zip_reader
                 .next_with_entry()
@@ -156,7 +157,7 @@ async fn fetch_package_file_full_download<P: PackageFile>(
                     ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
                 })?;
 
-                if filename.starts_with("info-") && filename.ends_with(".tar.zst") {
+                if filename.starts_with(prefix) && filename.ends_with(".tar.zst") {
                     // Bridge the entry reader back from futures → tokio
                     let compat_entry = entry.reader_mut().compat();
                     let buf_entry = tokio::io::BufReader::new(compat_entry);
