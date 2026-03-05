@@ -1,8 +1,9 @@
 //! Fetch individual files from remote `.conda` packages using HTTP range requests.
 //!
-//! Uses range requests to fetch only the info section, then stream-decompresses
-//! the zstd tar archive only until the target file is found. This avoids
-//! downloading the full package and avoids decompressing more data than needed.
+//! Streams the zstd-compressed info tar archive directly from the server,
+//! decompressing on the fly and stopping as soon as the target file is found.
+//! This means only the bytes up to (and including) the target file are ever
+//! downloaded or decompressed — even if the info archive is very large.
 //!
 //! Only `.conda` archives on servers that support range requests are supported.
 //! For a higher-level API that falls back to full downloads, see
@@ -26,20 +27,20 @@
 //! # }
 //! ```
 
-use std::io::Cursor;
 use std::path::Path;
 
+use async_compression::tokio::bufread::ZstdDecoder;
 use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
 use async_zip::base::read::seek::ZipFileReader;
-use futures::io::AsyncReadExt as _;
+use futures_util::StreamExt;
 use http::HeaderMap;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
-use tokio_util::compat::TokioAsyncReadCompatExt;
+use tokio::io::AsyncReadExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::debug;
 use url::Url;
 
-use crate::seek::get_file_from_archive;
 use crate::ExtractError;
 
 /// Default number of bytes to fetch from the end of the file.
@@ -50,8 +51,9 @@ const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 /// Fetch the raw bytes of a single file from a remote `.conda` package's info
 /// section using HTTP range requests.
 ///
-/// Only decompresses the zstd stream until the target file is found, avoiding
-/// unnecessary work for files early in the tar archive.
+/// Streams the zstd data directly from the server through an async decompressor
+/// and tar reader, stopping as soon as the target file is found. Only the bytes
+/// needed to reach the target file are downloaded and decompressed.
 ///
 /// Returns an error if the URL does not point to a `.conda` archive, the server
 /// does not support range requests, or the file is not found.
@@ -98,22 +100,37 @@ pub async fn fetch_file_from_remote_conda(
         })
         .ok_or(ExtractError::MissingComponent)?;
 
-    // Read the compressed entry
-    let mut entry_reader = zip_reader.reader_without_entry(index).await?;
-    let mut compressed_data = Vec::new();
-    entry_reader.read_to_end(&mut compressed_data).await?;
+    // Get a streaming reader for the ZIP entry (futures::io::AsyncRead).
+    // This does NOT buffer the entire entry — bytes are fetched on demand
+    // via HTTP range requests as the downstream decompressor/tar reader
+    // consumes them.
+    let entry_reader = zip_reader.reader_without_entry(index).await?;
 
-    // Stream-decompress zstd into tar and extract only the target file.
-    // This stops decompressing as soon as the file is found.
-    debug!(
-        "decompressing zstd info archive ({} bytes) to find {:?}",
-        compressed_data.len(),
-        target_path
-    );
-    let decoder =
-        zstd::Decoder::new(Cursor::new(&compressed_data)).map_err(ExtractError::IoError)?;
-    let mut archive = tar::Archive::new(decoder);
-    get_file_from_archive(&mut archive, target_path)
+    // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
+    let tokio_reader = entry_reader.compat();
+    let buf_reader = tokio::io::BufReader::new(tokio_reader);
+    let zstd_decoder = ZstdDecoder::new(buf_reader);
+    let mut tar = tokio_tar::Archive::new(zstd_decoder);
+
+    // Iterate tar entries, stopping as soon as we find the target file.
+    // Because the entire pipeline is streaming, this only downloads and
+    // decompresses the bytes up to (and including) the target entry.
+    let mut entries = tar.entries().map_err(ExtractError::IoError)?;
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry.map_err(ExtractError::IoError)?;
+        let path = entry.path().map_err(ExtractError::IoError)?;
+        if path.as_ref() == target_path {
+            let size = entry.header().size().map_err(ExtractError::IoError)?;
+            let mut buf = Vec::with_capacity(size as usize);
+            entry
+                .read_to_end(&mut buf)
+                .await
+                .map_err(ExtractError::IoError)?;
+            return Ok(buf);
+        }
+    }
+
+    Err(ExtractError::MissingComponent)
 }
 
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
