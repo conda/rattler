@@ -78,6 +78,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    subdir: Option<String>,
     sha256_string: String,
 }
 
@@ -87,6 +88,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name.clone(),
             version: key.version.clone(),
             build_string: key.build_string.clone(),
+            subdir: key.subdir.clone(),
             sha256_string: key.sha256_str(),
         }
     }
@@ -123,7 +125,7 @@ impl RunExportsCache {
         Fut: Future<Output = Result<Option<NamedTempFile>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_path = cache_key.cache_path(&self.inner.path);
         let cache_entry = self
             .inner
             .run_exports
