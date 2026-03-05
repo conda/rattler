@@ -13,7 +13,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use rattler_conda_types::package::IndexJson;
-//! use rattler_package_streaming::reqwest::range::fetch_package_file_from_url;
+//! use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
@@ -67,7 +67,7 @@ use crate::ExtractError;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use rattler_conda_types::package::IndexJson;
-/// use rattler_package_streaming::reqwest::range::fetch_package_file_from_url;
+/// use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
 /// use reqwest::Client;
 /// use reqwest_middleware::ClientWithMiddleware;
 /// use url::Url;

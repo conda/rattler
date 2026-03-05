@@ -6,7 +6,7 @@
 //!
 //! Only `.conda` archives on servers that support range requests are supported.
 //! For a higher-level API that falls back to full downloads, see
-//! [`super::range::fetch_package_file_from_url`].
+//! [`super::fetch::fetch_package_file_from_url`].
 //!
 //! # Example
 //!
