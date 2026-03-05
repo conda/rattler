@@ -59,6 +59,7 @@ pub enum ExtractError {
     #[error(transparent)]
     ReqwestError(::reqwest_middleware::Error),
 
+    #[cfg(feature = "reqwest")]
     #[error("an error occurred during a range request: {0}")]
     AsyncHttpRangeReaderError(#[from] async_http_range_reader::AsyncHttpRangeReaderError),
 
