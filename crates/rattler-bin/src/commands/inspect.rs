@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::package::IndexJson;
+use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
+use rattler_package_streaming::reqwest::sparse::SparseRemoteArchive;
 use reqwest::Client;
 use url::Url;
 
@@ -30,10 +30,15 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let index_json: IndexJson = fetch_package_file_from_url(client, opt.url)
+    let archive = SparseRemoteArchive::new(client, opt.url)
         .await
         .into_diagnostic()
         .context("failed to fetch package info")?;
+
+    let index_json: IndexJson = archive
+        .read()
+        .into_diagnostic()
+        .context("failed to read index.json")?;
 
     println!("name: {}", index_json.name.as_normalized());
     println!("version: {}", index_json.version);
@@ -55,6 +60,20 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         for c in &index_json.constrains {
             println!("  - {c}");
         }
+    }
+
+    let paths_json: PathsJson = archive
+        .read()
+        .into_diagnostic()
+        .context("failed to read paths.json")?;
+
+    let total = paths_json.paths.len();
+    println!("paths: ({total} total)");
+    for entry in paths_json.paths.iter().take(10) {
+        println!("  - {}", entry.relative_path.display());
+    }
+    if total > 10 {
+        println!("  ... and {} more", total - 10);
     }
 
     Ok(())
