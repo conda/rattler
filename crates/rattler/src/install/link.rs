@@ -101,6 +101,10 @@ pub enum LinkFileError {
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary,
 
+    /// The symlink target escapes the target prefix directory.
+    #[error("symlink target escapes the target prefix")]
+    SymlinkTargetEscapesPrefix,
+
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
@@ -145,7 +149,7 @@ pub struct LinkedFile {
 /// we control here to make the generated filesystem tree more reproducible. `modification_time`
 /// should be greater than any of the modification times of any of the files that were packaged
 /// up (ignoring any data conda stores).
-#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub fn link_file(
     path_json_entry: &PathsEntry,
     destination_relative_path: PathBuf,
@@ -158,6 +162,7 @@ pub fn link_file(
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
+    allow_external_symlinks: bool,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -283,7 +288,12 @@ pub fn link_file(
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        symlink_to_destination(&source_path, &destination_path)?
+        symlink_to_destination(
+            &source_path,
+            &destination_path,
+            target_dir.path(),
+            allow_external_symlinks,
+        )?
     } else {
         copy_to_destination(&source_path, &destination_path)?
     };
@@ -468,10 +478,43 @@ fn hardlink_to_destination(
 fn symlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
+    target_prefix: &Path,
+    allow_external_symlinks: bool,
 ) -> Result<LinkMethod, LinkFileError> {
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
+
+    // Resolve the symlink target relative to the destination's parent and
+    // verify it stays inside the target prefix.
+    let resolved = destination_path
+        .parent()
+        .unwrap_or(destination_path)
+        .join(&linked_path);
+
+    let mut normalized = PathBuf::new();
+    for component in resolved.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normalized.push(other),
+        }
+    }
+
+    if !normalized.starts_with(target_prefix) {
+        if allow_external_symlinks {
+            tracing::warn!(
+                "symlink {} points outside the target prefix: {}",
+                destination_path.display(),
+                linked_path.display()
+            );
+        } else {
+            return Err(LinkFileError::SymlinkTargetEscapesPrefix);
+        }
+    }
+
     loop {
         match symlink(&linked_path, destination_path) {
             Ok(_) => {
@@ -903,6 +946,7 @@ mod test {
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
+            false,
         )
         .unwrap();
 
@@ -962,6 +1006,7 @@ mod test {
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
+            false,
         )
         .unwrap();
 
@@ -1228,5 +1273,60 @@ mod test {
         // Test empty file
         let empty: [u8; 0] = [];
         assert_eq!(FileType::detect(&empty), None);
+    }
+
+    #[test]
+    fn test_symlink_escape_rejected() {
+        use super::{symlink_to_destination, LinkFileError};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let prefix = tmp.path().join("prefix");
+        let cache = tmp.path().join("cache");
+        fs::create_dir_all(prefix.join("lib")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../../../../escape_target", cache.join("lib/sneaky-link"))
+            .unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(
+            "..\\..\\..\\..\\escape_target",
+            cache.join("lib\\sneaky-link"),
+        )
+        .unwrap();
+
+        let result = symlink_to_destination(
+            &cache.join("lib/sneaky-link"),
+            &prefix.join("lib/sneaky-link"),
+            &prefix,
+            false,
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            LinkFileError::SymlinkTargetEscapesPrefix
+        ));
+    }
+
+    #[test]
+    fn test_symlink_within_prefix_allowed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let prefix = tmp.path().join("prefix");
+        let cache = tmp.path().join("cache");
+        fs::create_dir_all(prefix.join("lib")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../bin/real_file", cache.join("lib/safe-link")).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file("..\\bin\\real_file", cache.join("lib\\safe-link"))
+            .unwrap();
+
+        let result = super::symlink_to_destination(
+            &cache.join("lib/safe-link"),
+            &prefix.join("lib/safe-link"),
+            &prefix,
+            false,
+        );
+        assert!(result.is_ok());
     }
 }
