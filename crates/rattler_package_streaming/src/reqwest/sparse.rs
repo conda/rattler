@@ -177,7 +177,7 @@ pub async fn fetch_package_file_sparse<P: PackageFile>(
     let bytes = fetch_file_from_remote_conda(client, url, P::package_path())
         .await?
         .ok_or(ExtractError::MissingComponent)?;
-    P::from_str(&String::from_utf8_lossy(&bytes))
+    P::from_slice(&bytes)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 

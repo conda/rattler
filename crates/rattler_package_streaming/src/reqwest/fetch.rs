@@ -121,7 +121,7 @@ async fn fetch_package_file_full_download<P: PackageFile>(
         .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
     let content = read_package_file_content(Cursor::new(&*bytes), archive_type, P::package_path())?;
-    P::from_str(&String::from_utf8_lossy(&content))
+    P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 

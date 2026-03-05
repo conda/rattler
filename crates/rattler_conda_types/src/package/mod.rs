@@ -52,6 +52,14 @@ pub trait PackageFile: Sized {
     /// error.
     fn from_str(str: &str) -> Result<Self, std::io::Error>;
 
+    /// Parses the object from a byte slice, using a format appropriate for the file type.
+    ///
+    /// The bytes are interpreted as a UTF-8 string (with lossy conversion for
+    /// invalid sequences) and then parsed via [`Self::from_str`].
+    fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
+        Self::from_str(&String::from_utf8_lossy(slice))
+    }
+
     /// Parses the object from a `Read` trait object, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function reads the data from the `Read`
