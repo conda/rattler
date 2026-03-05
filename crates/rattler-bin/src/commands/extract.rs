@@ -50,7 +50,7 @@ fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWit
         authentication_storage,
     ));
     #[cfg(feature = "gcs")]
-    let client = client.with(rattler_networking::GCSMiddleware);
+    let client = client.with(rattler_networking::GCSMiddleware::default());
     let client = client.build();
 
     Ok(client)

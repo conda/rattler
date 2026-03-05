@@ -558,9 +558,7 @@ impl<'a> CondaDependencyProvider<'a> {
         let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
         for rule in dependency_overrides {
             if let Some(name) = rule.override_spec.name.as_exact() {
-                if let Some(name) = Option::<PackageName>::from(name.clone()) {
-                    override_map.entry(name).or_default().push(rule);
-                }
+                override_map.entry(name.clone()).or_default().push(rule);
             }
         }
 
@@ -601,8 +599,7 @@ impl<'a> CondaDependencyProvider<'a> {
         dep_spec: &MatchSpec,
     ) -> Option<String> {
         let dep_name = dep_spec.name.as_exact()?;
-        let dep_name = Option::<PackageName>::from(dep_name.clone())?;
-        let rules = self.dependency_overrides.get(&dep_name)?;
+        let rules = self.dependency_overrides.get(dep_name)?;
         for rule in rules {
             if rule.package_matcher.matches(&record.package_record) {
                 return Some(rule.override_spec.to_string());
