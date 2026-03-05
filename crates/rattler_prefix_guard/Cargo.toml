@@ -1,0 +1,25 @@
+[package]
+description = "A prefix guard (file lock) for rattler"
+edition = "2024"
+license.workspace = true
+name = "rattler_prefix_guard"
+repository.workspace = true
+version = "0.1.0"
+
+[features]
+
+
+[dependencies]
+fs-err = { workspace = true, features = ["tokio"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }

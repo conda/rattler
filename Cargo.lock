@@ -5008,6 +5008,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_git"
+version = "0.1.0"
+dependencies = [
+ "dashmap",
+ "dunce",
+ "fs-err",
+ "rattler_prefix_guard",
+ "reqwest 0.12.28",
+ "reqwest-middleware",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "urlencoding",
+ "which",
+]
+
+[[package]]
 name = "rattler_index"
 version = "0.27.16"
 dependencies = [
@@ -5202,6 +5222,18 @@ dependencies = [
  "walkdir",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "rattler_prefix_guard"
+version = "0.1.0"
+dependencies = [
+ "fs-err",
+ "libc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
