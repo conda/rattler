@@ -2,12 +2,11 @@
 source: crates/rattler_package_streaming/src/reqwest/fetch.rs
 expression: index_json
 ---
-build: hc8b5060_0
+build: h4616a5c_0
 build_number: 0
 depends: []
-license: LicenseRef-Public-Domain
-name: tzdata
+name: clobber-fd-1
 noarch: generic
 subdir: noarch
-timestamp: 1728047496079
-version: 2024b
+timestamp: 1751876402910
+version: 0.1.0

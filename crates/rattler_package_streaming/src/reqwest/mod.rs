@@ -2,3 +2,6 @@
 pub mod fetch;
 pub mod sparse;
 pub mod tokio;
+
+#[cfg(test)]
+mod test_server;

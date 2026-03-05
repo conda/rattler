@@ -5205,6 +5205,7 @@ dependencies = [
  "async-compression",
  "async-spooled-tempfile",
  "async_http_range_reader",
+ "axum",
  "bzip2",
  "chrono",
  "fs-err",

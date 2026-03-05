@@ -190,16 +190,19 @@ fn extract_all_from_tar(tar_bytes: &[u8]) -> Result<HashMap<PathBuf, Vec<u8>>, E
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reqwest::test_server;
+
+    fn test_file() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda")
+    }
 
     #[tokio::test]
     async fn test_sparse_remote_archive() {
         use rattler_conda_types::package::{AboutJson, IndexJson};
 
+        let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let url = Url::parse(
-            "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda",
-        )
-        .unwrap();
 
         let archive = SparseRemoteArchive::new(client, url).await.unwrap();
 
