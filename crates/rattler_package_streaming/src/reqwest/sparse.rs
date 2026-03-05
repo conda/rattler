@@ -119,33 +119,51 @@ pub async fn fetch_file_from_remote_conda(
     // This does NOT buffer the entire entry — bytes are fetched on demand
     // via HTTP range requests as the downstream decompressor/tar reader
     // consumes them.
-    let entry_reader = zip_reader.reader_without_entry(index).await?;
+    //
+    // The pipeline borrows zip_reader, so we scope it in a block to release
+    // the borrow before accessing the inner reader for debug logging.
+    let result = {
+        let entry_reader = zip_reader.reader_without_entry(index).await?;
 
-    // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
-    let tokio_reader = entry_reader.compat();
-    let buf_reader = tokio::io::BufReader::new(tokio_reader);
-    let zstd_decoder = ZstdDecoder::new(buf_reader);
-    let mut tar = tokio_tar::Archive::new(zstd_decoder);
+        // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
+        let tokio_reader = entry_reader.compat();
+        let buf_reader = tokio::io::BufReader::new(tokio_reader);
+        let zstd_decoder = ZstdDecoder::new(buf_reader);
+        let mut tar = tokio_tar::Archive::new(zstd_decoder);
 
-    // Iterate tar entries, stopping as soon as we find the target file.
-    // Because the entire pipeline is streaming, this only downloads and
-    // decompresses the bytes up to (and including) the target entry.
-    let mut entries = tar.entries().map_err(ExtractError::IoError)?;
-    while let Some(entry) = entries.next().await {
-        let mut entry = entry.map_err(ExtractError::IoError)?;
-        let path = entry.path().map_err(ExtractError::IoError)?;
-        if path.as_ref() == target_path {
-            let size = entry.header().size().map_err(ExtractError::IoError)?;
-            let mut buf = Vec::with_capacity(size as usize);
-            entry
-                .read_to_end(&mut buf)
-                .await
-                .map_err(ExtractError::IoError)?;
-            return Ok(buf);
+        // Iterate tar entries, stopping as soon as we find the target file.
+        // Because the entire pipeline is streaming, this only downloads and
+        // decompresses the bytes up to (and including) the target entry.
+        let mut entries = tar.entries().map_err(ExtractError::IoError)?;
+        let mut result = None;
+        while let Some(entry) = entries.next().await {
+            let mut entry = entry.map_err(ExtractError::IoError)?;
+            let path = entry.path().map_err(ExtractError::IoError)?;
+            if path.as_ref() == target_path {
+                let size = entry.header().size().map_err(ExtractError::IoError)?;
+                let mut buf = Vec::with_capacity(size as usize);
+                entry
+                    .read_to_end(&mut buf)
+                    .await
+                    .map_err(ExtractError::IoError)?;
+                result = Some(buf);
+                break;
+            }
         }
-    }
+        result
+    };
 
-    Err(ExtractError::MissingComponent)
+    debug!(
+        "Requested ranges: {:?}",
+        zip_reader
+            .inner_mut()
+            .get_mut()
+            .get_mut()
+            .requested_ranges()
+            .await
+    );
+
+    result.ok_or(ExtractError::MissingComponent)
 }
 
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
