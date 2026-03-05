@@ -24,8 +24,8 @@ pub async fn install_package_to_environment(
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
     // Link the contents of the package into our environment. This returns all the
-    // paths that were linked.
-    let paths = crate::install::link_package_sync(
+    // paths that were linked and the link type that was used.
+    let (paths, _link_type) = crate::install::link_package_sync(
         &package_dir,
         target_prefix,
         install_driver.clobber_registry.clone(),

@@ -58,7 +58,8 @@ pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
-    prefix_record, Platform,
+    prefix_record::{self, LinkType},
+    Platform,
 };
 use rayon::{
     iter::Either,
@@ -622,7 +623,7 @@ pub fn link_package_sync(
     target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
-) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
+) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -687,6 +688,13 @@ pub fn link_package_sync(
     let allow_hard_links = options
         .allow_hard_links
         .unwrap_or_else(|| can_create_hardlinks_sync(target_dir, package_dir));
+    // Record the link type that will be used for this package. Hard links take
+    // priority
+    let link_type = if allow_hard_links {
+        LinkType::HardLink
+    } else {
+        LinkType::Copy
+    };
     let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
         match reflink_copy::check_reflink_support(package_dir, target_dir) {
             Ok(reflink_copy::ReflinkSupport::Supported) => true,
@@ -988,7 +996,7 @@ pub fn link_package_sync(
         paths.append(&mut entry_point_paths);
     };
 
-    Ok(paths)
+    Ok((paths, link_type))
 }
 
 fn compute_paths(
@@ -1173,7 +1181,7 @@ async fn can_create_hardlinks(target_dir: &Prefix, package_dir: &Path) -> bool {
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-pub(crate) fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
+fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 

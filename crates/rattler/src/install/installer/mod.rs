@@ -22,8 +22,8 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    prefix_record::{Link, LinkType},
-    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
+    prefix_record::Link, MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord,
+    RepoDataRecord,
 };
 use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
 use rayon::prelude::*;
@@ -728,29 +728,14 @@ async fn link_package(
 
     rayon::spawn_fifo(move || {
         let inner = move || {
-            // Capturing the allow_hard_links option before install_options is moved into
-            // link_package_sync, so we can use it afterwards to record the correct
-            // link type in the PrefixRecord.
-            let allow_hard_links_opt = install_options.allow_hard_links;
-
-            // Link the contents of the package into the prefix.
-            let paths = crate::install::link_package_sync(
+            // Link the contents of the package into the prefix. 
+            let (paths, link_type) = crate::install::link_package_sync(
                 &cached_package_dir,
                 &target_prefix,
                 clobber_registry,
                 install_options,
             )
             .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;
-
-            // Determining whether hard links were actually used.
-            let allow_hard_links = allow_hard_links_opt.unwrap_or_else(|| {
-                crate::install::can_create_hardlinks_sync(&target_prefix, &cached_package_dir)
-            });
-            let link_type = if allow_hard_links {
-                LinkType::HardLink
-            } else {
-                LinkType::Copy
-            };
 
             // Construct a PrefixRecord for the package
             let prefix_record = PrefixRecord {
