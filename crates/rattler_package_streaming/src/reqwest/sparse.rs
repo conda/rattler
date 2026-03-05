@@ -210,10 +210,10 @@ mod tests {
 
         // Read typed files
         let index_json: IndexJson = archive.read().unwrap();
-        assert_eq!(index_json.name.as_normalized(), "tzdata");
+        insta::assert_yaml_snapshot!(index_json);
 
         let about_json: AboutJson = archive.read().unwrap();
-        assert!(about_json.license.is_some());
+        insta::assert_yaml_snapshot!(about_json);
 
         // Read raw bytes
         let raw = archive.read_raw(Path::new("info/index.json")).unwrap();

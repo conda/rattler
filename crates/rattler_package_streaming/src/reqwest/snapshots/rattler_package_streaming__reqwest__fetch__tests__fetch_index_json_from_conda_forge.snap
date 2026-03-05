@@ -1,0 +1,13 @@
+---
+source: crates/rattler_package_streaming/src/reqwest/fetch.rs
+expression: index_json
+---
+build: hc8b5060_0
+build_number: 0
+depends: []
+license: LicenseRef-Public-Domain
+name: tzdata
+noarch: generic
+subdir: noarch
+timestamp: 1728047496079
+version: 2024b

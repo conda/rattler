@@ -142,8 +142,7 @@ mod tests {
 
         let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
 
-        assert_eq!(index_json.name.as_normalized(), "tzdata");
-        assert_eq!(index_json.version.to_string(), "2024b");
+        insta::assert_yaml_snapshot!(index_json);
     }
 
     #[tokio::test]
@@ -158,7 +157,6 @@ mod tests {
 
         let about_json: AboutJson = fetch_package_file_from_url(client, url).await.unwrap();
 
-        // tzdata package should have license info
-        assert!(about_json.license.is_some());
+        insta::assert_yaml_snapshot!(about_json);
     }
 }
