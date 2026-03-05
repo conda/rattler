@@ -1,0 +1,25 @@
+[package]
+name = "rattler_git"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Git operations support for rattler-build"
+
+[dependencies]
+dashmap = { workspace = true }
+dunce = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+rattler_prefix_guard = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+reqwest-middleware = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
+tracing = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+urlencoding = { workspace = true }
+which = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

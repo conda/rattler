@@ -27,7 +27,7 @@ impl From<PyVersionSpec> for VersionSpec {
 
 #[pymethods]
 impl PyVersionSpec {
-    /// Construct a new VersionSpec from a string with optional strict parsing.
+    /// Construct a new `VersionSpec` from a string with optional strict parsing.
     #[new]
     #[pyo3(signature = (spec, strict=false))]
     pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
