@@ -32,15 +32,14 @@ use std::path::Path;
 use async_compression::tokio::bufread::ZstdDecoder;
 use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
 use async_zip::base::read::seek::ZipFileReader;
-use futures_util::StreamExt;
 use http::HeaderMap;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
-use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::debug;
 use url::Url;
 
+use crate::tokio::async_read::get_file_from_tar_archive;
 use crate::ExtractError;
 
 /// Default number of bytes to fetch from the end of the file.
@@ -131,26 +130,7 @@ pub async fn fetch_file_from_remote_conda(
         let zstd_decoder = ZstdDecoder::new(buf_reader);
         let mut tar = tokio_tar::Archive::new(zstd_decoder);
 
-        // Iterate tar entries, stopping as soon as we find the target file.
-        // Because the entire pipeline is streaming, this only downloads and
-        // decompresses the bytes up to (and including) the target entry.
-        let mut entries = tar.entries().map_err(ExtractError::IoError)?;
-        let mut result = None;
-        while let Some(entry) = entries.next().await {
-            let mut entry = entry.map_err(ExtractError::IoError)?;
-            let path = entry.path().map_err(ExtractError::IoError)?;
-            if path.as_ref() == target_path {
-                let size = entry.header().size().map_err(ExtractError::IoError)?;
-                let mut buf = Vec::with_capacity(size as usize);
-                entry
-                    .read_to_end(&mut buf)
-                    .await
-                    .map_err(ExtractError::IoError)?;
-                result = Some(buf);
-                break;
-            }
-        }
-        result
+        get_file_from_tar_archive(&mut tar, target_path).await.ok()
     };
 
     debug!(
