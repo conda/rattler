@@ -87,7 +87,7 @@ pub async fn fetch_file_from_remote_conda(
     let mut zip_reader = ZipFileReader::new(buf_reader).await?;
 
     // Find the info-*.tar.zst entry
-    let (index, _entry) = zip_reader
+    let (index, _) = zip_reader
         .file()
         .entries()
         .iter()
@@ -99,6 +99,21 @@ pub async fn fetch_file_from_remote_conda(
                 .unwrap_or(false)
         })
         .ok_or(ExtractError::MissingComponent)?;
+
+    // Prefetch the entire info entry in a single HTTP request so the
+    // streaming pipeline doesn't trigger many small range requests.
+    let entry = &zip_reader.file().entries()[index];
+    let offset = entry.header_offset();
+    let size = entry.header_size() + entry.compressed_size();
+    let buffer_size: u64 = 8192;
+    let size = size.div_ceil(buffer_size) * buffer_size;
+
+    zip_reader
+        .inner_mut()
+        .get_mut()
+        .get_mut()
+        .prefetch(offset..offset + size)
+        .await;
 
     // Get a streaming reader for the ZIP entry (futures::io::AsyncRead).
     // This does NOT buffer the entire entry — bytes are fetched on demand
