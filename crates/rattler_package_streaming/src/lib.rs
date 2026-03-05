@@ -46,7 +46,7 @@ pub enum ExtractError {
     ZipError(#[source] zip::result::ZipError),
 
     #[cfg(feature = "reqwest")]
-    #[error("invalid zip archive: {0}")]
+    #[error("invalid zip archive (async): {0}")]
     AsyncZipError(#[from] async_zip::error::ZipError),
 
     #[error("a component is missing from the Conda archive")]
