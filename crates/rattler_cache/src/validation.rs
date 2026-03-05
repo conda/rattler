@@ -79,6 +79,14 @@ pub enum PackageEntryValidationError {
     #[error("expected a symbolic link")]
     ExpectedSymlink,
 
+    /// The symlink target does not exist.
+    #[error("symlink target does not exist (broken symlink)")]
+    BrokenSymlink,
+
+    /// The symlink target resolves to a path outside the package directory.
+    #[error("symlink target escapes the package directory")]
+    SymlinkEscapesPackageDirectory,
+
     /// The file is not a directory.
     #[error("expected a directory")]
     ExpectedDirectory,
@@ -173,7 +181,7 @@ fn validate_package_entry(
     // Validate based on the type of path
     match entry.path_type {
         PathType::HardLink => validate_package_hard_link_entry(path, entry, mode),
-        PathType::SoftLink => validate_package_soft_link_entry(path, entry, mode),
+        PathType::SoftLink => validate_package_soft_link_entry(package_dir, path, entry, mode),
         PathType::Directory => validate_package_directory_entry(path, entry, mode),
     }
 }
@@ -244,10 +252,26 @@ fn validate_package_hard_link_entry(
 
     Ok(())
 }
+/// validates symlink targets even when the target does not exist on disk.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut result = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                result.pop();
+            }
+            c => result.push(c),
+        }
+    }
+    result
+}
 
 /// Determine whether the information in the [`PathsEntry`] matches the symbolic
 /// link at the specified path.
 fn validate_package_soft_link_entry(
+    package_dir: &Path,
     path: PathBuf,
     entry: &PathsEntry,
     _mode: ValidationMode,
@@ -258,11 +282,26 @@ fn validate_package_soft_link_entry(
         return Err(PackageEntryValidationError::ExpectedSymlink);
     }
 
-    // TODO: Validate symlink content. Dont validate the SHA256 hash of the file
-    // because since a symlink will most likely point to another file added as a
-    // hardlink by the package this is double work. Instead check that the
-    // symlink is correct e.g. `../a` points to the same file as `b/../../a` but
-    // they are different.
+    // Read the symlink target.
+    let target = std::fs::read_link(&path).map_err(PackageEntryValidationError::IoError)?;
+
+    // Resolve the target relative to the directory containing the symlink.
+    let parent = path.parent().unwrap_or(package_dir);
+    let resolved = if target.is_absolute() {
+        normalize_path(&target)
+    } else {
+        normalize_path(&parent.join(&target))
+    };
+
+    // The resolved target must stay within the package directory.
+    if !resolved.starts_with(package_dir) {
+        return Err(PackageEntryValidationError::SymlinkEscapesPackageDirectory);
+    }
+
+    // The target must actually exist (no dangling symlinks).
+    if !resolved.exists() {
+        return Err(PackageEntryValidationError::BrokenSymlink);
+    }
 
     Ok(())
 }
@@ -415,5 +454,92 @@ mod test {
             validate_package_directory(temp_dir.path(), ValidationMode::Full),
             Err(PackageValidationError::ReadIndexJsonError(_))
         );
+    }
+
+    /// Unit tests for symlink validation that do not require downloading packages.
+    #[cfg(unix)]
+    mod symlink_validation {
+        use std::os::unix::fs::symlink;
+
+        use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
+
+        use crate::validation::{
+            validate_package_directory_from_paths, PackageEntryValidationError, ValidationMode,
+        };
+
+        fn make_paths_json(relative_path: &str) -> PathsJson {
+            PathsJson {
+                paths: vec![PathsEntry {
+                    relative_path: relative_path.into(),
+                    path_type: PathType::SoftLink,
+                    no_link: false,
+                    prefix_placeholder: None,
+                    sha256: None,
+                    size_in_bytes: None,
+                }],
+                paths_version: 1,
+            }
+        }
+
+        #[test]
+        fn test_valid_symlink_within_package() {
+            let dir = tempfile::tempdir().unwrap();
+            // Create a real file and a symlink pointing to it.
+            std::fs::write(dir.path().join("real_file"), b"data").unwrap();
+            symlink("real_file", dir.path().join("link")).unwrap();
+
+            let paths = make_paths_json("link");
+            assert!(validate_package_directory_from_paths(
+                dir.path(),
+                &paths,
+                ValidationMode::Full
+            )
+            .is_ok());
+        }
+
+        #[test]
+        fn test_broken_symlink_detected() {
+            let dir = tempfile::tempdir().unwrap();
+            // Symlink points to a non-existent target.
+            symlink("does_not_exist", dir.path().join("link")).unwrap();
+
+            let paths = make_paths_json("link");
+            assert_matches::assert_matches!(
+                validate_package_directory_from_paths(dir.path(), &paths, ValidationMode::Full),
+                Err((_, PackageEntryValidationError::BrokenSymlink))
+            );
+        }
+
+        #[test]
+        fn test_symlink_escaping_package_directory_detected() {
+            let dir = tempfile::tempdir().unwrap();
+            // Symlink target that walks above the package root via `..`.
+            symlink("../../outside", dir.path().join("link")).unwrap();
+
+            let paths = make_paths_json("link");
+            assert_matches::assert_matches!(
+                validate_package_directory_from_paths(dir.path(), &paths, ValidationMode::Full),
+                Err((
+                    _,
+                    PackageEntryValidationError::SymlinkEscapesPackageDirectory
+                ))
+            );
+        }
+
+        #[test]
+        fn test_symlink_absolute_escape_detected() {
+            let dir = tempfile::tempdir().unwrap();
+            // Absolute symlink target that is outside the package directory.
+            symlink("/etc/passwd", dir.path().join("link")).unwrap();
+
+            let paths = make_paths_json("link");
+            assert_matches::assert_matches!(
+                validate_package_directory_from_paths(dir.path(), &paths, ValidationMode::Full),
+                Err((
+                    _,
+                    PackageEntryValidationError::SymlinkEscapesPackageDirectory
+                ))
+            );
+        }
     }
 }
