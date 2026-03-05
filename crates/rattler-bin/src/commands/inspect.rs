@@ -3,7 +3,7 @@ use std::sync::Arc;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::sparse::SparseRemoteArchive;
+use rattler_package_streaming::reqwest::sparse::fetch_package_file_sparse;
 use reqwest::Client;
 use url::Url;
 
@@ -30,13 +30,8 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let archive = SparseRemoteArchive::new(client, opt.url)
+    let index_json: IndexJson = fetch_package_file_sparse(client.clone(), opt.url.clone())
         .await
-        .into_diagnostic()
-        .context("failed to fetch package info")?;
-
-    let index_json: IndexJson = archive
-        .read()
         .into_diagnostic()
         .context("failed to read index.json")?;
 
@@ -62,8 +57,8 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    let paths_json: PathsJson = archive
-        .read()
+    let paths_json: PathsJson = fetch_package_file_sparse(client, opt.url)
+        .await
         .into_diagnostic()
         .context("failed to read paths.json")?;
 

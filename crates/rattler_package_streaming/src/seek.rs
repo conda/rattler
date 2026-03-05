@@ -70,7 +70,7 @@ pub fn stream_conda_content<'a>(
     stream_conda_zip_entry(archive, &file_name)
 }
 
-fn get_file_from_archive(
+pub(crate) fn get_file_from_archive(
     archive: &mut Archive<impl Read>,
     file_name: &Path,
 ) -> Result<Vec<u8>, ExtractError> {

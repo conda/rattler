@@ -4,8 +4,7 @@
 //! the entire file. This is achieved by using HTTP Range requests to fetch only the necessary
 //! bytes from the end of the zip archive.
 //!
-//! For fetching multiple files at once, see [`super::sparse`] which avoids redundant
-//! downloads and decompression.
+//! For lower-level access, see [`super::sparse`] which exposes the raw-bytes API.
 //!
 //! # Example
 //!
@@ -37,7 +36,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
 
-use super::sparse::SparseRemoteArchive;
+use super::sparse::fetch_package_file_sparse;
 use crate::seek::read_package_file_content;
 use crate::ExtractError;
 
@@ -49,8 +48,8 @@ use crate::ExtractError;
 /// If the server does not support range requests or the package is not a `.conda` file,
 /// the function falls back to downloading the entire package.
 ///
-/// For fetching multiple files from the same package, construct a
-/// [`SparseRemoteArchive`] directly to avoid redundant downloads.
+/// For lower-level access, see [`super::sparse::fetch_file_from_remote_conda`]
+/// which returns raw bytes for a specific file path.
 ///
 /// # Arguments
 ///
@@ -84,8 +83,8 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
-    match SparseRemoteArchive::new(client.clone(), url.clone()).await {
-        Ok(archive) => return archive.read::<P>(),
+    match fetch_package_file_sparse::<P>(client.clone(), url.clone()).await {
+        Ok(result) => return Ok(result),
         Err(ExtractError::UnsupportedArchiveType) => {
             debug!("archive type not supported for range requests, falling back to full download");
         }
