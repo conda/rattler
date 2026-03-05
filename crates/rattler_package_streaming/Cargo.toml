@@ -11,7 +11,6 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-bytes = { workspace = true, optional = true }
 bzip2 = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true, optional = true }
@@ -69,7 +68,6 @@ reqwest = [
   "dep:reqwest-middleware",
   "dep:reqwest",
   "dep:fs-err",
-  "dep:bytes",
   "dep:http",
   "dep:async_http_range_reader",
 ]
