@@ -28,16 +28,19 @@
 //! # }
 //! ```
 
-use std::io::Cursor;
-
+use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
 use async_http_range_reader::AsyncHttpRangeReaderError;
+use async_zip::base::read::stream::ZipFileReader;
+use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tokio_util::io::StreamReader;
 use tracing::debug;
 use url::Url;
 
 use super::sparse::fetch_package_file_sparse;
-use crate::seek::read_package_file_content;
+use crate::tokio::async_read::get_file_from_tar_archive;
 use crate::ExtractError;
 
 /// Fetch a specific [`PackageFile`] from a remote package using HTTP range requests.
@@ -99,7 +102,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     fetch_package_file_full_download::<P>(&client, &url).await
 }
 
-/// Download full package and extract a single [`PackageFile`].
+/// Stream the full package and extract a single [`PackageFile`].
 async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
@@ -115,12 +118,72 @@ async fn fetch_package_file_full_download<P: PackageFile>(
         .error_for_status()
         .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| ExtractError::ReqwestError(e.into()))?;
+    // Convert the response body into an AsyncRead stream (same pattern as reqwest/tokio.rs)
+    let byte_stream = response.bytes_stream().map_err(|err| {
+        if err.is_body() {
+            std::io::Error::new(std::io::ErrorKind::Interrupted, err)
+        } else if err.is_decode() {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, err)
+        } else {
+            std::io::Error::other(err)
+        }
+    });
+    let stream_reader = StreamReader::new(byte_stream);
 
-    let content = read_package_file_content(Cursor::new(&*bytes), archive_type, P::package_path())?;
+    let file_path = std::path::Path::new(P::package_path());
+
+    let content = match archive_type {
+        CondaArchiveType::TarBz2 => {
+            let buf_reader = tokio::io::BufReader::new(stream_reader);
+            let decoder = BzDecoder::new(buf_reader);
+            let mut archive = tokio_tar::Archive::new(decoder);
+            get_file_from_tar_archive(&mut archive, file_path).await?
+        }
+        CondaArchiveType::Conda => {
+            // async_zip uses futures IO traits, so bridge tokio → futures
+            let compat_reader = stream_reader.compat();
+            let mut buf_reader = futures::io::BufReader::new(compat_reader);
+            let mut zip_reader = ZipFileReader::new(&mut buf_reader);
+
+            let mut found: Option<Vec<u8>> = None;
+
+            while let Some(mut entry) = zip_reader
+                .next_with_entry()
+                .await
+                .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?
+            {
+                let filename = entry.reader().entry().filename().as_str().map_err(|e| {
+                    ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+                })?;
+
+                if filename.starts_with("info-") && filename.ends_with(".tar.zst") {
+                    // Bridge the entry reader back from futures → tokio
+                    let compat_entry = entry.reader_mut().compat();
+                    let buf_entry = tokio::io::BufReader::new(compat_entry);
+                    let decoder = ZstdDecoder::new(buf_entry);
+                    let mut archive = tokio_tar::Archive::new(decoder);
+                    found = get_file_from_tar_archive(&mut archive, file_path).await?;
+                    break;
+                }
+
+                // Skip to the next entry (required by async_zip API)
+                (.., zip_reader) = entry
+                    .skip()
+                    .await
+                    .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?;
+            }
+
+            found
+        }
+    };
+
+    let content = content.ok_or_else(|| {
+        ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("'{}' not found in archive", P::package_path().display()),
+        ))
+    })?;
+
     P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
@@ -157,5 +220,36 @@ mod tests {
         let about_json: AboutJson = fetch_package_file_from_url(client, url).await.unwrap();
 
         insta::assert_yaml_snapshot!(about_json);
+    }
+
+    /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_url`
+    /// falls through to `fetch_package_file_full_download` (streaming).
+    #[tokio::test]
+    async fn test_fetch_full_download_tar_bz2() {
+        use rattler_conda_types::package::IndexJson;
+
+        let tar_bz2 = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let url = test_server::serve_file(tar_bz2).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
+
+        insta::assert_yaml_snapshot!(index_json);
+    }
+
+    /// Exercise the streaming `.conda` full-download path directly.
+    #[tokio::test]
+    async fn test_fetch_full_download_conda() {
+        use rattler_conda_types::package::IndexJson;
+
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let index_json: IndexJson = fetch_package_file_full_download(&client, &url)
+            .await
+            .unwrap();
+
+        insta::assert_yaml_snapshot!(index_json);
     }
 }
