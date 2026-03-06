@@ -228,7 +228,7 @@ pub async fn extract_conda_via_buffering(
 /// given `target_path` inside a `.conda` archive.
 #[cfg(feature = "reqwest")]
 pub(crate) fn conda_entry_prefix(target_path: &Path) -> &'static str {
-    if target_path.starts_with("info/") {
+    if target_path.starts_with("info") {
         "info-"
     } else {
         "pkg-"

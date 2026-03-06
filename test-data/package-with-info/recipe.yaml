@@ -1,8 +1,0 @@
-package:
-  name: with-info
-  version: 0.1.0
-
-build:
-  noarch: generic
-  script:
-    - echo test > $PREFIX/info-custom.txt
