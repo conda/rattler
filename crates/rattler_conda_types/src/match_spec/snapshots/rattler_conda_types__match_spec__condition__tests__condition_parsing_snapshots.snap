@@ -4,116 +4,73 @@ expression: results
 ---
 - - foobar or bizbaz
   - Or:
-      - MatchSpec:
-          name: foobar
-      - MatchSpec:
-          name: bizbaz
+      - MatchSpec: foobar
+      - MatchSpec: bizbaz
 - - "python >=3.12 or foobar [version='3.12.*', url='https://foobar.com/bla.tar.bz2']"
   - Or:
-      - MatchSpec:
-          name: python
-          version: ">=3.12"
-      - MatchSpec:
-          name: foobar
-          version: 3.12.*
-          url: "https://foobar.com/bla.tar.bz2"
+      - MatchSpec: python >=3.12
+      - MatchSpec: "foobar 3.12.*[url=\"https://foobar.com/bla.tar.bz2\"]"
 - - foobar and (bizbaz or blabla)
   - And:
-      - MatchSpec:
-          name: foobar
+      - MatchSpec: foobar
       - Or:
-          - MatchSpec:
-              name: bizbaz
-          - MatchSpec:
-              name: blabla
+          - MatchSpec: bizbaz
+          - MatchSpec: blabla
 - - single_condition
-  - MatchSpec:
-      name: single_condition
+  - MatchSpec: single_condition
 - - a and b or c
   - Or:
       - And:
-          - MatchSpec:
-              name: a
-          - MatchSpec:
-              name: b
-      - MatchSpec:
-          name: c
+          - MatchSpec: a
+          - MatchSpec: b
+      - MatchSpec: c
 - - (a or b) and (c or d)
   - And:
       - Or:
-          - MatchSpec:
-              name: a
-          - MatchSpec:
-              name: b
+          - MatchSpec: a
+          - MatchSpec: b
       - Or:
-          - MatchSpec:
-              name: c
-          - MatchSpec:
-              name: d
+          - MatchSpec: c
+          - MatchSpec: d
 - - a and (b or (c and d))
   - And:
-      - MatchSpec:
-          name: a
+      - MatchSpec: a
       - Or:
-          - MatchSpec:
-              name: b
+          - MatchSpec: b
           - And:
-              - MatchSpec:
-                  name: c
-              - MatchSpec:
-                  name: d
+              - MatchSpec: c
+              - MatchSpec: d
 - - a and(b or(c and d))
   - And:
-      - MatchSpec:
-          name: a
+      - MatchSpec: a
       - Or:
-          - MatchSpec:
-              name: b
+          - MatchSpec: b
           - And:
-              - MatchSpec:
-                  name: c
-              - MatchSpec:
-                  name: d
+              - MatchSpec: c
+              - MatchSpec: d
 - - "foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))"
   - And:
-      - MatchSpec:
-          name: foobar
-          version: ">=1.23"
-          build: "*or*"
+      - MatchSpec: foobar >=1.23 *or*
       - Or:
-          - MatchSpec:
-              name: b
-              version: ">32.12,<=43"
-              build: "*and"
+          - MatchSpec: "b >32.12,<=43 *and"
           - And:
-              - MatchSpec:
-                  name: c
-              - MatchSpec:
-                  name: d
+              - MatchSpec: c
+              - MatchSpec: d
 - - "  foo   or   bar  "
   - Or:
-      - MatchSpec:
-          name: foo
-      - MatchSpec:
-          name: bar
+      - MatchSpec: foo
+      - MatchSpec: bar
 - - foo_bar and baz_qux
   - And:
-      - MatchSpec:
-          name: foo_bar
-      - MatchSpec:
-          name: baz_qux
+      - MatchSpec: foo_bar
+      - MatchSpec: baz_qux
 - - (alpha and beta) or (gamma and (delta or epsilon))
   - Or:
       - And:
-          - MatchSpec:
-              name: alpha
-          - MatchSpec:
-              name: beta
+          - MatchSpec: alpha
+          - MatchSpec: beta
       - And:
-          - MatchSpec:
-              name: gamma
+          - MatchSpec: gamma
           - Or:
-              - MatchSpec:
-                  name: delta
-              - MatchSpec:
-                  name: epsilon
+              - MatchSpec: delta
+              - MatchSpec: epsilon

@@ -3,10 +3,7 @@ source: crates/rattler_conda_types/src/match_spec/condition.rs
 expression: result
 ---
 And:
-  - MatchSpec:
-      name: foobar
+  - MatchSpec: foobar
   - Or:
-      - MatchSpec:
-          name: bizbaz
-      - MatchSpec:
-          name: blabla
+      - MatchSpec: bizbaz
+      - MatchSpec: blabla
