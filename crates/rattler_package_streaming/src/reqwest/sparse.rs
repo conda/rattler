@@ -187,7 +187,7 @@ mod tests {
 
     fn test_file() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda")
+            .join("../../test-data/package-with-info/with-info-0.1.0-h4616a5c_0.conda")
     }
 
     #[tokio::test]
@@ -223,11 +223,17 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let raw = fetch_file_from_remote_conda(client, url, Path::new("clobber"))
-            .await
-            .unwrap()
-            .expect("file should exist in pkg section");
+        let raw =
+            fetch_file_from_remote_conda(client.clone(), url.clone(), Path::new("info-custom.txt"))
+                .await
+                .unwrap()
+                .expect("file should exist in pkg section");
         let content = String::from_utf8(raw).unwrap();
-        insta::assert_snapshot!(content, @"clobber-fd-1");
+        insta::assert_snapshot!(content, @"test");
+
+        let non_existent = fetch_file_from_remote_conda(client, url, Path::new("non-existent"))
+            .await
+            .unwrap();
+        assert!(non_existent.is_none());
     }
 }

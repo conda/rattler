@@ -1,13 +1,12 @@
 ---
 source: crates/rattler_package_streaming/src/reqwest/sparse.rs
-assertion_line: 173
 expression: index_json
 ---
 build: h4616a5c_0
 build_number: 0
 depends: []
-name: clobber-fd-1
+name: with-info
 noarch: generic
 subdir: noarch
-timestamp: 1751876402910
+timestamp: 1772798713702
 version: 0.1.0
