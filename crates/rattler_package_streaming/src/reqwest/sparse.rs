@@ -34,9 +34,9 @@ use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
 use async_zip::base::read::seek::ZipFileReader;
 use http::HeaderMap;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
+use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
 use tracing::{debug, instrument};
 use url::Url;
 
