@@ -118,7 +118,17 @@ impl Middleware for MirrorMiddleware {
                 };
 
                 let mirror = &selected_mirror.mirror;
-                let selected_url = mirror.url.join(url_rest).unwrap();
+                let selected_url = {
+                    let mut u = mirror.url.clone();
+                    let base = u.path().trim_end_matches('/');
+                    let new_path = if base.is_empty() {
+                        format!("/{url_rest}")
+                    } else {
+                        format!("{base}/{url_rest}")
+                    };
+                    u.set_path(&new_path);
+                    u
+                };
 
                 // Short-circuit if the mirror does not support the file type
                 if url_rest.ends_with(".json.zst") && mirror.no_zstd {
@@ -300,5 +310,49 @@ mod test {
             assert!(path.0.len() <= len);
             len = path.0.len();
         }
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_path_rewrite() {
+        // Start a server that serves at /channel/count
+        let state = String::from("mirror server");
+        let router = Router::new()
+            .route("/channel/count", get(count))
+            .with_state(state);
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+
+        let mirror_url: Url = format!("http://{}:{}/channel", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let mut mirror_map = std::collections::HashMap::new();
+
+        // Upstream key includes a path segment (e.g. conda-forge)
+        // Mirror URL also has a path segment (e.g. channel)
+        // The mirror path must fully replace the upstream path.
+        mirror_map.insert(
+            "https://prefix.dev/conda-forge".parse().unwrap(),
+            vec![mirror_setting(mirror_url)],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        // Request to upstream: https://prefix.dev/conda-forge/count
+        // Should be rewritten to: http://127.0.0.1:PORT/channel/count
+        let res = client
+            .get("https://prefix.dev/conda-forge/count")
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "status: {}", res.status());
+        let body = res.text().await.unwrap();
+        assert_eq!(body, "Hi from counter: mirror server");
     }
 }
