@@ -165,20 +165,19 @@ pub fn fetch_raw_package_file_from_url<'a>(
     let url = parse_url(&url)?;
     let path = PathBuf::from(path);
     let future = async move {
-        let bytes =
-            rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda(
-                client.into(),
-                url,
-                &path,
-            )
-            .await
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?
-            .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                    "file '{}' not found in package",
-                    path.display()
-                ))
-            })?;
+        let bytes = rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda(
+            client.into(),
+            url,
+            &path,
+        )
+        .await
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?
+        .ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                "file '{}' not found in package",
+                path.display()
+            ))
+        })?;
 
         Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     };

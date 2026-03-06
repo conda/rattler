@@ -64,9 +64,9 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
-use package_streaming::PyPackageFile;
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
+use package_streaming::PyPackageFile;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
@@ -192,9 +192,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
     m.add_class::<PyPackageFile>()?;
-    m.add_function(
-        wrap_pyfunction!(package_streaming::fetch_package_file_from_url, &m).unwrap(),
-    )?;
+    m.add_function(wrap_pyfunction!(package_streaming::fetch_package_file_from_url, &m).unwrap())?;
     m.add_function(
         wrap_pyfunction!(package_streaming::fetch_raw_package_file_from_url, &m).unwrap(),
     )?;
