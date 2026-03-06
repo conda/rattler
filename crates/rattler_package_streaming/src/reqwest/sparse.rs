@@ -106,9 +106,6 @@ pub async fn fetch_file_from_remote_conda(
     let entry = &zip_reader.file().entries()[index];
     let offset = entry.header_offset();
     let size = entry.header_size() + entry.compressed_size();
-    let buffer_size: u64 = 8192;
-    let size = size.div_ceil(buffer_size) * buffer_size;
-
     zip_reader
         .inner_mut()
         .get_mut()
