@@ -120,12 +120,13 @@ impl Middleware for MirrorMiddleware {
                 let mirror = &selected_mirror.mirror;
                 let selected_url = {
                     let mut u = mirror.url.clone();
-                    let base_path = u.path().trim_end_matches('/');
-                    if url_rest.is_empty() {
-                        u.set_path(&format!("{base_path}/"));
+                    let base = u.path().trim_end_matches('/');
+                    let new_path = if base.is_empty() {
+                        format!("/{url_rest}")
                     } else {
-                        u.set_path(&format!("{base_path}/{url_rest}"));
-                    }
+                        format!("{base}/{url_rest}")
+                    };
+                    u.set_path(&new_path);
                     u
                 };
 
