@@ -117,9 +117,6 @@ pub async fn fetch_file_from_remote_conda(
     // This does NOT buffer the entire entry — bytes are fetched on demand
     // via HTTP range requests as the downstream decompressor/tar reader
     // consumes them.
-    //
-    // The pipeline borrows zip_reader, so we scope it in a block to release
-    // the borrow before accessing the inner reader for debug logging.
     let entry_reader = zip_reader.reader_without_entry(index).await?;
 
     // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
