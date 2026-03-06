@@ -261,3 +261,40 @@ pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     }
     Ok(None)
 }
+
+#[cfg(all(test, feature = "reqwest"))]
+mod tests {
+    use super::conda_entry_prefix;
+    use std::path::Path;
+
+    #[test]
+    fn test_conda_entry_prefix_info_files() {
+        assert_eq!(conda_entry_prefix(Path::new("info/index.json")), "info-");
+        assert_eq!(conda_entry_prefix(Path::new("info/about.json")), "info-");
+        assert_eq!(conda_entry_prefix(Path::new("info/paths.json")), "info-");
+        assert_eq!(
+            conda_entry_prefix(Path::new("info/nested/deep/file.txt")),
+            "info-"
+        );
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_pkg_files() {
+        assert_eq!(conda_entry_prefix(Path::new("lib/libz.so")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("bin/python")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("clobber")), "pkg-");
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_info_bare() {
+        // Path::starts_with works on components, so "info" matches "info/"
+        assert_eq!(conda_entry_prefix(Path::new("info")), "info-");
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_info_like_but_not_info_dir() {
+        // Paths that textually start with "info" but are not under the info/ directory
+        assert_eq!(conda_entry_prefix(Path::new("info-custom.txt")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("information/file")), "pkg-");
+    }
+}
