@@ -14,6 +14,11 @@ fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject)
     (sha256_bytes.into(), md5_bytes.into())
 }
 
+fn parse_url(url: &str) -> PyResult<Url> {
+    Url::parse(url)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}")))
+}
+
 #[pyfunction]
 pub fn extract_tar_bz2(
     py: Python<'_>,
@@ -78,5 +83,35 @@ pub fn download_and_extract<'a>(
     };
 
     // Convert the future to a Python awaitable
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn fetch_raw_package_file_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    path: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let path = PathBuf::from(path);
+    let future = async move {
+        let bytes = rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda(
+            client.into(),
+            url,
+            &path,
+        )
+        .await
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?
+        .ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                "file '{}' not found in package",
+                path.display()
+            ))
+        })?;
+
+        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+    };
+
     future_into_py(py, future)
 }

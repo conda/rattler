@@ -353,6 +353,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "async_http_range_reader"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
+dependencies = [
+ "bisection",
+ "futures",
+ "http-content-range",
+ "itertools 0.13.0",
+ "memmap2",
+ "reqwest 0.12.28",
+ "reqwest-middleware",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -864,6 +884,12 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
+name = "bisection"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "021e079a1bab0ecce6cf4b4b74c0c37afa4a697136eb3b127875c84a8f04a8c3"
 
 [[package]]
 name = "bit-set"
@@ -2395,6 +2421,12 @@ dependencies = [
  "serde",
  "time",
 ]
+
+[[package]]
+name = "http-content-range"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66cdb727cec723cee65912a74a7f9f0c3ad0c6f9df4f03d05a5c7a15398bbad1"
 
 [[package]]
 name = "http-serde"
@@ -4244,6 +4276,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "url",
 ]
@@ -4256,6 +4289,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "async-spooled-tempfile",
+ "async_http_range_reader",
  "bzip2",
  "chrono",
  "fs-err",
@@ -4263,6 +4297,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
+ "http 1.4.0",
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
@@ -5730,6 +5765,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

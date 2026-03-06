@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{AboutJson, PackageFile};
+use url::Url;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 
 /// The `about.json` file contains metadata about the package
 #[pyclass]
@@ -64,6 +66,29 @@ impl PyAboutJson {
         Ok(AboutJson::from_str(str)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let about_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+                AboutJson,
+            >(client.into(), url)
+            .await
+            .map(PyAboutJson::from)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+
+            Python::with_gil(|py| Ok(Py::new(py, about_json)?.into_any()))
+        })
     }
 
     /// Returns the path to the file within the Conda archive.
