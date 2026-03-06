@@ -728,7 +728,7 @@ async fn link_package(
 
     rayon::spawn_fifo(move || {
         let inner = move || {
-            // Link the contents of the package into the prefix. 
+            // Link the contents of the package into the prefix.
             let (paths, link_type) = crate::install::link_package_sync(
                 &cached_package_dir,
                 &target_prefix,
