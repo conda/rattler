@@ -78,3 +78,4 @@ retry-policies = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
+tracing-test = { workspace = true, features = ["no-env-filter"] }
