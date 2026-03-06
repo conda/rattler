@@ -258,6 +258,11 @@ impl WindowsMenu {
                 Ok(command)
             }
         } else {
+            // activate: false
+            // Run the command directly. Note: if the target exe is a console-subsystem
+            // application, Windows will show a console window. Properly suppressing it
+            // would require a GUI-subsystem proxy binary (similar to conda's cwp.py
+            // launched via pythonw.exe).
             let mut command = Vec::new();
             for elem in self.command.command.iter() {
                 command.push(elem.resolve(&self.placeholders));
@@ -421,6 +426,15 @@ impl WindowsMenu {
         for extension in extensions {
             let extension = extension.resolve(&self.placeholders);
             let identifier = format!("{name}.AssocFile{extension}");
+            // Generate a friendly type name from the extension, e.g. ".h5" -> "H5 File"
+            let ext_no_dot = extension.trim_start_matches('.');
+            let friendly_name = if ext_no_dot.is_empty() {
+                "File".to_string()
+            } else {
+                let mut chars = ext_no_dot.chars();
+                let first = chars.next().unwrap().to_uppercase().to_string();
+                format!("{}{} File", first, chars.as_str())
+            };
             let file_extension = FileExtension {
                 extension: &extension,
                 identifier: &identifier,
@@ -428,7 +442,7 @@ impl WindowsMenu {
                 icon: icon.as_deref(),
                 app_name: Some(name),
                 app_user_model_id: Some(&app_user_model_id),
-                friendly_type_name: None,
+                friendly_type_name: Some(&friendly_name),
             };
 
             registry::register_file_extension(file_extension, self.menu_mode)?;
