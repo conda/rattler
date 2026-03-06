@@ -1388,3 +1388,57 @@ fn channel_priority_disabled_libsolv_c() {
         ChannelPriority::Disabled,
     );
 }
+
+/// Regression test for issue #1928: strict channel priority must be enforced
+/// even when a higher-priority channel has no version matching the spec.
+///
+/// Scenario:
+/// - Channel A (higher priority) has `my-pkg` 1.0 only.
+/// - Channel B (lower priority) has `my-pkg` 2.0 only.
+/// - Spec: `my-pkg >=2.0`
+///
+/// Under strict channel priority the solver must NOT silently pick channel B.
+/// Channel A "owns" the package because it was seen first, so channel B's
+/// record should be excluded. Because no version in channel A satisfies the
+/// spec the solve should fail as unsolvable.
+#[test]
+fn channel_priority_strict_direct_dep_higher_channel_no_match() {
+    let channel_a = "https://conda.anaconda.org/channel-a/";
+    let channel_b = "https://conda.anaconda.org/channel-b/";
+
+    // Channel A: higher priority, only has 1.0
+    let records_a = [PackageBuilder::new("my-pkg")
+        .channel(channel_a)
+        .subdir("linux-64")
+        .version("1.0")
+        .build_string("h0_0")
+        .build_number(0)
+        .build()];
+
+    // Channel B: lower priority, has 2.0
+    let records_b = [PackageBuilder::new("my-pkg")
+        .channel(channel_b)
+        .subdir("linux-64")
+        .version("2.0")
+        .build_string("h0_0")
+        .build_number(0)
+        .build()];
+
+    let spec = MatchSpec::from_str("my-pkg>=2.0", ParseStrictness::Lenient).unwrap();
+
+    // Channel A is listed first → higher priority
+    let solver_task = SolverTask {
+        specs: vec![spec],
+        channel_priority: ChannelPriority::Strict,
+        ..SolverTask::from_iter([records_a.iter(), records_b.iter()])
+    };
+
+    let result = rattler_solve::resolvo::Solver::default().solve(solver_task);
+
+    // The solve must fail: channel A owns "my-pkg" but has no >=2.0, and
+    // channel B's 2.0 is excluded by strict channel priority.
+    assert!(
+        result.is_err(),
+        "expected unsolvable due to strict channel priority, but solve succeeded: {result:?}"
+    );
+}
