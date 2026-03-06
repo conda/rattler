@@ -1,0 +1,12 @@
+---
+source: crates/rattler_package_streaming/src/reqwest/fetch.rs
+expression: index_json
+---
+build: h4616a5c_0
+build_number: 0
+depends: []
+name: clobber-1
+noarch: generic
+subdir: noarch
+timestamp: 1707750772302
+version: 0.1.0

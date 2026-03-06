@@ -127,7 +127,7 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
         P::package_path(),
     )?;
 
-    P::from_str(&String::from_utf8_lossy(&content))
+    P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 
