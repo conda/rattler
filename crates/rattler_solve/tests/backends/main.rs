@@ -1433,7 +1433,7 @@ fn channel_priority_strict_direct_dep_higher_channel_no_match() {
         ..SolverTask::from_iter([records_a.iter(), records_b.iter()])
     };
 
-    let result = rattler_solve::resolvo::Solver::default().solve(solver_task);
+    let result = rattler_solve::resolvo::Solver.solve(solver_task);
 
     // The solve must fail: channel A owns "my-pkg" but has no >=2.0, and
     // channel B's 2.0 is excluded by strict channel priority.
