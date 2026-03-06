@@ -16,7 +16,7 @@ cfg-if = { workspace = true }
 coalesced_map = { workspace = true }
 fs-err = { workspace = true }
 anyhow = { workspace = true }
-async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
+async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2"] }
 async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
 bytes = { workspace = true }
@@ -56,7 +56,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-zstd = { workspace = true }
 retry-policies = { workspace = true }
 rattler_cache = { workspace = true }
 rattler_redaction = { workspace = true, features = ["reqwest", "reqwest-middleware"] }
@@ -74,6 +73,8 @@ fslock = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["rt", "io-util"] }
 rattler_package_streaming = { workspace = true, default-features = false, optional = true }
+zstd = { workspace = true }
+async-compression = { workspace = true, features = ["zstd"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasmtimer = { workspace = true }

@@ -3,7 +3,7 @@ use crate::package_name::JsPackageName;
 use crate::package_record::JsPackageRecord;
 use crate::parse_strictness::JsParseStrictness;
 use crate::version_spec::JsVersionSpec;
-use rattler_conda_types::{MatchSpec, ParseStrictness};
+use rattler_conda_types::{MatchSpec, Matches, ParseStrictness};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -37,16 +37,16 @@ extern "C" {
 /// @public
 #[wasm_bindgen(js_name = "BuildNumberSpec")]
 pub struct JsBuildNumberSpec {
-    inner: rattler_conda_types::build_spec::BuildNumberSpec,
+    inner: rattler_conda_types::BuildNumberSpec,
 }
 
-impl From<rattler_conda_types::build_spec::BuildNumberSpec> for JsBuildNumberSpec {
-    fn from(inner: rattler_conda_types::build_spec::BuildNumberSpec) -> Self {
+impl From<rattler_conda_types::BuildNumberSpec> for JsBuildNumberSpec {
+    fn from(inner: rattler_conda_types::BuildNumberSpec) -> Self {
         Self { inner }
     }
 }
 
-impl From<JsBuildNumberSpec> for rattler_conda_types::build_spec::BuildNumberSpec {
+impl From<JsBuildNumberSpec> for rattler_conda_types::BuildNumberSpec {
     fn from(js: JsBuildNumberSpec) -> Self {
         js.inner
     }
@@ -57,7 +57,7 @@ impl JsBuildNumberSpec {
     /// Parses a BuildNumberSpec from a string.
     #[wasm_bindgen(constructor)]
     pub fn new(spec: &str) -> JsResult<JsBuildNumberSpec> {
-        Ok(rattler_conda_types::build_spec::BuildNumberSpec::from_str(spec)?.into())
+        Ok(rattler_conda_types::BuildNumberSpec::from_str(spec)?.into())
     }
 
     /// Returns the string representation of the build number spec.
@@ -110,15 +110,15 @@ impl JsMatchSpec {
     /// Returns the package name of the match specification.
     #[wasm_bindgen(getter)]
     pub fn name(&self) -> Option<JsPackageName> {
-        self.inner.name.as_exact().map(|n| n.as_source().into())
+        self.inner.name.as_exact().map(|n| JsValue::from_str(n.as_source()).into())
     }
 
     #[wasm_bindgen(setter)]
     pub fn set_name(&mut self, name: Option<String>) -> JsResult<()> {
         self.inner.name = name
-            .map(|n| rattler_conda_types::match_spec::package_name_matcher::PackageNameMatcher::from_str(&n))
+            .map(|n| rattler_conda_types::PackageNameMatcher::from_str(&n))
             .transpose()?
-            .unwrap_or(rattler_conda_types::match_spec::package_name_matcher::PackageNameMatcher::from_str("*").unwrap());
+            .unwrap_or(rattler_conda_types::PackageNameMatcher::from_str("*").unwrap());
         Ok(())
     }
 
@@ -137,7 +137,7 @@ impl JsMatchSpec {
     #[wasm_bindgen(setter)]
     pub fn set_build(&mut self, build: Option<String>) -> JsResult<()> {
         self.inner.build = build
-            .map(|b| rattler_conda_types::match_spec::matcher::StringMatcher::from_str(&b))
+            .map(|b| rattler_conda_types::StringMatcher::from_str(&b))
             .transpose()?;
         Ok(())
     }
@@ -169,7 +169,7 @@ impl JsMatchSpec {
     /// Returns the channel of the match specification.
     #[wasm_bindgen(getter)]
     pub fn channel(&self) -> Option<String> {
-        self.inner.channel.as_ref().map(|c| c.name())
+        self.inner.channel.as_ref().map(|c| c.name().to_string())
     }
 
     #[wasm_bindgen(setter)]
@@ -177,7 +177,7 @@ impl JsMatchSpec {
         self.inner.channel = channel
             .map(|c| {
                 let config = rattler_conda_types::ChannelConfig::default_with_root_dir(
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
+                    std::path::PathBuf::from("/"),
                 );
                 rattler_conda_types::Channel::from_str(&c, &config).map(std::sync::Arc::new)
             })

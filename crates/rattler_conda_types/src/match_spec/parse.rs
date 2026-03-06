@@ -816,9 +816,12 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
-    let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
-    );
+    #[cfg(target_arch = "wasm32")]
+    let root_dir = std::path::PathBuf::from("/");
+    #[cfg(not(target_arch = "wasm32"))]
+    let root_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+
+    let channel_config = ChannelConfig::default_with_root_dir(root_dir);
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
@@ -1002,9 +1005,12 @@ mod tests {
     };
 
     fn channel_config() -> ChannelConfig {
-        ChannelConfig::default_with_root_dir(
-            std::env::current_dir().expect("Could not get current directory"),
-        )
+        #[cfg(target_arch = "wasm32")]
+        let root_dir = std::path::PathBuf::from("/");
+        #[cfg(not(target_arch = "wasm32"))]
+        let root_dir = std::env::current_dir().expect("Could not get current directory");
+
+        ChannelConfig::default_with_root_dir(root_dir)
     }
 
     #[test]

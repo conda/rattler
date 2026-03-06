@@ -59,6 +59,7 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
             ));
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         match zstd::decode_all(bytes_ref) {
             Ok(decoded) => Ok(decoded),
             Err(err) => Err(GatewayError::IoError(
@@ -71,6 +72,11 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
                 err,
             )),
         }
+        #[cfg(target_arch = "wasm32")]
+        Err(GatewayError::IoError(
+            format!("zstd is not supported on wasm: {}", url.redact()),
+            std::io::Error::new(std::io::ErrorKind::Unsupported, "zstd is not supported on wasm"),
+        ))
     };
 
     #[cfg(target_arch = "wasm32")]

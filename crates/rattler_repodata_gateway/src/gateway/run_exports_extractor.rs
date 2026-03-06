@@ -194,6 +194,7 @@ impl RunExportExtractor {
                     Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
                 let buf = BufReader::new(bytes_stream.reader());
+                #[cfg(not(target_arch = "wasm32"))]
                 let decoded = match zstd::decode_all(buf) {
                     Ok(decoded) => decoded,
                     Err(err) => {
@@ -203,13 +204,29 @@ impl RunExportExtractor {
                         ))
                     }
                 };
+
+                #[cfg(target_arch = "wasm32")]
+                let run_exports = {
+                    let _ = buf;
+                    return Err(RunExportExtractorError::DecodeRunExports(
+                        url.to_string(),
+                        std::io::Error::new(
+                            std::io::ErrorKind::Unsupported,
+                            "zstd is not supported on wasm",
+                        ),
+                    ));
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
                 let run_exports = match serde_json::from_slice(&decoded) {
                     Ok(run_exports) => Some(run_exports),
                     Err(e) => {
-                        return Err(RunExportExtractorError::DecodeRunExports(
-                            url.to_string(),
-                            e.into(),
-                        ))
+                        tracing::warn!(
+                            "failed to parse run_exports from {}: {}. Ignoring...",
+                            url,
+                            e
+                        );
+                        None
                     }
                 };
 

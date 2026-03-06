@@ -5,7 +5,7 @@ describe("MatchSpec", () => {
     it("should parse a basic match spec", () => {
         const spec = new MatchSpec("python >=3.10");
         expect(spec.name).toBe("python");
-        expect(spec.to_string()).toBe("python >=3.10");
+        expect(spec.toString()).toBe("python >=3.10");
     });
 
     it("should handle options in constructor", () => {
@@ -27,7 +27,7 @@ describe("MatchSpec", () => {
         expect(spec.build).toBe("py310*");
 
         spec.name = "python-test";
-        expect(spec.to_string()).toContain("python-test");
+        expect(spec.toString()).toContain("python-test");
 
         spec.subdir = "linux-64";
         expect(spec.subdir).toBe("linux-64");
