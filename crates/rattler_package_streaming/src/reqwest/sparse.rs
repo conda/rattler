@@ -36,7 +36,8 @@ use http::HeaderMap;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::debug;
+use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
@@ -57,13 +58,12 @@ const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 /// Returns `Ok(None)` if the file is not found in the archive.
 /// Returns an error if the URL does not point to a `.conda` archive or the
 /// server does not support range requests.
+#[instrument(skip_all, fields(url = %redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
 pub async fn fetch_file_from_remote_conda(
     client: ClientWithMiddleware,
     url: Url,
     target_path: &Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
-    debug!("fetching {:?} from remote archive {}", target_path, url);
-
     let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?;
 
