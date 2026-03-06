@@ -1,7 +1,0 @@
----
-source: crates/rattler_package_streaming/src/reqwest/sparse.rs
-assertion_line: 177
-expression: about_json
----
-channels:
-  - "https://conda.anaconda.org/conda-forge/"
