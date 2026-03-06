@@ -417,11 +417,27 @@ impl QueryExecutor {
                 result.records.extend(records);
             }
             SourceSpecs::Input(specs) => {
-                // Only a subset matches — filter and clone matching Arcs.
+                // Only keep records that satisfy at least one input spec.
+                //
+                // If no records match the input spec we still include all
+                // records from this channel. This preserves channel presence
+                // information so the solver can correctly enforce strict
+                // channel priority. Otherwise the solver might think the
+                // package only exists in a lower-priority channel.
+                //
+                // The solver already filters candidates by MatchSpec, so
+                // the extra non-matching records will not be selected — they
+                // only serve as a signal that this channel "owns" the
+                // package name.
+                let mut matched = false;
                 for record in &records {
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
                         result.records.push(record.clone());
+                        matched = true;
                     }
+                }
+                if !matched {
+                    result.records.extend(records);
                 }
             }
         }
