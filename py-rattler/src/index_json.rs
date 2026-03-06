@@ -1,14 +1,21 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, PyResult};
+use pyo3::{
+    exceptions::PyValueError, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python,
+};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
     VersionWithSource,
 };
 use rattler_package_streaming::seek::read_package_file;
+use url::Url;
 
-use crate::{error::PyRattlerError, package_name::PyPackageName, version::PyVersion};
+use crate::{
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, package_name::PyPackageName,
+    version::PyVersion,
+};
 
 #[pyclass]
 #[repr(transparent)]
@@ -73,6 +80,29 @@ impl PyIndexJson {
         Ok(IndexJson::from_str(str)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let index_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+                IndexJson,
+            >(client.into(), url)
+            .await
+            .map(PyIndexJson::from)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+
+            Python::with_gil(|py| Ok(Py::new(py, index_json)?.into_any()))
+        })
     }
 
     /// Returns the path to the file within the Conda archive.
