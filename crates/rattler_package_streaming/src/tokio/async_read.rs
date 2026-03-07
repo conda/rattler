@@ -6,9 +6,10 @@ use std::path::Path;
 use async_compression::tokio::bufread::BzDecoder;
 use async_spooled_tempfile::SpooledTempFile;
 use async_zip::base::read::stream::ZipFileReader;
-use futures_util::StreamExt;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncRead, AsyncSeekExt};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+#[cfg(feature = "reqwest")]
+use {futures_util::StreamExt as _, tokio::io::AsyncReadExt};
 
 use crate::{read::SizeCountingReader, ExtractError, ExtractResult};
 
