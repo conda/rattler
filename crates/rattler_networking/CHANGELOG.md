@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_networking-v0.26.2...rattler_networking-v0.26.3) - 2026-03-07
+
+### Fixed
+
+- replace panicking unwraps in `OCIUrl::new` ([#2162](https://github.com/conda/rattler/pull/2162))
+- *(networking)* cache GCS OAuth2 token across requests ([#2114](https://github.com/conda/rattler/pull/2114))
+
 ## [0.26.2](https://github.com/conda/rattler/compare/rattler_networking-v0.26.1...rattler_networking-v0.26.2) - 2026-02-25
 
 ### Fixed
