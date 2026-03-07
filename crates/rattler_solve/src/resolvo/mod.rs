@@ -365,6 +365,11 @@ impl<'a> CondaDependencyProvider<'a> {
                             // Exclude if published after cutoff and not exempt
                             timestamp > cutoff && !config.is_exempt(&record.package_record.name)
                         }
+                        (Some(config), Some(_), None) => {
+                            // Exclude if no timestamp and unknown timestamps are not allowed
+                            !config.include_unknown_timestamp
+                                && !config.is_exempt(&record.package_record.name)
+                        }
                         _ => false,
                     };
 
