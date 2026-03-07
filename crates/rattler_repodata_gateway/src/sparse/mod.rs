@@ -19,8 +19,8 @@ use rattler_conda_types::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
     },
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    UrlOrPath, WhlPackageRecord,
+    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageNameMatcher, PackageRecord,
+    RepoDataRecord, UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -338,7 +338,7 @@ impl SparseRepoData {
         }
     }
 
-    /// Returns all the records that matches any of the specified match spec.
+    /// Returns all the records that match any of the specified match specs.
     pub fn load_matching_records(
         &self,
         spec: impl IntoIterator<Item = impl Borrow<MatchSpec>>,
@@ -347,11 +347,63 @@ impl SparseRepoData {
         let mut result = Vec::new();
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
-        for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
-            let grouped_specs = specs.into_iter().collect::<Vec<_>>();
-            // TODO: support glob/regex package names
+
+        // Separate specs into exact specs and pattern specs (glob/regex).
+        // `name_specs` collects (PackageName -> Vec<MatchSpec>) for all names
+        // that need to be parsed – both from exact and pattern matches.
+        let mut name_specs: Vec<(PackageName, Vec<MatchSpec>)> = Vec::new();
+        let mut pattern_specs: Vec<(PackageNameMatcher, MatchSpec)> = Vec::new();
+
+        for s in spec {
+            let s = s.borrow().clone();
+            match &s.name {
+                PackageNameMatcher::Exact(name) => {
+                    // Find existing group or create new one
+                    if let Some(group) = name_specs.iter_mut().find(|(n, _)| n == name) {
+                        group.1.push(s);
+                    } else {
+                        name_specs.push((name.clone(), vec![s]));
+                    }
+                }
+                matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)) => {
+                    pattern_specs.push((matcher.clone(), s));
+                }
+            }
+        }
+
+        // Resolve pattern specs into concrete package names and merge them into
+        // `name_specs`. If both an exact and a pattern spec match the same
+        // package name, their filters are combined (a record passes if it
+        // matches ANY of them).
+        if !pattern_specs.is_empty() {
+            for name_str in self.package_names(variant_consolidation) {
+                let Ok(name) = PackageName::try_from(name_str) else {
+                    continue;
+                };
+
+                let matching: Vec<MatchSpec> = pattern_specs
+                    .iter()
+                    .filter(|(matcher, _)| matcher.matches(&name))
+                    .map(|(_, spec)| spec.clone())
+                    .collect();
+
+                if matching.is_empty() {
+                    continue;
+                }
+
+                // Merge with existing entry or create new one
+                if let Some(group) = name_specs.iter_mut().find(|(n, _)| n == &name) {
+                    group.1.extend(matching);
+                } else {
+                    name_specs.push((name, matching));
+                }
+            }
+        }
+
+        // Parse records once per package name
+        for (package_name, specs) in &name_specs {
             let mut parsed_records = parse_records(
-                package_name.as_exact(),
+                Some(package_name),
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 &repo_data.experimental_v3,
@@ -361,9 +413,9 @@ impl SparseRepoData {
                 &self.subdir,
                 self.patch_record_fn,
                 |record| {
-                    grouped_specs
+                    specs
                         .iter()
-                        .any(|spec| spec.borrow().matches(&record.package_record))
+                        .any(|spec| spec.matches(&record.package_record))
                 },
             )?;
             result.append(&mut parsed_records);
@@ -1079,7 +1131,8 @@ mod test {
     use fs_err as fs;
     use itertools::Itertools;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness,
+        ParseStrictnessWithNameMatcher, RepoData, RepoDataRecord,
     };
     use rstest::rstest;
 
@@ -1458,5 +1511,74 @@ mod test {
             .collect::<Vec<_>>();
 
         insta::assert_snapshot!(records.join("\n"), @"cuda-version-12.5-hd4f0392_3.conda");
+    }
+
+    /// Helper: parse a pattern spec (glob/regex) with non-exact name matching.
+    fn pattern_spec(s: &str) -> MatchSpec {
+        MatchSpec::from_str(
+            s,
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: ParseStrictness::Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap()
+    }
+
+    /// Helper: query the dummy repodata with the given specs and return
+    /// unique sorted package names.
+    fn query_matching_names(specs: Vec<MatchSpec>) -> Vec<String> {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        sparse
+            .load_matching_records(specs, PackageFormatSelection::default())
+            .unwrap()
+            .into_iter()
+            .map(|record| record.package_record.name.as_normalized().to_string())
+            .unique()
+            .sorted()
+            .collect()
+    }
+
+    #[test]
+    fn test_glob_pattern_query() {
+        let names = query_matching_names(vec![pattern_spec("foo*")]);
+        insta::assert_snapshot!(names.join("\n"), @r###"
+        foo
+        foobar
+        "###);
+    }
+
+    #[test]
+    fn test_glob_pattern_suffix() {
+        let names = query_matching_names(vec![pattern_spec("*bar")]);
+        insta::assert_snapshot!(names.join("\n"), @r###"
+        bar
+        foobar
+        xbar
+        "###);
+    }
+
+    #[test]
+    fn test_regex_pattern_query() {
+        let names = query_matching_names(vec![pattern_spec("^b.*$")]);
+        insta::assert_snapshot!(names.join("\n"), @r###"
+        bar
+        baz
+        bors
+        "###);
+    }
+
+    #[test]
+    fn test_mixed_exact_and_pattern_query() {
+        let names = query_matching_names(vec![
+            MatchSpec::from_str("bors", ParseStrictness::Strict).unwrap(),
+            pattern_spec("foo*"),
+        ]);
+        insta::assert_snapshot!(names.join("\n"), @r###"
+        bors
+        foo
+        foobar
+        "###);
     }
 }
