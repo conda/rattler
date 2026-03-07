@@ -70,18 +70,34 @@ impl Read for ProgressBarReader {
 /// a function that sorts paths into two iterators, one that starts with `info/`
 /// and one that does not both iterators are sorted alphabetically for
 /// reproducibility
-fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+fn sort_paths(
+    paths: &[PathBuf],
+    base_path: &Path,
+) -> Result<(Vec<PathBuf>, Vec<PathBuf>), io::Error> {
     let info = Path::new("info/");
-    let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = paths
-        .iter()
-        .map(|p| p.strip_prefix(base_path).unwrap())
-        .map(Path::to_path_buf)
-        .partition(|path| path.starts_with(info));
+    let mut relative_paths = Vec::with_capacity(paths.len());
+    for p in paths {
+        let rel = p.strip_prefix(base_path).map_err(|_e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "path '{}' is not under base path '{}'",
+                    p.display(),
+                    base_path.display()
+                ),
+            )
+        })?;
+        relative_paths.push(rel.to_path_buf());
+    }
+
+    let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = relative_paths
+        .into_iter()
+        .partition(|p| p.starts_with(info));
 
     info_paths.sort();
     other_paths.sort();
 
-    (info_paths, other_paths)
+    Ok((info_paths, other_paths))
 }
 
 fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
@@ -146,7 +162,7 @@ pub fn write_tar_bz2_package<W: Write>(
     progress_bar_wrapper.set_total(total_size);
 
     // sort paths alphabetically, and sort paths beginning with `info/` first
-    let (info_paths, other_paths) = sort_paths(paths, base_path);
+    let (info_paths, other_paths) = sort_paths(paths, base_path)?;
     for path in info_paths.iter().chain(other_paths.iter()) {
         append_path_to_archive(
             &mut archive,
@@ -281,7 +297,7 @@ pub fn write_conda_package<W: Write + Seek>(
     outer_archive.start_file("metadata.json", options)?;
     outer_archive.write_all(package_metadata.as_bytes())?;
 
-    let (info_paths, other_paths) = sort_paths(paths, base_path);
+    let (info_paths, other_paths) = sort_paths(paths, base_path)?;
 
     let archive_path = format!("pkg-{out_name}.tar.zst");
 
