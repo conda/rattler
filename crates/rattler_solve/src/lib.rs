@@ -282,6 +282,14 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Dependency overrides that replace dependencies of matching packages.
     pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
+
+    /// Package names known to exist per channel, in priority order (highest
+    /// priority first). Enables strict channel priority enforcement even
+    /// when the gateway's version filtering removed all records from a
+    /// higher-priority channel.
+    ///
+    /// Each entry is `(channel_url, package_names_in_that_channel)`.
+    pub channel_package_names: Vec<(Option<String>, HashSet<PackageName>)>,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -301,6 +309,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             min_age: None,
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
+            channel_package_names: Vec::new(),
         }
     }
 }
