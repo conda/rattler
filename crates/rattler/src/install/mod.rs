@@ -58,7 +58,8 @@ pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
-    prefix_record, Platform,
+    prefix_record::{self, LinkType},
+    Platform,
 };
 use rayon::{
     iter::Either,
@@ -250,6 +251,13 @@ pub struct InstallOptions {
     /// at all), and `--preserve-metadata=entitlements` preserves the original entitlements
     /// from the binary (required for programs that need specific permissions like virtualization).
     pub apple_codesign_behavior: AppleCodeSignBehavior,
+
+    /// Whether to allow symlinks that point outside the target prefix. Some
+    /// packages (e.g. driver packages) legitimately ship symlinks to paths
+    /// outside the environment. When set to `false` (the default), such
+    /// symlinks are rejected. When set to `true`, they are allowed with a
+    /// warning.
+    pub allow_external_symlinks: bool,
 }
 
 #[derive(Debug)]
@@ -442,6 +450,7 @@ pub async fn link_package(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
+                    options.allow_external_symlinks,
                 )
             })
             .await
@@ -614,7 +623,7 @@ pub fn link_package_sync(
     target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
-) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
+) -> Result<(Vec<prefix_record::PathsEntry>, LinkType), InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -679,6 +688,13 @@ pub fn link_package_sync(
     let allow_hard_links = options
         .allow_hard_links
         .unwrap_or_else(|| can_create_hardlinks_sync(target_dir, package_dir));
+    // Record the link type that will be used for this package. Hard links take
+    // priority
+    let link_type = if allow_hard_links {
+        LinkType::HardLink
+    } else {
+        LinkType::Copy
+    };
     let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
         match reflink_copy::check_reflink_support(package_dir, target_dir) {
             Ok(reflink_copy::ReflinkSupport::Supported) => true,
@@ -866,6 +882,7 @@ pub fn link_package_sync(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
+                    options.allow_external_symlinks,
                 );
 
                 let result = match link_result {
@@ -979,7 +996,7 @@ pub fn link_package_sync(
         paths.append(&mut entry_point_paths);
     };
 
-    Ok(paths)
+    Ok((paths, link_type))
 }
 
 fn compute_paths(

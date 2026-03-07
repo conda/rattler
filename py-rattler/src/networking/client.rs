@@ -25,14 +25,19 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None, headers=None))]
+    #[pyo3(signature = (middlewares=None, headers=None, timeout=None))]
     pub fn new(
         middlewares: Option<Vec<PyMiddleware>>,
         headers: Option<HashMap<String, String>>,
+        timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
 
         let mut client_builder = reqwest::Client::builder();
+
+        if let Some(timeout) = timeout {
+            client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
+        }
 
         if let Some(headers) = headers {
             let mut header_map = HeaderMap::new();
