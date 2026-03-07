@@ -277,7 +277,11 @@ pub async fn fetch_repo_data(
     // Now that the caches have been refreshed determine whether or not we can use
     // one of the variants. We don't check the expiration here since we just
     // refreshed it.
+    #[cfg(not(target_arch = "wasm32"))]
     let has_zst = options.zstd_enabled && variant_availability.has_zst();
+    #[cfg(target_arch = "wasm32")]
+    let has_zst = false;
+
     let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
 
     // Determine which variant to download
@@ -396,7 +400,10 @@ pub async fn fetch_repo_data(
             repo_data_url.clone(),
             response,
             if has_zst {
-                Encoding::Zst
+                #[cfg(not(target_arch = "wasm32"))]
+                { Encoding::Zst }
+                #[cfg(target_arch = "wasm32")]
+                { unreachable!("zstd is not supported on wasm") }
             } else if has_bz2 {
                 Encoding::Bz2
             } else {
@@ -952,6 +959,7 @@ mod test {
                 tokio::io::copy(&mut input, &mut encoder).await?;
                 encoder.shutdown().await?;
             }
+            #[cfg(not(target_arch = "wasm32"))]
             Encoding::Zst => {
                 let mut encoder = async_compression::tokio::write::ZstdEncoder::new(file);
                 tokio::io::copy(&mut input, &mut encoder).await?;

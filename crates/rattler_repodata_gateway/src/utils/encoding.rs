@@ -9,6 +9,7 @@ pub enum Encoding {
     Passthrough,
     GZip,
     Bz2,
+    #[cfg(not(target_arch = "wasm32"))]
     Zst,
 }
 
@@ -22,27 +23,54 @@ impl<'a> From<&'a reqwest::Response> for Encoding {
     }
 }
 
-pin_project! {
-    #[project = DecoderProj]
-    pub enum Decoder<T: AsyncBufRead> {
-        Passthrough { #[pin] inner: T },
-        GZip { #[pin] inner: async_compression::tokio::bufread::GzipDecoder<T> },
-        Bz2 { #[pin] inner: async_compression::tokio::bufread::BzDecoder<T> },
-        Zst { #[pin] inner: async_compression::tokio::bufread::ZstdDecoder<T> },
-    }
-}
+cfg_if::cfg_if! {
+    if #[cfg(target_arch = "wasm32")] {
+        pin_project! {
+            #[project = DecoderProj]
+            pub enum Decoder<T: AsyncBufRead> {
+                Passthrough { #[pin] inner: T },
+                GZip { #[pin] inner: async_compression::tokio::bufread::GzipDecoder<T> },
+                Bz2 { #[pin] inner: async_compression::tokio::bufread::BzDecoder<T> },
+            }
+        }
 
-impl<T: AsyncBufRead> AsyncRead for Decoder<T> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        match self.project() {
-            DecoderProj::Passthrough { inner } => inner.poll_read(cx, buf),
-            DecoderProj::GZip { inner } => inner.poll_read(cx, buf),
-            DecoderProj::Bz2 { inner } => inner.poll_read(cx, buf),
-            DecoderProj::Zst { inner } => inner.poll_read(cx, buf),
+        impl<T: AsyncBufRead> AsyncRead for Decoder<T> {
+            fn poll_read(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &mut ReadBuf<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                match self.project() {
+                    DecoderProj::Passthrough { inner } => inner.poll_read(cx, buf),
+                    DecoderProj::GZip { inner } => inner.poll_read(cx, buf),
+                    DecoderProj::Bz2 { inner } => inner.poll_read(cx, buf),
+                }
+            }
+        }
+    } else {
+        pin_project! {
+            #[project = DecoderProj]
+            pub enum Decoder<T: AsyncBufRead> {
+                Passthrough { #[pin] inner: T },
+                GZip { #[pin] inner: async_compression::tokio::bufread::GzipDecoder<T> },
+                Bz2 { #[pin] inner: async_compression::tokio::bufread::BzDecoder<T> },
+                Zst { #[pin] inner: async_compression::tokio::bufread::ZstdDecoder<T> },
+            }
+        }
+
+        impl<T: AsyncBufRead> AsyncRead for Decoder<T> {
+            fn poll_read(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+                buf: &mut ReadBuf<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                match self.project() {
+                    DecoderProj::Passthrough { inner } => inner.poll_read(cx, buf),
+                    DecoderProj::GZip { inner } => inner.poll_read(cx, buf),
+                    DecoderProj::Bz2 { inner } => inner.poll_read(cx, buf),
+                    DecoderProj::Zst { inner } => inner.poll_read(cx, buf),
+                }
+            }
         }
     }
 }
@@ -62,6 +90,7 @@ impl<T: AsyncBufRead> AsyncEncoding for T {
             Encoding::Bz2 => Decoder::Bz2 {
                 inner: async_compression::tokio::bufread::BzDecoder::new(self),
             },
+            #[cfg(not(target_arch = "wasm32"))]
             Encoding::Zst => Decoder::Zst {
                 inner: async_compression::tokio::bufread::ZstdDecoder::new(self),
             },

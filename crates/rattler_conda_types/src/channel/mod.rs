@@ -462,6 +462,10 @@ fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, Pa
 
     // Parse the `~/` as the home folder
     if let Ok(user_path) = path.strip_prefix("~/") {
+        #[cfg(target_arch = "wasm32")]
+        return Err(ParseChannelError::InvalidPath(path_str.to_owned()));
+
+        #[cfg(not(target_arch = "wasm32"))]
         return Ok(Utf8TypedPathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
