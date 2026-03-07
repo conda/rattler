@@ -1,11 +1,12 @@
-use std::{collections::BTreeMap, str::FromStr, time::Instant};
+use std::{collections::BTreeMap, collections::HashSet, str::FromStr, time::Instant};
 
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
-    ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
+    PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult,
+    Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -710,6 +711,7 @@ mod libsolv_c {
                 min_age: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
+                channel_package_names: Vec::new(),
             })
             .unwrap()
             .records;
@@ -1397,25 +1399,17 @@ fn channel_priority_disabled_libsolv_c() {
 /// - Channel B (lower priority) has `my-pkg` 2.0 only.
 /// - Spec: `my-pkg >=2.0`
 ///
-/// Under strict channel priority the solver must NOT silently pick channel B.
-/// Channel A "owns" the package because it was seen first, so channel B's
-/// record should be excluded. Because no version in channel A satisfies the
-/// spec the solve should fail as unsolvable.
+/// After gateway filtering only channel B's record survives, but
+/// `channel_package_names` tells the solver that channel A also owns the
+/// package. Under strict channel priority the solver must NOT select
+/// channel B and the solve should fail.
 #[test]
 fn channel_priority_strict_direct_dep_higher_channel_no_match() {
     let channel_a = "https://conda.anaconda.org/channel-a/";
     let channel_b = "https://conda.anaconda.org/channel-b/";
 
-    // Channel A: higher priority, only has 1.0
-    let records_a = [PackageBuilder::new("my-pkg")
-        .channel(channel_a)
-        .subdir("linux-64")
-        .version("1.0")
-        .build_string("h0_0")
-        .build_number(0)
-        .build()];
-
-    // Channel B: lower priority, has 2.0
+    // Channel B: lower priority, has 2.0 (the only record passing the
+    // gateway's version filter for spec ">=2.0").
     let records_b = [PackageBuilder::new("my-pkg")
         .channel(channel_b)
         .subdir("linux-64")
@@ -1425,12 +1419,25 @@ fn channel_priority_strict_direct_dep_higher_channel_no_match() {
         .build()];
 
     let spec = MatchSpec::from_str("my-pkg>=2.0", ParseStrictness::Lenient).unwrap();
+    let pkg_name = PackageName::from_str("my-pkg").unwrap();
 
-    // Channel A is listed first → higher priority
+    // Channel A (higher priority) has my-pkg but no version matching >=2.0.
+    // The gateway strips those records but reports the package name via
+    // channel_package_names so the solver can enforce strict priority.
+    let channel_package_names = vec![
+        (
+            Some(channel_a.to_string()),
+            HashSet::from([pkg_name.clone()]),
+        ),
+        (Some(channel_b.to_string()), HashSet::from([pkg_name])),
+    ];
+
+    // Only channel B's records reach the solver.
     let solver_task = SolverTask {
         specs: vec![spec],
         channel_priority: ChannelPriority::Strict,
-        ..SolverTask::from_iter([records_a.iter(), records_b.iter()])
+        channel_package_names,
+        ..SolverTask::from_iter([records_b.iter()])
     };
 
     let result = rattler_solve::resolvo::Solver.solve(solver_task);

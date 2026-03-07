@@ -282,6 +282,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         timeout: opt.timeout.map(Duration::from_millis),
         strategy: opt.strategy.map_or_else(Default::default, Into::into),
         exclude_newer: opt.exclude_newer.map(Into::into),
+        channel_package_names: RepoData::collect_channel_package_names(&repo_data),
         ..SolverTask::from_iter(&repo_data)
     };
 
