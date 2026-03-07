@@ -98,7 +98,7 @@ pub fn read_package_file_content<'a>(
             Ok(buf)
         }
         CondaArchiveType::Conda => {
-            let mut info_archive = stream_conda_info(file).unwrap();
+            let mut info_archive = stream_conda_info(file)?;
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
