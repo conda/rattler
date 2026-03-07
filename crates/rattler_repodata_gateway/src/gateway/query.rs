@@ -429,15 +429,17 @@ impl QueryExecutor {
                 // the extra non-matching records will not be selected — they
                 // only serve as a signal that this channel "owns" the
                 // package name.
-                let mut matched = false;
+                let mut matched = Vec::new();
                 for record in &records {
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
-                        result.records.push(record.clone());
-                        matched = true;
+                        matched.push(record.clone());
                     }
                 }
-                if !matched {
+
+                if matched.is_empty() {
                     result.records.extend(records);
+                } else {
+                    result.records.extend(matched);
                 }
             }
         }
