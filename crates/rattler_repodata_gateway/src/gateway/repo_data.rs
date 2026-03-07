@@ -44,7 +44,7 @@ impl RepoData {
         &self.channel_package_names
     }
 
-    /// Build a list of (channel, package_names) entries from a sequence of
+    /// Build a list of `(channel, package_names)` entries from a sequence of
     /// [`RepoData`] results, preserving priority order (first entry = highest
     /// priority). Channels that appear in multiple entries are merged.
     pub fn collect_channel_package_names(
