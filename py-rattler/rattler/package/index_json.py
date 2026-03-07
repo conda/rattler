@@ -2,12 +2,15 @@ from __future__ import annotations
 import os
 import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyIndexJson
 from rattler.version.version import Version
 from rattler.version.with_source import VersionWithSource
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class IndexJson:
@@ -66,6 +69,13 @@ class IndexJson:
         format, this function returns an error.
         """
         return IndexJson._from_py_index_json(PyIndexJson.from_str(string))
+
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> IndexJson:
+        """
+        Fetches `info/index.json` from a remote package archive URL.
+        """
+        return cls._from_py_index_json(await PyIndexJson.from_remote_url(client._client, url))
 
     @staticmethod
     def package_path() -> Path:

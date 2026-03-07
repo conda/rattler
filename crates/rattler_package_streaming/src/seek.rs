@@ -98,7 +98,7 @@ pub fn read_package_file_content<'a>(
             Ok(buf)
         }
         CondaArchiveType::Conda => {
-            let mut info_archive = stream_conda_info(file).unwrap();
+            let mut info_archive = stream_conda_info(file)?;
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
@@ -127,7 +127,7 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
         P::package_path(),
     )?;
 
-    P::from_str(&String::from_utf8_lossy(&content))
+    P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 

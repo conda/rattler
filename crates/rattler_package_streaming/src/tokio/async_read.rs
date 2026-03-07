@@ -6,7 +6,8 @@ use std::path::Path;
 use async_compression::tokio::bufread::BzDecoder;
 use async_spooled_tempfile::SpooledTempFile;
 use async_zip::base::read::stream::ZipFileReader;
-use tokio::io::{AsyncRead, AsyncSeekExt};
+use futures_util::StreamExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
 use crate::{read::SizeCountingReader, ExtractError, ExtractResult};
@@ -221,4 +222,79 @@ pub async fn extract_conda_via_buffering(
         md5,
         total_size,
     })
+}
+
+/// Returns the ZIP entry prefix (`"info-"` or `"pkg-"`) that contains the
+/// given `target_path` inside a `.conda` archive.
+#[cfg(feature = "reqwest")]
+pub(crate) fn conda_entry_prefix(target_path: &Path) -> &'static str {
+    if target_path.starts_with("info") {
+        "info-"
+    } else {
+        "pkg-"
+    }
+}
+
+/// Async equivalent of [`crate::seek::get_file_from_archive`].
+///
+/// Iterates entries of a tar archive, returning the contents of the first
+/// entry whose path matches `file_name`. Because the reader is streaming,
+/// only the bytes up to (and including) the target entry are consumed.
+#[cfg(feature = "reqwest")]
+pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
+    archive: &mut tokio_tar::Archive<R>,
+    file_name: &Path,
+) -> Result<Option<Vec<u8>>, ExtractError> {
+    let mut entries = archive.entries().map_err(ExtractError::IoError)?;
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry.map_err(ExtractError::IoError)?;
+        let path = entry.path().map_err(ExtractError::IoError)?;
+        if path.as_ref() == file_name {
+            let size = entry.header().size().map_err(ExtractError::IoError)?;
+            let mut buf = Vec::with_capacity(size as usize);
+            entry
+                .read_to_end(&mut buf)
+                .await
+                .map_err(ExtractError::IoError)?;
+            return Ok(Some(buf));
+        }
+    }
+    Ok(None)
+}
+
+#[cfg(all(test, feature = "reqwest"))]
+mod tests {
+    use super::conda_entry_prefix;
+    use std::path::Path;
+
+    #[test]
+    fn test_conda_entry_prefix_info_files() {
+        assert_eq!(conda_entry_prefix(Path::new("info/index.json")), "info-");
+        assert_eq!(conda_entry_prefix(Path::new("info/about.json")), "info-");
+        assert_eq!(conda_entry_prefix(Path::new("info/paths.json")), "info-");
+        assert_eq!(
+            conda_entry_prefix(Path::new("info/nested/deep/file.txt")),
+            "info-"
+        );
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_pkg_files() {
+        assert_eq!(conda_entry_prefix(Path::new("lib/libz.so")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("bin/python")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("clobber")), "pkg-");
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_info_bare() {
+        // Path::starts_with works on components, so "info" matches "info/"
+        assert_eq!(conda_entry_prefix(Path::new("info")), "info-");
+    }
+
+    #[test]
+    fn test_conda_entry_prefix_info_like_but_not_info_dir() {
+        // Paths that textually start with "info" but are not under the info/ directory
+        assert_eq!(conda_entry_prefix(Path::new("info-custom.txt")), "pkg-");
+        assert_eq!(conda_entry_prefix(Path::new("information/file")), "pkg-");
+    }
 }
