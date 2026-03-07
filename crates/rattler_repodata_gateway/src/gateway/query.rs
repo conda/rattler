@@ -417,29 +417,21 @@ impl QueryExecutor {
                 result.records.extend(records);
             }
             SourceSpecs::Input(specs) => {
-                // Only keep records that satisfy at least one input spec.
-                //
-                // If no records match the input spec we still include all
-                // records from this channel. This preserves channel presence
-                // information so the solver can correctly enforce strict
-                // channel priority. Otherwise the solver might think the
-                // package only exists in a lower-priority channel.
-                //
-                // The solver already filters candidates by MatchSpec, so
-                // the extra non-matching records will not be selected — they
-                // only serve as a signal that this channel "owns" the
-                // package name.
-                let mut matched = Vec::new();
                 for record in &records {
-                    if specs.iter().any(|s| s.matches(record.as_ref())) {
-                        matched.push(record.clone());
-                    }
-                }
+                    // Track all package names present in this channel,
+                    // regardless of spec filtering. This enables strict
+                    // channel priority enforcement in the solver even when no
+                    // versions from a higher-priority channel match the spec.
+                    result
+                        .channel_package_names
+                        .entry(record.channel.clone())
+                        .or_default()
+                        .insert(record.package_record.name.clone());
 
-                if matched.is_empty() {
-                    result.records.extend(records);
-                } else {
-                    result.records.extend(matched);
+                    // Only include records that match at least one input spec.
+                    if specs.iter().any(|s| s.matches(record.as_ref())) {
+                        result.records.push(record.clone());
+                    }
                 }
             }
         }

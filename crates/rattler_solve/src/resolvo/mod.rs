@@ -303,6 +303,7 @@ impl<'a> CondaDependencyProvider<'a> {
         min_age: Option<&MinimumAgeConfig>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
+        channel_package_names: &[(Option<String>, HashSet<PackageName>)],
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -333,7 +334,20 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        let mut package_name_found_in_channel = HashMap::<String, Option<String>>::new();
+
+        // Pre-populate channel ownership from explicit package name data.
+        // This enables strict channel priority even when no records from a
+        // higher-priority channel match the requested spec.
+        if channel_priority == ChannelPriority::Strict {
+            for (channel, names) in channel_package_names {
+                for name in names {
+                    package_name_found_in_channel
+                        .entry(name.as_normalized().to_string())
+                        .or_insert_with(|| channel.clone());
+                }
+            }
+        }
 
         // Add additional records
         for repo_data in repodata {
@@ -504,7 +518,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     channel_priority,
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
-                    if first_channel != &&record.channel {
+                    if first_channel != &record.channel {
                         if let Some(channel) = &record.channel {
                             tracing::debug!(
                                 "Ignoring '{}' from '{}' because of strict channel priority.",
@@ -531,7 +545,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 } else {
                     package_name_found_in_channel.insert(
                         record.package_record.name.as_normalized().to_string(),
-                        &record.channel,
+                        record.channel.clone(),
                     );
                 }
             }
@@ -973,6 +987,7 @@ impl super::SolverImpl for Solver {
             task.min_age.as_ref(),
             task.strategy,
             dependency_overrides,
+            &task.channel_package_names,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.
