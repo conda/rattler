@@ -1,5 +1,6 @@
 mod about_json;
 mod channel;
+mod config;
 mod error;
 mod explicit_environment_spec;
 mod generic_virtual_package;
@@ -35,6 +36,10 @@ use std::ops::Deref;
 
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
+use config::{
+    PyConcurrencyConfig, PyConfig, PyProxyConfig, PyRepodataChannelConfig, PyRepodataConfig,
+    PyS3Options,
+};
 use error::PyRattlerError;
 use exceptions::{
     ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
@@ -178,6 +183,13 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyPrefixPlaceholder>()?;
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
+
+    m.add_class::<PyConfig>()?;
+    m.add_class::<PyConcurrencyConfig>()?;
+    m.add_class::<PyProxyConfig>()?;
+    m.add_class::<PyRepodataConfig>()?;
+    m.add_class::<PyRepodataChannelConfig>()?;
+    m.add_class::<PyS3Options>()?;
 
     m.add_class::<PyMinimumAgeConfig>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
