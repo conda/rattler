@@ -7,6 +7,21 @@ authors = [
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
+preview = ["pixi-build"]
+
+[package]
+name = "py-rattler"
+
+[package.build]
+backend = { name = "pixi-build-python", version = "*" }
+[package.build-dependencies]
+compilers = "*"
+rust = "*"
+[package.host-dependencies]
+python = "*"
+maturin = "*"
+[package.run-dependencies]
+python = "*"
 
 [feature.build.dependencies]
 maturin = "~=1.10.1"
@@ -30,6 +45,8 @@ python = "3.9.*"
 
 ruff = ">=0.14.1,<0.15"
 mypy = "~=1.17.0"
+nushell = ">=0.106.1,<0.107"
+go-yq = "*"
 
 pytest = ">=8.4.1,<9"
 pytest-asyncio = ">=1.0.0,<2"
@@ -53,8 +70,14 @@ fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
+ensure-version-synced = "nu scripts/ensure-version-synced.nu"
 fmt = { depends-on = ["fmt-python", "fmt-rust"] }
-lint = { depends-on = ["type-check", "lint-python", "lint-rust"] }
+lint = { depends-on = [
+  "ensure-version-synced",
+  "type-check",
+  "lint-python",
+  "lint-rust",
+] }
 type-check = { cmd = "mypy", depends-on = ["build"] }
 
 # checks for the CI
@@ -86,10 +109,14 @@ ipython = ">=8.29.0,<9"
 [feature.repl.tasks]
 repl = { depends-on = ["build"], cmd = "ipython" }
 
+[feature.integration.dependencies]
+py-rattler = { path = "." }
+
 [environments]
 test = { features = ["build", "test"], solve-group = "default" }
 docs = ["docs"]
 repl = ["repl"]
+integration = { features = ["integration"], no-default-feature = true }
 
 [dependencies]
 requests = ">=2.32.3,<2.33"
