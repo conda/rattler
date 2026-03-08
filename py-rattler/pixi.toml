@@ -84,8 +84,7 @@ build-docs = { cmd = "mkdocs build --strict", depends-on = ["download-font"] }
 download-font = { cmd = "bash docs/layouts/download-font-to-cache.sh" }
 deploy-latest = { cmd = "mike deploy --push --update-aliases $RELEASE_VERSION latest", depends-on = ["download-font"] }
 deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = ["download-font"] }
-# Local-only: build versioned docs without pushing (run from py-rattler dir, then serve gh-pages or site/)
-deploy-dev-local = { cmd = "mike deploy dev devel", depends-on = ["download-font"] }
+
 [feature.repl.dependencies]
 ipython = ">=8.29.0,<9"
 [feature.repl.tasks]
