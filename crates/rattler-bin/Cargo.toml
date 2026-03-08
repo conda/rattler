@@ -38,6 +38,7 @@ gcs = ["rattler_networking/gcs"]
 
 [dependencies]
 anyhow = { workspace = true }
+async_http_range_reader = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }

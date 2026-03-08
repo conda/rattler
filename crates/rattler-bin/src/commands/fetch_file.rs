@@ -1,10 +1,11 @@
+use async_http_range_reader::AsyncHttpRangeReaderError;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda;
+use rattler_package_streaming::{reqwest::sparse::fetch_file_from_remote_sparse, ExtractError};
 use reqwest::Client;
 use url::Url;
 
@@ -37,16 +38,26 @@ pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
 
     let target_path = Path::new(&opt.path);
 
-    let bytes = fetch_file_from_remote_conda(client, opt.url, target_path)
-        .await
-        .into_diagnostic()
-        .context("failed to fetch file from package")?
-        .ok_or_else(|| miette::miette!("file '{}' not found in package", opt.path))?;
+    let bytes = match fetch_file_from_remote_sparse(client, opt.url, target_path).await {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => return Err(miette::miette!("file '{}' not found in package", opt.path)),
+        Err(ExtractError::UnsupportedArchiveType) => {
+            eprintln!("Unsupported archive type. Downloading full package.")
+        }
+        Err(ExtractError::AsyncHttpRangeReaderError(
+            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+        )) => panic!(),
+        Err(e) => return Err(e).into_diagnostic(),
+    };
 
     std::io::stdout()
         .write_all(&bytes)
         .into_diagnostic()
         .context("failed to write to stdout")?;
+
+    // .into_diagnostic()
+    // .context("failed to fetch file from package")?
+    // .ok_or_else(|| miette::miette!("file '{}' not found in package", opt.path))?;
 
     Ok(())
 }
