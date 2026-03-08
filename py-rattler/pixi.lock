@@ -956,7 +956,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/gcc_impl_linux-64-15.2.0-hcacfade_7.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/go-yq-4.52.4-h280c20c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/h2-4.2.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hpack-4.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hyperframe-6.1.0-pyhd8ed1ab_0.conda
@@ -1043,7 +1042,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.1.8-pyh707e725_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/go-yq-4.52.4-ha3d0635_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/h2-4.2.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hpack-4.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hyperframe-6.1.0-pyhd8ed1ab_0.conda
@@ -1116,7 +1114,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.1.8-pyh707e725_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/go-yq-4.52.4-h1a92334_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/h2-4.2.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hpack-4.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hyperframe-6.1.0-pyhd8ed1ab_0.conda
@@ -1190,7 +1187,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.1.8-pyh7428d3b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/go-yq-4.52.4-h6a83c73_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/h2-4.2.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hpack-4.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/hyperframe-6.1.0-pyhd8ed1ab_0.conda
@@ -2195,52 +2191,6 @@ packages:
   license_family: APACHE
   size: 16538
   timestamp: 1734344477841
-- conda: https://conda.anaconda.org/conda-forge/linux-64/go-yq-4.52.4-h280c20c_0.conda
-  sha256: 1f2083bcd2cc06e73011c4440c6a949eabd138bb2a42213d01d678e852398727
-  md5: e52ef738c114d90bd4d64d7562880def
-  depends:
-  - __glibc >=2.17
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  license: MIT
-  license_family: MIT
-  purls: []
-  size: 5565048
-  timestamp: 1771068806824
-- conda: https://conda.anaconda.org/conda-forge/osx-64/go-yq-4.52.4-ha3d0635_0.conda
-  sha256: 5ac812ef4680a0ae7a3ff73ec306a3d0bcdd397baf9ab78d39994f1123c69ab4
-  md5: 317cd65f0b9a1feb9970e42511658ac1
-  depends:
-  - __osx >=11.0
-  constrains:
-  - __osx >=10.12
-  license: MIT
-  license_family: MIT
-  purls: []
-  size: 5574893
-  timestamp: 1771068812981
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/go-yq-4.52.4-h1a92334_0.conda
-  sha256: 6fb4757ad7aaa0cea6f4dd20bbb447f128c607c4b461df18d395accc958d0a21
-  md5: 92b2a4aba1baee8eeb598ccd82a6df63
-  depends:
-  - __osx >=11.0
-  license: MIT
-  license_family: MIT
-  purls: []
-  size: 5067070
-  timestamp: 1771068884681
-- conda: https://conda.anaconda.org/conda-forge/win-64/go-yq-4.52.4-h6a83c73_0.conda
-  sha256: c011f08a6746082e74b6476650052f2abf0d2810f4eca244bcaa9d2d091bdcb6
-  md5: a2352aa70ad01b3d5f98c3b97ae3bcff
-  depends:
-  - vc >=14.3,<15
-  - vc14_runtime >=14.44.35208
-  - ucrt >=10.0.20348.0
-  license: MIT
-  license_family: MIT
-  purls: []
-  size: 5464045
-  timestamp: 1771068859150
 - conda: https://conda.anaconda.org/conda-forge/noarch/griffe-1.14.0-pyhd8ed1ab_0.conda
   sha256: 5dcb68767b83f775f43b11069527a4b60f197ca202d2f78057109edcc223b5f3
   md5: fc88f51d5bd157bce041d17df8fc54ee

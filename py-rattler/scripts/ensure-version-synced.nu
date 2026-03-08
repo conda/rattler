@@ -1,9 +1,11 @@
-let py = (yq -oy '.project.version' pyproject.toml | str trim)
-let cargo = (yq -oy '.package.version' Cargo.toml | str trim)
+#!/usr/bin/env nu
+
+let py = (open pyproject.toml | get project.version)
+let cargo = (open Cargo.toml | get package.version)
 
 if $py == $cargo {
   exit 0
 }
 
-print --stderr 'pyproject.toml and Cargo.toml versions differ'
+print --stderr $"py-rattler/pyproject.toml has ($py), py-rattler/Cargo.toml has ($cargo)"
 exit 1
