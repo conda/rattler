@@ -176,7 +176,8 @@ impl PyAboutJson {
 
     #[setter]
     pub fn set_extra(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
-        self.inner.extra = depythonize(&value).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        self.inner.extra =
+            depythonize(&value).map_err(|err| PyValueError::new_err(err.to_string()))?;
         Ok(())
     }
 
