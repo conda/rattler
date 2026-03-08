@@ -114,6 +114,7 @@ with-env {
   AWS_SECRET_ACCESS_KEY: $root_password
   AWS_REGION: "us-east-1"
   AWS_ENDPOINT_URL: "http://localhost:9000"
+  S3_FORCE_PATH_STYLE: "true"
 } {
   (^rattler
       create
