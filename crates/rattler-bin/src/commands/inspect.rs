@@ -3,7 +3,7 @@ use std::sync::Arc;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::sparse::fetch_package_file_sparse;
+use rattler_package_streaming::reqwest::sparse::fetch_package_file_from_remote_sparse;
 use reqwest::Client;
 use url::Url;
 
@@ -30,10 +30,11 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let index_json: IndexJson = fetch_package_file_sparse(client.clone(), opt.url.clone())
-        .await
-        .into_diagnostic()
-        .context("failed to read index.json")?;
+    let index_json: IndexJson =
+        fetch_package_file_from_remote_sparse(client.clone(), opt.url.clone())
+            .await
+            .into_diagnostic()
+            .context("failed to read index.json")?;
 
     println!("name: {}", index_json.name.as_normalized());
     println!("version: {}", index_json.version);
@@ -57,7 +58,7 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    let paths_json: PathsJson = fetch_package_file_sparse(client, opt.url)
+    let paths_json: PathsJson = fetch_package_file_from_remote_sparse(client, opt.url)
         .await
         .into_diagnostic()
         .context("failed to read paths.json")?;

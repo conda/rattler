@@ -5,13 +5,16 @@ use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::{reqwest::sparse::fetch_file_from_remote_sparse, ExtractError};
+use rattler_package_streaming::{
+    reqwest::sparse::{fetch_file_from_remote_full_download, fetch_file_from_remote_sparse},
+    ExtractError,
+};
 use reqwest::Client;
 use url::Url;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package (.conda archive)
+    /// URL of the conda package (.conda or .tar.bz2 archive)
     #[clap(required = true)]
     url: Url,
 
@@ -21,6 +24,8 @@ pub struct Opt {
 }
 
 pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
+    let Opt { url, path } = opt;
+
     let download_client = Client::builder()
         .no_gzip()
         .build()
@@ -36,17 +41,28 @@ pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let target_path = Path::new(&opt.path);
+    let target_path = Path::new(&path);
 
-    let bytes = match fetch_file_from_remote_sparse(client, opt.url, target_path).await {
+    let bytes = match fetch_file_from_remote_sparse(client.clone(), url.clone(), target_path).await
+    {
         Ok(Some(bytes)) => bytes,
-        Ok(None) => return Err(miette::miette!("file '{}' not found in package", opt.path)),
+        Ok(None) => return Err(miette::miette!("file '{}' not found in package", path)),
         Err(ExtractError::UnsupportedArchiveType) => {
-            eprintln!("Unsupported archive type. Downloading full package.")
+            eprintln!("Sparse path unsupported for archive type. Downloading full package.");
+            fetch_file_from_remote_full_download(&client, &url, target_path)
+                .await
+                .into_diagnostic()?
+                .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?
         }
         Err(ExtractError::AsyncHttpRangeReaderError(
             AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-        )) => panic!(),
+        )) => {
+            eprintln!("Server does not support range requests. Downloading full package.");
+            fetch_file_from_remote_full_download(&client, &url, target_path)
+                .await
+                .into_diagnostic()?
+                .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?
+        }
         Err(e) => return Err(e).into_diagnostic(),
     };
 
@@ -54,10 +70,5 @@ pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
         .write_all(&bytes)
         .into_diagnostic()
         .context("failed to write to stdout")?;
-
-    // .into_diagnostic()
-    // .context("failed to fetch file from package")?
-    // .ok_or_else(|| miette::miette!("file '{}' not found in package", opt.path))?;
-
     Ok(())
 }

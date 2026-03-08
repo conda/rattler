@@ -28,20 +28,15 @@
 //! # }
 //! ```
 
-use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
 use async_http_range_reader::AsyncHttpRangeReaderError;
-use async_zip::base::read::stream::ZipFileReader;
-use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::{CondaArchiveType, PackageFile};
+use rattler_conda_types::package::PackageFile;
 use reqwest_middleware::ClientWithMiddleware;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tokio_util::io::StreamReader;
 use tracing::debug;
 use url::Url;
 
-use super::sparse::fetch_package_file_sparse;
-use crate::reqwest::sparse::fetch_package_file_from_remote_full_download;
-use crate::tokio::async_read::get_file_from_tar_archive;
+use super::sparse::{
+    fetch_package_file_from_remote_full_download, fetch_package_file_from_remote_sparse,
+};
 use crate::ExtractError;
 
 /// Fetch a specific [`PackageFile`] from a remote package using HTTP range requests.
@@ -87,7 +82,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
-    match fetch_package_file_sparse::<P>(client.clone(), url.clone()).await {
+    match fetch_package_file_from_remote_sparse::<P>(client.clone(), url.clone()).await {
         Ok(result) => return Ok(result),
         Err(ExtractError::UnsupportedArchiveType) => {
             debug!("archive type not supported for range requests, falling back to full download");
@@ -138,7 +133,7 @@ mod tests {
     }
 
     /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_url`
-    /// falls through to `fetch_package_file_full_download` (streaming).
+    /// falls through to `fetch_package_file_from_remote_full_download` (streaming).
     #[tokio::test]
     async fn test_fetch_full_download_tar_bz2() {
         use rattler_conda_types::package::IndexJson;
@@ -161,7 +156,7 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_full_download(&client, &url)
+        let index_json: IndexJson = fetch_package_file_from_remote_full_download(&client, &url)
             .await
             .unwrap();
 

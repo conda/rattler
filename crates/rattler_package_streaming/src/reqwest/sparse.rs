@@ -15,7 +15,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use rattler_conda_types::package::IndexJson;
-//! use rattler_package_streaming::reqwest::sparse::fetch_package_file_sparse;
+//! use rattler_package_streaming::reqwest::sparse::fetch_package_file_from_remote_sparse;
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
@@ -23,11 +23,10 @@
 //! let client = ClientWithMiddleware::from(Client::new());
 //! let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap();
 //!
-//! let index_json: IndexJson = fetch_package_file_sparse(client, url).await.unwrap();
+//! let index_json: IndexJson = fetch_package_file_from_remote_sparse(client, url).await.unwrap();
 //! # }
 //! ```
 
-use async_zip::base::read::stream::ZipFileReader;
 use std::path::Path;
 
 use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
@@ -156,7 +155,7 @@ pub async fn fetch_file_from_remote_sparse(
 /// # #[tokio::main]
 /// # async fn main() {
 /// use rattler_conda_types::package::IndexJson;
-/// use rattler_package_streaming::reqwest::sparse::fetch_package_file_sparse;
+/// use rattler_package_streaming::reqwest::sparse::fetch_package_file_from_remote_sparse;
 /// use reqwest::Client;
 /// use reqwest_middleware::ClientWithMiddleware;
 /// use url::Url;
@@ -164,7 +163,7 @@ pub async fn fetch_file_from_remote_sparse(
 /// let client = ClientWithMiddleware::from(Client::new());
 /// let url = Url::parse("https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda").unwrap();
 ///
-/// let index_json: IndexJson = fetch_package_file_sparse(client, url).await.unwrap();
+/// let index_json: IndexJson = fetch_package_file_from_remote_sparse(client, url).await.unwrap();
 /// println!("Package: {}", index_json.name.as_normalized());
 /// # }
 /// ```
@@ -180,7 +179,8 @@ pub async fn fetch_package_file_from_remote_sparse<P: PackageFile>(
 }
 
 /// Stream the full package and extract a single [`PackageFile`].
-async fn fetch_file_from_remote_full_download(
+/// Download the full package and extract a single file from it.
+pub async fn fetch_file_from_remote_full_download(
     client: &ClientWithMiddleware,
     url: &Url,
     target_path: &Path,
@@ -208,7 +208,7 @@ async fn fetch_file_from_remote_full_download(
     });
     let stream_reader = StreamReader::new(byte_stream);
 
-    let file_path = std::path::Path::new(P::package_path());
+    let file_path = target_path;
 
     let content = match archive_type {
         CondaArchiveType::TarBz2 => {
@@ -289,12 +289,15 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_sparse(client.clone(), url.clone())
-            .await
-            .unwrap();
+        let index_json: IndexJson =
+            fetch_package_file_from_remote_sparse(client.clone(), url.clone())
+                .await
+                .unwrap();
         insta::assert_yaml_snapshot!(index_json);
 
-        let about_json: AboutJson = fetch_package_file_sparse(client, url).await.unwrap();
+        let about_json: AboutJson = fetch_package_file_from_remote_sparse(client, url)
+            .await
+            .unwrap();
         insta::assert_yaml_snapshot!(about_json);
     }
 
