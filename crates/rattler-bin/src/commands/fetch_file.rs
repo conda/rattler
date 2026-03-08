@@ -5,10 +5,7 @@ use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::{
-    reqwest::sparse::{fetch_file_from_remote_full_download, fetch_file_from_remote_sparse},
-    ExtractError,
-};
+use rattler_package_streaming::{reqwest::sparse::fetch_file_from_remote_sparse, ExtractError};
 use reqwest::Client;
 use url::Url;
 
