@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement comparison and hashing for `PackageRecord` types ([#2046](https://github.com/conda/rattler/pull/2046))
 - Support glob and regex patterns in repodata queries ([#2036](https://github.com/conda/rattler/pull/2036))
 - Add OAuth/OIDC authentication support in the authentication middleware ([#2049](https://github.com/conda/rattler/pull/2049))
+- Add extra to AboutJson ([#2198](https://github.com/conda/rattler/pull/2198))
 
 ### Changed
 
