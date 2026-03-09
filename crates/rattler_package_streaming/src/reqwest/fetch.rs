@@ -99,9 +99,9 @@ pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
         )) => {
             debug!("server does not support range requests, falling back to full download");
         }
-        Err(ExtractError::AsyncHttpRangeReaderError(
-            AsyncHttpRangeReaderError::HttpError(err),
-        )) if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) => {
+        Err(ExtractError::AsyncHttpRangeReaderError(AsyncHttpRangeReaderError::HttpError(err)))
+            if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) =>
+        {
             // this can happen with JFrog Artifactory when you query more than the object length
             debug!("server returned range not satisfiable, falling back to full download");
         }
@@ -133,9 +133,9 @@ pub async fn fetch_file_from_remote_url(
         )) => {
             debug!("server does not support range requests, falling back to full download");
         }
-        Err(ExtractError::AsyncHttpRangeReaderError(
-            AsyncHttpRangeReaderError::HttpError(err),
-        )) if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) => {
+        Err(ExtractError::AsyncHttpRangeReaderError(AsyncHttpRangeReaderError::HttpError(err)))
+            if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) =>
+        {
             // this can happen with JFrog Artifactory when you query more than the object length
             debug!("server returned range not satisfiable, falling back to full download");
         }
