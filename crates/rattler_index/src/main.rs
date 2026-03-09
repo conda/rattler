@@ -78,7 +78,7 @@ struct Cli {
 
     /// The path to the config file to use to configure rattler-index.
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
-    #[arg(long)]
+    #[arg(long, global = true)]
     config: Option<PathBuf>,
 }
 
