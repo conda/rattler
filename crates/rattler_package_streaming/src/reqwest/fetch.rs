@@ -15,7 +15,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use rattler_conda_types::package::IndexJson;
-//! use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
+//! use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
@@ -23,7 +23,7 @@
 //! let client = ClientWithMiddleware::from(Client::new());
 //! let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap();
 //!
-//! let index_json: IndexJson = fetch_package_file_from_url(client, url)
+//! let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
 //!     .await
 //!     .unwrap();
 //!
@@ -72,7 +72,7 @@ use crate::ExtractError;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use rattler_conda_types::package::IndexJson;
-/// use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
+/// use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 /// use reqwest::Client;
 /// use reqwest_middleware::ClientWithMiddleware;
 /// use url::Url;
@@ -80,7 +80,7 @@ use crate::ExtractError;
 /// let client = ClientWithMiddleware::from(Client::new());
 /// let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap();
 ///
-/// let index_json: IndexJson = fetch_package_file_from_url(client, url)
+/// let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -171,7 +171,7 @@ mod tests {
         insta::assert_yaml_snapshot!(about_json);
     }
 
-    /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_url`
+    /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_remote_url`
     /// falls through to `fetch_package_file_full_download` (streaming).
     #[tokio::test]
     async fn test_fetch_full_download_tar_bz2() {
