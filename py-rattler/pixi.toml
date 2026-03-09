@@ -17,11 +17,6 @@ backend = { name = "pixi-build-python", version = "*" }
 [package.build-dependencies]
 compilers = "*"
 rust = "*"
-[package.host-dependencies]
-python = "*"
-maturin = "*"
-[package.run-dependencies]
-python = "*"
 
 [feature.build.dependencies]
 maturin = "~=1.10.1"
