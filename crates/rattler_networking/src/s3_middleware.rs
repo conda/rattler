@@ -170,14 +170,6 @@ impl S3 {
             // Set the region from the default provider chain.
             s3_config_builder.set_region(sdk_config.region().cloned());
 
-            // Allow explicit path-style via env (e.g. for Minio). No URL-based inference.
-            if let Ok(v) = std::env::var("S3_FORCE_PATH_STYLE") {
-                let use_path_style =
-                    matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on");
-                if use_path_style {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
-                }
-            }
             Ok(aws_sdk_s3::Client::from_conf(s3_config_builder.build()))
         }
     }
@@ -343,7 +335,6 @@ region = eu-central-1
             [
                 ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
                 ("AWS_PROFILE", Some("packages")),
-                ("S3_FORCE_PATH_STYLE", Some("true")),
             ],
             async {
                 s3.generate_presigned_s3_url(
@@ -369,7 +360,6 @@ region = eu-central-1
             [
                 ("AWS_ENDPOINT_URL", Some("http://localhost:9000")),
                 ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
-                ("S3_FORCE_PATH_STYLE", Some("true")),
             ],
             async {
                 s3.generate_presigned_s3_url(

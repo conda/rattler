@@ -7,9 +7,18 @@ let data_dir = $"($tmp)/minio-data"
 let log_file = $"($tmp)/minio.log"
 let pid_file = $"($tmp)/minio.pid"
 let bucket_name = $"tmp-(random int 0..1000000)"
+let config_path = $"($tmp)/rattler.toml"
 
 # Create directories
 mkdir $bin_dir $data_dir
+
+# Create rattler config with S3 options for MinIO (path-style addressing)
+let config_content = $"[s3-options.($bucket_name)]
+endpoint-url = \"http://localhost:9000\"
+force-path-style = true
+region = \"us-east-1\"
+"
+$config_content | save $config_path
 
 # Credentials
 let root_user = ($env.MINIO_ACCESS_KEY? | default "minio")
@@ -56,11 +65,9 @@ print "== Index the channel"
 (^rattler-index
     s3
     $"s3://($bucket_name)"
+    --config $config_path
     --access-key-id $root_user
     --secret-access-key $root_password
-    --region "us-east-1"
-    --endpoint-url "http://localhost:9000"
-    --addressing-style path
 )
 
 print "== Verify cache control headers are set correctly"
@@ -113,12 +120,11 @@ with-env {
   AWS_ACCESS_KEY_ID: $root_user
   AWS_SECRET_ACCESS_KEY: $root_password
   AWS_REGION: "us-east-1"
-  AWS_ENDPOINT_URL: "http://localhost:9000"
-  S3_FORCE_PATH_STYLE: "true"
 } {
   (^rattler
       create
       --dry-run
+      --config $config_path
       -c $"s3://($bucket_name)"
       empty==0.1.0
   )

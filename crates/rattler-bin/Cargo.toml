@@ -33,7 +33,7 @@ rustls-tls = [
   "rattler_networking/rustls-tls",
   "rattler_cache/rustls-tls",
 ]
-s3 = ["rattler_networking/s3", "rattler_upload/s3"]
+s3 = ["rattler_networking/s3", "rattler_networking/rattler_config", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
 
 [dependencies]
@@ -50,6 +50,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
 ] }
+rattler_config = { workspace = true, default-features = false }
 rattler_repodata_gateway = { workspace = true, default-features = false, features = [
   "gateway",
 ] }
