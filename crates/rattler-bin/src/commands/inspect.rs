@@ -32,7 +32,7 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let index_json: IndexJson = fetch_package_file_sparse(client.clone(), opt.url.clone())
+    let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
         .await
         .into_diagnostic()
         .context("failed to read index.json")?;
