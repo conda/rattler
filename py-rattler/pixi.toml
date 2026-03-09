@@ -15,7 +15,7 @@ name = "py-rattler"
 [package.build]
 backend = { name = "pixi-build-python", version = "*" }
 [package.build.config]
-compilers = ["c", "cxx", "rust"]
+compilers = ["c", "rust"]
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
