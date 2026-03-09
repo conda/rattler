@@ -3,9 +3,7 @@ use std::sync::Arc;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::{
-    fetch::fetch_package_file_from_remote_url, sparse::fetch_package_file_sparse,
-};
+use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 use reqwest::Client;
 use url::Url;
 
