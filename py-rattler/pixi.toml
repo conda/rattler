@@ -19,6 +19,7 @@ maturin = "*"
 python = "*"
 [package.build.config]
 compilers = ["c", "rust"]
+env = { MATURIN_PEP517_ARGS = "--features pty" }
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
