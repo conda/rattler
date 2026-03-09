@@ -14,6 +14,9 @@ name = "py-rattler"
 
 [package.build]
 backend = { name = "pixi-build-python", version = "*" }
+[package.host-dependencies]
+maturin = "*"
+python = "*"
 [package.build.config]
 compilers = ["c", "rust"]
 
