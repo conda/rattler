@@ -1,10 +1,13 @@
-//! Functionality to fetch package metadata from a remote `.conda` package using HTTP range requests.
+//! High-level helpers to fetch files from remote Conda packages.
 //!
-//! This module allows fetching just the `info/` section of a `.conda` package without downloading
-//! the entire file. This is achieved by using HTTP Range requests to fetch only the necessary
-//! bytes from the end of the zip archive.
+//! These helpers first try the sparse HTTP range-request path from [`super::sparse`]
+//! and automatically fall back to streaming the full archive through
+//! [`super::full_download`] when range requests are unsupported or the archive type
+//! cannot be handled sparsely.
 //!
-//! For lower-level access, see [`super::sparse`] which exposes the raw-bytes API.
+//! Use this module when you want a single entry point that works for both typed
+//! [`PackageFile`] members and arbitrary file paths inside `.conda` or `.tar.bz2`
+//! packages.
 //!
 //! # Example
 //!
@@ -41,16 +44,18 @@ use super::sparse::fetch_package_file_sparse;
 use crate::reqwest::sparse::fetch_file_from_remote_sparse;
 use crate::ExtractError;
 
-/// Fetch a specific [`PackageFile`] from a remote package using HTTP range requests.
+/// Fetch and parse a specific [`PackageFile`] from a remote package.
 ///
-/// This function fetches only the minimal bytes needed from the package, typically
-/// just the `info/` section which is located at the end of the `.conda` archive.
+/// The function first attempts the sparse range-request path, which usually only
+/// downloads the bytes needed to reach the requested file inside a `.conda`
+/// archive.
 ///
-/// If the server does not support range requests or the package is not a `.conda` file,
-/// the function falls back to downloading the entire package.
+/// If the server does not support range requests, or if the archive type cannot
+/// be handled by the sparse implementation, it falls back to the streaming
+/// full-download path.
 ///
-/// For lower-level access, see [`super::sparse::fetch_file_from_remote_conda`]
-/// which returns raw bytes for a specific file path.
+/// For lower-level access, see [`super::sparse::fetch_file_from_remote_sparse`]
+/// and [`super::full_download::fetch_file_from_remote_full_download`].
 ///
 /// # Arguments
 ///
@@ -100,8 +105,13 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     fetch_package_file_full_download::<P>(&client, &url).await
 }
 
-/// Fetch a file from a remote package using HTTP range requests when possible,
-/// falling back to streaming the full package when needed.
+/// Fetch the raw bytes for an arbitrary file path inside a remote package.
+///
+/// The function first attempts the sparse range-request path for `.conda`
+/// packages and falls back to streaming the full archive when sparse access is
+/// unavailable.
+///
+/// Returns `Ok(None)` when the target path does not exist in the archive.
 pub async fn fetch_file_from_remote_url(
     client: ClientWithMiddleware,
     url: Url,

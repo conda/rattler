@@ -1,13 +1,14 @@
-//! Fetch individual files from remote `.conda` packages using HTTP range requests.
+//! Sparse remote access to files inside `.conda` archives.
 //!
-//! Streams the zstd-compressed info tar archive directly from the server,
-//! decompressing on the fly and stopping as soon as the target file is found.
-//! This means only the bytes up to (and including) the target file are ever
-//! downloaded or decompressed — even if the info archive is very large.
+//! This module uses HTTP range requests to avoid downloading the full archive.
+//! It opens the outer ZIP container, locates the relevant `info-*.tar.zst` or
+//! `pkg-*.tar.zst` member, and streams only the bytes needed to read a target
+//! path from that inner tarball.
 //!
 //! Only `.conda` archives on servers that support range requests are supported.
-//! For a higher-level API that falls back to full downloads, see
-//! [`super::fetch::fetch_package_file_from_url`].
+//! For higher-level APIs that fall back to full downloads, see
+//! [`super::fetch::fetch_package_file_from_url`] and
+//! [`super::fetch::fetch_file_from_remote_url`].
 //!
 //! # Example
 //!
@@ -143,9 +144,9 @@ pub async fn fetch_file_from_remote_sparse(
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
 /// using HTTP range requests.
 ///
-/// Only fetches the info section and decompresses only until the target file
-/// is found. Returns an error if the server does not support range requests
-/// or the package is not a `.conda` file.
+/// This is a thin typed wrapper around [`fetch_file_from_remote_sparse`]. It
+/// only works for `.conda` archives on servers that support range requests and
+/// does not perform any full-download fallback.
 ///
 /// # Example
 ///

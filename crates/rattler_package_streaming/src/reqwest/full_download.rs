@@ -1,3 +1,11 @@
+//! Streaming full-download helpers for remote Conda packages.
+//!
+//! These helpers download the full response body and extract the requested file
+//! while streaming, without first writing the archive to disk.
+//!
+//! They are primarily used as a fallback for the higher-level APIs in
+//! [`super::fetch`] when sparse range-request access is unavailable.
+
 use std::path::Path;
 
 use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
@@ -12,7 +20,9 @@ use url::Url;
 use crate::tokio::async_read::get_file_from_tar_archive;
 use crate::ExtractError;
 
-/// Stream the full package and extract a single file.
+/// Stream the full package response and extract a single file by path.
+///
+/// Returns `Ok(None)` when the target path does not exist in the archive.
 pub async fn fetch_file_from_remote_full_download(
     client: &ClientWithMiddleware,
     url: &Url,
@@ -89,7 +99,9 @@ pub async fn fetch_file_from_remote_full_download(
     Ok(content)
 }
 
-/// Stream the full package and extract a single [`PackageFile`].
+/// Stream the full package response and extract a single typed [`PackageFile`].
+///
+/// This is a typed wrapper around [`fetch_file_from_remote_full_download`].
 pub async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
