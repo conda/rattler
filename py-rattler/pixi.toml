@@ -23,6 +23,11 @@ clangdev = "*"
 compilers = ["c", "rust"]
 env = { MATURIN_PEP517_ARGS = "--features pty" }
 
+[feature.build.dependencies]
+maturin = ">=1.9.0,<2"
+pip = "~=23.2.1"
+rust = "~=1.93.1"
+
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --features pty"
