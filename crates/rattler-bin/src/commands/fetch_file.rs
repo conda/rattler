@@ -1,11 +1,10 @@
-use async_http_range_reader::AsyncHttpRangeReaderError;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::{reqwest::sparse::fetch_file_from_remote_sparse, ExtractError};
+use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url;
 use reqwest::Client;
 use url::Url;
 
@@ -40,28 +39,10 @@ pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
 
     let target_path = Path::new(&path);
 
-    let bytes = match fetch_file_from_remote_sparse(client.clone(), url.clone(), target_path).await
-    {
-        Ok(Some(bytes)) => bytes,
-        Ok(None) => return Err(miette::miette!("file '{}' not found in package", path)),
-        Err(ExtractError::UnsupportedArchiveType) => {
-            eprintln!("Sparse path unsupported for archive type. Downloading full package.");
-            fetch_file_from_remote_full_download(&client, &url, target_path)
-                .await
-                .into_diagnostic()?
-                .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?
-        }
-        Err(ExtractError::AsyncHttpRangeReaderError(
-            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-        )) => {
-            eprintln!("Server does not support range requests. Downloading full package.");
-            fetch_file_from_remote_full_download(&client, &url, target_path)
-                .await
-                .into_diagnostic()?
-                .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?
-        }
-        Err(e) => return Err(e).into_diagnostic(),
-    };
+    let bytes = fetch_file_from_remote_url(client, url, target_path)
+        .await
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?;
 
     std::io::stdout()
         .write_all(&bytes)
