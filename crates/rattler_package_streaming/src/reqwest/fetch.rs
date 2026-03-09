@@ -85,7 +85,7 @@ use crate::ExtractError;
 ///     .unwrap();
 /// # }
 /// ```
-pub async fn fetch_package_file_from_url<P: PackageFile>(
+pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
@@ -150,7 +150,9 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(index_json);
     }
@@ -162,7 +164,9 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let about_json: AboutJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let about_json: AboutJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(about_json);
     }
@@ -178,7 +182,9 @@ mod tests {
         let url = test_server::serve_file(tar_bz2).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(index_json);
     }
