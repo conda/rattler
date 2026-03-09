@@ -94,7 +94,7 @@ impl PyIndexJson {
         })?;
 
         future_into_py(py, async move {
-            let index_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+            let index_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                 IndexJson,
             >(client.into(), url)
             .await

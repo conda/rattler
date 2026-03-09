@@ -80,7 +80,7 @@ impl PyAboutJson {
         })?;
 
         future_into_py(py, async move {
-            let about_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+            let about_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                 AboutJson,
             >(client.into(), url)
             .await

@@ -100,7 +100,7 @@ impl PyPathsJson {
         })?;
 
         future_into_py(py, async move {
-            let paths_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+            let paths_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                 PathsJson,
             >(client.into(), url)
             .await
