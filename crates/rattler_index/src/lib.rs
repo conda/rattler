@@ -688,6 +688,10 @@ async fn index_subdir_inner(
         subdir
     );
 
+    for filename in &packages_to_delete {
+        registered_packages.remove(filename);
+    }
+
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
         .cloned()

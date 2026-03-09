@@ -147,3 +147,61 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     assert!(repodata_zst_path.is_file());
     assert!(repodata_msgpack_path.is_file());
 }
+
+/// Validates that reindexing removes stale package entries from repodata when
+/// the package file is deleted from disk.
+#[tokio::test]
+async fn test_reindex_removes_deleted_conda_package() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    let source_package = test_data_dir().join("packages").join(package_name);
+    let target_package = subdir_path.join(package_name);
+
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(source_package, &target_package).unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert!(repodata_json
+        .get("packages.conda")
+        .unwrap()
+        .get(package_name)
+        .is_some());
+
+    fs::remove_file(target_package).unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
+    assert!(repodata_json
+        .get("packages.conda")
+        .unwrap()
+        .get(package_name)
+        .is_none());
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from rattler.rattler import PyAboutJson
 
@@ -219,6 +219,29 @@ class AboutJson:
     @home.setter
     def home(self, value: List[str]) -> None:
         self._inner.home = value
+
+    @property
+    def extra(self) -> dict[str, Any]:
+        """
+        The JSON-serializable `extra` metadata attached to `about.json`.
+
+        Examples
+        --------
+        ```python
+        >>> about = AboutJson.from_str('{"extra": {"flow_id": "2024.08.13"}}')
+        >>> about.extra
+        {'flow_id': '2024.08.13'}
+        >>> about.extra = {"nested": {"value": [1, 2, None]}}
+        >>> about.extra
+        {'nested': {'value': [1, 2, None]}}
+        >>>
+        ```
+        """
+        return self._inner.extra
+
+    @extra.setter
+    def extra(self, value: dict[str, Any]) -> None:
+        self._inner.extra = value
 
     @property
     def license(self) -> Optional[str]:
