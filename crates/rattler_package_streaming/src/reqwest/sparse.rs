@@ -1,13 +1,14 @@
-//! Fetch individual files from remote `.conda` packages using HTTP range requests.
+//! Sparse remote access to files inside `.conda` archives.
 //!
-//! Streams the zstd-compressed info tar archive directly from the server,
-//! decompressing on the fly and stopping as soon as the target file is found.
-//! This means only the bytes up to (and including) the target file are ever
-//! downloaded or decompressed — even if the info archive is very large.
+//! This module uses HTTP range requests to avoid downloading the full archive.
+//! It opens the outer ZIP container, locates the relevant `info-*.tar.zst` or
+//! `pkg-*.tar.zst` member, and streams only the bytes needed to read a target
+//! path from that inner tarball.
 //!
 //! Only `.conda` archives on servers that support range requests are supported.
-//! For a higher-level API that falls back to full downloads, see
-//! [`super::fetch::fetch_package_file_from_url`].
+//! For higher-level APIs that fall back to full downloads, see
+//! [`super::fetch::fetch_package_file_from_remote_url`] and
+//! [`super::fetch::fetch_file_from_remote_url`].
 //!
 //! # Example
 //!
@@ -59,7 +60,7 @@ const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 /// Returns an error if the URL does not point to a `.conda` archive or the
 /// server does not support range requests.
 #[instrument(skip_all, fields(url = %redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
-pub async fn fetch_file_from_remote_conda(
+pub async fn fetch_file_from_remote_sparse(
     client: ClientWithMiddleware,
     url: Url,
     target_path: &Path,
@@ -143,9 +144,9 @@ pub async fn fetch_file_from_remote_conda(
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
 /// using HTTP range requests.
 ///
-/// Only fetches the info section and decompresses only until the target file
-/// is found. Returns an error if the server does not support range requests
-/// or the package is not a `.conda` file.
+/// This is a thin typed wrapper around [`fetch_file_from_remote_sparse`]. It
+/// only works for `.conda` archives on servers that support range requests and
+/// does not perform any full-download fallback.
 ///
 /// # Example
 ///
@@ -169,7 +170,7 @@ pub async fn fetch_package_file_sparse<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
-    let bytes = fetch_file_from_remote_conda(client, url, P::package_path())
+    let bytes = fetch_file_from_remote_sparse(client, url, P::package_path())
         .await?
         .ok_or(ExtractError::MissingComponent)?;
     P::from_slice(&bytes)
@@ -208,7 +209,7 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let raw = fetch_file_from_remote_conda(client, url, Path::new("info/index.json"))
+        let raw = fetch_file_from_remote_sparse(client, url, Path::new("info/index.json"))
             .await
             .unwrap()
             .expect("file should exist in archive");
@@ -220,7 +221,7 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let raw = fetch_file_from_remote_conda(client, url, Path::new("clobber"))
+        let raw = fetch_file_from_remote_sparse(client, url, Path::new("clobber"))
             .await
             .unwrap()
             .expect("file should exist in pkg section");
