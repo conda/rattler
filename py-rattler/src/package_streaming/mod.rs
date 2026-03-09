@@ -96,7 +96,7 @@ pub fn fetch_raw_package_file_from_url<'a>(
     let url = parse_url(&url)?;
     let path = PathBuf::from(path);
     let future = async move {
-        let bytes = rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda(
+        let bytes = rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url(
             client.into(),
             url,
             &path,
