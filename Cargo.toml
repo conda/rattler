@@ -34,8 +34,7 @@ async-compression = { version = "0.4", features = [
   "zstd",
 ] }
 async-fd-lock = "0.2.0"
-# async_http_range_reader = "0.9.2"
-async_http_range_reader = { git = "https://github.com/pavelzw/async_http_range_reader", branch = "416" }
+async_http_range_reader = "0.9.1"
 fs4 = "0.13.1"
 async-once-cell = "0.5.4"
 async-trait = "0.1.88"
