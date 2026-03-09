@@ -4885,7 +4885,6 @@ name = "rattler-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async_http_range_reader",
  "chrono",
  "clap",
  "console 0.16.2",
