@@ -123,7 +123,7 @@ pub fn fetch_raw_package_file_from_url<'a>(
 }
 
 #[pyfunction]
-pub fn download<'a>(
+pub fn download_to_path<'a>(
     py: Python<'a>,
     client: PyClientWithMiddleware,
     url: String,
@@ -155,6 +155,32 @@ pub fn download<'a>(
 
         file.flush().await.map_err(io_error)?;
         Ok(())
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn download_bytes<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let client: reqwest_middleware::ClientWithMiddleware = client.into();
+        let bytes = client
+            .get(url)
+            .send()
+            .await
+            .map_err(io_error)?
+            .error_for_status()
+            .map_err(io_error)?
+            .bytes()
+            .await
+            .map_err(io_error)?;
+
+        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     };
 
     future_into_py(py, future)

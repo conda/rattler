@@ -2,7 +2,8 @@ from os import PathLike
 from typing import Optional, Tuple
 
 from rattler.networking.client import Client
-from rattler.rattler import download as py_download
+from rattler.rattler import download_bytes as py_download_bytes
+from rattler.rattler import download_to_path as py_download_to_path
 from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import extract as py_extract
 from rattler.rattler import extract_tar_bz2 as py_extract_tar_bz2
@@ -19,9 +20,14 @@ def extract_tar_bz2(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, by
     return py_extract_tar_bz2(path, dest)
 
 
-async def download(client: Client, url: str, dest: PathLike[str]) -> None:
+async def download_to_path(client: Client, url: str, dest: PathLike[str]) -> None:
     """Download a package archive from a URL to a destination path."""
-    await py_download(client._client, url, dest)
+    await py_download_to_path(client._client, url, dest)
+
+
+async def download_bytes(client: Client, url: str) -> bytes:
+    """Download a package archive from a URL into memory."""
+    return await py_download_bytes(client._client, url)
 
 
 async def download_and_extract(
