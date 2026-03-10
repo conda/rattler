@@ -1,8 +1,10 @@
+use futures::StreamExt;
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use crate::{networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes};
@@ -17,6 +19,10 @@ fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject)
 fn parse_url(url: &str) -> PyResult<Url> {
     Url::parse(url)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}")))
+}
+
+fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
+    PyErr::new::<pyo3::exceptions::PyIOError, _>(error.to_string())
 }
 
 #[pyfunction]
@@ -111,6 +117,107 @@ pub fn fetch_raw_package_file_from_url<'a>(
         })?;
 
         Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn download_to_path<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    destination: PathBuf,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let client: reqwest_middleware::ClientWithMiddleware = client.into();
+
+        if let Some(parent) = destination.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(io_error)?;
+        }
+
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
+            .error_for_status()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+        let mut file = tokio::fs::File::create(&destination)
+            .await
+            .map_err(io_error)?;
+        let mut stream = response.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(io_error)?;
+            file.write_all(&chunk).await.map_err(io_error)?;
+        }
+
+        file.flush().await.map_err(io_error)?;
+        Ok(())
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn download_bytes<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let client: reqwest_middleware::ClientWithMiddleware = client.into();
+        let bytes = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
+            .error_for_status()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
+            .bytes()
+            .await
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn download_to_writer<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    writer: Py<PyAny>,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let client: reqwest_middleware::ClientWithMiddleware = client.into();
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
+            .error_for_status()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(io_error)?;
+            Python::with_gil(|py| {
+                writer
+                    .bind(py)
+                    .call_method1("write", (PyBytes::new(py, &chunk),))
+                    .map(|_| ())
+            })?;
+        }
+
+        Ok(())
     };
 
     future_into_py(py, future)
