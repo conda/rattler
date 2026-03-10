@@ -258,12 +258,12 @@ impl PackageCache {
 
     /// Acquires a global lock on the package cache.
     ///
-    /// This lock can be used to coordinate multiple package operations,
-    /// reducing the overhead of acquiring individual locks for each package.
-    /// The lock is held until the returned `CacheGlobalLock` is dropped.
+    /// This lock serializes cache operations across *processes* sharing the same cache
+    /// directory. It is held until the returned `CacheGlobalLock` is dropped.
     ///
-    /// This is particularly useful when installing many packages at once,
-    /// as it significantly reduces the number of file locking syscalls.
+    /// Prefer the default per-entry locking behavior for multi-process scenarios
+    /// (e.g. many concurrent installs sharing one cache). Only use this lock when
+    /// you explicitly want to trade parallelism for reduced lock contention.
     pub async fn acquire_global_lock(&self) -> Result<CacheGlobalLock, PackageCacheError> {
         // Use the first writable layer's path for the global cache lock
         let (_, writable_layers) = self.split_layers();
@@ -603,7 +603,7 @@ where
     E: Error + Send + Sync + 'static,
 {
     // Open the cache metadata file to read/write revision and hash information.
-    // Concurrent access is coordinated via the global cache lock.
+    // Concurrent access is coordinated by an exclusive lock on the metadata file.
     let lock_file_path = {
         // Append the `.lock` extension to the cache path to create the lock file path.
         let mut path_str = path.as_os_str().to_owned();
@@ -701,8 +701,9 @@ where
     }
 
     // If the cache is stale, we need to fetch the package again.
-    // Since we hold the global cache lock, we can safely update the metadata
-    // and fetch the package without worrying about concurrent modifications.
+    // Since we hold the cache entry lock (on the metadata file), we can safely
+    // update the metadata and fetch the package without worrying about concurrent
+    // modifications of this cache entry.
     if let Some(ref fetch_fn) = fetch {
         // Write the new revision
         let new_revision = cache_revision + 1;
