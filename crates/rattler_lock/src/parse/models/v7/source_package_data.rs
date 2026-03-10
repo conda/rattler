@@ -19,7 +19,7 @@ use crate::{
 
 /// A model struct for source packages in V7 lock files.
 ///
-/// This type is used for packages identified by the `- source:` key.
+/// This type is used for packages identified by the `- conda_source:` key.
 /// Unlike `CondaPackageDataModel` (for binary packages), this type:
 /// - Always converts to `CondaPackageData::Source`
 /// - Does not include binary-specific fields (`file_name`, `channel`, `hashes`)
@@ -35,8 +35,7 @@ use crate::{
 pub(crate) struct SourcePackageDataModel<'a> {
     /// The source identifier in the format `name[hash] @ location`.
     /// This is the discriminator key and uniquely identifies the package.
-    #[serde(rename = "source")]
-    pub identifier: SourceIdentifier,
+    pub conda_source: SourceIdentifier,
 
     // Version is required (not embedded in identifier)
     pub version: Cow<'a, VersionWithSource>,
@@ -88,7 +87,7 @@ pub(crate) struct SourcePackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
-    pub package_build_source: Option<PackageBuildSource>,
+    pub source: Option<PackageBuildSource>,
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
@@ -109,7 +108,7 @@ impl<'a> SourcePackageDataModel<'a> {
     /// directly for lookups without recomputing the hash.
     pub fn into_parts(self) -> Result<(SourceIdentifier, CondaSourceData), ConversionError> {
         // Extract name and location from the identifier, preserving the identifier itself
-        let (name, _hash, location) = self.identifier.clone().into_parts();
+        let (name, _hash, location) = self.conda_source.clone().into_parts();
 
         let subdir = self.subdir.into_owned();
         let build = self.build.into_owned();
@@ -146,11 +145,11 @@ impl<'a> SourcePackageDataModel<'a> {
             package_record,
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
-            package_build_source: self.package_build_source,
+            package_build_source: self.source,
             sources: self.sources,
         };
 
-        Ok((self.identifier, source_data))
+        Ok((self.conda_source, source_data))
     }
 }
 
@@ -172,7 +171,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
         let identifier = SourceIdentifier::from_source_data(value);
 
         Self {
-            identifier,
+            conda_source: identifier,
             version: Cow::Borrowed(&package_record.version),
             subdir: Cow::Borrowed(&package_record.subdir),
             build: Cow::Borrowed(&package_record.build),
@@ -190,7 +189,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
-            package_build_source: value.package_build_source.clone(),
+            source: value.package_build_source.clone(),
             sources: value.sources.clone(),
         }
     }

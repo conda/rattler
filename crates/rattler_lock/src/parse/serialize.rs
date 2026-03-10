@@ -133,8 +133,8 @@ enum SerializablePackageSelector<'a> {
     },
     /// Source packages use `SourceIdentifier` which uniquely identifies the package
     /// via the format `name[hash] @ location`. No additional disambiguation fields needed.
-    Source {
-        source: SourceIdentifier,
+    CondaSource {
+        conda_source: SourceIdentifier,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -160,8 +160,8 @@ impl<'a> SerializablePackageSelector<'a> {
     fn from_conda(package: &'a CondaPackageData) -> Self {
         match package {
             // Source packages use SourceIdentifier with an embedded hash
-            CondaPackageData::Source(source_data) => Self::Source {
-                source: SourceIdentifier::from_source_data(source_data),
+            CondaPackageData::Source(source_data) => Self::CondaSource {
+                conda_source: SourceIdentifier::from_source_data(source_data),
             },
             // Binary packages are uniquely identified by their URL
             CondaPackageData::Binary(binary_data) => Self::Conda {
@@ -193,7 +193,7 @@ impl Ord for SerializablePackageSelector<'_> {
         fn type_order(selector: &SerializablePackageSelector<'_>) -> u8 {
             match selector {
                 SerializablePackageSelector::Conda { .. } => 0,
-                SerializablePackageSelector::Source { .. } => 1,
+                SerializablePackageSelector::CondaSource { .. } => 1,
                 SerializablePackageSelector::Pypi { .. } => 2,
             }
         }
@@ -207,8 +207,8 @@ impl Ord for SerializablePackageSelector<'_> {
         // Same type, compare by content
         match (self, other) {
             (
-                SerializablePackageSelector::Source { source: a },
-                SerializablePackageSelector::Source { source: b },
+                SerializablePackageSelector::CondaSource { conda_source: a },
+                SerializablePackageSelector::CondaSource { conda_source: b },
             ) => {
                 // Compare by name first, then by hash, then by location
                 a.name()
