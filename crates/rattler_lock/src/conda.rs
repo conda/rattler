@@ -73,10 +73,10 @@ pub enum CondaPackageData {
     /// A binary package. A binary package is identified by looking at the
     /// location or filename of the package file and seeing if it represents a
     /// valid binary package name.
-    Binary(CondaBinaryData),
+    Binary(Box<CondaBinaryData>),
 
     /// A source package.
-    Source(CondaSourceData),
+    Source(Box<CondaSourceData>),
 }
 
 impl CondaPackageData {
@@ -95,7 +95,7 @@ impl CondaPackageData {
     pub fn record(&self) -> Option<&PackageRecord> {
         match self {
             CondaPackageData::Binary(data) => Some(&data.package_record),
-            CondaPackageData::Source(data) => data.package_record.as_ref(),
+            CondaPackageData::Source(data) => data.record(),
         }
     }
 
@@ -103,7 +103,19 @@ impl CondaPackageData {
     pub fn name(&self) -> &rattler_conda_types::PackageName {
         match self {
             CondaPackageData::Binary(data) => &data.package_record.name,
-            CondaPackageData::Source(data) => &data.name,
+            CondaPackageData::Source(data) => data.name(),
+        }
+    }
+
+    /// Returns the dependencies of the package.
+    ///
+    /// For binary packages, this returns the dependencies from the package
+    /// record. For source packages, this returns the dependencies from either
+    /// the full record or the partial metadata.
+    pub fn depends(&self) -> &[String] {
+        match self {
+            CondaPackageData::Binary(data) => &data.package_record.depends,
+            CondaPackageData::Source(data) => data.depends(),
         }
     }
 
@@ -128,7 +140,7 @@ impl CondaPackageData {
     /// Returns the binary representation of this instance if it exists.
     pub fn into_binary(self) -> Option<CondaBinaryData> {
         match self {
-            Self::Binary(data) => Some(data),
+            Self::Binary(data) => Some(*data),
             Self::Source(_) => None,
         }
     }
@@ -137,7 +149,7 @@ impl CondaPackageData {
     pub fn into_source(self) -> Option<CondaSourceData> {
         match self {
             Self::Binary(_) => None,
-            Self::Source(data) => Some(data),
+            Self::Source(data) => Some(*data),
         }
     }
 }
@@ -160,7 +172,7 @@ pub struct CondaBinaryData {
 
 impl From<CondaBinaryData> for CondaPackageData {
     fn from(value: CondaBinaryData) -> Self {
-        Self::Binary(value)
+        Self::Binary(Box::new(value))
     }
 }
 
@@ -233,34 +245,84 @@ pub enum PackageBuildSource {
     },
 }
 
+/// Metadata for a source package without a fully evaluated package record.
+///
+/// Contains the package name plus any known dependency and source information,
+/// but lacks the full [`PackageRecord`] fields (version, build, subdir, etc.).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PartialSourceMetadata {
+    /// The name of the output to use from the source.
+    pub name: rattler_conda_types::PackageName,
+
+    /// Dependencies on other packages (run-time requirements).
+    pub depends: Vec<String>,
+
+    /// Information about packages that should be built from source instead of
+    /// binary. This maps from a normalized package name to the location of the
+    /// source.
+    pub sources: BTreeMap<String, SourceLocation>,
+}
+
+/// Full metadata for a source package that has been evaluated.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FullSourceMetadata {
+    /// The evaluated package record.
+    pub package_record: PackageRecord,
+
+    /// Information about packages that should be built from source instead of
+    /// binary. This maps from a normalized package name to the location of the
+    /// source.
+    pub sources: BTreeMap<String, SourceLocation>,
+}
+
+/// Metadata for a source package, either partial (name-only) or full
+/// (evaluated record + sources).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SourceMetadata {
+    /// Only the package name is known.
+    Partial(PartialSourceMetadata),
+    /// The package has been fully evaluated.
+    Full(Box<FullSourceMetadata>),
+}
+
+impl SourceMetadata {
+    /// Returns a reference to the full metadata if this is the `Full` variant.
+    pub fn as_full(&self) -> Option<&FullSourceMetadata> {
+        match self {
+            Self::Full(full) => Some(full),
+            Self::Partial(_) => None,
+        }
+    }
+
+    /// Returns a reference to the partial metadata if this is the `Partial`
+    /// variant.
+    pub fn as_partial(&self) -> Option<&PartialSourceMetadata> {
+        match self {
+            Self::Partial(partial) => Some(partial),
+            Self::Full(_) => None,
+        }
+    }
+}
+
 /// Information about a source package stored in the lock-file.
+///
+/// The type parameter `D` determines the metadata level:
+/// - [`SourceMetadata`] (default): either partial or full metadata
+/// - [`FullSourceMetadata`]: guaranteed to have a full package record
+/// - [`PartialSourceMetadata`]: only the name is known
 #[derive(Clone, Debug)]
-pub struct CondaSourceData {
+pub struct CondaSourceData<D = SourceMetadata> {
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
 
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
 
-    /// The name of the output to use from the source.
-    pub name: rattler_conda_types::PackageName,
-
     /// Conda-build variants used to disambiguate between multiple source
     /// packages at the same location. This is a map from variant name to
     /// variant value. Optional field added in lock file format V6 (made
     /// required in V7).
     pub variants: BTreeMap<String, VariantValue>,
-
-    /// Optionally, the evaluated package record.
-    ///
-    /// We either force all metadata to be present for a source package or None.
-    /// If the data is not present, it should be retrieved at runtime.
-    pub package_record: Option<PackageRecord>,
-
-    /// Information about packages that should be built from source instead of
-    /// binary. This maps from a normalized package name to the location of the
-    /// source.
-    pub sources: BTreeMap<String, SourceLocation>,
 
     /// The short hash that was originally parsed from the [`crate::SourceIdentifier`]
     /// in the lock file (e.g. the `9f3c2a7b` part of `numba-cuda[9f3c2a7b] @ .`).
@@ -271,37 +333,197 @@ pub struct CondaSourceData {
     /// identifiers even if the hash algorithm or its inputs evolve over time.
     ///
     /// This field is intentionally excluded from [`PartialEq`], [`Eq`], and
-    /// [`Hash`] — it carries no semantic meaning about the package itself.
+    /// [`Hash`] because it carries no semantic meaning about the package itself.
     pub identifier_hash: Option<String>,
+
+    /// The metadata for this source package.
+    pub metadata: D,
 }
 
-impl PartialEq for CondaSourceData {
+impl<D: PartialEq> PartialEq for CondaSourceData<D> {
     fn eq(&self, other: &Self) -> bool {
         self.location == other.location
             && self.package_build_source == other.package_build_source
-            && self.name == other.name
             && self.variants == other.variants
-            && self.package_record == other.package_record
-            && self.sources == other.sources
+            && self.metadata == other.metadata
     }
 }
 
-impl Eq for CondaSourceData {}
+impl<D: Eq> Eq for CondaSourceData<D> {}
 
-impl std::hash::Hash for CondaSourceData {
+impl<D: Hash> std::hash::Hash for CondaSourceData<D> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.location.hash(state);
         self.package_build_source.hash(state);
-        self.name.hash(state);
         self.variants.hash(state);
-        self.package_record.hash(state);
-        self.sources.hash(state);
+        self.metadata.hash(state);
+    }
+}
+
+// --- Methods for CondaSourceData<SourceMetadata> (default) ---
+
+impl CondaSourceData<SourceMetadata> {
+    /// Returns the name of the package.
+    pub fn name(&self) -> &rattler_conda_types::PackageName {
+        match &self.metadata {
+            SourceMetadata::Partial(p) => &p.name,
+            SourceMetadata::Full(f) => &f.package_record.name,
+        }
+    }
+
+    /// Returns the package record if the metadata has been fully evaluated.
+    pub fn record(&self) -> Option<&PackageRecord> {
+        self.metadata.as_full().map(|f| &f.package_record)
+    }
+
+    /// Returns the source locations.
+    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
+        match &self.metadata {
+            SourceMetadata::Full(f) => &f.sources,
+            SourceMetadata::Partial(p) => &p.sources,
+        }
+    }
+
+    /// Returns the dependencies. Empty for partial metadata without depends.
+    pub fn depends(&self) -> &[String] {
+        match &self.metadata {
+            SourceMetadata::Full(f) => &f.package_record.depends,
+            SourceMetadata::Partial(p) => &p.depends,
+        }
+    }
+
+    /// Attempts to convert into a `CondaSourceData<FullSourceMetadata>`.
+    /// Returns `None` if the metadata is partial.
+    pub fn into_full(self) -> Option<CondaSourceData<FullSourceMetadata>> {
+        match self.metadata {
+            SourceMetadata::Full(full) => Some(CondaSourceData {
+                location: self.location,
+                package_build_source: self.package_build_source,
+                variants: self.variants,
+                identifier_hash: self.identifier_hash,
+                metadata: *full,
+            }),
+            SourceMetadata::Partial(_) => None,
+        }
+    }
+
+    /// Convenience constructor for a full source data.
+    pub fn full(
+        location: UrlOrPath,
+        package_build_source: Option<PackageBuildSource>,
+        variants: BTreeMap<String, VariantValue>,
+        identifier_hash: Option<String>,
+        package_record: PackageRecord,
+        sources: BTreeMap<String, SourceLocation>,
+    ) -> Self {
+        Self {
+            location,
+            package_build_source,
+            variants,
+            identifier_hash,
+            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
+                package_record,
+                sources,
+            })),
+        }
+    }
+
+    /// Convenience constructor for a partial source data.
+    pub fn partial(
+        location: UrlOrPath,
+        package_build_source: Option<PackageBuildSource>,
+        variants: BTreeMap<String, VariantValue>,
+        identifier_hash: Option<String>,
+        name: rattler_conda_types::PackageName,
+        depends: Vec<String>,
+        sources: BTreeMap<String, SourceLocation>,
+    ) -> Self {
+        Self {
+            location,
+            package_build_source,
+            variants,
+            identifier_hash,
+            metadata: SourceMetadata::Partial(PartialSourceMetadata {
+                name,
+                depends,
+                sources,
+            }),
+        }
+    }
+}
+
+// --- Methods for CondaSourceData<FullSourceMetadata> ---
+
+impl CondaSourceData<FullSourceMetadata> {
+    /// Returns the name of the package.
+    pub fn name(&self) -> &rattler_conda_types::PackageName {
+        &self.metadata.package_record.name
+    }
+
+    /// Returns the package record.
+    pub fn record(&self) -> &PackageRecord {
+        &self.metadata.package_record
+    }
+
+    /// Returns the dependencies.
+    pub fn depends(&self) -> &[String] {
+        &self.metadata.package_record.depends
+    }
+
+    /// Returns the source locations.
+    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
+        &self.metadata.sources
+    }
+}
+
+// --- Methods for CondaSourceData<PartialSourceMetadata> ---
+
+impl CondaSourceData<PartialSourceMetadata> {
+    /// Returns the name of the package.
+    pub fn name(&self) -> &rattler_conda_types::PackageName {
+        &self.metadata.name
+    }
+
+    /// Returns the dependencies.
+    pub fn depends(&self) -> &[String] {
+        &self.metadata.depends
+    }
+
+    /// Returns the source locations.
+    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
+        &self.metadata.sources
+    }
+}
+
+// --- Conversions ---
+
+impl From<CondaSourceData<FullSourceMetadata>> for CondaSourceData<SourceMetadata> {
+    fn from(value: CondaSourceData<FullSourceMetadata>) -> Self {
+        Self {
+            location: value.location,
+            package_build_source: value.package_build_source,
+            variants: value.variants,
+            identifier_hash: value.identifier_hash,
+            metadata: SourceMetadata::Full(Box::new(value.metadata)),
+        }
+    }
+}
+
+impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMetadata> {
+    fn from(value: CondaSourceData<PartialSourceMetadata>) -> Self {
+        Self {
+            location: value.location,
+            package_build_source: value.package_build_source,
+            variants: value.variants,
+            identifier_hash: value.identifier_hash,
+            metadata: SourceMetadata::Partial(value.metadata),
+        }
     }
 }
 
 impl From<CondaSourceData> for CondaPackageData {
     fn from(value: CondaSourceData) -> Self {
-        Self::Source(value)
+        Self::Source(Box::new(value))
     }
 }
 
@@ -354,7 +576,7 @@ impl Ord for CondaPackageData {
 impl From<RepoDataRecord> for CondaPackageData {
     fn from(value: RepoDataRecord) -> Self {
         let location = UrlOrPath::from(value.url).normalize().into_owned();
-        Self::Binary(CondaBinaryData {
+        Self::Binary(Box::new(CondaBinaryData {
             package_record: value.package_record,
             file_name: value.identifier,
             channel: value
@@ -362,7 +584,7 @@ impl From<RepoDataRecord> for CondaPackageData {
                 .and_then(|channel| Url::parse(&channel).ok())
                 .map(Into::into),
             location,
-        })
+        }))
     }
 }
 

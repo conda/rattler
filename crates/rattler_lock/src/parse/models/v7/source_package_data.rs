@@ -11,7 +11,10 @@ use serde_with::serde_as;
 
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
-    conda::{CondaSourceData, PackageBuildSource, VariantValue},
+    conda::{
+        CondaSourceData, FullSourceMetadata, PackageBuildSource, PartialSourceMetadata,
+        SourceMetadata, VariantValue,
+    },
     source::SourceLocation,
     utils::derived_fields,
     CondaPackageData, ConversionError, SourceIdentifier,
@@ -115,48 +118,53 @@ impl<'a> SourcePackageDataModel<'a> {
         let (name, hash, location) = self.conda_source.clone().into_parts();
 
         // Only build a PackageRecord when version (and subdir) are present.
-        let package_record = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
+        let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
             let subdir = subdir.into_owned();
             let build = self.build.into_owned();
             let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
-            Some(PackageRecord {
-                name: name.clone(),
-                version: version.into_owned(),
-                subdir,
-                build,
-                build_number: self.build_number,
-                noarch: self.noarch,
-                arch,
-                platform,
-                constrains: self.constrains.into_owned(),
-                depends: self.depends.into_owned(),
-                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
-                features: self.features.into_owned(),
-                legacy_bz2_md5: None,
-                legacy_bz2_size: None,
-                license: self.license.into_owned(),
-                license_family: self.license_family.into_owned(),
-                md5: None,
-                purls: self.purls.into_owned(),
-                sha256: None,
-                size: self.size.into_owned(),
-                timestamp: self.timestamp.map(Into::into),
-                track_features: self.track_features.into_owned(),
-                run_exports: None,
-                python_site_packages_path: self.python_site_packages_path.into_owned(),
-            })
+            SourceMetadata::Full(Box::new(FullSourceMetadata {
+                package_record: PackageRecord {
+                    name: name.clone(),
+                    version: version.into_owned(),
+                    subdir,
+                    build,
+                    build_number: self.build_number,
+                    noarch: self.noarch,
+                    arch,
+                    platform,
+                    constrains: self.constrains.into_owned(),
+                    depends: self.depends.into_owned(),
+                    experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                    features: self.features.into_owned(),
+                    legacy_bz2_md5: None,
+                    legacy_bz2_size: None,
+                    license: self.license.into_owned(),
+                    license_family: self.license_family.into_owned(),
+                    md5: None,
+                    purls: self.purls.into_owned(),
+                    sha256: None,
+                    size: self.size.into_owned(),
+                    timestamp: self.timestamp.map(Into::into),
+                    track_features: self.track_features.into_owned(),
+                    run_exports: None,
+                    python_site_packages_path: self.python_site_packages_path.into_owned(),
+                },
+                sources: self.source_depends,
+            }))
         } else {
-            None
+            SourceMetadata::Partial(PartialSourceMetadata {
+                name,
+                depends: self.depends.into_owned(),
+                sources: self.source_depends,
+            })
         };
 
         let source_data = CondaSourceData {
-            name,
-            package_record,
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
             package_build_source: self.source,
-            sources: self.source_depends,
             identifier_hash: Some(hash),
+            metadata,
         };
 
         Ok((self.conda_source, source_data))
@@ -168,7 +176,7 @@ impl<'a> TryFrom<SourcePackageDataModel<'a>> for CondaPackageData {
 
     fn try_from(value: SourcePackageDataModel<'a>) -> Result<Self, Self::Error> {
         let (_identifier, source_data) = value.into_parts()?;
-        Ok(CondaPackageData::Source(source_data))
+        Ok(CondaPackageData::Source(Box::new(source_data)))
     }
 }
 
@@ -177,31 +185,33 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
         let variants = (!value.variants.is_empty()).then_some(Cow::Borrowed(&value.variants));
         let identifier = SourceIdentifier::from_source_data(value);
 
-        if let Some(r) = value.package_record.as_ref() {
-            Self {
-                conda_source: identifier,
-                version: Some(Cow::Borrowed(&r.version)),
-                subdir: Some(Cow::Borrowed(&r.subdir)),
-                build: Cow::Borrowed(&r.build),
-                build_number: r.build_number,
-                noarch: r.noarch,
-                variants,
-                purls: Cow::Borrowed(&r.purls),
-                depends: Cow::Borrowed(&r.depends),
-                constrains: Cow::Borrowed(&r.constrains),
-                experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
-                size: Cow::Borrowed(&r.size),
-                timestamp: r.timestamp.map(TimestampMs::into_datetime),
-                features: Cow::Borrowed(&r.features),
-                track_features: Cow::Borrowed(&r.track_features),
-                license: Cow::Borrowed(&r.license),
-                license_family: Cow::Borrowed(&r.license_family),
-                python_site_packages_path: Cow::Borrowed(&r.python_site_packages_path),
-                source: value.package_build_source.clone(),
-                source_depends: value.sources.clone(),
+        match &value.metadata {
+            SourceMetadata::Full(full) => {
+                let r = &full.package_record;
+                Self {
+                    conda_source: identifier,
+                    version: Some(Cow::Borrowed(&r.version)),
+                    subdir: Some(Cow::Borrowed(&r.subdir)),
+                    build: Cow::Borrowed(&r.build),
+                    build_number: r.build_number,
+                    noarch: r.noarch,
+                    variants,
+                    purls: Cow::Borrowed(&r.purls),
+                    depends: Cow::Borrowed(&r.depends),
+                    constrains: Cow::Borrowed(&r.constrains),
+                    experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
+                    size: Cow::Borrowed(&r.size),
+                    timestamp: r.timestamp.map(TimestampMs::into_datetime),
+                    features: Cow::Borrowed(&r.features),
+                    track_features: Cow::Borrowed(&r.track_features),
+                    license: Cow::Borrowed(&r.license),
+                    license_family: Cow::Borrowed(&r.license_family),
+                    python_site_packages_path: Cow::Borrowed(&r.python_site_packages_path),
+                    source: value.package_build_source.clone(),
+                    source_depends: full.sources.clone(),
+                }
             }
-        } else {
-            Self {
+            SourceMetadata::Partial(partial) => Self {
                 conda_source: identifier,
                 version: None,
                 subdir: None,
@@ -210,7 +220,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 noarch: NoArchType::default(),
                 variants,
                 purls: Cow::Owned(None),
-                depends: Cow::Borrowed(&[]),
+                depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&[]),
                 experimental_extra_depends: Cow::Owned(BTreeMap::new()),
                 size: Cow::Owned(None),
@@ -221,8 +231,8 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 license_family: Cow::Owned(None),
                 python_site_packages_path: Cow::Owned(None),
                 source: value.package_build_source.clone(),
-                source_depends: value.sources.clone(),
-            }
+                source_depends: partial.sources.clone(),
+            },
         }
     }
 }

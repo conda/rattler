@@ -12,9 +12,9 @@ environments:
     packages:
       win-64:
         - conda: "https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda"
-        - conda_source: "child-package[3d9a84d8] @ child-package"
+        - conda_source: "child-package[9b6d0ace] @ child-package"
 packages:
-  - conda_source: "child-package[3d9a84d8] @ child-package"
+  - conda_source: "child-package[9b6d0ace] @ child-package"
     version: 0.1.0
     build: pyhbf21a9e_0
     subdir: noarch

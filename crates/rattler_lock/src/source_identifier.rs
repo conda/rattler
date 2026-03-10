@@ -1,13 +1,54 @@
-use rattler_conda_types::PackageName;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+
+use rattler_conda_types::{PackageName, PackageRecord};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
-use crate::{CondaSourceData, UrlOrPath};
+use crate::{CondaSourceData, SourceMetadata, UrlOrPath};
+
+/// Object-safe hashing trait so we can store heterogeneous hashable values
+/// behind `&dyn DynHash` and iterate them in a deterministic order.
+trait DynHash {
+    fn dyn_hash(&self, state: &mut dyn Hasher);
+}
+
+impl<T: Hash> DynHash for T {
+    fn dyn_hash(&self, state: &mut dyn Hasher) {
+        self.hash(&mut HasherMut(state));
+    }
+}
+
+/// Wrapper that turns `&mut dyn Hasher` into a concrete `Hasher` impl so it
+/// can be passed to `Hash::hash`.
+struct HasherMut<'a>(&'a mut dyn Hasher);
+
+impl Hasher for HasherMut<'_> {
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.write(bytes);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0.finish()
+    }
+}
+
+/// Hashes all entries in a `BTreeMap<&str, &dyn DynHash>`.
+///
+/// Because `BTreeMap` iterates keys in sorted order, the hash is guaranteed
+/// to be computed in alphabetical field-name order regardless of insertion
+/// order. Each entry is hashed as `key || value` so different fields cannot
+/// collide.
+fn hash_fields(fields: &BTreeMap<&str, &dyn DynHash>, hasher: &mut impl Hasher) {
+    for (key, value) in fields {
+        key.hash(hasher);
+        value.dyn_hash(hasher);
+    }
+}
 
 /// A unique identifier for a source package in the lock file.
 ///
@@ -67,7 +108,7 @@ impl SourceIdentifier {
             .unwrap_or_else(|| format_short_hash(compute_source_hash(source_data)));
 
         Self {
-            name: source_data.name.clone(),
+            name: source_data.name().clone(),
             hash: short_hash,
             location: source_data.location.clone(),
         }
@@ -135,38 +176,96 @@ pub enum ParseSourceIdentifierError {
 }
 
 /// Computes a unique, relatively stable, hash from the source package data.
+///
+/// Fields are hashed in alphabetical order via a `BTreeMap` so that the
+/// ordering invariant is enforced structurally rather than by convention.
 fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
     let mut hasher = xxhash_rust::xxh3::Xxh3::default();
 
     let CondaSourceData {
         package_build_source,
         variants,
-        package_record,
-        sources,
+        metadata,
 
-        // These fields are already recorded in the source identifier, and so they are not used for the hash here.
+        // These fields are already recorded in the source identifier, and
+        // so they are not used for the hash here.
         location: _,
-        name: _,
         identifier_hash: _,
     } = source_data;
 
-    // Hash package record fields if present
-    if let Some(record) = &package_record {
-        b"package_record".hash(&mut hasher);
-        record.hash(&mut hasher);
+    let mut fields: BTreeMap<&str, &dyn DynHash> = BTreeMap::new();
+
+    // Fields shared by both Full and Partial.
+    if let Some(package_build_sources) = package_build_source {
+        fields.insert("package_build_source", package_build_sources);
+    }
+    fields.insert("variants", variants);
+
+    match metadata {
+        SourceMetadata::Full(full) => {
+            let PackageRecord {
+                build,
+                build_number,
+                constrains,
+                depends,
+                experimental_extra_depends,
+                noarch,
+                subdir,
+                version,
+                // Excluded: name and arch/platform are derived from other
+                // fields; hashes, size, timestamps, license, features,
+                // purls, run_exports, etc. are not identifying.
+                name: _,
+                arch: _,
+                platform: _,
+                features: _,
+                legacy_bz2_md5: _,
+                legacy_bz2_size: _,
+                license: _,
+                license_family: _,
+                md5: _,
+                purls: _,
+                python_site_packages_path: _,
+                run_exports: _,
+                sha256: _,
+                size: _,
+                timestamp: _,
+                track_features: _,
+            } = &full.package_record;
+
+            fields.insert("build", build);
+            fields.insert("build_number", build_number);
+            fields.insert("noarch", noarch);
+            fields.insert("subdir", subdir);
+            fields.insert("version", version);
+
+            if !depends.is_empty() {
+                fields.insert("depends", depends);
+            }
+
+            if !constrains.is_empty() {
+                fields.insert("constrains", constrains);
+            }
+
+            if !full.sources.is_empty() {
+                fields.insert("sources", &full.sources);
+            }
+
+            if !experimental_extra_depends.is_empty() {
+                fields.insert("extra_depends", experimental_extra_depends);
+            }
+        }
+        SourceMetadata::Partial(partial) => {
+            if !partial.depends.is_empty() {
+                fields.insert("depends", &partial.depends);
+            }
+            if !partial.sources.is_empty() {
+                fields.insert("sources", &partial.sources);
+            }
+        }
     }
 
-    // Hash the source location
-    b"package_build_source".hash(&mut hasher);
-    package_build_source.hash(&mut hasher);
-
-    // Hash the variants
-    b"variants".hash(&mut hasher);
-    variants.hash(&mut hasher);
-
-    // Hash which packages should be taken from source
-    b"sources".hash(&mut hasher);
-    sources.hash(&mut hasher);
+    hash_fields(&fields, &mut hasher);
 
     hasher.finish()
 }
@@ -349,15 +448,14 @@ mod tests {
         );
         package_record.subdir = "linux-64".to_string();
 
-        let source_data = CondaSourceData {
-            name,
-            package_record: Some(package_record),
-            location: UrlOrPath::from_str(".").unwrap(),
-            variants: BTreeMap::new(),
-            package_build_source: None,
-            sources: BTreeMap::new(),
-            identifier_hash: None,
-        };
+        let source_data = CondaSourceData::full(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            BTreeMap::new(),
+            None,
+            package_record,
+            BTreeMap::new(),
+        );
 
         let id = SourceIdentifier::from_source_data(&source_data);
 
@@ -396,15 +494,14 @@ mod tests {
             VariantValue::String("linux-aarch64".to_string()),
         );
 
-        let source_data = CondaSourceData {
-            name,
-            package_record: Some(package_record),
-            location: UrlOrPath::from_str(".").unwrap(),
+        let source_data = CondaSourceData::full(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
             variants,
-            package_build_source: None,
-            sources: BTreeMap::new(),
-            identifier_hash: None,
-        };
+            None,
+            package_record,
+            BTreeMap::new(),
+        );
 
         let id = SourceIdentifier::from_source_data(&source_data);
 
@@ -413,6 +510,11 @@ mod tests {
         assert_eq!(id.hash().len(), 8);
     }
 
+    /// Asserts that the hashes computed for test data packages remain stable.
+    ///
+    /// If this test fails, it means the hash algorithm changed in a way that
+    /// would alter existing lock files. Review the snapshot diff and accept
+    /// (if the change is intentional) or fix the regression.
     #[test]
     fn compute_test_data_hashes() {
         use std::collections::BTreeMap;
@@ -421,106 +523,181 @@ mod tests {
 
         use crate::CondaSourceData;
 
-        fn print_hash(name: &str, version: &str, build: &str, subdir: &str, location: &str) {
+        fn source_identifier(
+            name: &str,
+            version: &str,
+            build: &str,
+            subdir: &str,
+            location: &str,
+        ) -> String {
             let pkg_name = PackageName::from_str(name).unwrap();
             let mut package_record = PackageRecord::new(
-                pkg_name.clone(),
+                pkg_name,
                 VersionWithSource::from_str(version).unwrap(),
                 build.to_string(),
             );
             package_record.subdir = subdir.to_string();
 
-            let source_data = CondaSourceData {
-                name: pkg_name,
-                package_record: Some(package_record),
-                location: UrlOrPath::from_str(location).unwrap(),
-                variants: BTreeMap::new(),
-                package_build_source: None,
-                sources: BTreeMap::new(),
-                identifier_hash: None,
-            };
+            let source_data = CondaSourceData::full(
+                UrlOrPath::from_str(location).unwrap(),
+                None,
+                BTreeMap::new(),
+                None,
+                package_record,
+                BTreeMap::new(),
+            );
 
-            let id = SourceIdentifier::from_source_data(&source_data);
-            println!("  {name}: {id}");
+            SourceIdentifier::from_source_data(&source_data).to_string()
         }
 
-        println!("Computed hashes for test data:");
+        let hashes = [
+            source_identifier(
+                "child-package",
+                "0.1.0",
+                "pyhbf21a9e_0",
+                "noarch",
+                "child-package",
+            ),
+            source_identifier(
+                "minimal-project",
+                "0.1",
+                "first",
+                "linux-64",
+                "../minimal-project",
+            ),
+            source_identifier(
+                "minimal-project",
+                "0.1",
+                "first",
+                "win-64",
+                "../minimal-project",
+            ),
+            source_identifier(
+                "minimal-project",
+                "0.1",
+                "second",
+                "win-64",
+                "../minimal-project",
+            ),
+            source_identifier(
+                "a-python-project",
+                "0.1",
+                "py38",
+                "noarch",
+                "../a-python-project",
+            ),
+            source_identifier(
+                "b-python-project",
+                "0.1",
+                "h398123",
+                "noarch",
+                "../a-python-project",
+            ),
+            source_identifier(
+                "pixi-build-package",
+                "1.0.0",
+                "pyhbf21a9e_0",
+                "noarch",
+                "pixi-build-package",
+            ),
+            source_identifier(
+                "pixi-url-package",
+                "2.0.0",
+                "pyhbf21a9e_0",
+                "noarch",
+                "pixi-url-package",
+            ),
+            source_identifier(
+                "pixi-tag-package",
+                "1.2.0",
+                "pyhbf21a9e_0",
+                "noarch",
+                "pixi-tag-package",
+            ),
+            source_identifier(
+                "pixi-rev-package",
+                "0.5.0",
+                "pyhbf21a9e_0",
+                "noarch",
+                "pixi-rev-package",
+            ),
+        ];
 
-        // sources-lock.yml, derived-channel-lock.yml
-        print_hash(
-            "child-package",
-            "0.1.0",
-            "pyhbf21a9e_0",
-            "noarch",
-            "child-package",
+        insta::assert_yaml_snapshot!(hashes);
+    }
+
+    #[test]
+    fn test_into_full_returns_none_for_partial() {
+        use std::collections::BTreeMap;
+
+        use crate::CondaSourceData;
+
+        let name = PackageName::from_str("my-package").unwrap();
+        let partial = CondaSourceData::partial(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            BTreeMap::new(),
+            None,
+            name,
+            vec![],
+            BTreeMap::new(),
+        );
+        assert!(partial.into_full().is_none());
+    }
+
+    #[test]
+    fn test_into_full_returns_some_for_full() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+
+        use crate::CondaSourceData;
+
+        let name = PackageName::from_str("my-package").unwrap();
+        let mut package_record = PackageRecord::new(
+            name.clone(),
+            VersionWithSource::from_str("1.0.0").unwrap(),
+            "h0000000_0".to_string(),
+        );
+        package_record.subdir = "linux-64".to_string();
+
+        let full = CondaSourceData::full(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            BTreeMap::new(),
+            None,
+            package_record,
+            BTreeMap::new(),
+        );
+        let converted = full.into_full();
+        assert!(converted.is_some());
+        assert_eq!(converted.unwrap().name().as_source(), "my-package");
+    }
+
+    #[test]
+    fn test_partial_metadata_hash_computation() {
+        use std::collections::BTreeMap;
+
+        use crate::CondaSourceData;
+
+        let name = PackageName::from_str("my-package").unwrap();
+        let partial = CondaSourceData::partial(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            BTreeMap::new(),
+            None,
+            name,
+            vec!["dep-a".to_string()],
+            BTreeMap::new(),
         );
 
-        // conda-path-lock.yml
-        print_hash(
-            "minimal-project",
-            "0.1",
-            "first",
-            "linux-64",
-            "../minimal-project",
-        );
-        print_hash(
-            "minimal-project",
-            "0.1",
-            "first",
-            "win-64",
-            "../minimal-project",
-        );
-        print_hash(
-            "minimal-project",
-            "0.1",
-            "second",
-            "win-64",
-            "../minimal-project",
-        );
-        print_hash(
-            "a-python-project",
-            "0.1",
-            "py38",
-            "noarch",
-            "../a-python-project",
-        );
-        print_hash(
-            "b-python-project",
-            "0.1",
-            "h398123",
-            "noarch",
-            "../a-python-project",
-        );
+        let id = SourceIdentifier::from_source_data(&partial);
+        assert_eq!(id.name().as_source(), "my-package");
+        assert_eq!(id.hash().len(), SHORT_HASH_LENGTH);
 
-        // pixi-build-*.yml files
-        print_hash(
-            "pixi-build-package",
-            "1.0.0",
-            "pyhbf21a9e_0",
-            "noarch",
-            "pixi-build-package",
-        );
-        print_hash(
-            "pixi-url-package",
-            "2.0.0",
-            "pyhbf21a9e_0",
-            "noarch",
-            "pixi-url-package",
-        );
-        print_hash(
-            "pixi-tag-package",
-            "1.2.0",
-            "pyhbf21a9e_0",
-            "noarch",
-            "pixi-tag-package",
-        );
-        print_hash(
-            "pixi-rev-package",
-            "0.5.0",
-            "pyhbf21a9e_0",
-            "noarch",
-            "pixi-rev-package",
-        );
+        // Verify the hash is deterministic
+        let id2 = SourceIdentifier::from_source_data(&partial);
+        assert_eq!(id.hash(), id2.hash());
     }
 
     #[test]
@@ -546,15 +723,14 @@ mod tests {
             VariantValue::String("3.10".to_string()),
         );
 
-        let source_data1 = CondaSourceData {
-            name: name.clone(),
-            package_record: Some(package_record.clone()),
-            location: UrlOrPath::from_str(".").unwrap(),
-            variants: variants1,
-            package_build_source: None,
-            sources: BTreeMap::new(),
-            identifier_hash: None,
-        };
+        let source_data1 = CondaSourceData::full(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            variants1,
+            None,
+            package_record.clone(),
+            BTreeMap::new(),
+        );
 
         // Second variant: python 3.11
         let mut variants2 = BTreeMap::new();
@@ -563,15 +739,14 @@ mod tests {
             VariantValue::String("3.11".to_string()),
         );
 
-        let source_data2 = CondaSourceData {
-            name,
-            package_record: Some(package_record),
-            location: UrlOrPath::from_str(".").unwrap(),
-            variants: variants2,
-            package_build_source: None,
-            sources: BTreeMap::new(),
-            identifier_hash: None,
-        };
+        let source_data2 = CondaSourceData::full(
+            UrlOrPath::from_str(".").unwrap(),
+            None,
+            variants2,
+            None,
+            package_record,
+            BTreeMap::new(),
+        );
 
         let id1 = SourceIdentifier::from_source_data(&source_data1);
         let id2 = SourceIdentifier::from_source_data(&source_data2);

@@ -324,7 +324,7 @@ impl LockFileBuilder {
         })?;
         let package_idx = match &locked_package {
             CondaPackageData::Binary(binary_data) => {
-                let unique_identifier = UniqueBinaryIdentifier::from(binary_data);
+                let unique_identifier = UniqueBinaryIdentifier::from(binary_data.as_ref());
 
                 // Check if we already have this binary package
                 if let Some(&existing_idx) = self.binary_package_indices.get(&unique_identifier) {
@@ -332,8 +332,8 @@ impl LockFileBuilder {
                     if let CondaPackageData::Binary(existing) =
                         &mut self.conda_packages[existing_idx]
                     {
-                        if let Cow::Owned(merged) = existing.merge(binary_data) {
-                            *existing = merged;
+                        if let Cow::Owned(merged) = existing.merge(binary_data.as_ref()) {
+                            **existing = merged;
                         }
                     }
                     existing_idx
