@@ -187,3 +187,38 @@ pub fn download_bytes<'a>(
 
     future_into_py(py, future)
 }
+
+#[pyfunction]
+pub fn download_to_writer<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    writer: Py<PyAny>,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let client: reqwest_middleware::ClientWithMiddleware = client.into();
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
+            .error_for_status()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(io_error)?;
+            Python::with_gil(|py| {
+                writer
+                    .bind(py)
+                    .call_method1("write", (PyBytes::new(py, &chunk),))
+                    .map(|_| ())
+            })?;
+        }
+
+        Ok(())
+    };
+
+    future_into_py(py, future)
+}
