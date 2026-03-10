@@ -16,7 +16,7 @@ packages:
   - pypi: https://my-custom-index.example.com/packages/requests-2.31.0-py3-none-any.whl
     name: requests
     version: 2.31.0
-    index_url: https://my-custom-index.example.com/simple
+    index: https://my-custom-index.example.com/simple
     sha256: 942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d1cae1b
     requires_python: ">=3.7"
   - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl

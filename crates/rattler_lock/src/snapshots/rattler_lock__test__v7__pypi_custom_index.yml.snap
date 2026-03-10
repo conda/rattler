@@ -30,5 +30,5 @@ packages:
     name: requests
     version: 2.31.0
     sha256: 942c5a758f98d790eaed1a29cb6eefc7f0edf3fcb0fce8aea3fbd5951d1cae1b
-    index_url: "https://my-custom-index.example.com/simple"
+    index: "https://my-custom-index.example.com/simple"
     requires_python: ">=3.7"
