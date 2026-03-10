@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-03-10
+
+### Added
+
+- Add methods to download a file by @pavelzw in [#2201](https://github.com/conda/rattler/pull/2201)
+
 ## [0.23.0] - 2026-03-06
 
 ### Added
@@ -53,5 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized repodata loading: up to 65x faster for in-memory queries and 2.4x faster for warm disk cache ([#2058](https://github.com/conda/rattler/pull/2058))
 - Speed up matchspec parsing by ~2x ([#2066](https://github.com/conda/rattler/pull/2066))
 
-[Unreleased]: https://github.com/conda/rattler/compare/py-rattler-v0.23.0...HEAD
+[Unreleased]: https://github.com/conda/rattler/compare/py-rattler-v0.23.1...HEAD
 [0.23.0]: https://github.com/conda/rattler/compare/py-rattler-v0.22.0...py-rattler-v0.23.0
+[0.23.1]: https://github.com/conda/rattler/compare/py-rattler-v0.23.0...py-rattler-v0.23.1

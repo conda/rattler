@@ -81,12 +81,13 @@ impl PyAboutJson {
         })?;
 
         future_into_py(py, async move {
-            let about_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
-                AboutJson,
-            >(client.into(), url)
-            .await
-            .map(PyAboutJson::from)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+            let about_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    AboutJson,
+                >(client.into(), url)
+                .await
+                .map(PyAboutJson::from)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
 
             Python::with_gil(|py| Ok(Py::new(py, about_json)?.into_any()))
         })
