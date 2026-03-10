@@ -37,7 +37,7 @@ pub(crate) struct PypiPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub index_url: Option<Cow<'a, url::Url>>,
+    pub index: Option<Cow<'a, url::Url>>,
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub requires_dist: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,7 +48,7 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         let index_url = match value.location.inner() {
             UrlOrPath::Url(_) => value
-                .index_url
+                .index
                 .map(std::borrow::Cow::into_owned)
                 .or_else(|| Some((*PYPI_URL).clone())),
             UrlOrPath::Path(_) => None,
@@ -89,7 +89,7 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
             version: value.version.as_ref().map(Cow::Borrowed),
             location: Cow::Borrowed(&value.location),
             hash: Cow::Borrowed(&value.hash),
-            index_url,
+            index: index_url,
             requires_dist: requires_dist.into(),
             requires_python: Cow::Borrowed(&value.requires_python),
         }
@@ -172,7 +172,7 @@ mod tests {
             name: Cow::Owned("test-pkg".parse::<PackageName>().unwrap()),
             version: None,
             hash: Cow::Owned(None),
-            index_url: index_url.map(Cow::Owned),
+            index: index_url.map(Cow::Owned),
             requires_dist: Cow::Owned(vec![]),
             requires_python: Cow::Owned(None),
         }
@@ -219,7 +219,7 @@ mod tests {
         };
         let model = PypiPackageDataModel::from(&data);
         assert!(
-            model.index_url.is_none(),
+            model.index.is_none(),
             "default pypi.org URL should be elided"
         );
     }
@@ -237,7 +237,7 @@ mod tests {
             requires_python: None,
         };
         let model = PypiPackageDataModel::from(&data);
-        assert_eq!(model.index_url.as_deref(), Some(&custom),);
+        assert_eq!(model.index.as_deref(), Some(&custom),);
     }
 
     #[test]
@@ -252,6 +252,6 @@ mod tests {
             requires_python: None,
         };
         let model = PypiPackageDataModel::from(&data);
-        assert!(model.index_url.is_none());
+        assert!(model.index.is_none());
     }
 }
