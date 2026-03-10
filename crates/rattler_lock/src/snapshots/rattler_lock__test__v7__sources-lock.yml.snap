@@ -22,7 +22,7 @@ packages:
       - git_tag
       - git_rev
       - git_branch
-    sources:
+    source_depends:
       git_branch:
         git: "https://github.com/example/baz.git"
         branch: foobar

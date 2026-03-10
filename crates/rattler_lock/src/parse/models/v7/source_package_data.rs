@@ -91,7 +91,7 @@ pub(crate) struct SourcePackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
-    pub sources: BTreeMap<String, SourceLocation>,
+    pub source_depends: BTreeMap<String, SourceLocation>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
@@ -146,7 +146,7 @@ impl<'a> SourcePackageDataModel<'a> {
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
             package_build_source: self.source,
-            sources: self.sources,
+            sources: self.source_depends,
         };
 
         Ok((self.conda_source, source_data))
@@ -190,7 +190,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
             source: value.package_build_source.clone(),
-            sources: value.sources.clone(),
+            source_depends: value.sources.clone(),
         }
     }
 }
