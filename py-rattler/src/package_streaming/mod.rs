@@ -141,9 +141,9 @@ pub fn download_to_path<'a>(
             .get(url)
             .send()
             .await
-            .map_err(io_error)?
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
             .error_for_status()
-            .map_err(io_error)?;
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
         let mut file = tokio::fs::File::create(&destination).await.map_err(io_error)?;
         let mut stream = response.bytes_stream();
@@ -173,12 +173,12 @@ pub fn download_bytes<'a>(
             .get(url)
             .send()
             .await
-            .map_err(io_error)?
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
             .error_for_status()
-            .map_err(io_error)?
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?
             .bytes()
             .await
-            .map_err(io_error)?;
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
         Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     };
