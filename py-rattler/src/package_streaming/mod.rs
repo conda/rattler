@@ -145,7 +145,9 @@ pub fn download_to_path<'a>(
             .error_for_status()
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
-        let mut file = tokio::fs::File::create(&destination).await.map_err(io_error)?;
+        let mut file = tokio::fs::File::create(&destination)
+            .await
+            .map_err(io_error)?;
         let mut stream = response.bytes_stream();
 
         while let Some(chunk) = stream.next().await {
