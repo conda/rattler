@@ -62,6 +62,7 @@ impl Default for FetchRepoDataOptions {
 
 #[derive(Debug, Copy, Clone)]
 enum Compression {
+    #[cfg(not(target_arch = "wasm32"))]
     Zst,
     Bz2,
     None,
@@ -70,6 +71,7 @@ enum Compression {
 impl From<Compression> for Encoding {
     fn from(value: Compression) -> Self {
         match value {
+            #[cfg(not(target_arch = "wasm32"))]
             Compression::Zst => Encoding::Zst,
             Compression::Bz2 => Encoding::Bz2,
             Compression::None => Encoding::Passthrough,
@@ -89,6 +91,7 @@ async fn execute_request(
     // variant
     let file_name = variant.file_name();
     let repo_data_url = match method {
+        #[cfg(not(target_arch = "wasm32"))]
         Compression::Zst => subdir_url.join(&format!("{file_name}.zst")),
         Compression::Bz2 => subdir_url.join(&format!("{file_name}.bz2")),
         Compression::None => subdir_url.join(variant.file_name()),
@@ -135,13 +138,16 @@ async fn execute_with_best_compression(
     client: reqwest_middleware::ClientWithMiddleware,
 ) -> Result<(Request, Response, SystemTime, Compression), FetchRepoDataError> {
     // Try with supported compression methods.
-    for compression in [
-        options.zstd_enabled.then_some(Compression::Zst),
-        options.bz2_enabled.then_some(Compression::Bz2),
-    ]
-    .into_iter()
-    .flatten()
-    {
+    let mut methods = Vec::new();
+    #[cfg(not(target_arch = "wasm32"))]
+    if options.zstd_enabled {
+        methods.push(Compression::Zst);
+    }
+    if options.bz2_enabled {
+        methods.push(Compression::Bz2);
+    }
+
+    for compression in methods {
         let (request, response, request_time) = execute_request(
             subdir_url.clone(),
             options.variant,
