@@ -17,6 +17,9 @@ build-debug = { cmd="npm run build:wasm:debug", depends-on = ["_install"] }
 fmt = { cmd="npm run fmt", depends-on = ["_install"] }
 fmt-check = { cmd="npm run fmt", depends-on = ["_install"] }
 
+## Packing tasks
+pack = { cmd="npm pack", depends-on = ["build"] }
+
 ## Testing tasks
 test = { cmd="npm run test", depends-on = ["build","build-types"] }
 test-debug = { cmd="npm run test:debug", depends-on = ["build-debug", "build-types"] }

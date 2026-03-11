@@ -81,13 +81,9 @@ jobs:
         with:
           node-version: "20.x"
           registry-url: "https://registry.npmjs.org"
-      - name: Build
+      - name: Build and pack
         working-directory: js-rattler
-        run: pixi run build
-      - run: npm pack
-        working-directory: js-rattler
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pixi run pack
       - name: Upload package tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
