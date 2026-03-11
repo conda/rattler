@@ -16,3 +16,19 @@ Its primary use case is as a library that you can use to provide conda related w
 Rattler is written in Rust and tries to provide a clean API to its functionalities.
 
 This package provides bindings to the native Rust library compiled to WASM.
+
+## Development
+
+This project uses [pixi](https://pixi.sh) to manage the development environment and tasks.
+
+For quick iteration during development, use the debug build which skips optimizations:
+
+```bash
+pixi run test-debug
+```
+
+For a full release build and test run:
+
+```bash
+pixi run test
+```

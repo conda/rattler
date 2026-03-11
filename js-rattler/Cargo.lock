@@ -77,6 +77,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral_async_zip"
+version = "0.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
+dependencies = [
+ "async-compression",
+ "crc32fast",
+ "futures-lite",
+ "pin-project",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -85,6 +100,7 @@ dependencies = [
  "compression-codecs",
  "compression-core",
  "futures-core",
+ "futures-io",
  "pin-project-lite",
  "tokio",
 ]
@@ -111,6 +127,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
 
 [[package]]
+name = "async-spooled-tempfile"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dd9c58a1dbecfc23aa470d57e5aff60877ab1b459bf05e60e861dd18fcaa5f5"
+dependencies = [
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -119,6 +145,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "async_http_range_reader"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
+dependencies = [
+ "bisection",
+ "futures",
+ "http-content-range",
+ "itertools 0.13.0",
+ "memmap2",
+ "reqwest",
+ "reqwest-middleware",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -138,6 +184,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "bisection"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "021e079a1bab0ecce6cf4b4b74c0c37afa4a697136eb3b127875c84a8f04a8c3"
 
 [[package]]
 name = "bit-set"
@@ -576,7 +628,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 name = "file_url"
 version = "0.2.7"
 dependencies = [
- "itertools",
+ "itertools 0.14.0",
  "percent-encoding",
  "thiserror 2.0.17",
  "typed-path",
@@ -741,6 +793,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
 
 [[package]]
+name = "futures-lite"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
+dependencies = [
+ "fastrand",
+ "futures-core",
+ "futures-io",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "futures-macro"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -872,6 +937,8 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.1.5",
 ]
 
@@ -952,6 +1019,12 @@ dependencies = [
  "serde",
  "time",
 ]
+
+[[package]]
+name = "http-content-range"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66cdb727cec723cee65912a74a7f9f0c3ad0c6f9df4f03d05a5c7a15398bbad1"
 
 [[package]]
 name = "http-serde"
@@ -1222,6 +1295,15 @@ checksum = "dbc5ebe9c3a1a7a5127f920a418f7585e9e758e911d0466ed004f393b0e380b2"
 dependencies = [
  "memchr",
  "serde",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -1776,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.6"
+version = "0.6.14"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1786,7 +1868,7 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "itertools",
+ "itertools 0.14.0",
  "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
@@ -1807,7 +1889,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.4"
+version = "0.43.5"
 dependencies = [
  "ahash",
  "chrono",
@@ -1819,7 +1901,7 @@ dependencies = [
  "glob",
  "hex",
  "indexmap 2.12.0",
- "itertools",
+ "itertools 0.14.0",
  "lazy-regex",
  "memmap2",
  "nom",
@@ -1873,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.29"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -1882,7 +1964,7 @@ dependencies = [
  "fs-err",
  "getrandom 0.3.4",
  "http",
- "itertools",
+ "itertools 0.14.0",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -1896,16 +1978,21 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.21"
+version = "0.24.2"
 dependencies = [
  "astral-tokio-tar",
+ "astral_async_zip",
  "async-compression",
+ "async-spooled-tempfile",
+ "async_http_range_reader",
  "bzip2",
  "chrono",
  "fs-err",
+ "futures",
  "futures-util",
  "getrandom 0.2.16",
  "getrandom 0.3.4",
+ "http",
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
@@ -1937,8 +2024,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.7"
+version = "0.26.2"
 dependencies = [
+ "ahash",
  "anyhow",
  "async-compression",
  "async-fd-lock",
@@ -1955,12 +2043,13 @@ dependencies = [
  "fs-err",
  "fslock",
  "futures",
+ "hashbrown 0.15.5",
  "hex",
  "http",
  "http-cache-semantics",
  "humansize",
  "humantime",
- "itertools",
+ "itertools 0.14.0",
  "json-patch",
  "libc",
  "memmap2",
@@ -1996,12 +2085,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.1.2"
+version = "4.2.6"
 dependencies = [
  "chrono",
  "futures",
  "humantime",
- "itertools",
+ "itertools 0.14.0",
  "rattler_conda_types",
  "rattler_digest",
  "resolvo",
@@ -2169,7 +2258,7 @@ dependencies = [
  "event-listener",
  "futures",
  "indexmap 2.12.0",
- "itertools",
+ "itertools 0.14.0",
  "petgraph",
  "tracing",
 ]
@@ -2852,6 +2941,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2862,6 +2952,7 @@ checksum = "14307c986784f72ef81c89db7d9e28d6ac26d16213b109ea501696195e6e3ce5"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",
