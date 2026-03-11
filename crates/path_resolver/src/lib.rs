@@ -1082,16 +1082,21 @@ mod tests {
         let (_, from_clobbers) = resolver.unregister_package("pkg1");
 
         // pkg2 should now win a.txt because it was the first after pkg1
-        assert_eq!(
-            from_clobbers,
-            vec![(PathBuf::from("a.txt"), "pkg2".into())]
-        );
+        assert_eq!(from_clobbers, vec![(PathBuf::from("a.txt"), "pkg2".into())]);
 
         // Verify state
         assert_eq!(resolver.packages_for_exact("a.txt").unwrap().len(), 2);
-        assert!(resolver.packages_for_exact("a.txt").unwrap().contains(&"pkg2".into()));
-        assert!(resolver.packages_for_exact("a.txt").unwrap().contains(&"pkg3".into()));
-        assert!(resolver.packages_for_exact("b.txt").is_none_or(|s| s.is_empty()));
+        assert!(resolver
+            .packages_for_exact("a.txt")
+            .unwrap()
+            .contains(&"pkg2".into()));
+        assert!(resolver
+            .packages_for_exact("a.txt")
+            .unwrap()
+            .contains(&"pkg3".into()));
+        assert!(resolver
+            .packages_for_exact("b.txt")
+            .is_none_or(std::collections::HashSet::is_empty));
     }
 
     #[test]
@@ -1108,7 +1113,9 @@ mod tests {
         // If we then unregister pkg2, it should be empty.
         let (_, from_clobbers) = resolver.unregister_package("pkg2");
         assert!(from_clobbers.is_empty());
-        assert!(resolver.packages_for_exact("a.txt").is_none_or(|s| s.is_empty()));
+        assert!(resolver
+            .packages_for_exact("a.txt")
+            .is_none_or(std::collections::HashSet::is_empty));
     }
 
     #[test]
@@ -1153,15 +1160,19 @@ mod props {
 
     /// Strategy to build random path trie.
     fn path_trie() -> impl Strategy<Value = Node> {
-        let leaf = any::<bool>().prop_map(|is_file| Node { is_file, children: BTreeMap::new() }).boxed();
+        let leaf = any::<bool>()
+            .prop_map(|is_file| Node {
+                is_file,
+                children: BTreeMap::new(),
+            })
+            .boxed();
         let dir = |inner: BoxedStrategy<Node>| {
-            (any::<bool>(), prop::collection::btree_map(
-                string_regex("[a-z]{1,1}").unwrap(),
-                inner,
-                0..=5,
-            ))
-            .prop_map(|(is_file, children)| Node { is_file, children })
-            .boxed()
+            (
+                any::<bool>(),
+                prop::collection::btree_map(string_regex("[a-z]{1,1}").unwrap(), inner, 0..=5),
+            )
+                .prop_map(|(is_file, children)| Node { is_file, children })
+                .boxed()
         };
 
         leaf.prop_recursive(5, 64, 5, dir)
