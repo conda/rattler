@@ -244,7 +244,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                 _conda: String,
             },
             Source {
-                #[serde(rename = "source")]
+                #[serde(rename = "conda_source")]
                 _source: String,
             },
             Pypi {
@@ -258,7 +258,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
             serde_value::ValueDeserializer::<D::Error>::new(value.clone()),
         ) else {
             return Err(D::Error::custom(
-                "expected at least `conda`, `source`, or `pypi` field",
+                "expected at least `conda`, `conda_source`, or `pypi` field",
             ));
         };
 
@@ -285,7 +285,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
 
 /// Package selector for V7+ environments.
 ///
-/// Supports `conda`, `source`, and `pypi` keys.
+/// Supports `conda`, `conda_source`, and `pypi` keys.
 /// For V7+, binary conda packages are uniquely identified by their URL (which includes the
 /// filename), and source packages use `SourceIdentifier` with an embedded hash.
 #[derive(Deserialize)]
@@ -298,8 +298,8 @@ enum DeserializablePackageSelector {
     },
     /// Source packages use `SourceIdentifier` format: `name[hash] @ location`.
     /// The hash uniquely identifies the package, so no additional disambiguation fields needed.
-    Source {
-        source: SourceIdentifier,
+    CondaSource {
+        conda_source: SourceIdentifier,
     },
     Pypi {
         pypi: Verbatim<UrlOrPath>,
@@ -308,7 +308,7 @@ enum DeserializablePackageSelector {
 
 /// Package selector for legacy (V4-V6) environments.
 ///
-/// Only supports `conda` and `pypi` keys. The `source` key was introduced in V7.
+/// Only supports `conda` and `pypi` keys. The `conda_source` key was introduced in V7.
 #[derive(Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
@@ -790,7 +790,9 @@ fn resolve_package_selector(
             })?;
             Ok(EnvironmentPackageData::Conda(*idx))
         }
-        DeserializablePackageSelector::Source { source } => {
+        DeserializablePackageSelector::CondaSource {
+            conda_source: source,
+        } => {
             let idx = source_identifier_lookup.get(&source).ok_or_else(|| {
                 ParseCondaLockError::MissingPackage {
                     environment: env_name.to_owned(),
