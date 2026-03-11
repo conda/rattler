@@ -14,9 +14,9 @@ environments:
       - url: https://conda.anaconda.org/conda-forge/
     packages:
       "DUPLICATE":
-        - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
+        - conda_source: "minimal-project[ac2e8eb3] @ ../minimal-project"
 packages:
-  - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
+  - conda_source: "minimal-project[ac2e8eb3] @ ../minimal-project"
     version: "0.1"
     subdir: linux-64
     build: "first"
