@@ -287,10 +287,12 @@ pub fn apply_patches_impl(
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 removed.insert(identifier.clone());
 
-                // also mark equivalent .conda package as removed
+                // also mark equivalent .conda package as removed if it exists
                 let conda_identifier =
                     identifier.with_archive_type(CondaArchiveType::Conda.into());
-                removed.insert(conda_identifier);
+                if conda_packages.contains_key(&conda_identifier) {
+                    removed.insert(conda_identifier);
+                }
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 removed.insert(identifier.clone());
