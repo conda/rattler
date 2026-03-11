@@ -11,9 +11,9 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       win-64:
-        - source: "child-package[87dc0b8a] @ child-package"
+        - conda_source: "child-package[87dc0b8a] @ child-package"
 packages:
-  - source: "child-package[87dc0b8a] @ child-package"
+  - conda_source: "child-package[87dc0b8a] @ child-package"
     version: 0.1.0
     build: pyhbf21a9e_0
     subdir: noarch
@@ -23,7 +23,7 @@ packages:
       - git_tag
       - git_rev
       - git_branch
-    sources:
+    source_depends:
       git_branch:
         git: "https://github.com/example/baz.git"
         branch: foobar
