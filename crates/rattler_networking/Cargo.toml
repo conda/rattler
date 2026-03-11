@@ -22,6 +22,7 @@ system-integration = ["keyring", "netrc-rs", "dirs"]
 features = ["gcs", "s3"]
 
 [dependencies]
+rattler_conda_types = { path = "../rattler_conda_types" }
 anyhow = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }

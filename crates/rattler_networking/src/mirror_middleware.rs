@@ -1,4 +1,5 @@
 //! Middleware to handle mirrors
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use std::{
     collections::HashMap,
     sync::atomic::{self, AtomicUsize},
