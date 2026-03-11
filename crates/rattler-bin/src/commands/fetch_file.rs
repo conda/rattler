@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::sparse::fetch_file_from_remote_conda;
+use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url;
 use reqwest::Client;
 use url::Url;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package (.conda archive)
+    /// URL of the conda package (.conda or .tar.bz2 archive)
     #[clap(required = true)]
     url: Url,
 
@@ -20,6 +20,8 @@ pub struct Opt {
 }
 
 pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
+    let Opt { url, path } = opt;
+
     let download_client = Client::builder()
         .no_gzip()
         .build()
@@ -35,18 +37,16 @@ pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let target_path = Path::new(&opt.path);
+    let target_path = Path::new(&path);
 
-    let bytes = fetch_file_from_remote_conda(client, opt.url, target_path)
+    let bytes = fetch_file_from_remote_url(client, url, target_path)
         .await
-        .into_diagnostic()
-        .context("failed to fetch file from package")?
-        .ok_or_else(|| miette::miette!("file '{}' not found in package", opt.path))?;
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("file '{}' not found in package", path))?;
 
     std::io::stdout()
         .write_all(&bytes)
         .into_diagnostic()
         .context("failed to write to stdout")?;
-
     Ok(())
 }
