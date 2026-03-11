@@ -1,0 +1,30 @@
+[workspace]
+authors = ["Bas Zalmstra <bas@prefix.dev>"]
+channels = ["https://prefix.dev/conda-forge"]
+name = "js-rattler"
+platforms = ["linux-aarch64", "win-64", "osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+_install = { cmd = "npm install", inputs = ["package.json", "package-lock.json"], outputs = ["node_modules/.package-lock.json"] }
+
+# Building tasks
+build = { cmd="npm run build", depends-on = ["_install"] }
+build-types = { cmd="npm run build:types", depends-on = ["_install"] }
+build-debug = { cmd="npm run build:wasm:debug", depends-on = ["_install"] }
+
+# Formatting tasks
+fmt = { cmd="npm run fmt", depends-on = ["_install"] }
+fmt-check = { cmd="npm run fmt", depends-on = ["_install"] }
+
+## Testing tasks
+test = { cmd="npm run test", depends-on = ["build","build-types"] }
+test-debug = { cmd="npm run test:debug", depends-on = ["build-debug", "build-types"] }
+
+[dependencies]
+nodejs = ">=25.7.0,<25.8"
+rust = ">=1.94.0,<1.95"
+rust-std-wasm32-unknown-unknown = ">=1.94.0,<2"
+wasm-pack = ">=0.14.0,<0.15"
+zstd = ">=1.5.7,<2"
+clang = ">=22.1.0,<23"
