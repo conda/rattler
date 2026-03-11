@@ -34,8 +34,8 @@ use rattler_conda_types::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
-    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
-    ShardedSubdirInfo,
+    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
+    Shard, ShardedRepodata, ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
@@ -688,6 +688,10 @@ async fn index_subdir_inner(
         subdir
     );
 
+    for filename in &packages_to_delete {
+        registered_packages.remove(filename);
+    }
+
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
         .cloned()
@@ -806,7 +810,7 @@ async fn index_subdir_inner(
         }),
         packages,
         conda_packages,
-        experimental_whl_packages: IndexMap::default(),
+        experimental_v3: ExperimentalV3Packages::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1295,7 +1299,7 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        experimental_whl_packages: IndexMap::default(),
+        experimental_v3: ExperimentalV3Packages::default(),
         removed: HashSet::default(),
         version: Some(2),
     };

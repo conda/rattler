@@ -2,7 +2,7 @@ use std::{hint::black_box, path::Path};
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
-use rattler_conda_types::{Channel, MatchSpec, PackageName};
+use rattler_conda_types::{Channel, MatchSpec};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority};
 use resolvo::SolverCache;
@@ -10,7 +10,7 @@ use resolvo::SolverCache;
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
     let match_spec =
         MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
-    let package_name = Option::<PackageName>::from(match_spec.name.clone().unwrap()).unwrap();
+    let package_name = match_spec.name.as_exact().unwrap().clone();
 
     let repodata = SparseRepoData::load_records_recursive(
         [sparse_repo_data],
@@ -38,6 +38,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     None,
                     None,
                     rattler_solve::SolveStrategy::Highest,
+                    Vec::new(),
                 )
                 .expect("failed to create dependency provider");
 

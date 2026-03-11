@@ -81,981 +81,983 @@
   "removed": [],
   "repodata_version": 3,
   "signatures": {},
-  "packages.whl": {
-    "six-1.9.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.9.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.9.0-py2.py3-none-any.whl",
-      "sha256": "e66d4bb9b165af63ba9efa967d9ab61a7a3c8349788353da711889a53b750d6d",
-      "size": 9897,
-      "subdir": "noarch",
-      "timestamp": 1765457000,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/10/e3/a7f8eea80a9fa8358c1cd89ef489bc03675e69e54ed2982cd6f2a28d8295/six-1.9.0-py2.py3-none-any.whl"
-    },
-    "six-1.8.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.8.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.8.0-py2.py3-none-any.whl",
-      "sha256": "c8fa17ac94d5ccd1b89aa25e7816e30a8815de5c50bedf173e760b8f0c1ac25f",
-      "size": 9373,
-      "subdir": "noarch",
-      "timestamp": 1765457000,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/a2/4b/2b4532b4eba116a02fc0b5e0b3540a073a61c003b7b6293b7b884afa8ff1/six-1.8.0-py2.py3-none-any.whl"
-    },
-    "six-1.7.3-py3_none_any_0": {
-      "name": "six",
-      "version": "1.7.3",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.7.3-py2.py3-none-any.whl",
-      "sha256": "b2bca436dc826d6f64371f30b0fe95706f3cabf8e2849b7f9ec468b8c7df6f20",
-      "size": 9191,
-      "subdir": "noarch",
-      "timestamp": 1765457000,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/2e/a4/6dcb84af409b7bc0c258a0d6bd7e14231724d9a46b750c048f09d74d870c/six-1.7.3-py2.py3-none-any.whl"
-    },
-    "six-1.7.2-py3_none_any_0": {
-      "name": "six",
-      "version": "1.7.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.7.2-py2.py3-none-any.whl",
-      "sha256": "8d82a1d6ebfeacc2ff207e33ad694eb3df0c8e1fc6623b61cd46e35bae232e3f",
-      "size": 9302,
-      "subdir": "noarch",
-      "timestamp": 1765457000,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/6b/30/839b8059d1225dbd3a0dd97c3c370bbb978cde505e160b30515fb7be17d8/six-1.7.2-py2.py3-none-any.whl"
-    },
-    "six-1.7.1-py3_none_any_0": {
-      "name": "six",
-      "version": "1.7.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.7.1-py2.py3-none-any.whl",
-      "sha256": "72a0c3321753a3ee454fca39229e3a7093041f34d2db8f409b6ff1ddb9376b88",
-      "size": 9297,
-      "subdir": "noarch",
-      "timestamp": 1765456999,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/aa/ec/e6954e19e617c1b9860325f0995d456d8416c84a6cb9bce1c10998280b59/six-1.7.1-py2.py3-none-any.whl"
-    },
-    "six-1.7.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.7.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.7.0-py2.py3-none-any.whl",
-      "sha256": "c8ccce78ddb6592760d57789477860924aeacb54401fa5e072a30ba1f9da6a73",
-      "size": 9036,
-      "subdir": "noarch",
-      "timestamp": 1765456999,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/20/0a/617bf23511160454995bf1cbe6789f22beeb8b49c1f3b1bbf4b5cd6a55ca/six-1.7.0-py2.py3-none-any.whl"
-    },
-    "six-1.6.1-py3_none_any_0": {
-      "name": "six",
-      "version": "1.6.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.6.1-py2.py3-none-any.whl",
-      "sha256": "28ee0c506d16a08f2bef34c19f64c72b4227f47cc1f91b7b405d099cc43335fd",
-      "size": 8252,
-      "subdir": "noarch",
-      "timestamp": 1765456999,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/ba/19/aa48edcff9d0c396a4d009d362d0a0a1ac3db6f9d7d5736e0175b94d7ef8/six-1.6.1-py2.py3-none-any.whl"
-    },
-    "six-1.6.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.6.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.6.0-py2.py3-none-any.whl",
-      "sha256": "e753c729fc683ac3d55f8f38c146b4048f0c6679b4aece0cb3eaff1d9ce74cc4",
-      "size": 8206,
-      "subdir": "noarch",
-      "timestamp": 1765456999,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/54/45/8b5eef1ba0b79acbdab01435359f37ae13dc6c4aafaa444b805e3867386d/six-1.6.0-py2.py3-none-any.whl"
-    },
-    "six-1.5.2-py3_none_any_0": {
-      "name": "six",
-      "version": "1.5.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.5.2-py2.py3-none-any.whl",
-      "sha256": "5d6341c82cb575414c6bc86cc8fec8e7a21b89695f35c8599517a6e7e2369ab9",
-      "size": 8123,
-      "subdir": "noarch",
-      "timestamp": 1765456999,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/c7/a4/35520d20a8e4b3c28c9db705fffd4c7053e0236928951da32167e5078faa/six-1.5.2-py2.py3-none-any.whl"
-    },
-    "six-1.5.1-py3_none_any_0": {
-      "name": "six",
-      "version": "1.5.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.5.1-py2.py3-none-any.whl",
-      "sha256": "951ddd8401562dad2f208be1c86f230936aebba028dffaf61f0c4b57fb21a662",
-      "size": 8095,
-      "subdir": "noarch",
-      "timestamp": 1765456998,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/60/84/72c628d5a4efffb23e2fb46cdbf8ee669046d8208ba5dab08f989b7bfe9c/six-1.5.1-py2.py3-none-any.whl"
-    },
-    "six-1.5.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.5.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.5.0-py2.py3-none-any.whl",
-      "sha256": "ae880000fcfc71aa65385afc2c6b6bc3a5a36b0e893f8db0d296d7efd0f0ac7a",
-      "size": 7886,
-      "subdir": "noarch",
-      "timestamp": 1765456998,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/ca/15/e62a66024dded9640f8d39112330e6b108e7ab21a1b8618c2d1e2eea7e1d/six-1.5.0-py2.py3-none-any.whl"
-    },
-    "six-1.17.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.17.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
-      ],
-      "fn": "six-1.17.0-py2.py3-none-any.whl",
-      "sha256": "315aa209a1eb65c989611a7062280799bff19941b9818f2d0c2985baf1e7eafc",
-      "size": 11130,
-      "subdir": "noarch",
-      "timestamp": 1765456998,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl"
-    },
-    "six-1.16.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.16.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
-      ],
-      "fn": "six-1.16.0-py2.py3-none-any.whl",
-      "sha256": "b9bc4f7dfc61c5e40a4e2de2811b114e9210a97125fcef8d8a175c1f9ce1436f",
-      "size": 11125,
-      "subdir": "noarch",
-      "timestamp": 1765456998,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl"
-    },
-    "six-1.13.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.13.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.6, !=3.0.*, !=3.1.*"
-      ],
-      "fn": "six-1.13.0-py2.py3-none-any.whl",
-      "sha256": "f91c6df4d02a12f493455ada1c0fb4f11cf393e3662a643fc45c6fc4b937b13f",
-      "size": 10815,
-      "subdir": "noarch",
-      "timestamp": 1765456997,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/65/26/32b8464df2a97e6dd1b656ed26b2c194606c16fe163c695a992b36c11cdf/six-1.13.0-py2.py3-none-any.whl"
-    },
-    "six-1.15.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.15.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
-      ],
-      "fn": "six-1.15.0-py2.py3-none-any.whl",
-      "sha256": "397a9df0830707ee73f8bfc409cf34ceae880cc798345cfed2fc54c760fc10bd",
-      "size": 11036,
-      "subdir": "noarch",
-      "timestamp": 1765456997,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/ee/ff/48bde5c0f013094d729fe4b0316ba2a24774b3ff1c52d924a8a4cb04078a/six-1.15.0-py2.py3-none-any.whl"
-    },
-    "six-1.14.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.14.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
-      ],
-      "fn": "six-1.14.0-py2.py3-none-any.whl",
-      "sha256": "395b91a5a70015fc476d34d4e8490a0c116488d27336ae8aee641a697c783587",
-      "size": 11008,
-      "subdir": "noarch",
-      "timestamp": 1765456997,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/65/eb/1f97cb97bfc2390a276969c6fae16075da282f5058082d4cb10c6c5c1dba/six-1.14.0-py2.py3-none-any.whl"
-    },
-    "six-1.10.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.10.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.10.0-py2.py3-none-any.whl",
-      "sha256": "3323a0e4ac455ea08cfb21e19c283450bd77f99dfdef3dd58c5bb3b9fa532555",
-      "size": 10012,
-      "subdir": "noarch",
-      "timestamp": 1765456997,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/c8/0a/b6723e1bc4c516cb687841499455a8505b44607ab535be01091c0f24f079/six-1.10.0-py2.py3-none-any.whl"
-    },
-    "six-1.12.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.12.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=2.6, !=3.0.*, !=3.1.*"
-      ],
-      "fn": "six-1.12.0-py2.py3-none-any.whl",
-      "sha256": "93e7180169333b5af1e346cb66e8b76d5123474cc1d0afa1dc50ce665fc789fc",
-      "size": 10655,
-      "subdir": "noarch",
-      "timestamp": 1765456997,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/73/fb/00a976f728d0d1fecfe898238ce23f502a721c0ac0ecfedb80e0d88c64e9/six-1.12.0-py2.py3-none-any.whl"
-    },
-    "six-1.11.0-py3_none_any_0": {
-      "name": "six",
-      "version": "1.11.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [],
-      "fn": "six-1.11.0-py2.py3-none-any.whl",
-      "sha256": "5d081fc97ae89bbe5ade5042bcb633e12f0d24d02d733e7f0278e24852a9e0c8",
-      "size": 10238,
-      "subdir": "noarch",
-      "timestamp": 1765456996,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/67/4b/141a581104b1f6397bfa78ac9d43d8ad29a7ca43ea90a2d863fe3056e86a/six-1.11.0-py2.py3-none-any.whl"
-    },
-    "starlette-0.47.2-py3_none_any_0": {
-      "record_version": 3,
-      "name": "starlette",
-      "version": "0.47.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "typing_extensions >=4.10.0",
-        "python >=3.9"
-      ],
-      "fn": "starlette-0.47.2-py3-none-any.whl",
-      "sha256": "eed9895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81",
-      "size": 4412,
-      "subdir": "noarch",
-      "timestamp": 1756405214,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/67/4b/895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81/starlette-0.47.2-py3-none-any.whl"
-    },
-    "typing_extensions-4.14.1-py3_none_any_0": {
-      "record_version": 3,
-      "name": "typing_extensions",
-      "version": "4.14.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "python >=3.9"
-      ],
-      "fn": "typing_extensions-4.14.1-py3-none-any.whl",
-      "sha256": "eefe7d0f85db6c44f9726bbd4c4a540157ea968667fba03037d5a3f120eb8946",
-      "size": 6741,
-      "subdir": "noarch",
-      "timestamp": 1756405213,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/67/4b/895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81/typing_extensions-4.14.1-py3-none-any.whl"
-    },
-    "unearth-0.17.5-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.5",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.5-py3-none-any.whl",
-      "sha256": "2fa0375963237751ae83f5306eb0b49574a59d20884946a9af554d89728e1db4",
-      "size": 47380,
-      "subdir": "noarch",
-      "timestamp": 1765456996,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/73/35/b22322e3e69be95cfe6fb9863d9f839d360e8348eb4ec2ea09d7dfc047f8/unearth-0.17.5-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+  "v3": {
+    "whl": {
+      "six-1.9.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.9.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.9.0-py2.py3-none-any.whl",
+        "sha256": "e66d4bb9b165af63ba9efa967d9ab61a7a3c8349788353da711889a53b750d6d",
+        "size": 9897,
+        "subdir": "noarch",
+        "timestamp": 1765457000,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/10/e3/a7f8eea80a9fa8358c1cd89ef489bc03675e69e54ed2982cd6f2a28d8295/six-1.9.0-py2.py3-none-any.whl"
+      },
+      "six-1.8.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.8.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.8.0-py2.py3-none-any.whl",
+        "sha256": "c8fa17ac94d5ccd1b89aa25e7816e30a8815de5c50bedf173e760b8f0c1ac25f",
+        "size": 9373,
+        "subdir": "noarch",
+        "timestamp": 1765457000,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/a2/4b/2b4532b4eba116a02fc0b5e0b3540a073a61c003b7b6293b7b884afa8ff1/six-1.8.0-py2.py3-none-any.whl"
+      },
+      "six-1.7.3-py3_none_any_0": {
+        "name": "six",
+        "version": "1.7.3",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.7.3-py2.py3-none-any.whl",
+        "sha256": "b2bca436dc826d6f64371f30b0fe95706f3cabf8e2849b7f9ec468b8c7df6f20",
+        "size": 9191,
+        "subdir": "noarch",
+        "timestamp": 1765457000,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/2e/a4/6dcb84af409b7bc0c258a0d6bd7e14231724d9a46b750c048f09d74d870c/six-1.7.3-py2.py3-none-any.whl"
+      },
+      "six-1.7.2-py3_none_any_0": {
+        "name": "six",
+        "version": "1.7.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.7.2-py2.py3-none-any.whl",
+        "sha256": "8d82a1d6ebfeacc2ff207e33ad694eb3df0c8e1fc6623b61cd46e35bae232e3f",
+        "size": 9302,
+        "subdir": "noarch",
+        "timestamp": 1765457000,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/6b/30/839b8059d1225dbd3a0dd97c3c370bbb978cde505e160b30515fb7be17d8/six-1.7.2-py2.py3-none-any.whl"
+      },
+      "six-1.7.1-py3_none_any_0": {
+        "name": "six",
+        "version": "1.7.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.7.1-py2.py3-none-any.whl",
+        "sha256": "72a0c3321753a3ee454fca39229e3a7093041f34d2db8f409b6ff1ddb9376b88",
+        "size": 9297,
+        "subdir": "noarch",
+        "timestamp": 1765456999,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/aa/ec/e6954e19e617c1b9860325f0995d456d8416c84a6cb9bce1c10998280b59/six-1.7.1-py2.py3-none-any.whl"
+      },
+      "six-1.7.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.7.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.7.0-py2.py3-none-any.whl",
+        "sha256": "c8ccce78ddb6592760d57789477860924aeacb54401fa5e072a30ba1f9da6a73",
+        "size": 9036,
+        "subdir": "noarch",
+        "timestamp": 1765456999,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/20/0a/617bf23511160454995bf1cbe6789f22beeb8b49c1f3b1bbf4b5cd6a55ca/six-1.7.0-py2.py3-none-any.whl"
+      },
+      "six-1.6.1-py3_none_any_0": {
+        "name": "six",
+        "version": "1.6.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.6.1-py2.py3-none-any.whl",
+        "sha256": "28ee0c506d16a08f2bef34c19f64c72b4227f47cc1f91b7b405d099cc43335fd",
+        "size": 8252,
+        "subdir": "noarch",
+        "timestamp": 1765456999,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/ba/19/aa48edcff9d0c396a4d009d362d0a0a1ac3db6f9d7d5736e0175b94d7ef8/six-1.6.1-py2.py3-none-any.whl"
+      },
+      "six-1.6.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.6.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.6.0-py2.py3-none-any.whl",
+        "sha256": "e753c729fc683ac3d55f8f38c146b4048f0c6679b4aece0cb3eaff1d9ce74cc4",
+        "size": 8206,
+        "subdir": "noarch",
+        "timestamp": 1765456999,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/54/45/8b5eef1ba0b79acbdab01435359f37ae13dc6c4aafaa444b805e3867386d/six-1.6.0-py2.py3-none-any.whl"
+      },
+      "six-1.5.2-py3_none_any_0": {
+        "name": "six",
+        "version": "1.5.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.5.2-py2.py3-none-any.whl",
+        "sha256": "5d6341c82cb575414c6bc86cc8fec8e7a21b89695f35c8599517a6e7e2369ab9",
+        "size": 8123,
+        "subdir": "noarch",
+        "timestamp": 1765456999,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/c7/a4/35520d20a8e4b3c28c9db705fffd4c7053e0236928951da32167e5078faa/six-1.5.2-py2.py3-none-any.whl"
+      },
+      "six-1.5.1-py3_none_any_0": {
+        "name": "six",
+        "version": "1.5.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.5.1-py2.py3-none-any.whl",
+        "sha256": "951ddd8401562dad2f208be1c86f230936aebba028dffaf61f0c4b57fb21a662",
+        "size": 8095,
+        "subdir": "noarch",
+        "timestamp": 1765456998,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/60/84/72c628d5a4efffb23e2fb46cdbf8ee669046d8208ba5dab08f989b7bfe9c/six-1.5.1-py2.py3-none-any.whl"
+      },
+      "six-1.5.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.5.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.5.0-py2.py3-none-any.whl",
+        "sha256": "ae880000fcfc71aa65385afc2c6b6bc3a5a36b0e893f8db0d296d7efd0f0ac7a",
+        "size": 7886,
+        "subdir": "noarch",
+        "timestamp": 1765456998,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/ca/15/e62a66024dded9640f8d39112330e6b108e7ab21a1b8618c2d1e2eea7e1d/six-1.5.0-py2.py3-none-any.whl"
+      },
+      "six-1.17.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.17.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "unearth-0.17.4-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.4",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.4-py3-none-any.whl",
-      "sha256": "3c5a4673ea297191fb23dc59a68095b8f6367604cf1dc0c86396abaa444d69bb",
-      "size": 47440,
-      "subdir": "noarch",
-      "timestamp": 1765456996,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/41/22/7aef7df40cef0aee5700ac1576644e4e919477119f580b96a7d11d21bc2a/unearth-0.17.4-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+        "fn": "six-1.17.0-py2.py3-none-any.whl",
+        "sha256": "315aa209a1eb65c989611a7062280799bff19941b9818f2d0c2985baf1e7eafc",
+        "size": 11130,
+        "subdir": "noarch",
+        "timestamp": 1765456998,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl"
+      },
+      "six-1.16.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.16.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "unearth-0.17.3-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.3",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.3-py3-none-any.whl",
-      "sha256": "7198669a82a4e4fceb570ca449052fa0698e64a254a2a07ef434a5c2953ea27e",
-      "size": 47467,
-      "subdir": "noarch",
-      "timestamp": 1765456995,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/79/e8/79bdd5b251b06accb1fc42eb996a6a80e87e24155c21c5b1a5edc7032244/unearth-0.17.3-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+        "fn": "six-1.16.0-py2.py3-none-any.whl",
+        "sha256": "b9bc4f7dfc61c5e40a4e2de2811b114e9210a97125fcef8d8a175c1f9ce1436f",
+        "size": 11125,
+        "subdir": "noarch",
+        "timestamp": 1765456998,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl"
+      },
+      "six-1.13.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.13.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.6, !=3.0.*, !=3.1.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "unearth-0.17.0-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.0-py3-none-any.whl",
-      "sha256": "1d04226b4e7d9bda3571e37c9602dcdb607817f95e6a4215e12d0a3a13308b5a",
-      "size": 47306,
-      "subdir": "noarch",
-      "timestamp": 1765456995,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/03/c5/6c168746280d035e0eb511e20ee8256f11353bc3521ba92d36b27e347a71/unearth-0.17.0-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+        "fn": "six-1.13.0-py2.py3-none-any.whl",
+        "sha256": "f91c6df4d02a12f493455ada1c0fb4f11cf393e3662a643fc45c6fc4b937b13f",
+        "size": 10815,
+        "subdir": "noarch",
+        "timestamp": 1765456997,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/65/26/32b8464df2a97e6dd1b656ed26b2c194606c16fe163c695a992b36c11cdf/six-1.13.0-py2.py3-none-any.whl"
+      },
+      "six-1.15.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.15.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "unearth-0.17.2-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.2-py3-none-any.whl",
-      "sha256": "ef247e44969bbcd3fa3a212946f2c7cbf3817bdbb061f22b3787d3cb17734590",
-      "size": 47377,
-      "subdir": "noarch",
-      "timestamp": 1765456995,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/40/2f/42e35e6826a8e941979a5a79517d6e15008140eaffe33a8c85c7dc336f6e/unearth-0.17.2-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+        "fn": "six-1.15.0-py2.py3-none-any.whl",
+        "sha256": "397a9df0830707ee73f8bfc409cf34ceae880cc798345cfed2fc54c760fc10bd",
+        "size": 11036,
+        "subdir": "noarch",
+        "timestamp": 1765456997,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/ee/ff/48bde5c0f013094d729fe4b0316ba2a24774b3ff1c52d924a8a4cb04078a/six-1.15.0-py2.py3-none-any.whl"
+      },
+      "six-1.14.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.14.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "unearth-0.17.1-py3_none_any_0": {
-      "name": "unearth",
-      "version": "0.17.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "packaging >=20",
-        "httpx <1,>=0.27.0",
-        "python >=3.8"
-      ],
-      "fn": "unearth-0.17.1-py3-none-any.whl",
-      "sha256": "9731930f752a4c41a7dcb3bdc739c200b022e718890e563887145a471529ee16",
-      "size": 47354,
-      "subdir": "noarch",
-      "timestamp": 1765456995,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/9b/96/43d4bb32f4bd7c2e0b22ca67b1d23d4b87219a3c69524033a7c95ca73f47/unearth-0.17.1-py3-none-any.whl",
-      "extra_depends": {
-        "keyring": [
-          "keyring"
+        "fn": "six-1.14.0-py2.py3-none-any.whl",
+        "sha256": "395b91a5a70015fc476d34d4e8490a0c116488d27336ae8aee641a697c783587",
+        "size": 11008,
+        "subdir": "noarch",
+        "timestamp": 1765456997,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/65/eb/1f97cb97bfc2390a276969c6fae16075da282f5058082d4cb10c6c5c1dba/six-1.14.0-py2.py3-none-any.whl"
+      },
+      "six-1.10.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.10.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.10.0-py2.py3-none-any.whl",
+        "sha256": "3323a0e4ac455ea08cfb21e19c283450bd77f99dfdef3dd58c5bb3b9fa532555",
+        "size": 10012,
+        "subdir": "noarch",
+        "timestamp": 1765456997,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/c8/0a/b6723e1bc4c516cb687841499455a8505b44607ab535be01091c0f24f079/six-1.10.0-py2.py3-none-any.whl"
+      },
+      "six-1.12.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.12.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=2.6, !=3.0.*, !=3.1.*"
         ],
-        "legacy": [
-          "requests >=2.25"
-        ]
-      }
-    },
-    "requests-2.32.2-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.32.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <3,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.8"
-      ],
-      "fn": "requests-2.32.2-py3-none-any.whl",
-      "sha256": "0375f9273b827542a3a03675feb1a4bcd8c064963dabf7b3fd6cfb761e4f7afd",
-      "size": 63998,
-      "subdir": "noarch",
-      "timestamp": 1765456754,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/c3/20/748e38b466e0819491f0ce6e90ebe4184966ee304fe483e2c414b0f4ef07/requests-2.32.2-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "six-1.12.0-py2.py3-none-any.whl",
+        "sha256": "93e7180169333b5af1e346cb66e8b76d5123474cc1d0afa1dc50ce665fc789fc",
+        "size": 10655,
+        "subdir": "noarch",
+        "timestamp": 1765456997,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/73/fb/00a976f728d0d1fecfe898238ce23f502a721c0ac0ecfedb80e0d88c64e9/six-1.12.0-py2.py3-none-any.whl"
+      },
+      "six-1.11.0-py3_none_any_0": {
+        "name": "six",
+        "version": "1.11.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [],
+        "fn": "six-1.11.0-py2.py3-none-any.whl",
+        "sha256": "5d081fc97ae89bbe5ade5042bcb633e12f0d24d02d733e7f0278e24852a9e0c8",
+        "size": 10238,
+        "subdir": "noarch",
+        "timestamp": 1765456996,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/67/4b/141a581104b1f6397bfa78ac9d43d8ad29a7ca43ea90a2d863fe3056e86a/six-1.11.0-py2.py3-none-any.whl"
+      },
+      "starlette-0.47.2-py3_none_any_0": {
+        "record_version": 3,
+        "name": "starlette",
+        "version": "0.47.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "typing_extensions >=4.10.0",
+          "python >=3.9"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.32.1-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.32.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <3,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.8"
-      ],
-      "fn": "requests-2.32.1-py3-none-any.whl",
-      "sha256": "d58df96a8a48ef92c2ff1e3e16dd2b043a1c4955305bf952be6741a2c8328dd8",
-      "size": 63796,
-      "subdir": "noarch",
-      "timestamp": 1765456754,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/9c/a6/b9bf71eeb6dc835311b5c47a7c90df57b08061091161639611252257768d/requests-2.32.1-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "starlette-0.47.2-py3-none-any.whl",
+        "sha256": "eed9895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81",
+        "size": 4412,
+        "subdir": "noarch",
+        "timestamp": 1756405214,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/67/4b/895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81/starlette-0.47.2-py3-none-any.whl"
+      },
+      "typing_extensions-4.14.1-py3_none_any_0": {
+        "record_version": 3,
+        "name": "typing_extensions",
+        "version": "4.14.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "python >=3.9"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.32.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.32.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <3,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.8"
-      ],
-      "fn": "requests-2.32.0-py3-none-any.whl",
-      "sha256": "02c4b63dff20397729229c280ee4a6d6da1ea1ad917fc2f384bc155c2b013f6a",
-      "size": 63791,
-      "subdir": "noarch",
-      "timestamp": 1765456754,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/24/e8/09e8d662a9675a4e4f5dd7a8e6127b463a091d2703ed931a64aa66d00065/requests-2.32.0-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "typing_extensions-4.14.1-py3-none-any.whl",
+        "sha256": "eefe7d0f85db6c44f9726bbd4c4a540157ea968667fba03037d5a3f120eb8946",
+        "size": 6741,
+        "subdir": "noarch",
+        "timestamp": 1756405213,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/67/4b/895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81/typing_extensions-4.14.1-py3-none-any.whl"
+      },
+      "unearth-0.17.5-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.5",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.31.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.31.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <3,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7"
-      ],
-      "fn": "requests-2.31.0-py3-none-any.whl",
-      "sha256": "1f816aa80bb0acdcab5940891bfab0b6ce869d9457e60e5dec48cb32b5c022ff",
-      "size": 62654,
-      "subdir": "noarch",
-      "timestamp": 1765456754,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.5-py3-none-any.whl",
+        "sha256": "2fa0375963237751ae83f5306eb0b49574a59d20884946a9af554d89728e1db4",
+        "size": 47380,
+        "subdir": "noarch",
+        "timestamp": 1765456996,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/73/35/b22322e3e69be95cfe6fb9863d9f839d360e8348eb4ec2ea09d7dfc047f8/unearth-0.17.5-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "unearth-0.17.4-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.4",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.28.2-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.28.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7, <4"
-      ],
-      "fn": "requests-2.28.2-py3-none-any.whl",
-      "sha256": "a83b301e2604f39dee727cb96197ee5aa58d484dacc000a36526dcf85b12f3f4",
-      "size": 62913,
-      "subdir": "noarch",
-      "timestamp": 1765456753,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/d2/f4/274d1dbe96b41cf4e0efb70cbced278ffd61b5c7bb70338b62af94ccb25b/requests-2.28.2-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.4-py3-none-any.whl",
+        "sha256": "3c5a4673ea297191fb23dc59a68095b8f6367604cf1dc0c86396abaa444d69bb",
+        "size": 47440,
+        "subdir": "noarch",
+        "timestamp": 1765456996,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/41/22/7aef7df40cef0aee5700ac1576644e4e919477119f580b96a7d11d21bc2a/unearth-0.17.4-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "unearth-0.17.3-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.3",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.30.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.30.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <3,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7"
-      ],
-      "fn": "requests-2.30.0-py3-none-any.whl",
-      "sha256": "0c0d432d769c2c63e66f91c4f7a7f331458f3d2dd40796ddd61b03372857d608",
-      "size": 62579,
-      "subdir": "noarch",
-      "timestamp": 1765456753,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/96/80/034ffeca15c0f4e01b7b9c6ad0fb704b44e190cde4e757edbd60be404c41/requests-2.30.0-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.3-py3-none-any.whl",
+        "sha256": "7198669a82a4e4fceb570ca449052fa0698e64a254a2a07ef434a5c2953ea27e",
+        "size": 47467,
+        "subdir": "noarch",
+        "timestamp": 1765456995,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/79/e8/79bdd5b251b06accb1fc42eb996a6a80e87e24155c21c5b1a5edc7032244/unearth-0.17.3-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "unearth-0.17.0-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.29.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.29.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <4,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7"
-      ],
-      "fn": "requests-2.29.0-py3-none-any.whl",
-      "sha256": "d5d4296ec2383866e983bab45ca0b587a615b4a84cd9714c14e102acfa2fd51e",
-      "size": 62588,
-      "subdir": "noarch",
-      "timestamp": 1765456753,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/cf/e1/2aa539876d9ed0ddc95882451deb57cfd7aa8dbf0b8dbce68e045549ba56/requests-2.29.0-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.0-py3-none-any.whl",
+        "sha256": "1d04226b4e7d9bda3571e37c9602dcdb607817f95e6a4215e12d0a3a13308b5a",
+        "size": 47306,
+        "subdir": "noarch",
+        "timestamp": 1765456995,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/03/c5/6c168746280d035e0eb511e20ee8256f11353bc3521ba92d36b27e347a71/unearth-0.17.0-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "unearth-0.17.2-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.28.1-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.28.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer <3,>=2",
-        "idna <4,>=2.5",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7, <4"
-      ],
-      "fn": "requests-2.28.1-py3-none-any.whl",
-      "sha256": "153827e5b8ac656356646d31f4d1398b560776e38ef84b7f1a868be75f40117b",
-      "size": 62921,
-      "subdir": "noarch",
-      "timestamp": 1765456752,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/ca/91/6d9b8ccacd0412c08820f72cebaa4f0c0441b5cda699c90f618b6f8a1b42/requests-2.28.1-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.2-py3-none-any.whl",
+        "sha256": "ef247e44969bbcd3fa3a212946f2c7cbf3817bdbb061f22b3787d3cb17734590",
+        "size": 47377,
+        "subdir": "noarch",
+        "timestamp": 1765456995,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/40/2f/42e35e6826a8e941979a5a79517d6e15008140eaffe33a8c85c7dc336f6e/unearth-0.17.2-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "unearth-0.17.1-py3_none_any_0": {
+        "name": "unearth",
+        "version": "0.17.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "packaging >=20",
+          "httpx <1,>=0.27.0",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <6,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.28.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.28.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer ~=2.0.0",
-        "idna <4,>=2.5",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=3.7, <4"
-      ],
-      "fn": "requests-2.28.0-py3-none-any.whl",
-      "sha256": "f446cb09580c793a5b6d497bf446236b67f9daae9d343792c7333878fa1ec25d",
-      "size": 62929,
-      "subdir": "noarch",
-      "timestamp": 1765456752,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/41/5b/2209eba8133fc081d3ffff02e1f6376e3117e52bb16f674721a83e67e68e/requests-2.28.0-py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6"
+        "fn": "unearth-0.17.1-py3-none-any.whl",
+        "sha256": "9731930f752a4c41a7dcb3bdc739c200b022e718890e563887145a471529ee16",
+        "size": 47354,
+        "subdir": "noarch",
+        "timestamp": 1765456995,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/9b/96/43d4bb32f4bd7c2e0b22ca67b1d23d4b87219a3c69524033a7c95ca73f47/unearth-0.17.1-py3-none-any.whl",
+        "extra_depends": {
+          "keyring": [
+            "keyring"
+          ],
+          "legacy": [
+            "requests >=2.25"
+          ]
+        }
+      },
+      "requests-2.32.2-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.32.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <3,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <5,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.27.1-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.27.1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
-        "chardet <5,>=3.0.2[when=\"python < 3\"]",
-        "idna <3,>=2.5[when=\"python < 3\"]",
-        "idna <4,>=2.5[when=\"python >= 3\"]",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
-      ],
-      "fn": "requests-2.27.1-py2.py3-none-any.whl",
-      "sha256": "5ae0233ba5b28bda8be353ed1e670a71e59113bfe5ea0b5de0e247a22df89770",
-      "size": 63214,
-      "subdir": "noarch",
-      "timestamp": 1765456752,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/2d/61/08076519c80041bc0ffa1a8af0cbd3bf3e2b62af10435d269a9d0f40564d/requests-2.27.1-py2.py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6",
-          "win-inet-pton"
+        "fn": "requests-2.32.2-py3-none-any.whl",
+        "sha256": "0375f9273b827542a3a03675feb1a4bcd8c064963dabf7b3fd6cfb761e4f7afd",
+        "size": 63998,
+        "subdir": "noarch",
+        "timestamp": 1765456754,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/c3/20/748e38b466e0819491f0ce6e90ebe4184966ee304fe483e2c414b0f4ef07/requests-2.32.2-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.32.1-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.32.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <3,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <5,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.27.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.27.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
-        "chardet <5,>=3.0.2[when=\"python < 3\"]",
-        "idna <3,>=2.5[when=\"python < 3\"]",
-        "idna <4,>=2.5[when=\"python >= 3\"]",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
-      ],
-      "fn": "requests-2.27.0-py2.py3-none-any.whl",
-      "sha256": "494b58ec33a537c1312ff2c560258f06fb330ea1af7a172f524cb52ee9bba26f",
-      "size": 63160,
-      "subdir": "noarch",
-      "timestamp": 1765456752,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/47/01/f420e7add78110940639a958e5af0e3f8e07a8a8b62049bac55ee117aa91/requests-2.27.0-py2.py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6",
-          "win-inet-pton"
+        "fn": "requests-2.32.1-py3-none-any.whl",
+        "sha256": "d58df96a8a48ef92c2ff1e3e16dd2b043a1c4955305bf952be6741a2c8328dd8",
+        "size": 63796,
+        "subdir": "noarch",
+        "timestamp": 1765456754,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/9c/a6/b9bf71eeb6dc835311b5c47a7c90df57b08061091161639611252257768d/requests-2.32.1-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.32.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.32.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <3,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.8"
         ],
-        "use-chardet-on-py3": [
-          "chardet <5,>=3.0.2"
-        ]
-      }
-    },
-    "requests-2.26.0-py3_none_any_0": {
-      "name": "requests",
-      "version": "2.26.0",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
-        "chardet <5,>=3.0.2[when=\"python < 3\"]",
-        "idna <3,>=2.5[when=\"python < 3\"]",
-        "idna <4,>=2.5[when=\"python >= 3\"]",
-        "urllib3 <1.27,>=1.21.1",
-        "certifi >=2017.4.17",
-        "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
-      ],
-      "fn": "requests-2.26.0-py2.py3-none-any.whl",
-      "sha256": "e796e3a8b3433b4e5d7b8ce95e2796698ef4e533d022e2641b0d9535ada43476",
-      "size": 62335,
-      "subdir": "noarch",
-      "timestamp": 1765456752,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/92/96/144f70b972a9c0eabbd4391ef93ccd49d0f2747f4f6a2a2738e99e5adc65/requests-2.26.0-py2.py3-none-any.whl",
-      "extra_depends": {
-        "socks": [
-          "pysocks !=1.5.7,>=1.5.6",
-          "win-inet-pton"
+        "fn": "requests-2.32.0-py3-none-any.whl",
+        "sha256": "02c4b63dff20397729229c280ee4a6d6da1ea1ad917fc2f384bc155c2b013f6a",
+        "size": 63791,
+        "subdir": "noarch",
+        "timestamp": 1765456754,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/24/e8/09e8d662a9675a4e4f5dd7a8e6127b463a091d2703ed931a64aa66d00065/requests-2.32.0-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.31.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.31.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <3,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7"
         ],
-        "use-chardet-on-py3": [
-          "chardet <5,>=3.0.2"
-        ]
-      }
-    },
-    "django-5.1.10-py3_none_any_0": {
-      "name": "django",
-      "version": "5.1.10",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref <4,>=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "django-5.1.10-py3-none-any.whl",
-      "sha256": "eb881725250e3f577785b0c9ba60ef39958f1b9570e8cc7e345470110c7f32ac",
-      "size": 8277457,
-      "subdir": "noarch",
-      "timestamp": 1765456735,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/9e/fc/80dc741ba0acb3241aac1213d7272c573d52d8a62ec2c69e9b3bef1547f2/django-5.1.10-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.31.0-py3-none-any.whl",
+        "sha256": "1f816aa80bb0acdcab5940891bfab0b6ce869d9457e60e5dec48cb32b5c022ff",
+        "size": 62654,
+        "subdir": "noarch",
+        "timestamp": 1765456754,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.28.2-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.28.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7, <4"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
-      }
-    },
-    "django-5.2rc1-py3_none_any_0": {
-      "name": "django",
-      "version": "5.2rc1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref >=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "Django-5.2rc1-py3-none-any.whl",
-      "sha256": "cb07e5d06fab39d48d2326d7618fa6d508c608ee29ea365b8bdb42ddd0564cb6",
-      "size": 8295671,
-      "subdir": "noarch",
-      "timestamp": 1765456735,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/89/90/cbc3d95cabce6ae81c9b56301c2ba6f22198193edcf8b17d35f91500a344/Django-5.2rc1-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.28.2-py3-none-any.whl",
+        "sha256": "a83b301e2604f39dee727cb96197ee5aa58d484dacc000a36526dcf85b12f3f4",
+        "size": 62913,
+        "subdir": "noarch",
+        "timestamp": 1765456753,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/d2/f4/274d1dbe96b41cf4e0efb70cbced278ffd61b5c7bb70338b62af94ccb25b/requests-2.28.2-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.30.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.30.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <3,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
-      }
-    },
-    "django-5.2b1-py3_none_any_0": {
-      "name": "django",
-      "version": "5.2b1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref >=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "Django-5.2b1-py3-none-any.whl",
-      "sha256": "cb8825f2447f0e1b31e3822d47053ec4d688eb132faa7f8f080726dcf0fe3229",
-      "size": 8295550,
-      "subdir": "noarch",
-      "timestamp": 1765456733,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/00/6a/4e53c567ef24e81e17a30c788209396e08b8aaf8011d9cf01b8aa4910fa1/Django-5.2b1-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.30.0-py3-none-any.whl",
+        "sha256": "0c0d432d769c2c63e66f91c4f7a7f331458f3d2dd40796ddd61b03372857d608",
+        "size": 62579,
+        "subdir": "noarch",
+        "timestamp": 1765456753,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/96/80/034ffeca15c0f4e01b7b9c6ad0fb704b44e190cde4e757edbd60be404c41/requests-2.30.0-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.29.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.29.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <4,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
-      }
-    },
-    "django-5.2a1-py3_none_any_0": {
-      "name": "django",
-      "version": "5.2a1",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref >=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "Django-5.2a1-py3-none-any.whl",
-      "sha256": "f75529f8b35597d9488a9234020477cf9d9f5cb36fdbced07e029cf0a35f3eb0",
-      "size": 8296448,
-      "subdir": "noarch",
-      "timestamp": 1765456732,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/14/1a/0d9c26312161a2c4cd393cc6d61edd507b6a99d964e7da56baa743288f3b/Django-5.2a1-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.29.0-py3-none-any.whl",
+        "sha256": "d5d4296ec2383866e983bab45ca0b587a615b4a84cd9714c14e102acfa2fd51e",
+        "size": 62588,
+        "subdir": "noarch",
+        "timestamp": 1765456753,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/cf/e1/2aa539876d9ed0ddc95882451deb57cfd7aa8dbf0b8dbce68e045549ba56/requests-2.29.0-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.28.1-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.28.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer <3,>=2",
+          "idna <4,>=2.5",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7, <4"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
-      }
-    },
-    "django-5.2-py3_none_any_0": {
-      "name": "django",
-      "version": "5.2",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref >=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "Django-5.2-py3-none-any.whl",
-      "sha256": "61fd2ba96e90225bdff30c2b93e81a4bacfc55df50c8a8a0d649f74f90f55237",
-      "size": 8301361,
-      "subdir": "noarch",
-      "timestamp": 1765456730,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/63/e0/6a5b5ea350c5bd63fe94b05e4c146c18facb51229d9dee42aa39f9fc2214/Django-5.2-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.28.1-py3-none-any.whl",
+        "sha256": "153827e5b8ac656356646d31f4d1398b560776e38ef84b7f1a868be75f40117b",
+        "size": 62921,
+        "subdir": "noarch",
+        "timestamp": 1765456752,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/ca/91/6d9b8ccacd0412c08820f72cebaa4f0c0441b5cda699c90f618b6f8a1b42/requests-2.28.1-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <6,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.28.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.28.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer ~=2.0.0",
+          "idna <4,>=2.5",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=3.7, <4"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
-      }
-    },
-    "django-5.1.7-py3_none_any_0": {
-      "name": "django",
-      "version": "5.1.7",
-      "build": "py3_none_any_0",
-      "build_number": 0,
-      "depends": [
-        "asgiref <4,>=3.8.1",
-        "sqlparse >=0.3.1",
-        "python-tzdata[when=\"__win\"]",
-        "python >=3.10"
-      ],
-      "fn": "Django-5.1.7-py3-none-any.whl",
-      "sha256": "9b4a961fde52965d5469f1a78a62e402d5d49ffb248793f28dc85cb65417c836",
-      "size": 8276912,
-      "subdir": "noarch",
-      "timestamp": 1765456730,
-      "noarch": "python",
-      "url": "https://files.pythonhosted.org/packages/ba/0f/7e042df3d462d39ae01b27a09ee76653692442bc3701fbfa6cb38e12889d/Django-5.1.7-py3-none-any.whl",
-      "extra_depends": {
-        "argon2": [
-          "argon2-cffi >=19.1.0"
+        "fn": "requests-2.28.0-py3-none-any.whl",
+        "sha256": "f446cb09580c793a5b6d497bf446236b67f9daae9d343792c7333878fa1ec25d",
+        "size": 62929,
+        "subdir": "noarch",
+        "timestamp": 1765456752,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/41/5b/2209eba8133fc081d3ffff02e1f6376e3117e52bb16f674721a83e67e68e/requests-2.28.0-py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <5,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.27.1-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.27.1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
+          "chardet <5,>=3.0.2[when=\"python < 3\"]",
+          "idna <3,>=2.5[when=\"python < 3\"]",
+          "idna <4,>=2.5[when=\"python >= 3\"]",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
         ],
-        "bcrypt": [
-          "bcrypt"
-        ]
+        "fn": "requests-2.27.1-py2.py3-none-any.whl",
+        "sha256": "5ae0233ba5b28bda8be353ed1e670a71e59113bfe5ea0b5de0e247a22df89770",
+        "size": 63214,
+        "subdir": "noarch",
+        "timestamp": 1765456752,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/2d/61/08076519c80041bc0ffa1a8af0cbd3bf3e2b62af10435d269a9d0f40564d/requests-2.27.1-py2.py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6",
+            "win-inet-pton"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <5,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.27.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.27.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
+          "chardet <5,>=3.0.2[when=\"python < 3\"]",
+          "idna <3,>=2.5[when=\"python < 3\"]",
+          "idna <4,>=2.5[when=\"python >= 3\"]",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
+        ],
+        "fn": "requests-2.27.0-py2.py3-none-any.whl",
+        "sha256": "494b58ec33a537c1312ff2c560258f06fb330ea1af7a172f524cb52ee9bba26f",
+        "size": 63160,
+        "subdir": "noarch",
+        "timestamp": 1765456752,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/47/01/f420e7add78110940639a958e5af0e3f8e07a8a8b62049bac55ee117aa91/requests-2.27.0-py2.py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6",
+            "win-inet-pton"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <5,>=3.0.2"
+          ]
+        }
+      },
+      "requests-2.26.0-py3_none_any_0": {
+        "name": "requests",
+        "version": "2.26.0",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "charset-normalizer ~=2.0.0[when=\"python >= 3\"]",
+          "chardet <5,>=3.0.2[when=\"python < 3\"]",
+          "idna <3,>=2.5[when=\"python < 3\"]",
+          "idna <4,>=2.5[when=\"python >= 3\"]",
+          "urllib3 <1.27,>=1.21.1",
+          "certifi >=2017.4.17",
+          "python >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
+        ],
+        "fn": "requests-2.26.0-py2.py3-none-any.whl",
+        "sha256": "e796e3a8b3433b4e5d7b8ce95e2796698ef4e533d022e2641b0d9535ada43476",
+        "size": 62335,
+        "subdir": "noarch",
+        "timestamp": 1765456752,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/92/96/144f70b972a9c0eabbd4391ef93ccd49d0f2747f4f6a2a2738e99e5adc65/requests-2.26.0-py2.py3-none-any.whl",
+        "extra_depends": {
+          "socks": [
+            "pysocks !=1.5.7,>=1.5.6",
+            "win-inet-pton"
+          ],
+          "use-chardet-on-py3": [
+            "chardet <5,>=3.0.2"
+          ]
+        }
+      },
+      "django-5.1.10-py3_none_any_0": {
+        "name": "django",
+        "version": "5.1.10",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref <4,>=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "django-5.1.10-py3-none-any.whl",
+        "sha256": "eb881725250e3f577785b0c9ba60ef39958f1b9570e8cc7e345470110c7f32ac",
+        "size": 8277457,
+        "subdir": "noarch",
+        "timestamp": 1765456735,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/9e/fc/80dc741ba0acb3241aac1213d7272c573d52d8a62ec2c69e9b3bef1547f2/django-5.1.10-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
+      },
+      "django-5.2rc1-py3_none_any_0": {
+        "name": "django",
+        "version": "5.2rc1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref >=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "Django-5.2rc1-py3-none-any.whl",
+        "sha256": "cb07e5d06fab39d48d2326d7618fa6d508c608ee29ea365b8bdb42ddd0564cb6",
+        "size": 8295671,
+        "subdir": "noarch",
+        "timestamp": 1765456735,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/89/90/cbc3d95cabce6ae81c9b56301c2ba6f22198193edcf8b17d35f91500a344/Django-5.2rc1-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
+      },
+      "django-5.2b1-py3_none_any_0": {
+        "name": "django",
+        "version": "5.2b1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref >=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "Django-5.2b1-py3-none-any.whl",
+        "sha256": "cb8825f2447f0e1b31e3822d47053ec4d688eb132faa7f8f080726dcf0fe3229",
+        "size": 8295550,
+        "subdir": "noarch",
+        "timestamp": 1765456733,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/00/6a/4e53c567ef24e81e17a30c788209396e08b8aaf8011d9cf01b8aa4910fa1/Django-5.2b1-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
+      },
+      "django-5.2a1-py3_none_any_0": {
+        "name": "django",
+        "version": "5.2a1",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref >=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "Django-5.2a1-py3-none-any.whl",
+        "sha256": "f75529f8b35597d9488a9234020477cf9d9f5cb36fdbced07e029cf0a35f3eb0",
+        "size": 8296448,
+        "subdir": "noarch",
+        "timestamp": 1765456732,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/14/1a/0d9c26312161a2c4cd393cc6d61edd507b6a99d964e7da56baa743288f3b/Django-5.2a1-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
+      },
+      "django-5.2-py3_none_any_0": {
+        "name": "django",
+        "version": "5.2",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref >=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "Django-5.2-py3-none-any.whl",
+        "sha256": "61fd2ba96e90225bdff30c2b93e81a4bacfc55df50c8a8a0d649f74f90f55237",
+        "size": 8301361,
+        "subdir": "noarch",
+        "timestamp": 1765456730,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/63/e0/6a5b5ea350c5bd63fe94b05e4c146c18facb51229d9dee42aa39f9fc2214/Django-5.2-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
+      },
+      "django-5.1.7-py3_none_any_0": {
+        "name": "django",
+        "version": "5.1.7",
+        "build": "py3_none_any_0",
+        "build_number": 0,
+        "depends": [
+          "asgiref <4,>=3.8.1",
+          "sqlparse >=0.3.1",
+          "python-tzdata[when=\"__win\"]",
+          "python >=3.10"
+        ],
+        "fn": "Django-5.1.7-py3-none-any.whl",
+        "sha256": "9b4a961fde52965d5469f1a78a62e402d5d49ffb248793f28dc85cb65417c836",
+        "size": 8276912,
+        "subdir": "noarch",
+        "timestamp": 1765456730,
+        "noarch": "python",
+        "url": "https://files.pythonhosted.org/packages/ba/0f/7e042df3d462d39ae01b27a09ee76653692442bc3701fbfa6cb38e12889d/Django-5.1.7-py3-none-any.whl",
+        "extra_depends": {
+          "argon2": [
+            "argon2-cffi >=19.1.0"
+          ],
+          "bcrypt": [
+            "bcrypt"
+          ]
+        }
       }
     }
   }

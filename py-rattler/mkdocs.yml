@@ -162,6 +162,8 @@ nav:
           - TransactionError: transaction_error.md
 
 extra:
+  version:
+    provider: mike
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/prefix-dev
@@ -175,6 +177,8 @@ extra:
       link: https://twitter.com/prefix_dev
 
 plugins:
+  - mike:
+      deploy_prefix: py-rattler
   - mkdocstrings:
       handlers:
         python:

@@ -13,12 +13,15 @@ use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use url::{ParseError, Url};
 
-use crate::mirror_middleware::create_404_response;
+use crate::{mirror_middleware::create_404_response, LazyClient};
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    #[error("Reqwest middleware error: {0}")]
+    ReqwestMiddleware(#[from] reqwest_middleware::Error),
 
     #[error("URL parse error: {0}")]
     ParseError(#[from] ParseError),
@@ -28,11 +31,27 @@ enum OciMiddlewareError {
 
     #[error("Layer not found")]
     LayerNotFound,
+
+    #[error("Invalid OCI URL '{0}': {1}")]
+    InvalidUrl(Url, &'static str),
 }
 
 /// Middleware to handle `oci://` URLs
-#[derive(Default, Debug, Clone)]
-pub struct OciMiddleware;
+#[derive(Debug, Clone)]
+pub struct OciMiddleware {
+    /// Shared HTTP client reused across all OCI requests to avoid creating a
+    /// new connection pool on every token fetch or manifest pull.
+    client: LazyClient,
+}
+
+impl OciMiddleware {
+    /// Create a new [`OciMiddleware`] reusing the provided HTTP client.
+    pub fn new(client: impl Into<LazyClient>) -> Self {
+        Self {
+            client: client.into(),
+        }
+    }
+}
 
 /// The action to perform on the OCI registry
 pub enum OciAction {
@@ -60,10 +79,14 @@ impl Display for OciAction {
 }
 
 // [oci://ghcr.io/channel-mirrors/conda-forge]/[osx-arm64/xtensor]
-async fn get_token(url: &OCIUrl, action: OciAction) -> Result<String, OciMiddlewareError> {
+async fn get_token(
+    client: &LazyClient,
+    url: &OCIUrl,
+    action: OciAction,
+) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
 
-    let response = reqwest::get(token_url.clone()).await?;
+    let response = client.client().get(token_url.clone()).send().await?;
 
     match response.error_for_status() {
         Ok(response) => {
@@ -124,9 +147,14 @@ impl OCIUrl {
         format!("https://{}/v2/{}/blobs/{}", self.host, self.path, sha256).parse()
     }
 
-    pub fn new(url: &Url) -> Result<Self, ParseError> {
+    pub fn new(url: &Url) -> Result<Self, OciMiddlewareError> {
         // get filename (last segment of path)
-        let filename = url.path_segments().unwrap().next_back().unwrap();
+        let filename = url
+            .path_segments()
+            .and_then(|mut s| s.next_back())
+            .ok_or_else(|| {
+                OciMiddlewareError::InvalidUrl(url.clone(), "URL has no path segments")
+            })?;
 
         let mut res = OCIUrl {
             url: url.clone(),
@@ -142,14 +170,34 @@ impl OCIUrl {
         // because we don't want to introduce cyclic dependencies
         if let Some(archive_name) = filename.strip_suffix(".conda") {
             let parts = archive_name.rsplitn(3, '-').collect::<Vec<&str>>();
-            computed_filename = parts[2].to_string();
-            res.tag = version_build_tag(&format!("{}-{}", parts[1], parts[0]));
-            res.media_type = "application/vnd.conda.package.v2".to_string();
+            match parts.as_slice() {
+                [build, version, name] => {
+                    computed_filename = name.to_string();
+                    res.tag = version_build_tag(&format!("{version}-{build}"));
+                    res.media_type = "application/vnd.conda.package.v2".to_string();
+                }
+                _ => {
+                    return Err(OciMiddlewareError::InvalidUrl(
+                        url.clone(),
+                        "package filename must have the form name-version-build.conda",
+                    ))
+                }
+            }
         } else if let Some(archive_name) = filename.strip_suffix(".tar.bz2") {
             let parts = archive_name.rsplitn(3, '-').collect::<Vec<&str>>();
-            computed_filename = parts[2].to_string();
-            res.tag = version_build_tag(&format!("{}-{}", parts[1], parts[0]));
-            res.media_type = "application/vnd.conda.package.v1".to_string();
+            match parts.as_slice() {
+                [build, version, name] => {
+                    computed_filename = name.to_string();
+                    res.tag = version_build_tag(&format!("{version}-{build}"));
+                    res.media_type = "application/vnd.conda.package.v1".to_string();
+                }
+                _ => {
+                    return Err(OciMiddlewareError::InvalidUrl(
+                        url.clone(),
+                        "package filename must have the form name-version-build.tar.bz2",
+                    ))
+                }
+            }
         } else if filename.starts_with("repodata.json") {
             computed_filename = "repodata.json".to_string();
             if filename == "repodata.json" {
@@ -168,14 +216,17 @@ impl OCIUrl {
             computed_filename = format!("zzz{computed_filename}");
         }
 
-        res.url = url.join(&computed_filename).unwrap();
+        res.url = url.join(&computed_filename)?;
         res.path = res.url.path().trim_start_matches('/').to_string();
         Ok(res)
     }
 
-    pub async fn get_blob_url(req: &mut Request) -> Result<(), OciMiddlewareError> {
+    pub async fn get_blob_url(
+        client: &LazyClient,
+        req: &mut Request,
+    ) -> Result<(), OciMiddlewareError> {
         let oci_url = OCIUrl::new(req.url())?;
-        let token = get_token(&oci_url, OciAction::Pull).await?;
+        let token = get_token(client, &oci_url, OciAction::Pull).await?;
 
         let mut header = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))?;
         header.set_sensitive(true);
@@ -194,7 +245,8 @@ impl OCIUrl {
             // get the tag from the URL retrieve the manifest
             let manifest_url = oci_url.manifest_url()?; // TODO: handle error
 
-            let manifest = reqwest::Client::new()
+            let manifest = client
+                .client()
                 .get(manifest_url)
                 .bearer_auth(&token)
                 .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
@@ -254,7 +306,7 @@ impl Middleware for OciMiddleware {
             return next.run(req, extensions).await;
         }
 
-        let res = OCIUrl::get_blob_url(&mut req).await;
+        let res = OCIUrl::get_blob_url(&self.client, &mut req).await;
 
         match res {
             Ok(_) => next.run(req, extensions).await,
@@ -283,9 +335,9 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
-        let middleware = OciMiddleware;
-
         let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
             .with(middleware)
             .build();
@@ -316,9 +368,9 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
-        let middleware = OciMiddleware;
-
         let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
             .with(middleware)
             .build();

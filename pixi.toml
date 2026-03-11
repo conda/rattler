@@ -2,10 +2,10 @@
 name = "rattler"
 description = "Rust library to install conda environments"
 authors = [
-    "Wolf Vollprecht <wolf@prefix.dev>",
-    "Bas Zalmstra <bas@prefix.dev>",
-    "Tim de Jager <tim@prefix.dev>",
-    "Ruben Arts <ruben@prefix.dev>",
+  "Wolf Vollprecht <wolf@prefix.dev>",
+  "Bas Zalmstra <bas@prefix.dev>",
+  "Tim de Jager <tim@prefix.dev>",
+  "Ruben Arts <ruben@prefix.dev>",
 ]
 channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
@@ -51,6 +51,8 @@ dprint = ">=0.50.0,<0.51"
 lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 shellcheck = ">=0.10.0,<0.11"
+[feature.lint.target.unix.dependencies]
+vouch = "*"
 
 [feature.lint.tasks]
 actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
@@ -72,7 +74,7 @@ cargo-fmt = "cargo fmt --all"
 cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::dbg_macro"
 
 [environments]
-lint = { features = [ "lint" ], solve-group = "default" }
+lint = { features = ["lint"], solve-group = "default" }
 
 #------------------------------
 # Minio E2E test

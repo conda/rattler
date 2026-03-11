@@ -28,6 +28,7 @@ pub struct SolverCase<'a> {
     exclude_newer: Option<DateTime<Utc>>,
     min_age: Option<MinimumAgeConfig>,
     strategy: SolveStrategy,
+    dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
     expect_extras: HashMap<String, Vec<String>>,
@@ -47,6 +48,7 @@ impl<'a> SolverCase<'a> {
             exclude_newer: None,
             min_age: None,
             strategy: SolveStrategy::default(),
+            dependency_overrides: Vec::new(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
             expect_extras: HashMap::new(),
@@ -127,6 +129,23 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Sets dependency overrides for the solve.
+    pub fn dependency_overrides(
+        mut self,
+        overrides: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Self {
+        self.dependency_overrides = overrides
+            .into_iter()
+            .map(|(pkg, dep)| {
+                (
+                    MatchSpec::from_str(pkg, ParseMatchSpecOptions::lenient()).unwrap(),
+                    MatchSpec::from_str(dep, ParseMatchSpecOptions::lenient()).unwrap(),
+                )
+            })
+            .collect();
+        self
+    }
+
     /// Sets the solve strategy (e.g., `LowestVersion`, `LowestVersionDirect`).
     pub fn strategy(mut self, strategy: SolveStrategy) -> Self {
         self.strategy = strategy;
@@ -184,6 +203,7 @@ impl<'a> SolverCase<'a> {
             exclude_newer: self.exclude_newer,
             min_age: self.min_age.clone(),
             strategy: self.strategy,
+            dependency_overrides: self.dependency_overrides.clone(),
             ..SolverTask::from_iter(repo_refs)
         };
 

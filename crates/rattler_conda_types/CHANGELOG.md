@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.4...rattler_conda_types-v0.43.5) - 2026-02-25
+
+### Other
+
+- experimental repodata v3 ([#2093](https://github.com/conda/rattler/pull/2093))
+
+## [0.43.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.3...rattler_conda_types-v0.43.4) - 2026-02-20
+
+### Fixed
+
+- track features package record ordering ([#2092](https://github.com/conda/rattler/pull/2092))
+
 ## [0.43.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.2...rattler_conda_types-v0.43.3) - 2026-02-19
 
 ### Added

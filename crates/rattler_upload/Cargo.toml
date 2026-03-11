@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.4.13"
+version = "0.4.15"
 edition.workspace = true
 authors = [
   "Wolf Vollprecht <w.vollprecht@gmail.com>",
@@ -77,3 +77,6 @@ sha2 = { workspace = true, features = ["asm"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sha2 = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }

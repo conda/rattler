@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from rattler.rattler import PyAboutJson
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class AboutJson:
@@ -73,6 +76,13 @@ class AboutJson:
         ```
         """
         return AboutJson._from_py_about_json(PyAboutJson.from_str(string))
+
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> AboutJson:
+        """
+        Fetches `info/about.json` from a remote package archive URL.
+        """
+        return cls._from_py_about_json(await PyAboutJson.from_remote_url(client._client, url))
 
     @staticmethod
     def package_path() -> Path:
@@ -209,6 +219,29 @@ class AboutJson:
     @home.setter
     def home(self, value: List[str]) -> None:
         self._inner.home = value
+
+    @property
+    def extra(self) -> dict[str, Any]:
+        """
+        The JSON-serializable `extra` metadata attached to `about.json`.
+
+        Examples
+        --------
+        ```python
+        >>> about = AboutJson.from_str('{"extra": {"flow_id": "2024.08.13"}}')
+        >>> about.extra
+        {'flow_id': '2024.08.13'}
+        >>> about.extra = {"nested": {"value": [1, 2, None]}}
+        >>> about.extra
+        {'nested': {'value': [1, 2, None]}}
+        >>>
+        ```
+        """
+        return self._inner.extra
+
+    @extra.setter
+    def extra(self, value: dict[str, Any]) -> None:
+        self._inner.extra = value
 
     @property
     def license(self) -> Optional[str]:
