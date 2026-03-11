@@ -933,9 +933,9 @@ mod flatten_tests {
         let lockfile = make_multi_env_lockfile();
 
         for ((env_name, platform), flat_lf) in lockfile.flatten_by_env_plat() {
-            let env = flat_lf.environment(&env_name).unwrap_or_else(|| {
-                panic!("Expected env '{}' to exist", env_name)
-            });
+            let env = flat_lf
+                .environment(&env_name)
+                .unwrap_or_else(|| panic!("Expected env '{}' to exist", env_name));
             let platforms: Vec<_> = env.platforms().collect();
             assert_eq!(
                 platforms.len(),
