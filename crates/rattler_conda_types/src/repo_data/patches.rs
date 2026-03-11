@@ -285,20 +285,15 @@ pub fn apply_patches_impl(
     for identifier in instructions.remove.iter() {
         match identifier.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                if packages.contains_key(identifier) {
-                    removed.insert(identifier.clone());
-                }
+                removed.insert(identifier.clone());
 
-                // also mark equivalent .conda package as removed if it exists
-                let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
-                if conda_packages.contains_key(&conda_identifier) {
-                    removed.insert(conda_identifier);
-                }
+                // also mark equivalent .conda package as removed
+                let conda_identifier =
+                    identifier.with_archive_type(CondaArchiveType::Conda.into());
+                removed.insert(conda_identifier);
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                if conda_packages.contains_key(identifier) {
-                    removed.insert(identifier.clone());
-                }
+                removed.insert(identifier.clone());
             }
             DistArchiveType::Wheel(_) => {
                 // Wheel packages are stored in v3.whl; removal by
