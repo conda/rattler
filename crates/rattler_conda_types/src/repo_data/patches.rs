@@ -279,25 +279,24 @@ pub fn apply_patches_impl(
         }
     }
 
-    // remove packages that have been removed
+    // Mark packages as removed. Note: we only add them to the `removed` set
+    // and do NOT remove them from the package maps. The `removed` key signals
+    // that a package has been yanked, but its metadata should remain available.
     for identifier in instructions.remove.iter() {
         match identifier.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                if packages.shift_remove_entry(identifier).is_some() {
+                if packages.contains_key(identifier) {
                     removed.insert(identifier.clone());
                 }
 
-                // also remove equivalent .conda package if it exists
+                // also mark equivalent .conda package as removed if it exists
                 let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
-                if conda_packages
-                    .shift_remove_entry(&conda_identifier)
-                    .is_some()
-                {
+                if conda_packages.contains_key(&conda_identifier) {
                     removed.insert(conda_identifier);
                 }
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                if conda_packages.shift_remove_entry(identifier).is_some() {
+                if conda_packages.contains_key(identifier) {
                     removed.insert(identifier.clone());
                 }
             }
