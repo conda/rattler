@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Mode"],"fn":["download_and_cache_file","download_and_cache_file_async","fetch_test_conda_forge_repodata","fetch_test_conda_forge_repodata_async","project_root","test_data_dir"],"mod":["libsolv_bindings"]};

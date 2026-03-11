@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["GitReference","SourceLocation"],"struct":["GitSourceLocation","PathSourceLocation","UrlSourceLocation"]};

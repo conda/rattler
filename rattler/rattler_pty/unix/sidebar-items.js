@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["PtyProcess","PtyProcessOptions","PtySession"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MatchSpecUrlError"],"mod":["condition","matcher","package_name_matcher","parse"],"struct":["MatchSpec","NamelessMatchSpec"],"trait":["Matches"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FileType","LinkFileError","LinkMethod"],"fn":["copy_and_replace_cstring_placeholder","copy_and_replace_placeholders","copy_and_replace_textual_placeholder","link_file"],"struct":["LinkedFile"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AttestationSource","ServerType"],"struct":["AnacondaData","AnacondaOpts","ArtifactoryData","ArtifactoryOpts","CommonData","CommonOpts","CondaForgeData","CondaForgeOpts","ForceOverwrite","PrefixData","PrefixOpts","QuetzData","QuetzOpts","S3Opts","SkipExisting","UploadOpts"]};

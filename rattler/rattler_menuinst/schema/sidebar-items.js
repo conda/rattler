@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CFBundleTypeRole","Environment","LSHandlerRank","NameField"],"struct":["BasePlatformSpecific","CFBundleDocumentTypesModel","CFBundleURLTypesModel","Linux","MacOS","MacOSVersion","MenuInstSchema","MenuItem","MenuItemCommand","MenuItemNameDict","NameComplex","Platform","Platforms","UTTypeDeclarationModel","Windows"]};

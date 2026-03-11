@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["S3AddressingStyleOpts"],"struct":["S3CredentialsOpts"]};
