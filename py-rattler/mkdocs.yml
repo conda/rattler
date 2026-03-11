@@ -177,8 +177,6 @@ extra:
       link: https://twitter.com/prefix_dev
 
 plugins:
-  - mike:
-      deploy_prefix: py-rattler
   - mkdocstrings:
       handlers:
         python:
@@ -194,6 +192,16 @@ plugins:
       cards_layout: custom
       # Set debug to true to help troubleshoot social card generation issues
       debug: false
+  - mike:
+      deploy_prefix: py-rattler
+      # These fields are all optional; the defaults are as below...
+      # alias_type: symlink
+      # redirect_template: null
+      # canonical_version: null
+      # version_selector: true
+      # css_dir: css
+      # javascript_dir: js
+  # llmstxt must come after the mike plugin:
   - llmstxt:
       enabled: !ENV [CI, false]
       full_output: llms-full.txt
