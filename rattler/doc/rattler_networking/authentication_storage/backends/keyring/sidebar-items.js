@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["KeyringAuthenticationStorageError"],"struct":["KeyringAuthenticationStorage"]};

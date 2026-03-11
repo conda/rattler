@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Jitter","RetryDecision"],"fn":["default_retry_policy"],"struct":["DoNotRetryPolicy","ExponentialBackoff","ExponentialBackoffBuilder","ExponentialBackoffTimed"],"trait":["RetryPolicy"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["default_max_concurrent_downloads","default_max_concurrent_solves"],"struct":["ConcurrencyConfig"]};

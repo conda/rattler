@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cache_repodata"],"struct":["LibcByteSlice","RepoData","Solver"]};

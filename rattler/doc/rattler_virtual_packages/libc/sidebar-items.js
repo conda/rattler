@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DetectLibCError"],"fn":["libc_family_and_version"]};

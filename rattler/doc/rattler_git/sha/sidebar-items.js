@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["OidParseError"],"struct":["GitOid","GitSha"]};

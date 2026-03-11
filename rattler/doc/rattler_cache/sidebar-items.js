@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PACKAGE_CACHE_DIR","REPODATA_CACHE_DIR","RUN_EXPORTS_CACHE_DIR"],"fn":["default_cache_dir","ensure_cache_dir"],"mod":["package_cache","run_exports_cache","validation"]};

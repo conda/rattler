@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["GitResolverError"],"struct":["GitResolver","RepositoryReference","ResolvedRepositoryReference"]};

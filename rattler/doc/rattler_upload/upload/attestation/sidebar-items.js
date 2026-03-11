@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_attestation"],"struct":["AttestationConfig","AttestationResponse","CondaV1Predicate"]};

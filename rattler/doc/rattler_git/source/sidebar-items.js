@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cache_digest"],"struct":["Fetch","GitSource"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["store_credentials_from_url"],"static":["GIT_STORE"],"struct":["Credentials","GitStore"]};

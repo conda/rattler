@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MenuInstError"],"fn":["install_menuitems","install_menuitems_for_record","is_menu_schema_path","remove_menu_items","remove_menuitems_for_record"],"mod":["schema"]};

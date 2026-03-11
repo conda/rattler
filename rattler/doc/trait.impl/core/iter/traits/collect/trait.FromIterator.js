@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["rattler_solve",[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/iter/traits/collect/trait.FromIterator.html\" title=\"trait core::iter::traits::collect::FromIterator\">FromIterator</a>&lt;&amp;'a RepoDataRecord&gt; for <a class=\"struct\" href=\"rattler_solve/libsolv_c/struct.RepoData.html\" title=\"struct rattler_solve::libsolv_c::RepoData\">RepoData</a>&lt;'a&gt;"],["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/iter/traits/collect/trait.FromIterator.html\" title=\"trait core::iter::traits::collect::FromIterator\">FromIterator</a>&lt;&amp;'a RepoDataRecord&gt; for <a class=\"struct\" href=\"rattler_solve/resolvo/struct.RepoData.html\" title=\"struct rattler_solve::resolvo::RepoData\">RepoData</a>&lt;'a&gt;"],["impl&lt;'r, I: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/iter/traits/collect/trait.IntoIterator.html\" title=\"trait core::iter::traits::collect::IntoIterator\">IntoIterator</a>&lt;Item = &amp;'r RepoDataRecord&gt;&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/iter/traits/collect/trait.FromIterator.html\" title=\"trait core::iter::traits::collect::FromIterator\">FromIterator</a>&lt;I&gt; for <a class=\"struct\" href=\"rattler_solve/struct.SolverTask.html\" title=\"struct rattler_solve::SolverTask\">SolverTask</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.93.1/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"struct\" href=\"rattler_solve/struct.RepoDataIter.html\" title=\"struct rattler_solve::RepoDataIter\">RepoDataIter</a>&lt;I&gt;&gt;&gt;"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1638]}

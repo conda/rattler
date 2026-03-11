@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MMAP_HEURISTIC_THRESHOLD"],"fn":["collect_minimal_prefix_records"],"struct":["MinimalPrefixRecord"],"trait":["MinimalPrefixCollection"]};

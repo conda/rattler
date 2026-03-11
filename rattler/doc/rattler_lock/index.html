@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Definitions for a lock-file format that stores information about pinned dependencies from both the Conda and Pypi ecosystem."><title>rattler_lock - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="rattler_lock" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+
+</head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate rattler_lock</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../rattler_lock/index.html">rattler_<wbr>lock</a><span class="version">0.26.16</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#design-goals" title="Design goals">Design goals</a></li><li><a href="#relation-to-conda-lock" title="Relation to conda-lock">Relation to conda-lock</a></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>rattler_<wbr>lock</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/rattler_lock/lib.rs.html#1-742">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Definitions for a lock-file format that stores information about pinned
+dependencies from both the Conda and Pypi ecosystem.</p>
+<p>The crate is structured in two API levels.</p>
+<ol>
+<li>The top level API accessible through the <a href="struct.LockFile.html" title="struct rattler_lock::LockFile"><code>LockFile</code></a> type that exposes
+high level access to the lock-file. This API is intended to be relatively
+stable and is the preferred way to interact with the lock-file.</li>
+<li>The <code>*Data</code> types. These are lower level types that expose more of the
+internal data structures used in the crate. These types are not intended
+to be stable and are subject to change over time. These types are used
+internally by the top level API. Also note that only a subset of the
+<code>*Data</code> types are exposed. See <code>[crate::PyPiPackageData]</code>,
+<code>[crate::CondaPackageData]</code> for examples.</li>
+</ol>
+<h3 id="design-goals"><a class="doc-anchor" href="#design-goals">§</a>Design goals</h3>
+<p>The goal of the lock-file format is:</p>
+<ul>
+<li>To be complete. The lock-file should contain all the information needed to
+recreate environments even years after it was created. As long as the
+package data persists that a lock-file refers to, it should be possible to
+recreate the environment.</li>
+<li>To be human readable. Although lock-files are not intended to be edited by
+hand, they should be relatively easy to read and understand. So that when
+a lock-file is checked into version control and someone looks at the diff,
+they can understand what changed.</li>
+<li>To be easily parse-able. It should be fairly straightforward to create a
+parser for the format so that it can be used in other tools.</li>
+<li>To reduce diff size when the content changes. The order of content in the
+serialized lock-file should be fixed to ensure that the diff size is
+minimized when the content changes.</li>
+<li>To be reproducible. Recreating the lock-file with the exact same input
+(including externally fetched data) should yield the same lock-file
+byte-for-byte.</li>
+<li>To be statically verifiable. Given the specifications of the packages that
+went into a lock-file it should be possible to cheaply verify whether or
+not the specifications are still satisfied by the packages stored in the
+lock-file.</li>
+<li>Backward compatible. Older version of lock-files should still be readable
+by never versions of this crate.</li>
+</ul>
+<h3 id="relation-to-conda-lock"><a class="doc-anchor" href="#relation-to-conda-lock">§</a>Relation to conda-lock</h3>
+<p>Initially the lock-file format was based on <a href="https://github.com/conda/conda-lock"><code>conda-lock</code></a>
+but over time significant changes have been made compared to the original
+conda-lock format. Conda-lock files (e.g. <code>conda-lock.yml</code> files) can still
+be parsed by this crate but the serialization format changed significantly.
+This means files created by this crate are not compatible with conda-lock.</p>
+<p>Conda-lock stores a lot of metadata to be able to verify if the lock-file is
+still valid given the sources/inputs. For example conda-lock contains a
+<code>content-hash</code> which is a hash of all the input data of the lock-file.
+This crate approaches this differently by storing enough information in the
+lock-file to be able to verify if the lock-file still satisfies an
+input/source without requiring additional input (e.g. network requests) or
+expensive solves. We call this static satisfiability verification.</p>
+<p>Conda-lock stores a custom <strong>partial</strong> representation of a
+[<code>rattler_conda_types::RepoDataRecord</code>] in the lock-file. This poses a
+problem when incrementally updating an environment. To only partially update
+packages in the lock-file without completely recreating it, the records
+stored in the lock-file need to be passed to the solver as “preferred”
+packages. Since [<code>rattler_conda_types::MatchSpec</code>] can match on any field
+present in a [<code>rattler_conda_types::PackageRecord</code>] we need to store all
+fields in the lock-file not just a subset.
+To that end this crate stores the full
+[<code>rattler_conda_types::PackageRecord</code>] in the lock-file. This allows
+completely recreating the record that was read from repodata when the
+lock-file was created which will allow a correct incremental update.</p>
+<p>Conda-lock requires users to create multiple lock-files when they want to
+store multiple environments. This crate allows storing multiple environments
+for different platforms and with different channels in a single lock-file.
+This allows storing production- and test environments in a single file.</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.PypiPrereleaseMode"><code>pub use options::<a class="enum" href="options/enum.PypiPrereleaseMode.html" title="enum rattler_lock::options::PypiPrereleaseMode">PypiPrereleaseMode</a>;</code></dt><dt id="reexport.SolveOptions"><code>pub use options::<a class="struct" href="options/struct.SolveOptions.html" title="struct rattler_lock::options::SolveOptions">SolveOptions</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="options/index.html" title="mod rattler_lock::options">options</a></dt><dd>Defines <a href="options/struct.SolveOptions.html" title="struct rattler_lock::options::SolveOptions"><code>SolveOptions</code></a> and reexports from <code>rattler_solve</code> that are used.</dd><dt><a class="mod" href="source/index.html" title="mod rattler_lock::source">source</a></dt><dd>Provides data types that are used to describe the location of a source
+package.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Channel.html" title="struct rattler_lock::Channel">Channel</a></dt><dd>The conda channel that was used for the dependency</dd><dt><a class="struct" href="struct.CondaBinaryData.html" title="struct rattler_lock::CondaBinaryData">Conda<wbr>Binary<wbr>Data</a></dt><dd>Information about a binary conda package stored in the lock-file.</dd><dt><a class="struct" href="struct.CondaSourceData.html" title="struct rattler_lock::CondaSourceData">Conda<wbr>Source<wbr>Data</a></dt><dd>Information about a source package stored in the lock-file.</dd><dt><a class="struct" href="struct.Environment.html" title="struct rattler_lock::Environment">Environment</a></dt><dd>Information about a specific environment in the lock-file.</dd><dt><a class="struct" href="struct.InputHash.html" title="struct rattler_lock::InputHash">Input<wbr>Hash</a></dt><dd>A record of input files that were used to define the metadata of the
+package.</dd><dt><a class="struct" href="struct.LockFile.html" title="struct rattler_lock::LockFile">Lock<wbr>File</a></dt><dd>Represents a lock-file for both Conda packages and Pypi packages.</dd><dt><a class="struct" href="struct.LockFileBuilder.html" title="struct rattler_lock::LockFileBuilder">Lock<wbr>File<wbr>Builder</a></dt><dd>A struct to incrementally build a lock-file.</dd><dt><a class="struct" href="struct.OwnedEnvironment.html" title="struct rattler_lock::OwnedEnvironment">Owned<wbr>Environment</a></dt><dd>An owned version of an <a href="struct.Environment.html" title="struct rattler_lock::Environment"><code>Environment</code></a>.</dd><dt><a class="struct" href="struct.PypiIndexes.html" title="struct rattler_lock::PypiIndexes">Pypi<wbr>Indexes</a></dt><dd>Defines the pypi indexes that were used during solving.</dd><dt><a class="struct" href="struct.PypiPackageData.html" title="struct rattler_lock::PypiPackageData">Pypi<wbr>Package<wbr>Data</a></dt><dd>A pinned Pypi package</dd><dt><a class="struct" href="struct.PypiPackageEnvironmentData.html" title="struct rattler_lock::PypiPackageEnvironmentData">Pypi<wbr>Package<wbr>Environment<wbr>Data</a></dt><dd>Additional runtime configuration of a package. Multiple environments/platforms might refer to
+the same pypi package but with different extras enabled.</dd><dt><a class="struct" href="struct.PypiSourceTreeHashable.html" title="struct rattler_lock::PypiSourceTreeHashable">Pypi<wbr>Source<wbr>Tree<wbr>Hashable</a></dt><dd>A struct that wraps the hashable part of a source package.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.CondaPackageData.html" title="enum rattler_lock::CondaPackageData">Conda<wbr>Package<wbr>Data</a></dt><dd>A locked conda dependency can be either a binary package or a source
+package.</dd><dt><a class="enum" href="enum.ConversionError.html" title="enum rattler_lock::ConversionError">Conversion<wbr>Error</a></dt><dd>Error used when converting from <code>repo_data</code> module to conda lock module</dd><dt><a class="enum" href="enum.FileFormatVersion.html" title="enum rattler_lock::FileFormatVersion">File<wbr>Format<wbr>Version</a></dt><dd>The different version of the lock-file format.</dd><dt><a class="enum" href="enum.FindLinksUrlOrPath.html" title="enum rattler_lock::FindLinksUrlOrPath">Find<wbr>Links<wbr>UrlOr<wbr>Path</a></dt><dd>A flat index is a static source of</dd><dt><a class="enum" href="enum.GitShallowSpec.html" title="enum rattler_lock::GitShallowSpec">GitShallow<wbr>Spec</a></dt><dd>Shallow git specification for tracking the originally requested reference.</dd><dt><a class="enum" href="enum.LockedPackage.html" title="enum rattler_lock::LockedPackage">Locked<wbr>Package</a></dt><dd>Information about a single locked package in an environment.</dd><dt><a class="enum" href="enum.LockedPackageRef.html" title="enum rattler_lock::LockedPackageRef">Locked<wbr>Package<wbr>Ref</a></dt><dd>Data related to a single locked package in an <a href="struct.Environment.html" title="struct rattler_lock::Environment"><code>Environment</code></a>.</dd><dt><a class="enum" href="enum.PackageBuildSource.html" title="enum rattler_lock::PackageBuildSource">Package<wbr>Build<wbr>Source</a></dt><dd>Package build source location for reproducible builds.</dd><dt><a class="enum" href="enum.PackageHashes.html" title="enum rattler_lock::PackageHashes">Package<wbr>Hashes</a></dt><dd>This implementation of the <code>Deserialize</code> trait for the <code>PackageHashes</code> struct</dd><dt><a class="enum" href="enum.ParseCondaLockError.html" title="enum rattler_lock::ParseCondaLockError">Parse<wbr>Conda<wbr>Lock<wbr>Error</a></dt><dt><a class="enum" href="enum.UrlOrPath.html" title="enum rattler_lock::UrlOrPath">UrlOr<wbr>Path</a></dt><dd>Represents either a URL or a path.</dd><dt><a class="enum" href="enum.VariantValue.html" title="enum rattler_lock::VariantValue">Variant<wbr>Value</a></dt><dd>Represents a conda-build variant value.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.DEFAULT_ENVIRONMENT_NAME.html" title="constant rattler_lock::DEFAULT_ENVIRONMENT_NAME">DEFAULT_<wbr>ENVIRONMENT_<wbr>NAME</a></dt><dd>The name of the default environment in a <a href="struct.LockFile.html" title="struct rattler_lock::LockFile"><code>LockFile</code></a>. This is the
+environment name that is used when no explicit environment name is
+specified.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.Matches.html" title="trait rattler_lock::Matches">Matches</a></dt><dd>A trait that defines the behavior of matching a spec against a record.</dd></dl></section></div></main></body></html>

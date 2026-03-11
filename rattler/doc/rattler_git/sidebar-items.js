@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GIT_SSH_CLONING_WARNING_MSG","GIT_URL_QUERY_REV_TYPE"],"enum":["GitError"],"mod":["credentials","git","resolver","sha","source","url"],"struct":["GitUrl"],"trait":["Reporter"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_repo_data"],"struct":["FetchRepoDataOptions"]};

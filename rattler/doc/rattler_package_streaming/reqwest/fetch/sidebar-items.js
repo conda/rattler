@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_file_from_remote_url","fetch_package_file_from_remote_url"]};

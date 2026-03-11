@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CancelReason","NameType","SolverMatchSpec","SolverPackageRecord"],"fn":["add_extra","extra_version_set"],"struct":["CondaDependencyProvider","DependencyOverride","RepoData","Solver"]};
