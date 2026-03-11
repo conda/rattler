@@ -288,8 +288,7 @@ pub fn apply_patches_impl(
                 removed.insert(identifier.clone());
 
                 // also mark equivalent .conda package as removed if it exists
-                let conda_identifier =
-                    identifier.with_archive_type(CondaArchiveType::Conda.into());
+                let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
                 if conda_packages.contains_key(&conda_identifier) {
                     removed.insert(conda_identifier);
                 }
