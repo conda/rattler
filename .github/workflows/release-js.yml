@@ -73,7 +73,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
         with:
           manifest-path: js-rattler/pixi.toml
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c676846f29d98ff6b0106d3608c7ffd4048af17b # v2.9.0
         with:
           workspaces: js-rattler
       - name: Install Node.js (for npm publish)
