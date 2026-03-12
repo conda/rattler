@@ -26,7 +26,10 @@ use std::{borrow::Cow, collections::BTreeMap};
 use rattler_conda_types::{package::DistArchiveIdentifier, ChannelUrl, PackageRecord};
 
 use crate::{
-    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
+    conda::{
+        CondaBinaryData, CondaSourceData, FullSourceMetadata, PackageBuildSource, SourceMetadata,
+        VariantValue,
+    },
     source::SourceLocation,
     CondaPackageData, UrlOrPath,
 };
@@ -153,20 +156,25 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
             LegacyCondaPackageData::Binary(data) => {
                 let file_id = DistArchiveIdentifier::try_from_filename(&data.file_name)
                     .expect("This file name must be valid here");
-                CondaPackageData::Binary(CondaBinaryData {
+                CondaPackageData::Binary(Box::new(CondaBinaryData {
                     package_record: data.package_record,
                     location: data.location,
                     file_name: file_id,
                     channel: data.channel,
-                })
+                }))
             }
-            LegacyCondaPackageData::Source(data) => CondaPackageData::Source(CondaSourceData {
-                package_record: data.package_record,
-                location: data.location,
-                variants: data.variants,
-                package_build_source: data.package_build_source,
-                sources: data.sources,
-            }),
+            LegacyCondaPackageData::Source(data) => {
+                CondaPackageData::Source(Box::new(CondaSourceData {
+                    location: data.location,
+                    package_build_source: data.package_build_source,
+                    variants: data.variants,
+                    identifier_hash: None,
+                    metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
+                        package_record: data.package_record,
+                        sources: data.sources,
+                    })),
+                }))
+            }
         }
     }
 }

@@ -195,6 +195,7 @@ wasmtimer = "0.4.1"
 which = "8.0.0"
 windows-sys = { version = "0.61.2", default-features = false }
 winver = { version = "1.0.0" }
+xxhash-rust = "0.8.15"
 zip = { version = "8.2.0", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
