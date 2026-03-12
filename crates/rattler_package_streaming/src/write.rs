@@ -75,20 +75,23 @@ fn sort_paths(
     base_path: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<PathBuf>), io::Error> {
     let info = Path::new("info/");
-    let mut relative_paths = Vec::with_capacity(paths.len());
-    for p in paths {
-        let rel = p.strip_prefix(base_path).map_err(|_e| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "path '{}' is not under base path '{}'",
-                    p.display(),
-                    base_path.display()
-                ),
-            )
-        })?;
-        relative_paths.push(rel.to_path_buf());
-    }
+    let relative_paths = paths
+        .iter()
+        .map(|p| {
+            p.strip_prefix(base_path)
+                .map(Path::to_path_buf)
+                .map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "path '{}' is not under base path '{}'",
+                            p.display(),
+                            base_path.display()
+                        ),
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = relative_paths
         .into_iter()
