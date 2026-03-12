@@ -127,13 +127,21 @@ impl Middleware for GCSMiddleware {
     ) -> MiddlewareResult<Response> {
         if req.url().scheme() == "gcs" {
             let mut url = req.url().clone();
-            let bucket_name = url.host_str().expect("Host should be present in GCS URL");
+            let bucket_name = url.host_str().ok_or_else(|| {
+                reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                    "Host should be present in GCS URL, got: {url}"
+                ))
+            })?;
             let new_url = format!(
                 "https://storage.googleapis.com/{}{}",
                 bucket_name,
                 url.path()
             );
-            url = Url::parse(&new_url).expect("Failed to parse URL");
+            url = Url::parse(&new_url).map_err(|e| {
+                reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                    "Failed to parse constructed GCS URL '{new_url}': {e}"
+                ))
+            })?;
             *req.url_mut() = url;
             req = self.authenticate(req).await?;
         }
