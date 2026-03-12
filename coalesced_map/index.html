@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A thread-safe, deduplicating map that ensures expensive computations are executed only once per key, even when multiple concurrent requests are made."><title>coalesced_map - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="coalesced_map" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+
+</head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate coalesced_map</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../coalesced_map/index.html">coalesced_<wbr>map</a><span class="version">0.1.2</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#example" title="Example">Example</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>coalesced_<wbr>map</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/coalesced_map/lib.rs.html#1-750">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A thread-safe, deduplicating map that ensures expensive computations are
+executed only once per key, even when multiple concurrent requests are made.</p>
+<p>This map is designed for scenarios where multiple async tasks might request
+the same resource simultaneously. Instead of performing duplicate work, the
+<code>CoalescedMap</code> ensures that only the first request for a given key executes
+the initialization function, while subsequent concurrent requests wait for
+and receive the same result.</p>
+<p>The implementation uses <code>DashMap</code> for thread-safe storage and
+<code>tokio::sync::broadcast</code> channels for coordinating between concurrent
+waiters.</p>
+<h3 id="example"><a class="doc-anchor" href="#example">§</a>Example</h3>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>coalesced_map::{CoalescedMap, CoalescedGetError};
+<span class="kw">use </span>std::{sync::Arc, time::Duration};
+
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() {
+    <span class="comment">// Create with default hasher (RandomState)
+    </span><span class="kw">let </span>cache: CoalescedMap&lt;String, Arc&lt;String&gt;&gt; = CoalescedMap::new();
+
+    <span class="comment">// Or create with custom hasher
+    </span><span class="kw">use </span>std::collections::hash_map::RandomState;
+    <span class="kw">let </span>hasher = RandomState::new();
+    <span class="kw">let </span>cache_with_hasher: CoalescedMap&lt;String, Arc&lt;String&gt;, RandomState&gt; =
+        CoalescedMap::with_hasher(hasher);
+
+    <span class="comment">// Simulate multiple concurrent requests for the same expensive resource
+    </span><span class="kw">let </span>key = <span class="string">"expensive_computation"</span>.to_string();
+
+    <span class="kw">let </span>handle1 = {
+        <span class="kw">let </span>cache = cache.clone();
+        <span class="kw">let </span>key = key.clone();
+        tokio::spawn(<span class="kw">async move </span>{
+            cache.get_or_try_init(key, || <span class="kw">async </span>{
+                <span class="comment">// Simulate expensive work (e.g., network request, file I/O)
+                </span>tokio::time::sleep(Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
+                <span class="macro">println!</span>(<span class="string">"Performing expensive computation..."</span>);
+                <span class="prelude-val">Ok</span>(Arc::new(<span class="string">"computed_result"</span>.to_string()))
+            }).<span class="kw">await
+        </span>})
+    };
+
+    <span class="kw">let </span>handle2 = {
+        <span class="kw">let </span>cache = cache.clone();
+        <span class="kw">let </span>key = key.clone();
+        tokio::spawn(<span class="kw">async move </span>{
+            cache.get_or_try_init(key, || <span class="kw">async </span>{
+                <span class="comment">// This function will NOT be executed due to coalescing
+                </span><span class="macro">println!</span>(<span class="string">"This should not print!"</span>);
+                <span class="prelude-val">Ok</span>(Arc::new(<span class="string">"unused"</span>.to_string()))
+            }).<span class="kw">await
+        </span>})
+    };
+
+    <span class="kw">let </span>result1 = handle1.<span class="kw">await</span>.unwrap().unwrap();
+    <span class="kw">let </span>result2 = handle2.<span class="kw">await</span>.unwrap().unwrap();
+
+    <span class="comment">// Both results are identical (same Arc instance)
+    </span><span class="macro">assert!</span>(Arc::ptr_eq(<span class="kw-2">&amp;</span>result1, <span class="kw-2">&amp;</span>result2));
+    <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>result1, <span class="string">"computed_result"</span>);
+}</code></pre></div></div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CoalescedMap.html" title="struct coalesced_map::CoalescedMap">Coalesced<wbr>Map</a></dt><dd>A thread-safe map that deduplicates concurrent async initialization
+requests.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.CoalescedGetError.html" title="enum coalesced_map::CoalescedGetError">Coalesced<wbr>GetError</a></dt><dd>Error type returned by <a href="struct.CoalescedMap.html#method.get_or_try_init" title="method coalesced_map::CoalescedMap::get_or_try_init"><code>CoalescedMap::get_or_try_init</code></a>.</dd><dt><a class="enum" href="enum.PendingOrFetched.html" title="enum coalesced_map::PendingOrFetched">Pending<wbr>OrFetched</a></dt><dd>Internal state for a coalesced entry.</dd></dl></section></div></main></body></html>

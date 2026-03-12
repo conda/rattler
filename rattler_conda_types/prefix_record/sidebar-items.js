@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LinkType","PathType"],"struct":["Link","PathsEntry","PrefixPaths","PrefixRecord"]};

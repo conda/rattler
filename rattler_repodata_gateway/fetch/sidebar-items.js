@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CacheAction","CacheResult","FetchRepoDataError","RepoDataNotFoundError","Variant"],"fn":["check_variant_availability","fetch_repo_data"],"mod":["no_cache"],"struct":["CachedRepoData","FetchRepoDataOptions","VariantAvailability"]};

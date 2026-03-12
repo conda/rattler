@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FromSDKError","S3AddressingStyle"],"mod":["clap"],"struct":["ResolvedS3Credentials","S3Credentials"]};

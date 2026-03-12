@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_REDACTION_STR"],"fn":["redact_known_secrets_from_url"],"trait":["Redact"]};

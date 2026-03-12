@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChannelPriority","SolveError","SolveStrategy"],"mod":["libsolv_c","resolvo"],"struct":["MinimumAgeConfig","RepoDataIter","SolverTask"],"trait":["IntoRepoData","SolverImpl","SolverRepoData"]};

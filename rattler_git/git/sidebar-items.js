@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GIT_DIR"],"enum":["GitBinaryError","GitReference"],"static":["GIT"]};

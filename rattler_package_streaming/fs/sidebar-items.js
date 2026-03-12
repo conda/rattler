@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract","extract_conda","extract_tar_bz2"]};

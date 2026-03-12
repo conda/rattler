@@ -1,0 +1,9 @@
+(function() {
+    var type_impls = Object.fromEntries([["rattler_digest",[["<details class=\"toggle implementors-toggle\" open><summary><section id=\"impl-From%3CSerializableHash%3CT%3E%3E-for-GenericArray%3Cu8,+%3CT+as+OutputSizeUser%3E::OutputSize%3E\" class=\"impl\"><a class=\"src rightside\" href=\"src/rattler_digest/serde.rs.html#149-153\">Source</a><a href=\"#impl-From%3CSerializableHash%3CT%3E%3E-for-GenericArray%3Cu8,+%3CT+as+OutputSizeUser%3E::OutputSize%3E\" class=\"anchor\">§</a><h3 class=\"code-header\">impl&lt;T: Digest&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"rattler_digest/serde/struct.SerializableHash.html\" title=\"struct rattler_digest::serde::SerializableHash\">SerializableHash</a>&lt;T&gt;&gt; for Output&lt;T&gt;</h3></section></summary><div class=\"impl-items\"><details class=\"toggle method-toggle\" open><summary><section id=\"method.from\" class=\"method trait-impl\"><a class=\"src rightside\" href=\"src/rattler_digest/serde.rs.html#150-152\">Source</a><a href=\"#method.from\" class=\"anchor\">§</a><h4 class=\"code-header\">fn <a href=\"https://doc.rust-lang.org/1.93.1/core/convert/trait.From.html#tymethod.from\" class=\"fn\">from</a>(s: <a class=\"struct\" href=\"rattler_digest/serde/struct.SerializableHash.html\" title=\"struct rattler_digest::serde::SerializableHash\">SerializableHash</a>&lt;T&gt;) -&gt; Self</h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details>","From<SerializableHash<T>>","rattler_digest::Sha256Hash","rattler_digest::Md5Hash","rattler_digest::Blake2b256Hash","rattler_digest::Blake2bMac256Hash"]]]]);
+    if (window.register_type_impls) {
+        window.register_type_impls(type_impls);
+    } else {
+        window.pending_type_impls = type_impls;
+    }
+})()
+//{"start":55,"fragment_lengths":[1708]}

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PackageFilenameError","PackageFormatSelection"],"fn":["load_repo_data_recursively"],"struct":["SparseRepoData"]};

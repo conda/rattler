@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["default_cache_dir"],"mod":["cli","install","package_cache","validation"]};

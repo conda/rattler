@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ActivationError","PathModificationBehavior"],"fn":["prefix_path_entries"],"struct":["ActivationResult","ActivationVariables","Activator"]};

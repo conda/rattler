@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ClobberedPath","PackageName","PathResolver"],"type":["Changes","FromClobbers","ToClobbers"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Arch","Platform"],"struct":["ArchIter","ParseArchError","ParsePlatformError","PlatformIter"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MenuMode","Tracker"],"struct":["LinuxRegisteredMimeFile","LinuxTracker","MacOsTracker","WindowsFileExtension","WindowsTerminalProfile","WindowsTracker","WindowsUrlProtocol"]};

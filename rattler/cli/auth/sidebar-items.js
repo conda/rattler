@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AuthenticationCLIError","ValidationResult"],"fn":["execute"],"mod":["oauth"],"struct":["Args"]};

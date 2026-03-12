@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["path_resolver",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"path_resolver/struct.PackageName.html\" title=\"struct path_resolver::PackageName\">PackageName</a>"]]],["rattler_conda_types",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"rattler_conda_types/prefix/struct.Prefix.html\" title=\"struct rattler_conda_types::prefix::Prefix\">Prefix</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"rattler_conda_types/struct.VersionWithSource.html\" title=\"struct rattler_conda_types::VersionWithSource\">VersionWithSource</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"rattler_conda_types/utils/url_with_trailing_slash/struct.UrlWithTrailingSlash.html\" title=\"struct rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash\">UrlWithTrailingSlash</a>"]]],["rattler_digest",[["impl&lt;T: Digest&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"rattler_digest/serde/struct.SerializableHash.html\" title=\"struct rattler_digest::serde::SerializableHash\">SerializableHash</a>&lt;T&gt;"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[302,1018,360]}

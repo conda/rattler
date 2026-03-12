@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["redact_credentials"],"struct":["CanonicalUrl","RepositoryUrl"]};
