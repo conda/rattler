@@ -80,7 +80,7 @@ fn sort_paths(
         .map(|p| {
             p.strip_prefix(base_path)
                 .map(Path::to_path_buf)
-                .map_err(|_| {
+                .map_err(|_e| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
