@@ -145,7 +145,12 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
 
         if let Some(url) = url {
             let url = url.into_owned();
-            Ok(SourceLocation::Url(UrlSourceLocation { url, md5, sha256 }))
+            Ok(SourceLocation::Url(UrlSourceLocation {
+                url,
+                md5,
+                sha256,
+                subdirectory: subdirectory.as_deref().map(str::to_owned),
+            }))
         } else if let Some(path) = path {
             if subdirectory.is_some() {
                 return Err(SourceLocationError::PathSubdir);

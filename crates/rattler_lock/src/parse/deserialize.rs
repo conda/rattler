@@ -691,12 +691,12 @@ fn parse_from_lock<P>(
             PackageData::Conda(binary) => {
                 let idx = conda_packages.len();
                 binary_url_lookup.insert(binary.location.clone(), idx);
-                conda_packages.push(CondaPackageData::Binary(binary));
+                conda_packages.push(CondaPackageData::Binary(Box::new(binary)));
             }
             PackageData::CondaSource(identifier, source_data) => {
                 let idx = conda_packages.len();
                 source_identifier_lookup.insert(identifier, idx);
-                conda_packages.push(CondaPackageData::Source(source_data));
+                conda_packages.push(CondaPackageData::Source(Box::new(source_data)));
             }
             PackageData::Pypi(p) => {
                 pypi_packages.push(convert_raw_pypi_package(file_version, p, base_dir)?);

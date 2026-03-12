@@ -198,6 +198,7 @@ which = "8.0.0"
 windows-sys = { version = "0.61.2", default-features = false }
 winver = { version = "1.0.0" }
 zip = { version = "8.5.1", default-features = false }
+xxhash-rust = "0.8.15"
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.

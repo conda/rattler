@@ -113,8 +113,12 @@ enum SerializablePackageDataV7<'a> {
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
         match package {
-            PackageData::Conda(CondaPackageData::Binary(binary)) => Self::Conda(binary.into()),
-            PackageData::Conda(CondaPackageData::Source(source)) => Self::Source(source.into()),
+            PackageData::Conda(CondaPackageData::Binary(binary)) => {
+                Self::Conda(binary.as_ref().into())
+            }
+            PackageData::Conda(CondaPackageData::Source(source)) => {
+                Self::Source(source.as_ref().into())
+            }
             PackageData::Pypi(p) => Self::Pypi(p.into()),
         }
     }
@@ -371,7 +375,7 @@ pub enum PackageData<'a> {
 impl PackageData<'_> {
     fn source_name(&self) -> &str {
         match self {
-            PackageData::Conda(p) => p.record().name.as_source(),
+            PackageData::Conda(p) => p.name().as_source(),
             PackageData::Pypi(p) => p.name.as_ref(),
         }
     }
@@ -404,11 +408,11 @@ impl Serialize for CondaPackageData {
     {
         match self {
             CondaPackageData::Binary(binary) => {
-                SerializablePackageDataV7::Conda(v7::CondaPackageDataModel::from(binary))
+                SerializablePackageDataV7::Conda(v7::CondaPackageDataModel::from(binary.as_ref()))
                     .serialize(serializer)
             }
             CondaPackageData::Source(source) => {
-                SerializablePackageDataV7::Source(v7::SourcePackageDataModel::from(source))
+                SerializablePackageDataV7::Source(v7::SourcePackageDataModel::from(source.as_ref()))
                     .serialize(serializer)
             }
         }

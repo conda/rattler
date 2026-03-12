@@ -99,8 +99,9 @@ mod verbatim;
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
-    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource, VariantValue,
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, FullSourceMetadata,
+    GitShallowSpec, InputHash, PackageBuildSource, PartialSourceMetadata, SourceMetadata,
+    VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -534,7 +535,7 @@ impl<'lock> LockedPackageRef<'lock> {
     /// might not be the normalized name.
     pub fn name(self) -> &'lock str {
         match self {
-            LockedPackageRef::Conda(data) => data.record().name.as_source(),
+            LockedPackageRef::Conda(data) => data.name().as_source(),
             LockedPackageRef::Pypi(data) => data.name.as_ref(),
         }
     }
@@ -876,5 +877,138 @@ mod test {
         // But if we render it again, the lockfile should look the same at least
         let rerendered_lock_file_two = parsed_lock_file.render_to_string().unwrap();
         assert_eq!(rendered_lock_file, rerendered_lock_file_two);
+    }
+
+    /// Verify that a source package with partial metadata (no version/subdir)
+    /// round-trips correctly: `record()` returns `None`, the name is preserved,
+    /// and re-serializing + re-parsing produces identical output.
+    #[test]
+    fn test_partial_metadata_roundtrip() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda_source: \"my-partial-pkg[abcd1234] @ my-partial-pkg\"
+packages:
+  - conda_source: \"my-partial-pkg[abcd1234] @ my-partial-pkg\"
+    depends:
+      - python >=3.10
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+
+        let platform = lock_file.platform("linux-64").unwrap();
+        let source_data = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(platform)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_source_conda)
+            .expect("expected a source package");
+
+        // Partial metadata: record() should return None, name() should work.
+        assert!(source_data.record().is_none());
+        assert_eq!(source_data.name().as_source(), "my-partial-pkg");
+        assert_eq!(source_data.depends(), &["python >=3.10".to_string()]);
+
+        // Roundtrip: serialize → re-parse → re-serialize should be identical.
+        let rendered = lock_file.render_to_string().unwrap();
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// Verify that a source identifier hash read from a lock file is stored
+    /// verbatim in the resulting [`crate::CondaSourceData`] and reproduced
+    /// unchanged when the lock file is re-serialized, even if the stored hash
+    /// differs from what the current hash algorithm would compute.
+    #[test]
+    fn test_source_identifier_hash_is_preserved() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda_source: \"my-package[deadbeef] @ my-package\"
+packages:
+  - conda_source: \"my-package[deadbeef] @ my-package\"
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+
+        let platform = lock_file.platform("linux-64").unwrap();
+        let source_data = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(platform)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_source_conda)
+            .expect("expected a source package");
+
+        // The hash read from the lock file must be stored verbatim, not recomputed.
+        assert_eq!(source_data.identifier_hash.as_deref(), Some("deadbeef"));
+
+        // Re-serializing must reproduce the same hash unchanged.
+        let rendered = lock_file.render_to_string().unwrap();
+        assert!(rendered.contains("my-package[deadbeef]"));
+    }
+
+    /// Verify that two source packages with identical data but different stored
+    /// hashes both survive a parse→serialize cycle with their hashes intact.
+    #[test]
+    fn test_identical_source_packages_different_hashes_roundtrip() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda_source: \"my-package[aaaaaaaa] @ my-package\"
+        - conda_source: \"my-package[bbbbbbbb] @ my-package\"
+packages:
+  - conda_source: \"my-package[aaaaaaaa] @ my-package\"
+  - conda_source: \"my-package[bbbbbbbb] @ my-package\"
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+
+        let platform = lock_file.platform("linux-64").unwrap();
+        let source_packages: Vec<_> = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(platform)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_source_conda)
+            .collect();
+
+        assert_eq!(source_packages.len(), 2);
+        let hashes: Vec<_> = source_packages
+            .iter()
+            .map(|s| s.identifier_hash.as_deref())
+            .collect();
+        assert!(hashes.contains(&Some("aaaaaaaa")));
+        assert!(hashes.contains(&Some("bbbbbbbb")));
+
+        // Re-serializing must preserve both hashes unchanged.
+        let rendered = lock_file.render_to_string().unwrap();
+        assert!(rendered.contains("my-package[aaaaaaaa]"));
+        assert!(rendered.contains("my-package[bbbbbbbb]"));
+
+        // Parsing the rendered output must be stable (parse→render idempotent).
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
     }
 }
