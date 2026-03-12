@@ -223,7 +223,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
-        Ok(CondaPackageData::Binary(value.try_into()?))
+        Ok(CondaPackageData::Binary(Box::new(value.try_into()?)))
     }
 }
 
