@@ -1,10 +1,13 @@
-//! Functionality to fetch package metadata from a remote `.conda` package using HTTP range requests.
+//! High-level helpers to fetch files from remote Conda packages.
 //!
-//! This module allows fetching just the `info/` section of a `.conda` package without downloading
-//! the entire file. This is achieved by using HTTP Range requests to fetch only the necessary
-//! bytes from the end of the zip archive.
+//! These helpers first try the sparse HTTP range-request path from [`super::sparse`]
+//! and automatically fall back to streaming the full archive through
+//! [`super::full_download`] when range requests are unsupported or the archive type
+//! cannot be handled sparsely.
 //!
-//! For lower-level access, see [`super::sparse`] which exposes the raw-bytes API.
+//! Use this module when you want a single entry point that works for both typed
+//! [`PackageFile`] members and arbitrary file paths inside `.conda` or `.tar.bz2`
+//! packages.
 //!
 //! # Example
 //!
@@ -12,7 +15,7 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use rattler_conda_types::package::IndexJson;
-//! use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
+//! use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
@@ -20,7 +23,7 @@
 //! let client = ClientWithMiddleware::from(Client::new());
 //! let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap();
 //!
-//! let index_json: IndexJson = fetch_package_file_from_url(client, url)
+//! let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
 //!     .await
 //!     .unwrap();
 //!
@@ -28,31 +31,31 @@
 //! # }
 //! ```
 
-use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
 use async_http_range_reader::AsyncHttpRangeReaderError;
-use async_zip::base::read::stream::ZipFileReader;
-use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::{CondaArchiveType, PackageFile};
+use rattler_conda_types::package::PackageFile;
 use reqwest_middleware::ClientWithMiddleware;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tokio_util::io::StreamReader;
 use tracing::debug;
 use url::Url;
 
+pub use super::full_download::{
+    fetch_file_from_remote_full_download, fetch_package_file_full_download,
+};
 use super::sparse::fetch_package_file_sparse;
-use crate::tokio::async_read::get_file_from_tar_archive;
+use crate::reqwest::sparse::fetch_file_from_remote_sparse;
 use crate::ExtractError;
 
-/// Fetch a specific [`PackageFile`] from a remote package using HTTP range requests.
+/// Fetch and parse a specific [`PackageFile`] from a remote package.
 ///
-/// This function fetches only the minimal bytes needed from the package, typically
-/// just the `info/` section which is located at the end of the `.conda` archive.
+/// The function first attempts the sparse range-request path, which usually only
+/// downloads the bytes needed to reach the requested file inside a `.conda`
+/// archive.
 ///
-/// If the server does not support range requests or the package is not a `.conda` file,
-/// the function falls back to downloading the entire package.
+/// If the server does not support range requests, or if the archive type cannot
+/// be handled by the sparse implementation, it falls back to the streaming
+/// full-download path.
 ///
-/// For lower-level access, see [`super::sparse::fetch_file_from_remote_conda`]
-/// which returns raw bytes for a specific file path.
+/// For lower-level access, see [`super::sparse::fetch_file_from_remote_sparse`]
+/// and [`super::full_download::fetch_file_from_remote_full_download`].
 ///
 /// # Arguments
 ///
@@ -69,7 +72,7 @@ use crate::ExtractError;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use rattler_conda_types::package::IndexJson;
-/// use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url;
+/// use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 /// use reqwest::Client;
 /// use reqwest_middleware::ClientWithMiddleware;
 /// use url::Url;
@@ -77,12 +80,12 @@ use crate::ExtractError;
 /// let client = ClientWithMiddleware::from(Client::new());
 /// let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap();
 ///
-/// let index_json: IndexJson = fetch_package_file_from_url(client, url)
+/// let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
 ///     .await
 ///     .unwrap();
 /// # }
 /// ```
-pub async fn fetch_package_file_from_url<P: PackageFile>(
+pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
@@ -96,97 +99,50 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         )) => {
             debug!("server does not support range requests, falling back to full download");
         }
+        Err(ExtractError::AsyncHttpRangeReaderError(AsyncHttpRangeReaderError::HttpError(err)))
+            if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) =>
+        {
+            // this can happen with JFrog Artifactory when you query more than the object length
+            debug!("server returned range not satisfiable, falling back to full download");
+        }
         Err(e) => return Err(e),
     }
 
     fetch_package_file_full_download::<P>(&client, &url).await
 }
 
-/// Stream the full package and extract a single [`PackageFile`].
-async fn fetch_package_file_full_download<P: PackageFile>(
-    client: &ClientWithMiddleware,
-    url: &Url,
-) -> Result<P, ExtractError> {
-    let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
-        .ok_or(ExtractError::UnsupportedArchiveType)?;
-
-    let response = client
-        .get(url.clone())
-        .send()
-        .await
-        .map_err(ExtractError::ReqwestError)?
-        .error_for_status()
-        .map_err(|e| ExtractError::ReqwestError(e.into()))?;
-
-    // Convert the response body into an AsyncRead stream (same pattern as reqwest/tokio.rs)
-    let byte_stream = response.bytes_stream().map_err(|err| {
-        if err.is_body() {
-            std::io::Error::new(std::io::ErrorKind::Interrupted, err)
-        } else if err.is_decode() {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-        } else {
-            std::io::Error::other(err)
+/// Fetch the raw bytes for an arbitrary file path inside a remote package.
+///
+/// The function first attempts the sparse range-request path for `.conda`
+/// packages and falls back to streaming the full archive when sparse access is
+/// unavailable.
+///
+/// Returns `Ok(None)` when the target path does not exist in the archive.
+pub async fn fetch_file_from_remote_url(
+    client: ClientWithMiddleware,
+    url: Url,
+    target_path: &std::path::Path,
+) -> Result<Option<Vec<u8>>, ExtractError> {
+    match fetch_file_from_remote_sparse(client.clone(), url.clone(), target_path).await {
+        Ok(result) => return Ok(result),
+        Err(ExtractError::UnsupportedArchiveType) => {
+            debug!("archive type not supported for range requests, falling back to full download");
         }
-    });
-    let stream_reader = StreamReader::new(byte_stream);
-
-    let file_path = std::path::Path::new(P::package_path());
-
-    let content = match archive_type {
-        CondaArchiveType::TarBz2 => {
-            let buf_reader = tokio::io::BufReader::new(stream_reader);
-            let decoder = BzDecoder::new(buf_reader);
-            let mut archive = tokio_tar::Archive::new(decoder);
-            get_file_from_tar_archive(&mut archive, file_path).await?
+        Err(ExtractError::AsyncHttpRangeReaderError(
+            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+        )) => {
+            debug!("server does not support range requests, falling back to full download");
         }
-        CondaArchiveType::Conda => {
-            // async_zip uses futures IO traits, so bridge tokio → futures
-            let compat_reader = stream_reader.compat();
-            let mut buf_reader = futures::io::BufReader::new(compat_reader);
-            let mut zip_reader = ZipFileReader::new(&mut buf_reader);
-
-            let mut found: Option<Vec<u8>> = None;
-            let prefix = crate::tokio::async_read::conda_entry_prefix(file_path);
-
-            while let Some(mut entry) = zip_reader
-                .next_with_entry()
-                .await
-                .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?
-            {
-                let filename = entry.reader().entry().filename().as_str().map_err(|e| {
-                    ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                })?;
-
-                if filename.starts_with(prefix) && filename.ends_with(".tar.zst") {
-                    // Bridge the entry reader back from futures → tokio
-                    let compat_entry = entry.reader_mut().compat();
-                    let buf_entry = tokio::io::BufReader::new(compat_entry);
-                    let decoder = ZstdDecoder::new(buf_entry);
-                    let mut archive = tokio_tar::Archive::new(decoder);
-                    found = get_file_from_tar_archive(&mut archive, file_path).await?;
-                    break;
-                }
-
-                // Skip to the next entry (required by async_zip API)
-                (.., zip_reader) = entry
-                    .skip()
-                    .await
-                    .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?;
-            }
-
-            found
+        Err(ExtractError::AsyncHttpRangeReaderError(AsyncHttpRangeReaderError::HttpError(err)))
+            if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) =>
+        {
+            // this can happen with JFrog Artifactory when you query more than the object length
+            debug!("server returned range not satisfiable, falling back to full download");
         }
-    };
+        Err(e) => return Err(e),
+    }
 
-    let content = content.ok_or_else(|| {
-        ExtractError::IoError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("'{}' not found in archive", P::package_path().display()),
-        ))
-    })?;
-
-    P::from_slice(&content)
-        .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
+    fetch_file_from_remote_full_download(&client, &url, target_path).await
 }
 
 #[cfg(test)]
@@ -206,7 +162,9 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(index_json);
     }
@@ -218,12 +176,14 @@ mod tests {
         let url = test_server::serve_file(test_file()).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let about_json: AboutJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let about_json: AboutJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(about_json);
     }
 
-    /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_url`
+    /// tar.bz2 is unsupported by the sparse path, so `fetch_package_file_from_remote_url`
     /// falls through to `fetch_package_file_full_download` (streaming).
     #[tokio::test]
     async fn test_fetch_full_download_tar_bz2() {
@@ -234,7 +194,9 @@ mod tests {
         let url = test_server::serve_file(tar_bz2).await;
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
 
-        let index_json: IndexJson = fetch_package_file_from_url(client, url).await.unwrap();
+        let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
 
         insta::assert_yaml_snapshot!(index_json);
     }
@@ -252,5 +214,33 @@ mod tests {
             .unwrap();
 
         insta::assert_yaml_snapshot!(index_json);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_file_from_remote() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_file_from_remote_url(client, url, std::path::Path::new("info/index.json"))
+            .await
+            .unwrap()
+            .expect("file should exist in archive");
+
+        assert!(!raw.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_file_from_remote_tar_bz2_fallback() {
+        let tar_bz2 = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let url = test_server::serve_file(tar_bz2).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_file_from_remote_url(client, url, std::path::Path::new("info/index.json"))
+            .await
+            .unwrap()
+            .expect("file should exist in archive");
+
+        assert!(!raw.is_empty());
     }
 }
