@@ -15,7 +15,8 @@ use rattler_conda_types::{
     package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
+    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
+    WhlPackageRecord,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use url::Url;
@@ -140,6 +141,55 @@ impl From<PyLink> for Link {
             source: value.source,
             link_type,
         }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyWhlPackageRecord {
+    inner: WhlPackageRecord,
+}
+
+#[pymethods]
+impl PyWhlPackageRecord {
+    #[new]
+    #[pyo3(signature = (package_record, url))]
+    pub fn new(package_record: PyRecord, url: &str) -> PyResult<Self> {
+        if !package_record.is_package_record() {
+            return Err(PyTypeError::new_err(
+                "package_record must be a PackageRecord",
+            ));
+        }
+        let package_record = package_record.as_package_record().clone();
+        let url: UrlOrPath = url.parse().map_err(PyRattlerError::from)?;
+        Ok(Self {
+            inner: WhlPackageRecord {
+                package_record,
+                url,
+            },
+        })
+    }
+
+    #[getter]
+    pub fn package_record(&self) -> PyRecord {
+        PyRecord::from(self.inner.package_record.clone())
+    }
+
+    #[getter]
+    pub fn url(&self) -> String {
+        self.inner.url.as_str().to_string()
+    }
+}
+
+impl From<WhlPackageRecord> for PyWhlPackageRecord {
+    fn from(value: WhlPackageRecord) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl From<PyWhlPackageRecord> for WhlPackageRecord {
+    fn from(value: PyWhlPackageRecord) -> Self {
+        value.inner
     }
 }
 
