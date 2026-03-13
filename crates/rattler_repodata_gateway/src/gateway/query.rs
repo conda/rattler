@@ -402,7 +402,7 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the result.
+    /// Add matching records to the result and populate `package_names`.
     fn accumulate_records(
         &mut self,
         result_idx: usize,
@@ -411,6 +411,13 @@ impl QueryExecutor {
     ) {
         let result = &mut self.result[result_idx];
 
+        for record in &records {
+            // Always track package name for channel presence.
+            result
+                .package_names
+                .insert(record.package_record.name.clone());
+        }
+
         match request_specs {
             SourceSpecs::Transitive => {
                 // All records match — extend with Arc clones (cheap refcount bumps).
@@ -418,16 +425,6 @@ impl QueryExecutor {
             }
             SourceSpecs::Input(specs) => {
                 for record in &records {
-                    // Track all package names present in this channel,
-                    // regardless of spec filtering. This enables strict
-                    // channel priority enforcement in the solver even when no
-                    // versions from a higher-priority channel match the spec.
-                    result
-                        .channel_package_names
-                        .entry(record.channel.clone())
-                        .or_default()
-                        .insert(record.package_record.name.clone());
-
                     // Only include records that match at least one input spec.
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
                         result.records.push(record.clone());

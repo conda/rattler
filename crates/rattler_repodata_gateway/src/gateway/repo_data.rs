@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 use rattler_conda_types::{PackageName, RepoDataRecord};
 
@@ -15,9 +12,9 @@ use rattler_conda_types::{PackageName, RepoDataRecord};
 #[derive(Debug, Default, Clone)]
 pub struct RepoData {
     pub(crate) records: Vec<Arc<RepoDataRecord>>,
-    /// All package names present in this source, keyed by channel URL.
+    /// All package names present in this channel.
     /// Includes names whose records were filtered out by version constraints.
-    pub(crate) channel_package_names: HashMap<Option<String>, HashSet<PackageName>>,
+    pub(crate) package_names: HashSet<PackageName>,
 }
 
 impl RepoData {
@@ -38,32 +35,9 @@ impl RepoData {
         self.records.is_empty()
     }
 
-    /// Returns the package names present per channel in this source,
-    /// including names whose records were filtered out by version constraints.
-    pub fn channel_package_names(&self) -> &HashMap<Option<String>, HashSet<PackageName>> {
-        &self.channel_package_names
-    }
-
-    /// Build a list of `(channel, package_names)` entries from a sequence of
-    /// [`RepoData`] results, preserving priority order (first entry = highest
-    /// priority). Channels that appear in multiple entries are merged.
-    pub fn collect_channel_package_names(
-        all: &[RepoData],
-    ) -> Vec<(Option<String>, HashSet<PackageName>)> {
-        let mut result: Vec<(Option<String>, HashSet<PackageName>)> = Vec::new();
-        let mut channel_index: HashMap<Option<String>, usize> = HashMap::new();
-        for rd in all {
-            for (channel, names) in &rd.channel_package_names {
-                if let Some(&idx) = channel_index.get(channel) {
-                    result[idx].1.extend(names.iter().cloned());
-                } else {
-                    let idx = result.len();
-                    channel_index.insert(channel.clone(), idx);
-                    result.push((channel.clone(), names.clone()));
-                }
-            }
-        }
-        result
+    /// Returns the package names present in this channel.
+    pub fn package_names(&self) -> &HashSet<PackageName> {
+        &self.package_names
     }
 
     /// Returns an iterator over the Arc-wrapped records.
