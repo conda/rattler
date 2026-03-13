@@ -874,7 +874,7 @@ impl AsRef<PackageRecord> for PyRecord {
             RecordInner::Prefix(r) => &r.repodata_record.package_record,
             RecordInner::RepoData(r) => &r.package_record,
             RecordInner::Package(r) => r,
-            RecordInner::Whl(r) => &(**r).package_record,
+            RecordInner::Whl(r) => &r.package_record,
         }
     }
 }
