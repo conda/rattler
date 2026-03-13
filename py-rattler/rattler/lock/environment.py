@@ -18,10 +18,14 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[Union[Channel, LockChannel]]
+        self,
+        name: str,
+        requirements: Dict[Platform, List[RepoDataRecord]],
+        channels: List[Union[Channel, LockChannel]],
+        pypi_packages: Optional[Dict[Platform, List[PypiLockedPackage]]] = None,
     ) -> None:
         """
-        Create a new environment.
+        Create a new environment with Conda and optionally PyPI requirements.
         """
         # Convert LockChannel to Channel for compatibility
         py_channels = []
@@ -31,6 +35,12 @@ class Environment:
             else:
                 py_channels.append(channel._channel)
 
+        py_pypi = None
+        if pypi_packages is not None:
+            py_pypi = {
+                platform._inner: [pkg._package for pkg in packages] for (platform, packages) in pypi_packages.items()
+            }
+
         self._env = PyEnvironment(
             name=name,
             # TODO: move this logic to rust
@@ -38,6 +48,7 @@ class Environment:
                 platform._inner: [record._record for record in records] for (platform, records) in requirements.items()
             },
             channels=py_channels,
+            pypi_packages=py_pypi,
         )
 
     def platforms(self) -> List[Platform]:
