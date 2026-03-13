@@ -50,12 +50,18 @@ pub struct DependencyOverride {
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: Vec<&'a RepoDataRecord>,
+    /// The channel URL for this `RepoData`
+    pub channel: Option<String>,
+    /// All package names present in this channel
+    pub package_names: std::collections::HashSet<rattler_conda_types::PackageName>,
 }
 
 impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
     fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
         Self {
             records: Vec::from_iter(iter),
+            channel: None,
+            package_names: std::collections::HashSet::new(),
         }
     }
 }
@@ -303,7 +309,6 @@ impl<'a> CondaDependencyProvider<'a> {
         min_age: Option<&MinimumAgeConfig>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
-        channel_package_names: &[(Option<String>, HashSet<PackageName>)],
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -336,12 +341,12 @@ impl<'a> CondaDependencyProvider<'a> {
         // Hashmap that maps the package name to the channel it was first found in.
         let mut package_name_found_in_channel = HashMap::<String, Option<String>>::new();
 
-        // Pre-populate channel ownership from explicit package name data.
-        // This enables strict channel priority even when no records from a
-        // higher-priority channel match the requested spec.
+        // Pre-populate channel ownership from RepoData.package_names.
+        let repodata_vec: Vec<RepoData<'a>> = repodata.into_iter().collect();
         if channel_priority == ChannelPriority::Strict {
-            for (channel, names) in channel_package_names {
-                for name in names {
+            for repo_data in &repodata_vec {
+                let channel = repo_data.channel.clone();
+                for name in repo_data.package_names.iter() {
                     package_name_found_in_channel
                         .entry(name.as_normalized().to_string())
                         .or_insert_with(|| channel.clone());
@@ -350,7 +355,7 @@ impl<'a> CondaDependencyProvider<'a> {
         }
 
         // Add additional records
-        for repo_data in repodata {
+        for repo_data in &repodata_vec {
             // Iterate over all records and dedup records that refer to the same package
             // data but with different archive types. This can happen if you
             // have two variants of the same package but with different
@@ -366,7 +371,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
-            for record in repo_data.records {
+            for record in &repo_data.records {
                 // Determine if this record will be excluded by exclude_newer.
                 let excluded_by_newer = matches!((&exclude_newer, &record.package_record.timestamp),
                     (Some(exclude_newer), Some(record_timestamp))
@@ -987,7 +992,6 @@ impl super::SolverImpl for Solver {
             task.min_age.as_ref(),
             task.strategy,
             dependency_overrides,
-            &task.channel_package_names,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.
