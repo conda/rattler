@@ -10,7 +10,6 @@ from rattler.repo_data import (
     SourceConfig,
     PackageFormatSelection,
     RepoDataSource,
-    WhlPackageRecord,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -56,7 +55,6 @@ __all__ = [
     "MatchSpec",
     "NamelessMatchSpec",
     "PackageRecord",
-    "WhlPackageRecord",
     "Channel",
     "ChannelConfig",
     "ChannelPriority",

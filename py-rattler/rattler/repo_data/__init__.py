@@ -5,7 +5,6 @@ from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.repo_data.gateway import Gateway, SourceConfig
 from rattler.repo_data.source import RepoDataSource
-from rattler.repo_data.whl_package_record import WhlPackageRecord
 
 __all__ = [
     "PackageRecord",
@@ -17,5 +16,4 @@ __all__ = [
     "SourceConfig",
     "PackageFormatSelection",
     "RepoDataSource",
-    "WhlPackageRecord",
 ]
