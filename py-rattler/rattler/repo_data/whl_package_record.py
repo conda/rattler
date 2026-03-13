@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rattler.rattler import PyWhlPackageRecord
+from rattler.rattler import PyRecord
 from rattler.repo_data.package_record import PackageRecord
 
 
@@ -13,17 +13,11 @@ class WhlPackageRecord(PackageRecord):
     """
 
     def __init__(self, package_record: PackageRecord, url: str) -> None:
-        inner = PyWhlPackageRecord(package_record._record, url)
-        self._record = inner.package_record
-        self._whl_inner = inner
-
-    @property
-    def package_record(self) -> PackageRecord:
-        return PackageRecord._from_py_record(self._record)
+        self._record = PyRecord.create_whl_record(package_record._record, url)
 
     @property
     def url(self) -> str:
-        return self._whl_inner.url
+        return self._record.url
 
     def __repr__(self) -> str:
         """Returns a representation of the WhlPackageRecord."""

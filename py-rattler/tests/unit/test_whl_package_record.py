@@ -14,8 +14,8 @@ def test_whl_package_record_construction_with_url() -> None:
         "https://example.com/wheels/numpy-1.24.0-cp39-cp39-linux_x86_64.whl",
     )
     assert whl_record.url == "https://example.com/wheels/numpy-1.24.0-cp39-cp39-linux_x86_64.whl"
-    assert whl_record.package_record.name == record.name
-    assert whl_record.package_record.version == record.version
+    assert whl_record.name == record.name
+    assert whl_record.version == record.version
 
 
 def test_whl_package_record_construction_with_relative_path() -> None:
@@ -28,7 +28,7 @@ def test_whl_package_record_construction_with_relative_path() -> None:
     )
     whl_record = WhlPackageRecord(record, "subdir/requests-2.28.0-py3-none-any.whl")
     assert whl_record.url == "subdir/requests-2.28.0-py3-none-any.whl"
-    assert whl_record.package_record.name == record.name
+    assert whl_record.name == record.name
 
 
 def test_whl_package_record_properties() -> None:
@@ -47,10 +47,6 @@ def test_whl_package_record_properties() -> None:
     assert whl_record.version == record.version
     assert whl_record.build == record.build
     assert whl_record.subdir == record.subdir
-    assert whl_record.package_record.name == record.name
-    assert whl_record.package_record.version == record.version
-    assert whl_record.package_record.build == record.build
-    assert whl_record.package_record.subdir == record.subdir
     assert whl_record.url == url
 
 
