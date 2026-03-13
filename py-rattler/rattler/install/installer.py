@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional
+from typing import List, Optional, Protocol, runtime_checkable
 
 from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
@@ -11,13 +11,15 @@ from rattler.repo_data.record import RepoDataRecord
 from rattler.rattler import py_install
 
 
-class InstallerReporter:
+@runtime_checkable
+class InstallerReporter(Protocol):
     """
-    Base class for custom installation progress reporters.
+    Protocol for custom installation progress reporters.
 
-    Subclass this and override the methods we care about to receive progress
-    callbacks during package installation. All methods have no-op defaults so
-    we only need to implement the ones relevant to our use case.
+    Implement this protocol (by subclassing or structurally) and override the
+    methods we care about to receive progress callbacks during package
+    installation. All methods have no-op defaults so we only need to implement
+    the ones relevant to our use case.
 
     Methods that return an ``int`` act as opaque tokens: the value we return
     will be passed back to the corresponding ``*_complete`` callback so we can
@@ -28,7 +30,7 @@ class InstallerReporter:
     ```python
     from rattler.install import InstallerReporter
 
-    class MyReporter(InstallerReporter):
+    class MyReporter:  # no need to inherit — structural subtyping is sufficient
         def on_transaction_start(self, total_operations: int) -> None:
             print(f"Starting installation of {total_operations} operations")
 
