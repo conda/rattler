@@ -42,6 +42,11 @@ def test_whl_package_record_properties() -> None:
     url = "https://pypi.org/simple/foo-1.0-py3-none-any.whl"
     whl_record = WhlPackageRecord(record, url)
 
+    assert isinstance(whl_record, PackageRecord)
+    assert whl_record.name == record.name
+    assert whl_record.version == record.version
+    assert whl_record.build == record.build
+    assert whl_record.subdir == record.subdir
     assert whl_record.package_record.name == record.name
     assert whl_record.package_record.version == record.version
     assert whl_record.package_record.build == record.build
