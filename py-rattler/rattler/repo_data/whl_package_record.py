@@ -5,12 +5,6 @@ from rattler.repo_data.package_record import PackageRecord
 
 
 class WhlPackageRecord:
-    """
-    A wheel package record pairing a PackageRecord with its URL or path.
-
-    Used to build repodata from PyPI/wheel metadata without conda archives.
-    """
-
     def __init__(self, package_record: PackageRecord, url: str) -> None:
         self._inner = PyWhlPackageRecord(package_record._record, url)
 

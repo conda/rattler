@@ -129,7 +129,6 @@ nav:
           - PackageRecord: package_record.md
           - PatchInstructions: patch_instructions.md
           - RepoDataRecord: repo_data_record.md
-          - WhlPackageRecord: whl_package_record.md
           - Repodata: repo_data.md
           - SparseRepoData: sparse_repo_data.md
       - version:
