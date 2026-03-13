@@ -1,5 +1,4 @@
 //! Middleware to handle mirrors
-use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use std::{
     collections::HashMap,
     sync::atomic::{self, AtomicUsize},
@@ -119,25 +118,16 @@ impl Middleware for MirrorMiddleware {
                 };
 
                 let mirror = &selected_mirror.mirror;
-<<<<<<< HEAD
-                let selected_url = mirror.url.join(url_rest).map_err(|e| {
-                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                        "Failed to join mirror URL with '{url_rest}': {e}"
-                    ))
-                })?;
-=======
                 let selected_url = {
                     let mut u = mirror.url.clone();
-                    let base = u.path().trim_end_matches('/');
-                    let new_path = if base.is_empty() {
-                        format!("/{url_rest}")
+                    let base_path = u.path().trim_end_matches('/');
+                    if url_rest.is_empty() {
+                        u.set_path(&format!("{base_path}/"));
                     } else {
-                        format!("{base}/{url_rest}")
-                    };
-                    u.set_path(&new_path);
+                        u.set_path(&format!("{base_path}/{url_rest}"));
+                    }
                     u
                 };
->>>>>>> fc82fd7b (fix: preserve mirror URL path when rewriting requests)
 
                 // Short-circuit if the mirror does not support the file type
                 if url_rest.ends_with(".json.zst") && mirror.no_zstd {

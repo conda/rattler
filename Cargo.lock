@@ -5198,7 +5198,6 @@ dependencies = [
  "itertools 0.14.0",
  "keyring",
  "netrc-rs",
- "rattler_conda_types",
  "rattler_config",
  "reqwest 0.12.28",
  "reqwest-middleware",
