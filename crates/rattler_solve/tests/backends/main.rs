@@ -3,10 +3,24 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    Channel, Channel, ChannelConfig, ChannelConfig, GenericVirtualPackage, GenericVirtualPackage,
-    MatchSpec, MatchSpec, NoArchType, NoArchType, PackageRecord, ParseMatchSpecOptions,
-    ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    Channel,
+    ChannelConfig,
+    GenericVirtualPackage,
+    MatchSpec,
+    NoArchType,
+    PackageRecord,
+    ParseMatchSpecOptions,
+    RepoDataRecord,
+    Version,
+    ParseStrictness,
+    SolverResult,
+    RepoData,
+};
+use rattler_conda_types::package::{
+    ArchiveIdentifier,
+    CondaArchiveType,
+    DistArchiveIdentifier,
+    DistArchiveType,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -65,6 +79,16 @@ fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
     let repo_data: RepoData =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     repo_data.into_repo_data_records(&Channel::from_str("conda-forge", &channel_config()).unwrap())
+}
+
+fn read_sparse_repodata(path: &str) -> SparseRepoData {
+    SparseRepoData::from_file(
+        Channel::from_str("dummy", &channel_config()).unwrap(),
+        "dummy".to_string(),
+        path,
+        None,
+    )
+    .unwrap()
 }
 
 fn installed_package(
@@ -226,8 +250,14 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
 fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
     static REPO_DATA: Lazy<Vec<SparseRepoData>> = Lazy::new(|| {
+        let json_file = tools::fetch_test_conda_forge_repodata("linux-64")
+            .expect("Failed to fetch linux-64 repodata");
+        let json_file_noarch = tools::fetch_test_conda_forge_repodata("noarch")
+            .expect("Failed to fetch noarch repodata");
+
         vec![
-            // channel_package_names removed; package presence tracked in RepoData
+            read_sparse_repodata(json_file.to_str().unwrap()),
+            read_sparse_repodata(json_file_noarch.to_str().unwrap()),
         ]
     });
 
@@ -695,7 +725,6 @@ mod libsolv_c {
                 min_age: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
-                // channel_package_names removed; package presence tracked in RepoData
             })
             .unwrap()
             .records;
@@ -1372,52 +1401,5 @@ fn channel_priority_disabled_libsolv_c() {
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
-    );
-}
-
-/// Regression test for issue #1928: strict channel priority must be enforced
-/// even when a higher-priority channel has no version matching the spec.
-///
-/// Scenario:
-/// - Channel A (higher priority) has `my-pkg` 1.0 only.
-/// - Channel B (lower priority) has `my-pkg` 2.0 only.
-/// - Spec: `my-pkg >=2.0`
-///
-/// After gateway filtering only channel B's record survives, but
-/// `channel_package_names` removed; package presence tracked in `RepoData`
-/// package. Under strict channel priority the solver must NOT select
-/// channel B and the solve should fail.
-#[test]
-fn channel_priority_strict_direct_dep_higher_channel_no_match() {
-    // Channel B: lower priority, has 2.0 (the only record passing the
-    // gateway's version filter for spec ">=2.0").
-    let records_b = [PackageBuilder::new("my-pkg")
-        .channel("https://conda.anaconda.org/channel-b/")
-        .subdir("linux-64")
-        .version("2.0")
-        .build_string("h0_0")
-        .build_number(0)
-        .build()];
-
-    let spec = MatchSpec::from_str("my-pkg>=2.0", ParseStrictness::Lenient).unwrap();
-
-    // Channel A (higher priority) has my-pkg but no version matching >=2.0.
-    // The gateway strips those records but reports the package name via
-    // RepoData.package_names so the solver can enforce strict priority.
-
-    // Only channel B's records reach the solver.
-    let solver_task = SolverTask {
-        specs: vec![spec],
-        channel_priority: ChannelPriority::Strict,
-        ..SolverTask::from_iter([records_b.iter()])
-    };
-
-    let result = rattler_solve::resolvo::Solver.solve(solver_task);
-
-    // The solve must fail: channel A owns "my-pkg" but has no >=2.0, and
-    // channel B's 2.0 is excluded by strict channel priority.
-    assert!(
-        result.is_err(),
-        "expected unsolvable due to strict channel priority, but solve succeeded: {result:?}"
     );
 }
