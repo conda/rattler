@@ -169,7 +169,6 @@ pub fn py_solve<'a>(
                 min_age,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
-                
             };
 
             Ok::<_, PyErr>(
@@ -273,7 +272,6 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 min_age,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
-                
             };
 
             Ok::<_, PyErr>(
