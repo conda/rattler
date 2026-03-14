@@ -858,13 +858,11 @@ mod flatten_tests {
             assert_eq!(
                 flat_lf.environments().count(),
                 1,
-                "Expected 1 env in flattened lockfile for '{}'",
-                env_name
+                "Expected 1 env in flattened lockfile for '{env_name}'"
             );
             assert!(
                 flat_lf.environment(&env_name).is_some(),
-                "Expected env '{}' to exist in flattened lockfile",
-                env_name
+                "Expected env '{env_name}' to exist in flattened lockfile"
             );
         }
     }
@@ -879,8 +877,7 @@ mod flatten_tests {
             assert_eq!(
                 original_env.channels(),
                 flattened_env.channels(),
-                "Channels mismatch for env '{}'",
-                env_name
+                "Channels mismatch for env '{env_name}'"
             );
         }
     }
@@ -894,18 +891,11 @@ mod flatten_tests {
             let flattened_env = flat_lf.environment(&env_name).unwrap();
 
             for platform in original_env.platforms() {
-                let original_count = original_env
-                    .packages(platform)
-                    .map(|p| p.count())
-                    .unwrap_or(0);
-                let flattened_count = flattened_env
-                    .packages(platform)
-                    .map(|p| p.count())
-                    .unwrap_or(0);
+                let original_count = original_env.packages(platform).map_or(0, Iterator::count);
+                let flattened_count = flattened_env.packages(platform).map_or(0, Iterator::count);
                 assert_eq!(
                     original_count, flattened_count,
-                    "Package count mismatch for env '{}' platform '{}'",
-                    env_name, platform
+                    "Package count mismatch for env '{env_name}' platform '{platform}'"
                 );
             }
         }
@@ -935,14 +925,12 @@ mod flatten_tests {
         for ((env_name, platform), flat_lf) in lockfile.flatten_by_env_plat() {
             let env = flat_lf
                 .environment(&env_name)
-                .unwrap_or_else(|| panic!("Expected env '{}' to exist", env_name));
+                .unwrap_or_else(|| panic!("Expected env '{env_name}' to exist"));
             let platforms: Vec<_> = env.platforms().collect();
             assert_eq!(
                 platforms.len(),
                 1,
-                "Expected exactly 1 platform in flattened lockfile for ({}, {})",
-                env_name,
-                platform
+                "Expected exactly 1 platform in flattened lockfile for ({env_name}, {platform})"
             );
             assert_eq!(platforms[0], platform);
         }
@@ -958,8 +946,7 @@ mod flatten_tests {
             assert_eq!(
                 original_env.channels(),
                 flattened_env.channels(),
-                "Channels mismatch for env '{}'",
-                env_name
+                "Channels mismatch for env '{env_name}'"
             );
         }
     }
@@ -972,18 +959,11 @@ mod flatten_tests {
             let original_env = lockfile.environment(&env_name).unwrap();
             let flattened_env = flat_lf.environment(&env_name).unwrap();
 
-            let original_count = original_env
-                .packages(platform)
-                .map(|p| p.count())
-                .unwrap_or(0);
-            let flattened_count = flattened_env
-                .packages(platform)
-                .map(|p| p.count())
-                .unwrap_or(0);
+            let original_count = original_env.packages(platform).map_or(0, Iterator::count);
+            let flattened_count = flattened_env.packages(platform).map_or(0, Iterator::count);
             assert_eq!(
                 original_count, flattened_count,
-                "Package count mismatch for ({}, {})",
-                env_name, platform
+                "Package count mismatch for ({env_name}, {platform})"
             );
         }
     }
@@ -1001,8 +981,7 @@ mod flatten_tests {
             assert_eq!(
                 original_env.solve_options(),
                 flattened_env.solve_options(),
-                "Solve options mismatch for env '{}'",
-                env_name
+                "Solve options mismatch for env '{env_name}'"
             );
         }
     }
