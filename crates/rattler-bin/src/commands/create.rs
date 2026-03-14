@@ -22,6 +22,8 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
 };
+#[cfg(feature = "s3")]
+use rattler_networking::s3_middleware::compute_s3_config;
 use rattler_networking::AuthenticationMiddleware;
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
@@ -41,6 +43,9 @@ pub struct Opt {
 
     #[clap(required = true)]
     specs: Vec<String>,
+
+    #[clap(long)]
+    config: Option<PathBuf>,
 
     #[clap(long)]
     dry_run: bool,
@@ -178,10 +183,23 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         ))
         .with(rattler_networking::OciMiddleware::new(download_client));
     #[cfg(feature = "s3")]
-    let download_client = download_client.with(rattler_networking::S3Middleware::new(
-        HashMap::new(),
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
-    ));
+    let download_client = {
+        use rattler_networking::s3_middleware::S3Config;
+        let s3_config: std::collections::HashMap<String, S3Config> = opt
+            .config
+            .as_ref()
+            .and_then(|config_path| {
+                rattler_config::config::ConfigBase::<()>::load_from_files([config_path]).ok()
+            })
+            .map(|config| compute_s3_config(&config.s3_options.0))
+            .unwrap_or_default();
+        download_client.with(rattler_networking::S3Middleware::new(
+            s3_config,
+            AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
+        ))
+    };
+    #[cfg(not(feature = "s3"))]
+    let download_client = download_client;
     #[cfg(feature = "gcs")]
     let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
     let download_client = download_client.build();

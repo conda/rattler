@@ -170,18 +170,6 @@ impl S3 {
             // Set the region from the default provider chain.
             s3_config_builder.set_region(sdk_config.region().cloned());
 
-            // Infer if we expect path-style addressing from the endpoint URL.
-            if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                // If the endpoint URL is localhost, we probably have to use path-style
-                // addressing. xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
-                if endpoint_url.starts_with("http://localhost") {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
-                }
-                // same with cloudflare R2
-                if endpoint_url.starts_with("r2.cloudflarestorage.com") {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
-                }
-            }
             Ok(aws_sdk_s3::Client::from_conf(s3_config_builder.build()))
         }
     }
