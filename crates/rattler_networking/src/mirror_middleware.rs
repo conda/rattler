@@ -119,18 +119,9 @@ impl Middleware for MirrorMiddleware {
                 };
 
                 let mirror = &selected_mirror.mirror;
-<<<<<<< HEAD
-                let selected_url = mirror.url.join(url_rest).map_err(|e| {
-                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                        "Failed to join mirror URL with '{url_rest}': {e}"
-                    ))
-                })?;
-=======
 
                 let base = UrlWithTrailingSlash::from(mirror.url.clone());
                 let selected_url = base.as_ref().join(url_rest).unwrap();
-                
->>>>>>> 44b59e60 (fix: priority-direct-deps)
 
                 // Short-circuit if the mirror does not support the file type
                 if url_rest.ends_with(".json.zst") && mirror.no_zstd {
