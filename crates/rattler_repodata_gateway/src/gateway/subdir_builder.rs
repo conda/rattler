@@ -99,15 +99,33 @@ impl<'g> SubdirBuilder<'g> {
                     err.subdir,
                     err.channel.canonical_name()
                 );
-                Ok(Subdir::NotFound)
+
+                let expires_at = match &err.source {
+                    crate::gateway::error::HttpOrFilesystemError::Http(_, expires) => *expires,
+                    crate::gateway::error::HttpOrFilesystemError::Filesystem(_) => None,
+                };
+                Ok(Subdir::NotFound(expires_at))
             }
             Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
-                Err(Box::new(SubdirNotFoundError {
-                    subdir: self.platform.to_string(),
-                    channel: self.channel.clone(),
-                    source: err.into(),
-                })
-                .into())
+                let expires_at = match &err {
+                    crate::fetch::RepoDataNotFoundError::HttpError(_, expires) => *expires,
+                    crate::fetch::RepoDataNotFoundError::FileSystemError(_) => None,
+                };
+                if self.platform == Platform::NoArch {
+                    Err(Box::new(SubdirNotFoundError {
+                        subdir: self.platform.to_string(),
+                        channel: self.channel.clone(),
+                        source: err.into(),
+                    })
+                    .into())
+                } else {
+                    tracing::info!(
+                        "subdir {} of channel {} was not found, ignoring",
+                        self.platform,
+                        self.channel.canonical_name()
+                    );
+                    Ok(Subdir::NotFound(expires_at))
+                }
             }
             Err(err) => Err(err),
         }

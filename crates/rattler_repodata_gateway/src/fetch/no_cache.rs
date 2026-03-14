@@ -170,7 +170,7 @@ async fn execute_with_best_compression(
     .await?;
     if response.status() == StatusCode::NOT_FOUND {
         Err(FetchRepoDataError::NotFound(
-            RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
+            RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err(), None),
         ))
     } else {
         Ok((

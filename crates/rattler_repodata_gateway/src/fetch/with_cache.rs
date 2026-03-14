@@ -335,9 +335,26 @@ pub async fn fetch_repo_data(
         let request_start_time = SystemTime::now();
         let response = match client.execute(request.try_clone().unwrap()).await {
             Ok(response) if response.status() == StatusCode::NOT_FOUND => {
-                return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
-                    response.error_for_status().unwrap_err(),
-                )));
+                let cache_headers = CacheHeaders::from(&response);
+
+                // Construct dummy RepoDataState just to use its `expires_at` logic
+                let dummy_state = RepoDataState {
+                    url: repo_data_url.clone(),
+                    cache_headers,
+                    cache_last_modified: SystemTime::now(),
+                    cache_size: 0,
+                    blake2_hash: None,
+                    has_zst: None,
+                    has_bz2: None,
+                };
+                let expires_at = dummy_state.expires_at();
+
+                return Err(FetchRepoDataError::NotFound(
+                    RepoDataNotFoundError::HttpError(
+                        response.error_for_status().unwrap_err().redact(),
+                        expires_at,
+                    ),
+                ));
             }
             Ok(response) => response.error_for_status()?,
             Err(e) => {
@@ -1369,7 +1386,7 @@ mod test {
         assert!(matches!(
             result,
             Err(FetchRepoDataError::NotFound(
-                RepoDataNotFoundError::HttpError(_)
+                RepoDataNotFoundError::HttpError(..)
             ))
         ));
     }

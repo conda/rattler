@@ -28,6 +28,7 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    expires_at: Option<std::time::SystemTime>,
 }
 
 impl ShardedSubdir {
@@ -46,7 +47,7 @@ impl ShardedSubdir {
             .expect("invalid subdir url");
 
         // Fetch the shard index
-        let sharded_repodata = index::fetch_index(
+        let (sharded_repodata, expires_at) = index::fetch_index(
             client.clone(),
             &index_base_url,
             concurrent_requests_semaphore.clone(),
@@ -91,6 +92,7 @@ impl ShardedSubdir {
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
             sharded_repodata,
             concurrent_requests_semaphore,
+            expires_at,
         })
     }
 }
@@ -163,5 +165,10 @@ impl SubdirClient for ShardedSubdir {
 
     fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
+    }
+
+    fn has_expired(&self) -> bool {
+        self.expires_at
+            .is_some_and(|exp| std::time::SystemTime::now() >= exp)
     }
 }
