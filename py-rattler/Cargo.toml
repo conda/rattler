@@ -33,6 +33,7 @@ rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"]}
 rattler = { path = "../crates/rattler", default-features = false, features = [
     "indicatif",
 ] }
+rattler_cache = { path = "../crates/rattler_cache", default-features = false }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",
     "gateway",

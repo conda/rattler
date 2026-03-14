@@ -153,6 +153,11 @@ impl From<PackageCacheLayerError> for PackageCacheError {
 }
 
 impl PackageCacheLayer {
+    /// Returns the path of this cache layer.
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
         self.path
@@ -314,6 +319,14 @@ impl PackageCache {
         }
     }
 
+    /// Returns all cache layer paths in their original insertion order.
+    pub fn paths(&self) -> Vec<&std::path::Path> {
+        self.inner
+            .layers
+            .iter()
+            .map(PackageCacheLayer::path)
+            .collect()
+    }
     /// Returns a tuple containing two sets of layers:
     /// - A collection of read-only layers.
     /// - A collection of writable layers.
