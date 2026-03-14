@@ -13,6 +13,7 @@ from rattler.repo_data import (
     RepoDataSource,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
+from rattler.explicit_environment import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec
 from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
@@ -106,6 +107,8 @@ __all__ = [
     "NoArchLiteral",
     "Link",
     "LinkType",
+    "ExplicitEnvironmentEntry",
+    "ExplicitEnvironmentSpec",
 ]
 
 # PTY support - only available on Unix platforms
