@@ -66,8 +66,11 @@ impl PyRecord {
         match &self.inner {
             RecordInner::Prefix(r) => Ok(&r.repodata_record),
             RecordInner::RepoData(r) => Ok(r),
-            RecordInner::Package(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
             )),
         }
     }
@@ -76,8 +79,11 @@ impl PyRecord {
         match &mut self.inner {
             RecordInner::Prefix(r) => Ok(&mut Arc::make_mut(r).repodata_record),
             RecordInner::RepoData(r) => Ok(Arc::make_mut(r)),
-            RecordInner::Package(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
             )),
         }
     }
@@ -85,11 +91,14 @@ impl PyRecord {
     pub fn try_as_prefix_record(&self) -> PyResult<&PrefixRecord> {
         match &self.inner {
             RecordInner::Prefix(r) => Ok(r),
-            RecordInner::RepoData(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
             )),
         }
     }
@@ -97,11 +106,14 @@ impl PyRecord {
     pub fn try_as_prefix_record_mut(&mut self) -> PyResult<&mut PrefixRecord> {
         match &mut self.inner {
             RecordInner::Prefix(r) => Ok(Arc::make_mut(r)),
-            RecordInner::RepoData(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
             )),
         }
     }
@@ -630,19 +642,22 @@ impl PyRecord {
     /// The canonical URL from where to get this package.
     #[getter]
     pub fn url(&self) -> PyResult<String> {
-        if let Ok(whl) = self.try_as_whl_package_record() {
-            return Ok(whl.url.as_str().to_string());
+        match &self.inner {
+            RecordInner::Whl(r) => Ok(r.url.as_str().to_string()),
+            _ => Ok(self.try_as_repodata_record()?.url.to_string()),
         }
-        Ok(self.try_as_repodata_record()?.url.to_string())
     }
 
     #[setter]
     pub fn set_url(&mut self, url: String) -> PyResult<()> {
-        if let Ok(whl) = self.try_as_whl_package_record_mut() {
-            whl.url = url.parse().map_err(PyRattlerError::from)?;
-            return Ok(());
+        match &mut self.inner {
+            RecordInner::Whl(r) => {
+                Arc::make_mut(r).url = url.parse().map_err(PyRattlerError::from)?;
+            }
+            _ => {
+                self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
+            }
         }
-        self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
         Ok(())
     }
 
@@ -773,8 +788,11 @@ impl TryFrom<PyRecord> for PrefixRecord {
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
-            RecordInner::Package(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
             )),
         }
     }
@@ -819,8 +837,11 @@ impl TryFrom<PyRecord> for RepoDataRecord {
         match value.inner {
             RecordInner::Prefix(r) => Ok(Arc::unwrap_or_clone(r).repodata_record),
             RecordInner::RepoData(r) => Ok(Arc::unwrap_or_clone(r)),
-            RecordInner::Package(_) | RecordInner::Whl(_) => Err(PyTypeError::new_err(
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
             )),
         }
     }
