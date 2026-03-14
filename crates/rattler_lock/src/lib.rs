@@ -241,6 +241,90 @@ impl LockFile {
     pub fn is_empty(&self) -> bool {
         self.inner.conda_packages.is_empty() && self.inner.pypi_packages.is_empty()
     }
+
+    /// Flattens the lock-file by environment.
+    ///
+    /// Returns an iterator of `(env_name, LockFile)` pairs, where each
+    /// resulting `LockFile` contains only the data for a single environment.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use rattler_lock::LockFile;
+    /// # fn example(lockfile: &LockFile) {
+    /// for (env_name, env_lockfile) in lockfile.flatten_by_env() {
+    ///     println!("Environment: {}", env_name);
+    /// }
+    /// # }
+    /// ```
+    pub fn flatten_by_env(&self) -> impl ExactSizeIterator<Item = (String, LockFile)> + '_ {
+        self.environments().map(|(env_name, env)| {
+            let mut builder = LockFileBuilder::new();
+
+            // Copy environment metadata
+            builder.set_channels(env_name, env.channels().iter().cloned());
+            if let Some(indexes) = env.pypi_indexes() {
+                builder.set_pypi_indexes(env_name, indexes.clone());
+            }
+            builder.set_options(env_name, env.solve_options().clone());
+
+            // Copy all platforms for this environment into the new lockfile
+            for platform in env.platforms() {
+                for package in env.packages(platform).into_iter().flatten() {
+                    builder.add_package(env_name, platform, package.into());
+                }
+            }
+
+            (env_name.to_string(), builder.finish())
+        })
+    }
+
+    /// Flattens the lock-file by environment and platform.
+    ///
+    /// Returns an iterator of `((env_name, Platform), LockFile)` pairs,
+    /// where each resulting `LockFile` contains only the data for a single
+    /// (environment, platform) combination.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use rattler_lock::LockFile;
+    /// # fn example(lockfile: &LockFile) {
+    /// for ((env_name, platform), env_plat_lockfile) in lockfile.flatten_by_env_plat() {
+    ///     println!("Environment: {}, Platform: {}", env_name, platform);
+    /// }
+    /// # }
+    /// ```
+    pub fn flatten_by_env_plat(
+        &self,
+    ) -> impl ExactSizeIterator<Item = ((String, Platform), LockFile)> + '_ {
+        // Collect all (env, platform) pairs first so we know the exact size
+        let pairs: Vec<(String, Platform)> = self
+            .environments()
+            .flat_map(|(env_name, env)| {
+                env.platforms()
+                    .map(move |platform| (env_name.to_string(), platform))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        pairs.into_iter().map(|(env_name, platform)| {
+            let mut builder = LockFileBuilder::new();
+
+            if let Some(env) = self.environment(&env_name) {
+                // Copy environment metadata
+                builder.set_channels(&env_name, env.channels().iter().cloned());
+                if let Some(indexes) = env.pypi_indexes() {
+                    builder.set_pypi_indexes(&env_name, indexes.clone());
+                }
+                builder.set_options(&env_name, env.solve_options().clone());
+
+                for package in env.packages(platform).into_iter().flatten() {
+                    builder.add_package(&env_name, platform, package.into());
+                }
+            }
+
+            ((env_name, platform), builder.finish())
+        })
+    }
 }
 
 /// Information about a specific environment in the lock-file.
@@ -738,5 +822,167 @@ mod test {
         // But if we render it again, the lockfile should look the same at least
         let rerendered_lock_file_two = parsed_lock_file.render_to_string().unwrap();
         assert_eq!(rendered_lock_file, rerendered_lock_file_two);
+    }
+}
+
+#[cfg(test)]
+mod flatten_tests {
+    use super::*;
+
+    /// Uses v6/conda-path-lock.yml which has two environments ("default" with
+    /// linux-64 + win-64, and "second" with win-64).
+    fn make_multi_env_lockfile() -> LockFile {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/v6/conda-path-lock.yml");
+        LockFile::from_path(&path).unwrap()
+    }
+
+    // ── flatten_by_env ──────────────────────────────────────────────
+
+    #[test]
+    fn test_flatten_by_env_returns_correct_count() {
+        let lockfile = make_multi_env_lockfile();
+        let env_count = lockfile.environments().count();
+        let flattened: Vec<_> = lockfile.flatten_by_env().collect();
+
+        assert_eq!(flattened.len(), env_count);
+        // The fixture has exactly 2 environments
+        assert_eq!(env_count, 2);
+    }
+
+    #[test]
+    fn test_flatten_by_env_each_has_one_env() {
+        let lockfile = make_multi_env_lockfile();
+
+        for (env_name, flat_lf) in lockfile.flatten_by_env() {
+            assert_eq!(
+                flat_lf.environments().count(),
+                1,
+                "Expected 1 env in flattened lockfile for '{env_name}'"
+            );
+            assert!(
+                flat_lf.environment(&env_name).is_some(),
+                "Expected env '{env_name}' to exist in flattened lockfile"
+            );
+        }
+    }
+
+    #[test]
+    fn test_flatten_by_env_preserves_channels() {
+        let lockfile = make_multi_env_lockfile();
+
+        for (env_name, flat_lf) in lockfile.flatten_by_env() {
+            let original_env = lockfile.environment(&env_name).unwrap();
+            let flattened_env = flat_lf.environment(&env_name).unwrap();
+            assert_eq!(
+                original_env.channels(),
+                flattened_env.channels(),
+                "Channels mismatch for env '{env_name}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_flatten_by_env_preserves_packages() {
+        let lockfile = make_multi_env_lockfile();
+
+        for (env_name, flat_lf) in lockfile.flatten_by_env() {
+            let original_env = lockfile.environment(&env_name).unwrap();
+            let flattened_env = flat_lf.environment(&env_name).unwrap();
+
+            for platform in original_env.platforms() {
+                let original_count = original_env.packages(platform).map_or(0, Iterator::count);
+                let flattened_count = flattened_env.packages(platform).map_or(0, Iterator::count);
+                assert_eq!(
+                    original_count, flattened_count,
+                    "Package count mismatch for env '{env_name}' platform '{platform}'"
+                );
+            }
+        }
+    }
+
+    // ── flatten_by_env_plat ─────────────────────────────────────────
+
+    #[test]
+    fn test_flatten_by_env_plat_returns_correct_count() {
+        let lockfile = make_multi_env_lockfile();
+
+        let expected_count: usize = lockfile
+            .environments()
+            .map(|(_, env)| env.platforms().count())
+            .sum();
+
+        let flattened: Vec<_> = lockfile.flatten_by_env_plat().collect();
+        assert_eq!(flattened.len(), expected_count);
+        // default has linux-64 + win-64, second has win-64 → 3 total
+        assert_eq!(expected_count, 3);
+    }
+
+    #[test]
+    fn test_flatten_by_env_plat_each_has_one_platform() {
+        let lockfile = make_multi_env_lockfile();
+
+        for ((env_name, platform), flat_lf) in lockfile.flatten_by_env_plat() {
+            let env = flat_lf
+                .environment(&env_name)
+                .unwrap_or_else(|| panic!("Expected env '{env_name}' to exist"));
+            let platforms: Vec<_> = env.platforms().collect();
+            assert_eq!(
+                platforms.len(),
+                1,
+                "Expected exactly 1 platform in flattened lockfile for ({env_name}, {platform})"
+            );
+            assert_eq!(platforms[0], platform);
+        }
+    }
+
+    #[test]
+    fn test_flatten_by_env_plat_preserves_channels() {
+        let lockfile = make_multi_env_lockfile();
+
+        for ((env_name, _platform), flat_lf) in lockfile.flatten_by_env_plat() {
+            let original_env = lockfile.environment(&env_name).unwrap();
+            let flattened_env = flat_lf.environment(&env_name).unwrap();
+            assert_eq!(
+                original_env.channels(),
+                flattened_env.channels(),
+                "Channels mismatch for env '{env_name}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_flatten_by_env_plat_preserves_packages() {
+        let lockfile = make_multi_env_lockfile();
+
+        for ((env_name, platform), flat_lf) in lockfile.flatten_by_env_plat() {
+            let original_env = lockfile.environment(&env_name).unwrap();
+            let flattened_env = flat_lf.environment(&env_name).unwrap();
+
+            let original_count = original_env.packages(platform).map_or(0, Iterator::count);
+            let flattened_count = flattened_env.packages(platform).map_or(0, Iterator::count);
+            assert_eq!(
+                original_count, flattened_count,
+                "Package count mismatch for ({env_name}, {platform})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_flatten_by_env_plat_preserves_solve_options() {
+        // Use options-lock.yml which has 6 environments with different solve options
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/v6/options-lock.yml");
+        let lockfile = LockFile::from_path(&path).unwrap();
+
+        for ((env_name, _platform), flat_lf) in lockfile.flatten_by_env_plat() {
+            let original_env = lockfile.environment(&env_name).unwrap();
+            let flattened_env = flat_lf.environment(&env_name).unwrap();
+            assert_eq!(
+                original_env.solve_options(),
+                flattened_env.solve_options(),
+                "Solve options mismatch for env '{env_name}'"
+            );
+        }
     }
 }
