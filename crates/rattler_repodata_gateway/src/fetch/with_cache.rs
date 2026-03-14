@@ -655,7 +655,7 @@ pub async fn check_variant_availability(
     let bz2_future = if has_zst == Some(true) {
         // If we already know that zst is available we simply copy the availability
         // value from the last time we checked.
-        ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
+        ready(cache_state.and_then(|state| state.has_bz2.clone())).right_future()
     } else {
         // If the zst variant might not be available we need to check whether bz2 is
         // available.

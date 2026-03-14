@@ -247,7 +247,12 @@ impl Middleware for S3Middleware {
         let url = req.url().clone();
         let presigned_url = self.s3.generate_presigned_s3_url(url, req.method()).await?;
         *req.url_mut() = presigned_url;
-        next.run(req.try_clone().unwrap(), extensions).await
+        let cloned_req = req.try_clone().ok_or_else(|| {
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                "Failed to clone S3 request: request body is a non-cloneable stream"
+            ))
+        })?;
+        next.run(cloned_req, extensions).await
     }
 }
 
