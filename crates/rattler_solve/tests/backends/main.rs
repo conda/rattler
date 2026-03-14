@@ -2,25 +2,12 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use rattler_conda_types::{
-    Channel,
-    ChannelConfig,
-    GenericVirtualPackage,
-    MatchSpec,
-    NoArchType,
-    PackageRecord,
-    ParseMatchSpecOptions,
-    RepoDataRecord,
-    Version,
-    ParseStrictness,
-    SolverResult,
-    RepoData,
-};
 use rattler_conda_types::package::{
-    ArchiveIdentifier,
-    CondaArchiveType,
-    DistArchiveIdentifier,
-    DistArchiveType,
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
+use rattler_conda_types::{
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+    ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
