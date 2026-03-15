@@ -124,14 +124,15 @@ impl S3 {
 
         let bucket_name = url
             .host_str()
-            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
+            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?
+            .to_owned();
         if let S3Config::Custom {
             endpoint_url,
             region,
             force_path_style,
         } = self
             .config
-            .get(bucket_name)
+            .get(&bucket_name)
             .unwrap_or(&S3Config::FromAWS)
             .clone()
         {
@@ -159,7 +160,16 @@ impl S3 {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
                 }
                 (_, None) => {
-                    return Err(anyhow::anyhow!("no S3 authentication found"));
+                    // Fall back to AWS SDK credentials (e.g. AWS_ACCESS_KEY_ID env var)
+                    // when no credentials are found in the authentication storage.
+                    tracing::debug!(
+                        "No S3 credentials in auth storage for bucket '{}', falling back to AWS SDK credentials",
+                        bucket_name
+                    );
+                    aws_sdk_s3::config::Builder::from(sdk_config)
+                        .endpoint_url(endpoint_url)
+                        .region(aws_sdk_s3::config::Region::new(region))
+                        .force_path_style(force_path_style)
                 }
             };
             let s3_config = config_builder.build();
@@ -440,7 +450,9 @@ region = eu-central-1
     }
 
     #[tokio::test]
-    async fn test_presigned_s3_request_no_credentials() {
+    async fn test_presigned_s3_request_custom_config_falls_back_to_aws_env() {
+        // When custom S3 config is provided but no credentials in auth storage,
+        // the middleware should fall back to AWS SDK credentials from environment.
         let s3 = S3::new(
             HashMap::from([(
                 "rattler-s3-testing".into(),
@@ -453,19 +465,29 @@ region = eu-central-1
             AuthenticationStorage::empty(),
         );
 
-        let result = s3
-            .generate_presigned_s3_url(
-                Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
-                &Method::GET,
-            )
-            .await;
-        assert!(result.is_err());
-        let err_message = result.err().unwrap().to_string();
-        assert!(
-            err_message.contains("no S3 authentication found"),
-            "{}",
-            err_message
+        let presigned = async_with_vars(
+            [
+                ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
+                ("AWS_SECRET_ACCESS_KEY", Some("minioadmin")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+        // Should use the custom endpoint_url and force_path_style from the config
+        assert_eq!(
+            presigned.path(),
+            "/rattler-s3-testing/channel/noarch/repodata.json"
         );
+        assert_eq!(presigned.scheme(), "http");
+        assert_eq!(presigned.host_str().unwrap(), "localhost");
+        assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
     }
 
     #[rstest]
