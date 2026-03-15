@@ -166,6 +166,8 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The license family of the package (e.g. `MIT`, `GPL`, `BSD`)
+    pub license_family: Option<String>,
     /// The condition under which this match spec applies.
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
@@ -229,6 +231,10 @@ impl Display for MatchSpec {
             keys.push(format!("license=\"{license}\""));
         }
 
+        if let Some(license_family) = &self.license_family {
+            keys.push(format!("license_family=\"{license_family}\""));
+        }
+
         if let Some(track_features) = &self.track_features {
             keys.push(format!(
                 "track_features=\"{}\"",
@@ -267,6 +273,7 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
+                license_family: self.license_family,
                 condition: self.condition,
                 track_features: self.track_features,
             },
@@ -329,6 +336,8 @@ pub struct NamelessMatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The license family of the package (e.g. `MIT`, `GPL`, `BSD`)
+    pub license_family: Option<String>,
     /// The condition under which this match spec applies.
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
@@ -354,6 +363,10 @@ impl Display for NamelessMatchSpec {
 
         if let Some(sha256) = &self.sha256 {
             keys.push(format!("sha256=\"{sha256:x}\""));
+        }
+
+        if let Some(license_family) = &self.license_family {
+            keys.push(format!("license_family=\"{license_family}\""));
         }
 
         if let Some(condition) = &self.condition {
@@ -384,6 +397,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            license_family: spec.license_family,
             condition: spec.condition,
             track_features: spec.track_features,
         }
@@ -407,6 +421,7 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            license_family: spec.license_family,
             condition: spec.condition,
             track_features: spec.track_features,
         }
@@ -482,6 +497,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(license_family) = self.license_family.as_ref() {
+            if Some(license_family) != other.license_family.as_ref() {
+                return false;
+            }
+        }
+
         if let Some(track_features) = self.track_features.as_ref() {
             for feature in track_features {
                 if !other.track_features.contains(feature) {
@@ -533,6 +554,12 @@ impl Matches<PackageRecord> for MatchSpec {
 
         if let Some(license) = self.license.as_ref() {
             if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(license_family) = self.license_family.as_ref() {
+            if Some(license_family) != other.license_family.as_ref() {
                 return false;
             }
         }
