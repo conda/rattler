@@ -459,10 +459,11 @@ impl Version {
                 flags = flags.with_has_epoch(true);
             }
 
-            // Copy the segments
+            // Copy the segments. We skip the implicit default `0` component
             for segment_iter in self.segments() {
                 segments.push(segment_iter.segment);
-                for component in segment_iter.components() {
+                let implicit_default = usize::from(segment_iter.has_implicit_default());
+                for component in segment_iter.components().skip(implicit_default) {
                     components.push(component.clone());
                 }
             }
@@ -506,7 +507,9 @@ impl Version {
                 .with_local_segment_index(segments.len() as u8)
                 .ok_or(VersionExtendError::VersionTooLong)?;
             for segment_iter in self.local_segments() {
-                for component in segment_iter.components().cloned() {
+                // Skip the implicit default `0` for the same reason
+                let implicit_default = usize::from(segment_iter.has_implicit_default());
+                for component in segment_iter.components().skip(implicit_default).cloned() {
                     components.push(component);
                 }
                 segments.push(segment_iter.segment);
@@ -1034,7 +1037,7 @@ impl<'v> SegmentIter<'v> {
 /// this is not equal. Useful in ranges where we are talking
 /// about equality over version ranges instead of specific
 /// version instances
-#[derive(Clone, PartialOrd, Ord, Eq, Debug, Deserialize)]
+#[derive(Clone, Eq, Debug, Deserialize)]
 pub struct StrictVersion(pub Version);
 
 impl PartialEq for StrictVersion {
@@ -1066,6 +1069,22 @@ impl Hash for StrictVersion {
         self.0.epoch().hash(state);
         hash_segments(state, self.0.segments());
         hash_segments(state, self.0.local_segments());
+    }
+}
+
+impl Ord for StrictVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Use Version's semantic ordering as the primary key, then break ties
+        // using the raw component count. 
+        self.0
+            .cmp(&other.0)
+            .then_with(|| self.0.components.len().cmp(&other.0.components.len()))
+    }
+}
+
+impl PartialOrd for StrictVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -1273,18 +1292,75 @@ mod test {
 
     #[test]
     fn strict_version_test() {
-        let v_1_0 = StrictVersion::from_str("1.0.0").unwrap();
+        let v_1_0_0 = StrictVersion::from_str("1.0.0").unwrap();
         // Should be equal to itself
-        assert_eq!(v_1_0, v_1_0);
-        let v_1_0_0 = StrictVersion::from_str("1.0").unwrap();
-        // Strict version should not discard zero's
-        assert_ne!(v_1_0, v_1_0_0);
-        // Ordering should stay the same as version
-        assert_eq!(v_1_0.cmp(&v_1_0_0), Ordering::Equal);
+        assert_eq!(v_1_0_0, v_1_0_0);
+        let v_1_0 = StrictVersion::from_str("1.0").unwrap();
+        // Strict version should not discard trailing zeros
+        assert_ne!(v_1_0_0, v_1_0);
 
-        // Hashing should consider v_1_0 and v_1_0_0 as unequal
-        assert_eq!(get_hash(&v_1_0), get_hash(&v_1_0));
-        assert_ne!(get_hash(&v_1_0), get_hash(&v_1_0_0));
+        // Hashing should consider v_1_0_0 and v_1_0 as unequal
+        assert_eq!(get_hash(&v_1_0_0), get_hash(&v_1_0_0));
+        assert_ne!(get_hash(&v_1_0_0), get_hash(&v_1_0));
+    }
+
+    /// Regression test: `StrictVersion::cmp` must not return `Equal` for
+    /// versions that `StrictVersion::eq` considers different.
+    #[test]
+    fn strict_version_ord_contract() {
+        let v100 = StrictVersion::from_str("1.0.0").unwrap();
+        let v10 = StrictVersion::from_str("1.0").unwrap();
+
+        // PartialEq: distinct strict versions
+        assert_ne!(v100, v10);
+
+        // Ord: must not return Equal for unequal values
+        assert_ne!(v100.cmp(&v10), Ordering::Equal);
+        assert_ne!(v10.cmp(&v100), Ordering::Equal);
+
+        // Ordering must be antisymmetric
+        assert_eq!(v10.cmp(&v100), Ordering::Less);
+        assert_eq!(v100.cmp(&v10), Ordering::Greater);
+
+        // Reflexivity
+        assert_eq!(v100.cmp(&v100), Ordering::Equal);
+        assert_eq!(v10.cmp(&v10), Ordering::Equal);
+
+        // BTreeSet must hold both as distinct entries
+        let mut set = std::collections::BTreeSet::new();
+        set.insert(v10.clone());
+        set.insert(v100.clone());
+        assert_eq!(set.len(), 2, "BTreeSet lost one entry due to Ord violation");
+
+        // Sort and dedup must preserve both entries
+        let mut vec = vec![v100.clone(), v10.clone(), v100.clone()];
+        vec.sort();
+        vec.dedup();
+        assert_eq!(vec.len(), 2, "dedup collapsed distinct strict versions");
+
+        // Semantic comparison via the inner Version is still Equal
+        assert_eq!(v100.0.cmp(&v10.0), Ordering::Equal);
+    }
+
+    #[test]
+    fn strict_version_ord_with_genuine_differences() {
+        // Versions that are genuinely less/greater should order correctly
+        let cases: &[(&str, &str)] = &[
+            ("1.0", "2.0"),
+            ("1.0.0", "2.0.0"),
+            ("1.0", "1.1"),
+            ("1.0.0", "1.0.1"),
+        ];
+        for (lesser, greater) in cases {
+            let a = StrictVersion::from_str(lesser).unwrap();
+            let b = StrictVersion::from_str(greater).unwrap();
+            assert_eq!(
+                a.cmp(&b),
+                Ordering::Less,
+                "{lesser} should be Less than {greater}"
+            );
+            assert_eq!(b.cmp(&a), Ordering::Greater);
+        }
     }
 
     #[test]
@@ -1523,12 +1599,36 @@ mod test {
         );
     }
 
+    /// Regression test: strip_local() must not double the implicit `0` 
+    #[test]
+    fn strip_local_letter_initial_segment() {
+        for (input, expected) in [
+            ("1.0.rc2+build.5", "1.0.rc2"),
+            ("2.3.alpha1+git.abc", "2.3.alpha1"),
+            ("1.0a3+local", "1.0a3"),
+        ] {
+            let stripped = Version::from_str(input).unwrap().strip_local().into_owned();
+            let want = Version::from_str(expected).unwrap();
+            assert_eq!(
+                stripped, want,
+                "strip_local({input}) produced {stripped} instead of {expected}"
+            );
+            assert_eq!(
+                stripped.to_string(),
+                expected,
+                "strip_local({input}).to_string() produced wrong output"
+            );
+        }
+    }
+
     #[rstest]
     #[case("1", 3, "1.0.0")]
     #[case("1.2", 3, "1.2.0")]
     #[case("1.2+3.4", 3, "1.2.0+3.4")]
     #[case("4!1.2+3.4", 3, "4!1.2.0+3.4")]
     #[case("4!1.2+3.4", 5, "4!1.2.0.0.0+3.4")]
+    #[case("1.2+alpha.1", 3, "1.2.0+alpha.1")]
+    #[case("1.2+rc2", 3, "1.2.0+rc2")]
     #[test]
     fn extend_to_length(#[case] version: &str, #[case] elements: usize, #[case] expected: &str) {
         assert_eq!(
