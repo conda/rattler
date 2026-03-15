@@ -229,6 +229,7 @@ async fn get_github_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
+    log_github_trusted_publishing_context();
     let oidc_token_url = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
         TrustedPublishingError::from_var_err(consts::ACTIONS_ID_TOKEN_REQUEST_URL, err)
     })?;
@@ -250,6 +251,43 @@ async fn get_github_oidc_token(
         .await
         .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?;
     Ok(oidc_token.value)
+}
+
+fn log_github_trusted_publishing_context() {
+    let oidc_url = match env::var(consts::ACTIONS_ID_TOKEN_REQUEST_URL) {
+        Ok(value) => match Url::parse(&value) {
+            Ok(mut url) => {
+                url.set_query(None);
+                url.to_string()
+            }
+            Err(_) => "<invalid url>".to_string(),
+        },
+        Err(_) => "<not set>".to_string(),
+    };
+
+    let has_request_token = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+
+    let github_repository = env::var(consts::GITHUB_REPOSITORY).ok();
+    let github_workflow_ref = env::var(consts::GITHUB_WORKFLOW_REF).ok();
+    let github_workflow = env::var(consts::GITHUB_WORKFLOW).ok();
+    let github_ref = env::var(consts::GITHUB_REF).ok();
+    let github_environment = env::var(consts::GITHUB_ENVIRONMENT).ok();
+
+    tracing::info!(
+        "Trusted publishing (GitHub Actions) context: audience=prefix.dev, \
+oidc_request_url={}, has_request_token={}, \
+github_repository={:?}, github_workflow_ref={:?}, github_workflow={:?}, \
+github_ref={:?}, github_environment={:?}",
+        oidc_url,
+        has_request_token,
+        github_repository,
+        github_workflow_ref,
+        github_workflow,
+        github_ref,
+        github_environment
+    );
 }
 
 /// Get the OIDC token from Google Cloud metadata server.
