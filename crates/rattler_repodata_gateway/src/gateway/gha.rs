@@ -29,7 +29,7 @@
 //! GitHub tokens are resolved in this order:
 //! 1. `GITHUB_TOKEN` environment variable
 //! 2. `GH_TOKEN` environment variable
-//! 3. `gh` CLI config file (`~/.config/gh/hosts.yml`)
+//! 3. `gh auth token` (the `gh` CLI)
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -178,12 +178,7 @@ fn resolve_github_token() -> Result<String, GhaError> {
         }
     }
 
-    // 3. gh CLI config file
-    if let Some(token) = read_gh_cli_token() {
-        return Ok(token);
-    }
-
-    // 4. `gh auth token` — handles keychain-backed auth used by newer gh versions
+    // 3. `gh auth token`
     if let Some(token) = run_gh_auth_token() {
         return Ok(token);
     }
@@ -209,67 +204,6 @@ fn run_gh_auth_token() -> Option<String> {
         None
     } else {
         Some(token)
-    }
-}
-
-/// Read the GitHub token from the `gh` CLI config file.
-fn read_gh_cli_token() -> Option<String> {
-    let config_path = gh_config_path()?;
-    let contents = std::fs::read_to_string(config_path).ok()?;
-
-    // Parse the hosts.yml file. It's a simple YAML structure:
-    // github.com:
-    //     oauth_token: gho_xxxx
-    //     user: ...
-    // We do a simple line-based parse to avoid a YAML dependency.
-    let mut in_github_section = false;
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed == "github.com:" || trimmed == "\"github.com\":" {
-            in_github_section = true;
-            continue;
-        }
-        // New top-level key (not indented) means we left the github.com section
-        if in_github_section && !line.starts_with(' ') && !line.starts_with('\t') {
-            break;
-        }
-        if in_github_section {
-            if let Some(token) = trimmed
-                .strip_prefix("oauth_token:")
-                .or_else(|| trimmed.strip_prefix("oauth_token :"))
-            {
-                let token = token.trim().trim_matches('"').trim_matches('\'');
-                if !token.is_empty() {
-                    return Some(token.to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Get the path to the `gh` CLI hosts config file.
-fn gh_config_path() -> Option<PathBuf> {
-    // GH_CONFIG_DIR takes precedence
-    if let Ok(dir) = std::env::var("GH_CONFIG_DIR") {
-        return Some(PathBuf::from(dir).join("hosts.yml"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("APPDATA")
-            .ok()
-            .map(|appdata| PathBuf::from(appdata).join("GitHub CLI").join("hosts.yml"))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // XDG_CONFIG_HOME or ~/.config
-        let config_dir = std::env::var("XDG_CONFIG_HOME")
-            .ok()
-            .map(PathBuf::from)
-            .or_else(|| dirs::home_dir().map(|h| h.join(".config")))?;
-        Some(config_dir.join("gh").join("hosts.yml"))
     }
 }
 
@@ -556,11 +490,5 @@ mod tests {
             format!("hello-rattler-{current}"),
             "`{{subdir}}` should be replaced with the current platform subdir"
         );
-    }
-
-    #[test]
-    fn test_gh_config_path() {
-        // Just make sure it doesn't panic
-        let _ = gh_config_path();
     }
 }
