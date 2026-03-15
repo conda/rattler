@@ -14,6 +14,47 @@ use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
 
+/// S3 credentials resolved from `S3_*` environment variables.
+struct S3EnvCredentials {
+    access_key_id: String,
+    secret_access_key: String,
+    session_token: Option<String>,
+}
+
+/// S3 connection config resolved from `S3_*` environment variables.
+struct S3EnvConfig {
+    endpoint_url: String,
+    region: String,
+    force_path_style: bool,
+}
+
+/// Try to read S3 credentials from the vendor-neutral `S3_*` environment variables.
+fn s3_credentials_from_env() -> Option<S3EnvCredentials> {
+    let access_key_id = std::env::var("S3_ACCESS_KEY_ID").ok()?;
+    let secret_access_key = std::env::var("S3_SECRET_ACCESS_KEY").ok()?;
+    let session_token = std::env::var("S3_SESSION_TOKEN").ok();
+    Some(S3EnvCredentials {
+        access_key_id,
+        secret_access_key,
+        session_token,
+    })
+}
+
+/// Try to read S3 connection config from the vendor-neutral `S3_*` environment variables.
+fn s3_config_from_env() -> Option<S3EnvConfig> {
+    let endpoint_url = std::env::var("S3_ENDPOINT_URL").ok()?;
+    let region = std::env::var("S3_REGION").ok()?;
+    let force_path_style = std::env::var("S3_ADDRESSING_STYLE").map_or_else(
+        |_| std::env::var("S3_FORCE_PATH_STYLE").is_ok_and(|s| s == "true" || s == "1"),
+        |s| s.eq_ignore_ascii_case("path"),
+    );
+    Some(S3EnvConfig {
+        endpoint_url,
+        region,
+        force_path_style,
+    })
+}
+
 /// Configuration for the S3 middleware.
 #[derive(Clone, Debug)]
 pub enum S3Config {
@@ -160,18 +201,53 @@ impl S3 {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
                 }
                 (_, None) => {
-                    tracing::debug!(
-                        "No S3 credentials in rattler auth storage for bucket '{}', \
-                         falling back to AWS SDK default credential chain",
-                        bucket_name
-                    );
-                    aws_sdk_s3::config::Builder::from(sdk_config)
+                    // Fall back to S3_* env vars, then AWS SDK credentials.
+                    let mut builder = aws_sdk_s3::config::Builder::from(sdk_config)
                         .endpoint_url(endpoint_url)
                         .region(aws_sdk_s3::config::Region::new(region))
-                        .force_path_style(force_path_style)
+                        .force_path_style(force_path_style);
+                    if let Some(creds) = s3_credentials_from_env() {
+                        tracing::debug!("Using S3_* env credentials for bucket '{}'", bucket_name);
+                        builder =
+                            builder.credentials_provider(aws_sdk_s3::config::Credentials::new(
+                                creds.access_key_id,
+                                creds.secret_access_key,
+                                creds.session_token,
+                                None,
+                                "rattler-s3-env",
+                            ));
+                    } else {
+                        tracing::debug!(
+                            "No S3 credentials in auth storage for bucket '{}', \
+                             falling back to AWS SDK default credential chain",
+                            bucket_name
+                        );
+                    }
+                    builder
                 }
             };
             let s3_config = config_builder.build();
+            Ok(aws_sdk_s3::Client::from_conf(s3_config))
+        } else if let (Some(env_config), Some(env_creds)) =
+            (s3_config_from_env(), s3_credentials_from_env())
+        {
+            // Use vendor-neutral S3_* environment variables.
+            tracing::debug!(
+                "Using S3_* env config and credentials for bucket '{}'",
+                bucket_name
+            );
+            let s3_config = aws_sdk_s3::config::Builder::from(sdk_config)
+                .endpoint_url(env_config.endpoint_url)
+                .region(aws_sdk_s3::config::Region::new(env_config.region))
+                .force_path_style(env_config.force_path_style)
+                .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                    env_creds.access_key_id,
+                    env_creds.secret_access_key,
+                    env_creds.session_token,
+                    None,
+                    "rattler-s3-env",
+                ))
+                .build();
             Ok(aws_sdk_s3::Client::from_conf(s3_config))
         } else {
             let mut s3_config_builder = aws_sdk_s3::config::Builder::from(sdk_config);
@@ -491,6 +567,79 @@ region = eu-central-1
             presigned.path(),
             "/rattler-s3-testing/channel/noarch/repodata.json"
         );
+        assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
+    }
+
+    #[tokio::test]
+    async fn test_presigned_s3_request_s3_env_vars() {
+        // When no bucket config exists, S3_* env vars should be used for both
+        // connection config and credentials.
+        let s3 = S3::new(HashMap::new(), AuthenticationStorage::empty());
+        let presigned = async_with_vars(
+            [
+                ("S3_ACCESS_KEY_ID", Some("minioadmin")),
+                ("S3_SECRET_ACCESS_KEY", Some("minioadmin")),
+                ("S3_REGION", Some("eu-central-1")),
+                ("S3_ENDPOINT_URL", Some("http://localhost:9000")),
+                ("S3_ADDRESSING_STYLE", Some("path")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+        assert_eq!(
+            presigned.path(),
+            "/rattler-s3-testing/channel/noarch/repodata.json"
+        );
+        assert!(
+            presigned.to_string().contains("localhost:9000"),
+            "Unexpected presigned URL: {presigned:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_presigned_s3_request_custom_config_falls_back_to_s3_env() {
+        // When custom S3 config is provided but no credentials in auth storage,
+        // S3_* env credentials should be preferred over AWS SDK defaults.
+        let s3 = S3::new(
+            HashMap::from([(
+                "rattler-s3-testing".into(),
+                S3Config::Custom {
+                    endpoint_url: Url::parse("http://localhost:9000").unwrap(),
+                    region: "eu-central-1".into(),
+                    force_path_style: true,
+                },
+            )]),
+            AuthenticationStorage::empty(),
+        );
+
+        let presigned = async_with_vars(
+            [
+                ("S3_ACCESS_KEY_ID", Some("minioadmin")),
+                ("S3_SECRET_ACCESS_KEY", Some("minioadmin")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+        assert_eq!(
+            presigned.path(),
+            "/rattler-s3-testing/channel/noarch/repodata.json"
+        );
+        assert_eq!(presigned.scheme(), "http");
+        assert_eq!(presigned.host_str().unwrap(), "localhost");
         assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
     }
 
