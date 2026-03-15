@@ -445,23 +445,28 @@ impl QueryExecutor {
                 continue;
             }
 
+            // Skip names already committed via an exact spec or a transitive
+            if self.seen.contains_key(name.as_normalized()) {
+                continue;
+            }
+
+            // Apply ALL matching patterns, not just the first.
             for (matcher, spec) in &self.pending_pattern_specs {
                 if matcher.matches(&name) {
-                    if self
-                        .seen
-                        .insert(name.as_normalized().to_string(), ())
-                        .is_none()
-                    {
-                        let pending = self
-                            .pending_package_specs
-                            .entry(name.clone())
-                            .or_insert_with(|| SourceSpecs::Input(vec![]));
-                        if let SourceSpecs::Input(input_specs) = pending {
-                            input_specs.push(spec.clone());
-                        }
+                    let pending = self
+                        .pending_package_specs
+                        .entry(name.clone())
+                        .or_insert_with(|| SourceSpecs::Input(vec![]));
+                    if let SourceSpecs::Input(input_specs) = pending {
+                        input_specs.push(spec.clone());
                     }
-                    break;
                 }
+            }
+
+            // Mark as seen after the full pattern scan so that all matching
+            // specs are collected before the name is considered committed.
+            if self.pending_package_specs.contains_key(&name) {
+                self.seen.insert(name.as_normalized().to_string(), ());
             }
         }
     }
