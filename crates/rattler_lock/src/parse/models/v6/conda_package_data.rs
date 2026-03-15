@@ -15,11 +15,11 @@ use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
 };
 use rattler_conda_types::{
-    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
-    PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
+    PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
@@ -89,7 +89,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_channel_field"
+    )]
     pub channel: Option<Cow<'a, Option<Url>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -207,7 +211,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         if value
             .location
             .file_name()
-            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
+            .is_some_and(|name| name.ends_with(".tar.bz2") || name.ends_with(".conda"))
         {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
@@ -292,8 +296,12 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
             variants: variants.map(Cow::Borrowed),
-            channel: (channel != derived.channel.as_ref())
-                .then_some(Cow::Owned(normalized_channel)),
+            channel: if value.as_binary().is_some() && channel != derived.channel.as_ref() {
+                Some(Cow::Owned(normalized_channel))
+            } else {
+                None
+            },
+
             file_name: (file_name != derived.identifier.as_ref())
                 .then_some(Cow::Owned(file_name.cloned())),
             purls: Cow::Borrowed(&package_record.purls),
@@ -330,4 +338,15 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
     } else {
         Cow::Borrowed(url)
     }
+}
+
+/// Helper to deserialize the channel field, distinguishing "null" from "missing".
+fn deserialize_channel_field<'de, 'a, D>(
+    deserializer: D,
+) -> Result<Option<Cow<'a, Option<Url>>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<Url> = Option::deserialize(deserializer)?;
+    Ok(Some(Cow::Owned(opt)))
 }
