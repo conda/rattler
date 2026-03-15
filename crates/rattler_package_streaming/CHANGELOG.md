@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.2...rattler_package_streaming-v0.24.3) - 2026-03-15
+
+### Added
+
+- Add support for downloading info files via range requests ([#1935](https://github.com/conda/rattler/pull/1935))
+
+### Fixed
+
+- propagate stream_conda_info error instead of panic ([#2182](https://github.com/conda/rattler/pull/2182))
+- validate symlink targets to prevent prefix escape ([#2143](https://github.com/conda/rattler/pull/2143))
+
+### Other
+
+- Improve range request API, fix 416 issue ([#2199](https://github.com/conda/rattler/pull/2199))
+
 ## [0.24.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.1...rattler_package_streaming-v0.24.2) - 2026-02-25
 
 ### Other
