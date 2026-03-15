@@ -53,6 +53,7 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         None, // min_age
         strategy,
         Vec::new(), // dependency_overrides
+                    // channel_package_names removed; package presence tracked in RepoData
     )
     .expect("failed to create dependency provider");
 

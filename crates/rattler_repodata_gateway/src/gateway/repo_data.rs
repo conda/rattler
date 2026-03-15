@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{PackageName, RepoDataRecord};
 
 /// A container for [`RepoDataRecord`]s that are returned from the [`super::Gateway`].
 ///
@@ -12,6 +12,9 @@ use rattler_conda_types::RepoDataRecord;
 #[derive(Debug, Default, Clone)]
 pub struct RepoData {
     pub(crate) records: Vec<Arc<RepoDataRecord>>,
+    /// All package names present in this channel.
+    /// Includes names whose records were filtered out by version constraints.
+    pub(crate) package_names: HashSet<PackageName>,
 }
 
 impl RepoData {
@@ -30,6 +33,11 @@ impl RepoData {
     /// Returns true if there are no records stored in this instance.
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
+    }
+
+    /// Returns the package names present in this channel.
+    pub fn package_names(&self) -> &HashSet<PackageName> {
+        &self.package_names
     }
 
     /// Returns an iterator over the Arc-wrapped records.

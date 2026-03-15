@@ -402,7 +402,7 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the result.
+    /// Add matching records to the result and populate `package_names`.
     fn accumulate_records(
         &mut self,
         result_idx: usize,
@@ -411,14 +411,21 @@ impl QueryExecutor {
     ) {
         let result = &mut self.result[result_idx];
 
+        for record in &records {
+            // Always track package name for channel presence.
+            result
+                .package_names
+                .insert(record.package_record.name.clone());
+        }
+
         match request_specs {
             SourceSpecs::Transitive => {
                 // All records match — extend with Arc clones (cheap refcount bumps).
                 result.records.extend(records);
             }
             SourceSpecs::Input(specs) => {
-                // Only a subset matches — filter and clone matching Arcs.
                 for record in &records {
+                    // Only include records that match at least one input spec.
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
                         result.records.push(record.clone());
                     }

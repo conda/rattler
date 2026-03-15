@@ -50,12 +50,18 @@ pub struct DependencyOverride {
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: Vec<&'a RepoDataRecord>,
+    /// The channel URL for this `RepoData`
+    pub channel: Option<String>,
+    /// All package names present in this channel
+    pub package_names: std::collections::HashSet<rattler_conda_types::PackageName>,
 }
 
 impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
     fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
         Self {
             records: Vec::from_iter(iter),
+            channel: None,
+            package_names: std::collections::HashSet::new(),
         }
     }
 }
@@ -333,10 +339,23 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        let mut package_name_found_in_channel = HashMap::<String, Option<String>>::new();
+
+        // Pre-populate channel ownership from RepoData.package_names.
+        let repodata_vec: Vec<RepoData<'a>> = repodata.into_iter().collect();
+        if channel_priority == ChannelPriority::Strict {
+            for repo_data in &repodata_vec {
+                let channel = repo_data.channel.clone();
+                for name in repo_data.package_names.iter() {
+                    package_name_found_in_channel
+                        .entry(name.as_normalized().to_string())
+                        .or_insert_with(|| channel.clone());
+                }
+            }
+        }
 
         // Add additional records
-        for repo_data in repodata {
+        for repo_data in &repodata_vec {
             // Iterate over all records and dedup records that refer to the same package
             // data but with different archive types. This can happen if you
             // have two variants of the same package but with different
@@ -352,7 +371,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
-            for record in repo_data.records {
+            for record in &repo_data.records {
                 // Determine if this record will be excluded by exclude_newer.
                 let excluded_by_newer = matches!((&exclude_newer, &record.package_record.timestamp),
                     (Some(exclude_newer), Some(record_timestamp))
@@ -504,7 +523,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     channel_priority,
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
-                    if first_channel != &&record.channel {
+                    if first_channel != &record.channel {
                         if let Some(channel) = &record.channel {
                             tracing::debug!(
                                 "Ignoring '{}' from '{}' because of strict channel priority.",
@@ -531,7 +550,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 } else {
                     package_name_found_in_channel.insert(
                         record.package_record.name.as_normalized().to_string(),
-                        &record.channel,
+                        record.channel.clone(),
                     );
                 }
             }

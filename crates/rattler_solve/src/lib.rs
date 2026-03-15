@@ -282,6 +282,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Dependency overrides that replace dependencies of matching packages.
     pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
+    // channel_package_names field removed; package presence is now tracked in RepoData
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
