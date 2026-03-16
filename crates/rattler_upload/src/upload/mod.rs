@@ -220,12 +220,12 @@ pub async fn upload_package_to_anaconda(
 ) -> Result<(), anaconda::AnacondaError> {
     let token = match anaconda_data.api_key {
         Some(token) => token,
-        None => match storage.get("anaconda.org") {
-            Ok(Some(Authentication::CondaToken(token))) => token,
-            Ok(Some(_)) => {
+        None => match storage.get_by_url(Url::from(anaconda_data.url.clone())) {
+            Ok((_, Some(Authentication::CondaToken(token)))) => token,
+            Ok((_, Some(_))) => {
                 return Err(anaconda::AnacondaError::WrongAuthenticationType);
             }
-            Ok(None) => {
+            Ok((_, None)) => {
                 return Err(anaconda::AnacondaError::MissingApiKey);
             }
             Err(e) => {
