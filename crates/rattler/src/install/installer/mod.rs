@@ -726,7 +726,19 @@ async fn link_package(
     // Since we use the `Prefix` type, the conda-meta folder is guaranteed to exist
     let conda_meta_path = target_prefix.path().join("conda-meta");
 
+    // Acquire an IO permit before spawning the rayon task. Without this,
+    // launching hundreds of packages simultaneously would trigger hundreds of
+    // concurrent opens of `index.json` and `paths.json`, exhausting file
+    // descriptors on systems with low ulimit values. Holding the permit for the
+    // duration of the blocking task keeps the number of simultaneous file
+    // operations bounded by the configured IO concurrency limit.
+    let permit = driver
+        .acquire_io_permit()
+        .await
+        .map_err(|_| InstallerError::Cancelled)?;
+
     rayon::spawn_fifo(move || {
+        let _permit = permit;
         let inner = move || {
             // Link the contents of the package into the prefix.
             let (paths, link_type) = crate::install::link_package_sync(
