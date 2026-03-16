@@ -121,6 +121,7 @@ pub enum ServerType {
     Artifactory(ArtifactoryOpts),
     Prefix(PrefixOpts),
     Anaconda(AnacondaOpts),
+    Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
     #[clap(hide = true)]
@@ -439,6 +440,57 @@ impl AnacondaData {
                 .unwrap_or_else(|| Url::parse("https://api.anaconda.org").unwrap())
                 .into(),
             force,
+        }
+    }
+}
+
+/// Options for uploading to a Cloudsmith repository.
+/// Authentication is used from the keychain / auth-file.
+#[derive(Clone, Debug, PartialEq, Parser)]
+pub struct CloudsmithOpts {
+    /// The owner (namespace) of the Cloudsmith repository
+    #[arg(short, long, env = "CLOUDSMITH_OWNER")]
+    pub owner: String,
+
+    /// The Cloudsmith repository name
+    #[arg(short, long, env = "CLOUDSMITH_REPO")]
+    pub repo: String,
+
+    /// The Cloudsmith API key, if none is provided, the token is read from the
+    /// keychain / auth-file
+    #[arg(short = 'k', long, env = "CLOUDSMITH_API_KEY")]
+    pub api_key: Option<String>,
+
+    /// The URL to the Cloudsmith API server
+    #[arg(short, long, env = "CLOUDSMITH_API_URL")]
+    pub url: Option<Url>,
+}
+
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct CloudsmithData {
+    pub owner: String,
+    pub repo: String,
+    pub api_key: Option<String>,
+    pub url: UrlWithTrailingSlash,
+}
+
+impl From<CloudsmithOpts> for CloudsmithData {
+    fn from(value: CloudsmithOpts) -> Self {
+        Self::new(value.owner, value.repo, value.api_key, value.url)
+    }
+}
+
+impl CloudsmithData {
+    /// Create a new instance of `CloudsmithData`
+    pub fn new(owner: String, repo: String, api_key: Option<String>, url: Option<Url>) -> Self {
+        Self {
+            owner,
+            repo,
+            api_key,
+            url: url
+                .unwrap_or_else(|| Url::parse("https://api.cloudsmith.io/v1").unwrap())
+                .into(),
         }
     }
 }

@@ -68,6 +68,10 @@ impl<'a> ExtractedPackage<'a> {
             .map(|digest| general_purpose::STANDARD.encode(digest))
     }
 
+    pub fn md5_hex(&self) -> Result<String, std::io::Error> {
+        compute_file_digest::<Md5>(&self.file).map(|digest| format!("{digest:x}"))
+    }
+
     pub fn filename(&self) -> Option<&str> {
         self.file.file_name().and_then(|s| s.to_str())
     }
