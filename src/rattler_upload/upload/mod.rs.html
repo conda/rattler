@@ -222,12 +222,12 @@
 <a href=#220 id=220 data-nosnippet>220</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), anaconda::AnacondaError&gt; {
 <a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>token = <span class="kw">match </span>anaconda_data.api_key {
 <a href=#222 id=222 data-nosnippet>222</a>        <span class="prelude-val">Some</span>(token) =&gt; token,
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="prelude-val">None </span>=&gt; <span class="kw">match </span>storage.get(<span class="string">"anaconda.org"</span>) {
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Authentication::CondaToken(token))) =&gt; token,
-<a href=#225 id=225 data-nosnippet>225</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="kw">_</span>)) =&gt; {
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="prelude-val">None </span>=&gt; <span class="kw">match </span>storage.get_by_url(Url::from(anaconda_data.url.clone())) {
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="prelude-val">Ok</span>((<span class="kw">_</span>, <span class="prelude-val">Some</span>(Authentication::CondaToken(token)))) =&gt; token,
+<a href=#225 id=225 data-nosnippet>225</a>            <span class="prelude-val">Ok</span>((<span class="kw">_</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>))) =&gt; {
 <a href=#226 id=226 data-nosnippet>226</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(anaconda::AnacondaError::WrongAuthenticationType);
 <a href=#227 id=227 data-nosnippet>227</a>            }
-<a href=#228 id=228 data-nosnippet>228</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="prelude-val">Ok</span>((<span class="kw">_</span>, <span class="prelude-val">None</span>)) =&gt; {
 <a href=#229 id=229 data-nosnippet>229</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(anaconda::AnacondaError::MissingApiKey);
 <a href=#230 id=230 data-nosnippet>230</a>            }
 <a href=#231 id=231 data-nosnippet>231</a>            <span class="prelude-val">Err</span>(e) =&gt; {
