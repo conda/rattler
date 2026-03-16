@@ -392,3 +392,20 @@ fn append_path_to_archive(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sort_paths_returns_error_for_path_outside_base() {
+        let base_path = Path::new("/base/dir");
+        let paths = vec![PathBuf::from("/other/dir/file.txt")];
+
+        let result = sort_paths(&paths, base_path);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+}
