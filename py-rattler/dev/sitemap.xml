@@ -2,254 +2,254 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/about_json/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/activate/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/activation_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/activation_result/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/activation_variables/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/arch/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/cache_dir_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/channel/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/channel_config/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/client/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/conda_locked_binary_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/conda_locked_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/conda_locked_source_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/detect_virtual_package_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/environment/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/environment_creation_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/fetch_repo_data/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/fetch_repo_data_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/file_mode/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/gateway/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/generic_virtual_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/index_/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/index_json/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/installer/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/invalid_channel_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/invalid_match_spec_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/invalid_package_name_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/invalid_url_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/invalid_version_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/io_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/link_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/lock_file/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/locked_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/match_spec/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/nameless_match_spec/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_hashes/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_name/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/package_record/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/parse_arch_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/parse_platform_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/patch_instructions/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/path_modification_behavior/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/path_type/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/paths_entry/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/paths_json/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/platform/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/prefix_paths/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/prefix_placeholder/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/prefix_record/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/pypi_locked_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/repo_data/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/repo_data_record/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/run_exports_json/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/shell/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/solver/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/solver_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/sparse_repo_data/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/transaction_error/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/version/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/version_with_source/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/virtual_package/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
     <url>
          <loc>https://conda.github.io/rattler/py-rattler/dev/whl_package_record/</loc>
-         <lastmod>2026-03-15</lastmod>
+         <lastmod>2026-03-16</lastmod>
     </url>
 </urlset>
