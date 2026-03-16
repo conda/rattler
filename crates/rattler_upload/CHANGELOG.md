@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_upload-v0.4.15...rattler_upload-v0.5.0) - 2026-03-16
+
+### Fixed
+
+- upload token matching for anaconda.org ([#2231](https://github.com/conda/rattler/pull/2231))
+
+### Other
+
+- *(upload)* [**breaking**] add proper errors and tests to rattler upload  ([#2157](https://github.com/conda/rattler/pull/2157))
+
 ## [0.4.15](https://github.com/conda/rattler/compare/rattler_upload-v0.4.14...rattler_upload-v0.4.15) - 2026-02-25
 
 ### Other
