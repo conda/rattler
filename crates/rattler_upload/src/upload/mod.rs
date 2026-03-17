@@ -621,10 +621,10 @@ mod test {
         };
 
         let router = Router::new()
-            .route("/repos/{owner}/{repo}/files/upload/", post(upload_handler))
+            .route("/files/{owner}/{repo}/", post(upload_handler))
             .route("/s3-upload", post(|| async { StatusCode::OK }))
             .route(
-                "/repos/{owner}/{repo}/packages/upload/conda/",
+                "/packages/{owner}/{repo}/upload/conda/",
                 post(|| async {
                     (
                         StatusCode::OK,

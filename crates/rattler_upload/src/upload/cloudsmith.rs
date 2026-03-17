@@ -138,7 +138,7 @@ impl Cloudsmith {
     ) -> Result<UploadResponse, CloudsmithError> {
         let url = self
             .url
-            .join(&format!("repos/{}/{}/files/upload/", self.owner, self.repo))
+            .join(&format!("files/{}/{}/", self.owner, self.repo))
             .into_diagnostic()?;
 
         let method = if is_multipart { "put_parts" } else { "post" };
@@ -256,7 +256,7 @@ impl Cloudsmith {
         let url = self
             .url
             .join(&format!(
-                "repos/{}/{}/files/complete/",
+                "files/{}/{}/complete/",
                 self.owner, self.repo
             ))
             .into_diagnostic()?;
@@ -291,7 +291,7 @@ impl Cloudsmith {
         let url = self
             .url
             .join(&format!(
-                "repos/{}/{}/packages/upload/conda/",
+                "packages/{}/{}/upload/conda/",
                 self.owner, self.repo
             ))
             .into_diagnostic()?;
@@ -412,7 +412,7 @@ mod test {
         };
 
         let router = Router::new()
-            .route("/repos/{owner}/{repo}/files/upload/", post(upload_handler))
+            .route("/files/{owner}/{repo}/", post(upload_handler))
             .route(
                 "/s3-upload",
                 axum::routing::put({
@@ -427,11 +427,11 @@ mod test {
                 }),
             )
             .route(
-                "/repos/{owner}/{repo}/files/complete/",
+                "/files/{owner}/{repo}/complete/",
                 post(|| async { StatusCode::OK }),
             )
             .route(
-                "/repos/{owner}/{repo}/packages/upload/conda/",
+                "/packages/{owner}/{repo}/upload/conda/",
                 post(|| async {
                     (
                         StatusCode::OK,
