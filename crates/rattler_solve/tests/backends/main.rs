@@ -4,9 +4,8 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    Channel, Channel, ChannelConfig, ChannelConfig, GenericVirtualPackage, GenericVirtualPackage,
-    MatchSpec, MatchSpec, NoArchType, NoArchType, PackageRecord, ParseMatchSpecOptions,
-    ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+    ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
