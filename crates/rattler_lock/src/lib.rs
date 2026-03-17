@@ -588,6 +588,14 @@ mod test {
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
+    fn test_path() -> PathBuf {
+        if cfg!(windows) {
+            PathBuf::from("C:\\tmp\\some\\test\\path")
+        } else {
+            PathBuf::from("/tmp/some/test/path")
+        }
+    }
+
     #[rstest]
     #[case::v0_numpy("v0/numpy-conda-lock.yml")]
     #[case::v0_python("v0/python-conda-lock.yml")]
@@ -668,10 +676,7 @@ mod test {
         let rendered_lock_file = conda_lock.render_to_string().unwrap();
 
         // Parse the rendered lock-file again
-        #[cfg(not(target_os = "windows"))]
-        let source_path = PathBuf::from("/tmp/some/test/path");
-        #[cfg(target_os = "windows")]
-        let source_path = PathBuf::from("C:\\tmp\\some\\test\\path");
+        let source_path = test_path();
         let parsed_lock_file =
             LockFile::from_str_with_base_directory(&rendered_lock_file, Some(&source_path))
                 .unwrap();
@@ -1050,7 +1055,7 @@ packages:
       - my-subdir @ file:my_subdir
       - external-pkg @ file:../external_pkg
 ";
-        let base_dir = PathBuf::from("/tmp/project");
+        let base_dir = test_path();
         let lock_file =
             LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
 
@@ -1156,5 +1161,71 @@ packages:
         let reparsed = LockFile::from_str_with_base_directory(&rendered, Some(&base_dir)).unwrap();
         let rerendered = reparsed.render_to_string().unwrap();
         similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// Verify that `file:///` URLs in pypi package locations produce matching
+    /// selectors. `UrlOrPath::from_str("file:///...")` normalizes to a bare
+    /// path internally, but `Verbatim` preserves the original `file:///`
+    /// string. `SerializablePackageSelector` serializes the inner `UrlOrPath`
+    /// (bare path) while the package data serializes the `Verbatim` wrapper
+    /// (`file:///`), causing a mismatch.
+    #[test]
+    fn test_pypi_file_url_selector_matches_package() {
+        let base_dir = test_path();
+        let lock_file_str = format!(
+            r#"version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: file://{0}/my_pkg
+packages:
+  - pypi: file://{0}/my_pkg
+    name: my-pkg
+    version: 1.0.0
+    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+"#,
+            base_dir.display()
+        );
+        eprintln!("Lockfile:\n{lock_file_str}");
+        let lock_file =
+            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
+
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // Parse the rendered YAML and verify that the selector path matches
+        // the package path. This fails because the selector serializes the
+        // inner UrlOrPath (producing "/tmp/project/my_pkg") while the package
+        // serializes via Verbatim (producing "file:///tmp/project/my_pkg").
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+
+        let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|pkg| pkg["pypi"].as_str())
+            .collect();
+
+        let selector_pypi_keys: Vec<&str> = yaml["environments"]["default"]["packages"]["linux-64"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|sel| sel["pypi"].as_str())
+            .collect();
+
+        assert_eq!(selector_pypi_keys.len(), 1);
+        for selector_key in &selector_pypi_keys {
+            assert!(
+                package_pypi_keys.contains(selector_key),
+                "environment selector `pypi: {selector_key}` has no matching \
+                 entry in the packages section (available: {package_pypi_keys:?})"
+            );
+        }
     }
 }
