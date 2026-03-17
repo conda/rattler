@@ -188,8 +188,17 @@ async fn benchmark_download_and_extract(
             if use_spooled {
                 // To force remote behavior for file:// or localhost streaming over test server
                 // we bypass `extract` and call `extract_tar_bz2_via_buffering` directly.
-                let response = client.get(url).send().await.unwrap().error_for_status().unwrap();
-                let byte_stream = futures_util::stream::TryStreamExt::map_err(response.bytes_stream(), |err| std::io::Error::new(std::io::ErrorKind::Other, err));
+                let response = client
+                    .get(url)
+                    .send()
+                    .await
+                    .unwrap()
+                    .error_for_status()
+                    .unwrap();
+                let byte_stream =
+                    futures_util::stream::TryStreamExt::map_err(response.bytes_stream(), |err| {
+                        std::io::Error::other(err)
+                    });
                 let reader = tokio_util::io::StreamReader::new(byte_stream);
                 rattler_package_streaming::tokio::async_read::extract_tar_bz2_via_buffering(
                     reader, &dest,
