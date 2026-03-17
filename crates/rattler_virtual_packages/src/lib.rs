@@ -510,9 +510,14 @@ impl From<LibC> for GenericVirtualPackage {
         GenericVirtualPackage {
             // TODO: Convert the family to a valid package name. We can simply replace invalid
             // characters.
-            name: format!("__{}", libc.family.to_lowercase())
-                .try_into()
-                .unwrap(),
+            name: format!(
+                "__{}",
+                libc.family
+                    .to_lowercase()
+                    .replace(|c: char| !matches!(c, 'a'..='z' | '0'..='9' | '-' | '_' | '.'), "_")
+            )
+            .try_into()
+            .unwrap(),
             version: libc.version,
             build_string: "0".into(),
         }
