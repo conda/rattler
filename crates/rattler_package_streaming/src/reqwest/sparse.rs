@@ -82,7 +82,10 @@ pub async fn fetch_file_from_remote_sparse(
     .await?;
 
     // Wrap for async_zip (tokio → futures traits + buffering)
-    let buf_reader = futures::io::BufReader::new(reader.compat());
+    let buf_reader = futures::io::BufReader::with_capacity(
+        crate::tokio::shared::DEFAULT_BUF_SIZE,
+        reader.compat(),
+    );
 
     // Open ZIP (parses EOCD + central directory, data already cached from range request)
     let mut zip_reader = ZipFileReader::new(buf_reader).await?;
@@ -122,7 +125,8 @@ pub async fn fetch_file_from_remote_sparse(
 
     // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
     let tokio_reader = entry_reader.compat();
-    let buf_reader = tokio::io::BufReader::new(tokio_reader);
+    let buf_reader =
+        tokio::io::BufReader::with_capacity(crate::tokio::shared::DEFAULT_BUF_SIZE, tokio_reader);
     let zstd_decoder = ZstdDecoder::new(buf_reader);
     let mut tar = tokio_tar::Archive::new(zstd_decoder);
 

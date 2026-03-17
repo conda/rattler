@@ -80,6 +80,64 @@ pub async fn extract_tar_bz2(
     })
 }
 
+/// Extracts a `.tar.bz2` package by first buffering the full stream into a
+/// `SpooledTempFile`, then decompressing. This allows the download to proceed
+/// at maximum speed without being throttled by bzip2 decompression.
+pub async fn extract_tar_bz2_via_buffering(
+    reader: impl AsyncRead + Send + Unpin + 'static,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    // Ensure the destination directory exists
+    tokio::fs::create_dir_all(destination)
+        .await
+        .map_err(ExtractError::CouldNotCreateDestination)?;
+
+    let destination = destination.to_owned();
+
+    // Hash while downloading
+    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
+    let mut md5_reader =
+        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
+
+    tracing::debug!("spooling up to 5MB of .tar.bz2 payload in memory");
+    // Buffer into SpooledTempFile (5MB in-memory, then disk)
+    let mut spooled = SpooledTempFile::new(5 * 1024 * 1024);
+    tokio::io::copy(&mut size_reader, &mut spooled)
+        .await
+        .map_err(ExtractError::IoError)?;
+
+    // Finalize hashes
+    let (_, total_size) = size_reader.finalize();
+    let (sha256_reader, md5) = md5_reader.finalize();
+    let (_, sha256) = sha256_reader.finalize();
+
+    if total_size == 0 {
+        return Err(ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "no data was read from the package stream - the stream may have been truncated",
+        )));
+    }
+
+    // Rewind and decompress
+    spooled.rewind().await.map_err(ExtractError::IoError)?;
+    let buf_reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, spooled);
+    let decoder = BzDecoder::new(buf_reader);
+    let archive = tokio_tar::ArchiveBuilder::new(decoder)
+        .set_preserve_mtime(true)
+        .set_preserve_permissions(false)
+        .set_unpack_xattrs(false)
+        .set_allow_external_symlinks(false)
+        .build();
+    unpack_tar_archive(archive, &destination).await?;
+
+    Ok(ExtractResult {
+        sha256,
+        md5,
+        total_size,
+    })
+}
+
 /// Extracts the contents of a `.conda` package archive using fully async implementation.
 /// This will perform on-the-fly decompression by streaming the reader.
 pub async fn extract_conda(

@@ -8,6 +8,10 @@ use std::time::{Duration, Instant};
 use reqwest::Client;
 use tempfile::TempDir;
 
+#[cfg(feature = "reqwest")]
+#[path = "../src/reqwest/test_server.rs"]
+mod test_server;
+
 /// Test packages across size ranges
 struct TestPackage {
     name: &'static str,
@@ -160,13 +164,20 @@ async fn benchmark_extraction(
 /// Benchmark download + extract
 async fn benchmark_download_and_extract(
     concurrency: usize,
+    use_spooled: bool,
+    scenario_name: &str,
 ) -> Result<BenchmarkResults, Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let client = reqwest_middleware::ClientWithMiddleware::from(Client::new());
 
-    run_benchmark("Download+Extract", concurrency, move |i| {
+    // Setup local test server with the cached packages to eliminate network noise
+    let cache_dir = std::env::temp_dir().join("rattler_bench_cache");
+    let server_url = test_server::serve_dir(cache_dir.clone()).await;
+
+    run_benchmark(scenario_name, concurrency, move |i| {
         let pkg = &TEST_PACKAGES[i % TEST_PACKAGES.len()];
-        let url = pkg.url.to_string();
+        let file_name = pkg.url.split('/').next_back().unwrap();
+        let url = server_url.join(file_name).unwrap();
         let dest = temp_dir.path().join(format!("extract_{i}"));
         let client = client.clone();
 
@@ -174,15 +185,22 @@ async fn benchmark_download_and_extract(
             std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {e:?}"))?;
 
             let task_start = Instant::now();
-            rattler_package_streaming::reqwest::tokio::extract(
-                client,
-                url.parse().unwrap(),
-                &dest,
-                None,
-                None,
-            )
-            .await
-            .map_err(|e| format!("Download+Extract failed: {e:?}"))?;
+            if use_spooled {
+                // To force remote behavior for file:// or localhost streaming over test server
+                // we bypass `extract` and call `extract_tar_bz2_via_buffering` directly.
+                let response = client.get(url).send().await.unwrap().error_for_status().unwrap();
+                let byte_stream = futures_util::stream::TryStreamExt::map_err(response.bytes_stream(), |err| std::io::Error::new(std::io::ErrorKind::Other, err));
+                let reader = tokio_util::io::StreamReader::new(byte_stream);
+                rattler_package_streaming::tokio::async_read::extract_tar_bz2_via_buffering(
+                    reader, &dest,
+                )
+                .await
+                .map_err(|e| format!("Download+Extract (spooled) failed: {e:?}"))?;
+            } else {
+                rattler_package_streaming::reqwest::tokio::extract(client, url, &dest, None, None)
+                    .await
+                    .map_err(|e| format!("Download+Extract failed: {e:?}"))?;
+            }
             Ok(task_start.elapsed())
         }
     })
@@ -256,14 +274,22 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
         print_results(&result);
         all_results.push(result);
 
-        // Scenario 2: Download + Extract
-        println!("\nRunning Scenario 2: Download + Extract...");
-        let result = benchmark_download_and_extract(concurrency).await?;
+        // Scenario 2: Download + Extract (Streaming)
+        println!("\nRunning Scenario 2: Download + Extract (Streaming)...");
+        let result =
+            benchmark_download_and_extract(concurrency, false, "Download+Extract (Stream)").await?;
         print_results(&result);
         all_results.push(result);
 
-        // Scenario 3: Mixed workload
-        println!("\nRunning Scenario 3: Mixed Workload...");
+        // Scenario 3: Download + Extract (Spooled)
+        println!("\nRunning Scenario 3: Download + Extract (Spooled)...");
+        let result =
+            benchmark_download_and_extract(concurrency, true, "Download+Extract (Spooled)").await?;
+        print_results(&result);
+        all_results.push(result);
+
+        // Scenario 4: Mixed workload
+        println!("\nRunning Scenario 4: Mixed Workload...");
         let result = benchmark_extraction("Mixed Workload", &package_paths, concurrency).await?;
         print_results(&result);
         all_results.push(result);

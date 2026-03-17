@@ -59,3 +59,18 @@ async fn clamp_suffix_range(
     }
     next.run(req).await
 }
+
+/// Spawn a local file server for a directory
+pub async fn serve_dir(dir: impl AsRef<Path>) -> Url {
+    let dir = dir.as_ref();
+    let app = axum::Router::new().fallback_service(ServeDir::new(dir));
+    let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{}:{}/", addr.ip(), addr.port())
+        .parse()
+        .unwrap()
+}
