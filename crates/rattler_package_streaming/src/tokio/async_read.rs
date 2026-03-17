@@ -47,7 +47,10 @@ pub async fn extract_tar_bz2(
         .set_preserve_mtime(true)
         .set_preserve_permissions(false)
         .set_unpack_xattrs(false)
-        .set_allow_external_symlinks(false)
+        // We need this setting otherwise some packages in conda-forge will
+        // not extract. However, we are checking much better in rattler-build and hopefully
+        // one day can remove this.
+        .set_allow_external_symlinks(true)
         .build();
 
     // Unpack entries manually, preserving only executable bits on Unix
