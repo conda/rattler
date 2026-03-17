@@ -7,6 +7,8 @@ on:
       - crates/rattler_index/**
       - crates/rattler_upload/**
       - crates/rattler_networking/**
+      - pixi.toml
+      - pixi.lock
       - .github/workflows/e2e-s3-tests.yml
 
 name: E2E S3 Tests
