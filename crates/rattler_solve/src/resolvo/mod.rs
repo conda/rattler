@@ -326,7 +326,6 @@ impl<'a> CondaDependencyProvider<'a> {
             .map(|name| pool.intern_package_name(name))
             .collect();
 
-        // TODO: Normalize these channel names to urls so we can compare them correctly.
         let channel_specific_specs = match_specs
             .iter()
             .filter(|spec| spec.channel.is_some())
@@ -475,7 +474,21 @@ impl<'a> CondaDependencyProvider<'a> {
                         // Check if the spec has a channel, and compare it to the repodata
                         // channel
                         if let Some(spec_channel) = &spec.channel {
-                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
+                            let spec_channel_name = spec_channel.canonical_name();
+                            let spec_base_url =
+                                spec_channel.base_url.as_str().trim_end_matches('/');
+
+                            let is_match = match &record.channel {
+                                Some(record_channel) => {
+                                    let record_channel_trimmed =
+                                        record_channel.trim_end_matches('/');
+                                    record_channel_trimmed == spec_channel_name
+                                        || record_channel_trimmed == spec_base_url
+                                }
+                                None => false,
+                            };
+
+                            if !is_match {
                                 tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
                                         Some(channel) => format!("from {}", &channel),
                                         None => "without a channel".to_string(),
