@@ -1388,27 +1388,48 @@ fn channel_priority_disabled_libsolv_c() {
 /// channel B and the solve should fail.
 #[test]
 fn channel_priority_strict_direct_dep_higher_channel_no_match() {
-    // Channel B: lower priority, has 2.0 (the only record passing the
+    use rattler_solve::resolvo::RepoData;
+
+    // Channel A (higher priority): has my-pkg but no version matching >=2.0.
+    // The gateway strips those records but reports the package name via
+    // RepoData.package_names so the solver can enforce strict priority.
+    let repo_data_a = RepoData {
+        records: vec![],
+        channel: Some("https://conda.anaconda.org/channel-a/".to_string()),
+        package_names: std::collections::HashSet::from(["my-pkg".parse().unwrap()]),
+    };
+
+    // Channel B (lower priority): has 2.0 (the only record passing the
     // gateway's version filter for spec ">=2.0").
-    let records_b = [PackageBuilder::new("my-pkg")
+    let record_b = PackageBuilder::new("my-pkg")
         .channel("https://conda.anaconda.org/channel-b/")
         .subdir("linux-64")
         .version("2.0")
         .build_string("h0_0")
         .build_number(0)
-        .build()];
+        .build();
+    let repo_data_b = RepoData {
+        records: vec![&record_b],
+        channel: Some("https://conda.anaconda.org/channel-b/".to_string()),
+        package_names: std::collections::HashSet::from(["my-pkg".parse().unwrap()]),
+    };
 
     let spec = MatchSpec::from_str("my-pkg>=2.0", ParseStrictness::Lenient).unwrap();
 
-    // Channel A (higher priority) has my-pkg but no version matching >=2.0.
-    // The gateway strips those records but reports the package name via
-    // RepoData.package_names so the solver can enforce strict priority.
-
-    // Only channel B's records reach the solver.
+    // Channel A is listed first (higher priority), then channel B.
     let solver_task = SolverTask {
         specs: vec![spec],
         channel_priority: ChannelPriority::Strict,
-        ..SolverTask::from_iter([records_b.iter()])
+        available_packages: vec![repo_data_a, repo_data_b],
+        locked_packages: Vec::new(),
+        pinned_packages: Vec::new(),
+        virtual_packages: Vec::new(),
+        constraints: Vec::new(),
+        timeout: None,
+        exclude_newer: None,
+        min_age: None,
+        strategy: SolveStrategy::default(),
+        dependency_overrides: Vec::new(),
     };
 
     let result = rattler_solve::resolvo::Solver.solve(solver_task);
