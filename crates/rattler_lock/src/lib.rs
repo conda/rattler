@@ -1011,4 +1011,150 @@ packages:
         let rerendered = reparsed.render_to_string().unwrap();
         similar_asserts::assert_eq!(rendered, rerendered);
     }
+
+    /// Verify that pypi source packages with relative paths (both `./` and
+    /// `../`) roundtrip correctly and that the `SerializablePackageSelector`
+    /// values in the environment section always match the `pypi:` keys in
+    /// the top-level `packages` section.
+    #[test]
+    fn test_pypi_relative_source_packages_roundtrip() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./
+        - pypi: ./my_subdir
+        - pypi: ../external_pkg
+packages:
+  - pypi: ../external_pkg
+    name: external-pkg
+    version: 2.0.0
+    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+  - pypi: ./my_subdir
+    name: my-subdir
+    version: 0.1.0
+    sha256: c16866cba9a8ec2cfe83bff0f8e36f376ad719ddb21e9a01a8e7699fa28bb2cb
+  - pypi: ./
+    name: my-project
+    version: 1.0.0
+    sha256: 0c8c8ad3d4764ea68d2b5951866ba0ca61d2bfbc49c1af1d53ae7b8f3d841039
+    requires_dist:
+      - my-subdir @ file:my_subdir
+      - external-pkg @ file:../external_pkg
+";
+        let base_dir = PathBuf::from("/tmp/project");
+        let lock_file =
+            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
+
+        let platform = lock_file.platform("linux-64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+        let pypi_packages: Vec<_> = env
+            .packages(platform)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_pypi)
+            .collect();
+
+        assert_eq!(pypi_packages.len(), 3);
+
+        // Check the root package (location = "./")
+        let root_pkg = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "my-project")
+            .expect("my-project package");
+        assert_eq!(
+            root_pkg.location.given(),
+            Some("./"),
+            "verbatim relative path for root should be preserved"
+        );
+        assert_eq!(
+            root_pkg
+                .version
+                .as_ref()
+                .map(std::string::ToString::to_string),
+            Some("1.0.0".to_string())
+        );
+        assert!(root_pkg.hash.is_some());
+        assert_eq!(root_pkg.requires_dist.len(), 2);
+        assert!(
+            root_pkg.index_url.is_none(),
+            "path-based packages have no index_url"
+        );
+
+        // Check the subdirectory package (location = "./my_subdir")
+        let subdir_pkg = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "my-subdir")
+            .expect("my-subdir package");
+        assert_eq!(subdir_pkg.location.given(), Some("./my_subdir"));
+        assert_eq!(
+            subdir_pkg
+                .version
+                .as_ref()
+                .map(std::string::ToString::to_string),
+            Some("0.1.0".to_string())
+        );
+
+        // Check the parent-relative package (location = "../external_pkg")
+        let external_pkg = pypi_packages
+            .iter()
+            .find(|p| p.name.as_ref() == "external-pkg")
+            .expect("external-pkg package");
+        assert_eq!(external_pkg.location.given(), Some("../external_pkg"));
+        assert_eq!(
+            external_pkg
+                .version
+                .as_ref()
+                .map(std::string::ToString::to_string),
+            Some("2.0.0".to_string())
+        );
+
+        // Roundtrip: serialize → re-parse → re-serialize must be identical.
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // Parse the rendered YAML and verify that every pypi selector in the
+        // environment section has a matching pypi key in the packages section.
+        // This catches mismatches between SerializablePackageSelector (which
+        // serializes the inner UrlOrPath via Display) and the package data
+        // (which serializes via Verbatim, preferring the `given` string).
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+
+        let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|pkg| pkg["pypi"].as_str())
+            .collect();
+
+        let selector_pypi_keys: Vec<&str> = yaml["environments"]["default"]["packages"]["linux-64"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|sel| sel["pypi"].as_str())
+            .collect();
+
+        assert_eq!(
+            selector_pypi_keys.len(),
+            3,
+            "expected 3 pypi selectors in environment"
+        );
+        for selector_key in &selector_pypi_keys {
+            assert!(
+                package_pypi_keys.contains(selector_key),
+                "environment selector `pypi: {selector_key}` has no matching \
+                 entry in the packages section (available: {package_pypi_keys:?})"
+            );
+        }
+
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, Some(&base_dir)).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
 }
