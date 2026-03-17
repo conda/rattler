@@ -10,8 +10,7 @@
 
 use std::{sync::Arc, time::SystemTime};
 
-use chrono::{DateTime, Utc};
-use opendal::Operator;
+use opendal::{raw::Timestamp, Operator};
 use rattler_conda_types::PackageRecord;
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
@@ -27,7 +26,7 @@ struct CachedPackage {
     /// The `ETag` when this record was computed (if available)
     etag: Option<String>,
     /// The last modified time when this record was computed (if available)
-    last_modified: Option<DateTime<Utc>>,
+    last_modified: Option<Timestamp>,
 }
 
 /// Result of a cache lookup operation from [`PackageRecordCache::get_or_stat`].
@@ -42,7 +41,7 @@ pub enum CacheResult {
         /// Current `ETag` of the file (if available)
         etag: Option<String>,
         /// Current last modified time of the file (if available)
-        last_modified: Option<DateTime<Utc>>,
+        last_modified: Option<Timestamp>,
     },
 }
 
@@ -155,7 +154,7 @@ impl PackageRecordCache {
         path: &str,
         record: PackageRecord,
         etag: Option<String>,
-        last_modified: Option<DateTime<Utc>>,
+        last_modified: Option<Timestamp>,
     ) {
         let cached = CachedPackage {
             record,
