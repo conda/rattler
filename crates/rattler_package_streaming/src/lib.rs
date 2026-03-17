@@ -96,12 +96,22 @@ impl ExtractError {
     /// network streaming operations.
     pub fn should_retry(&self) -> bool {
         match self {
-            // Retry on all I/O errors during streaming - these are typically
-            // transient network issues (broken pipe, connection reset, etc.)
-            // The cache layer will clean up partial files on retry.
-            // TODO: Add more specific checks for transient I/O errors
-            ExtractError::IoError(_) => true,
-            ExtractError::CouldNotCreateDestination(_) => true,
+            // Only retry on transient network-related I/O errors. Permanent filesystem
+            // errors (PermissionDenied, NotFound, etc.) will never succeed on retry.
+            ExtractError::IoError(io_err) => matches!(
+                io_err.kind(),
+                std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionRefused
+                    | std::io::ErrorKind::NotConnected
+                    | std::io::ErrorKind::Interrupted
+                    | std::io::ErrorKind::UnexpectedEof
+                    | std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::WouldBlock
+            ),
+            // CouldNotCreateDestination is always a local filesystem error — never retry.
+            ExtractError::CouldNotCreateDestination(_) => false,
             #[cfg(feature = "reqwest")]
             ExtractError::ReqwestError(err) => {
                 // Check if this is a connection error (includes broken pipe during connection)
@@ -220,7 +230,7 @@ mod tests {
             std::io::ErrorKind::NotFound,
             "not found",
         ));
-        assert!(err.should_retry());
+        assert!(!err.should_retry());
     }
 
     #[test]
@@ -229,14 +239,14 @@ mod tests {
             std::io::ErrorKind::PermissionDenied,
             "permission denied",
         ));
-        assert!(err.should_retry());
+        assert!(!err.should_retry());
     }
 
     #[test]
     fn test_should_retry_could_not_create_destination() {
         let err =
             ExtractError::CouldNotCreateDestination(std::io::Error::other("could not create"));
-        assert!(err.should_retry());
+        assert!(!err.should_retry());
     }
 
     #[test]
