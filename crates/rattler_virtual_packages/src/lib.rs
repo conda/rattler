@@ -508,8 +508,6 @@ impl LibC {
 impl From<LibC> for GenericVirtualPackage {
     fn from(libc: LibC) -> Self {
         GenericVirtualPackage {
-            // TODO: Convert the family to a valid package name. We can simply replace invalid
-            // characters.
             name: format!(
                 "__{}",
                 libc.family.to_lowercase().replace(
