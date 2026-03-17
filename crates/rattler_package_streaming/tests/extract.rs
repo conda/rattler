@@ -314,7 +314,7 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
         "md5": format!("{:x}", new_result.md5),
     });
 
-    insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);
+    insta::assert_snapshot!(combined_result, @r###"{"md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9","sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97"}"###);
 }
 
 struct FlakyReader<R: Read> {
