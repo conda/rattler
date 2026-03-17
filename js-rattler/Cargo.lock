@@ -1337,6 +1337,8 @@ dependencies = [
  "chrono",
  "console_error_panic_hook",
  "getrandom 0.2.16",
+ "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_repodata_gateway",
