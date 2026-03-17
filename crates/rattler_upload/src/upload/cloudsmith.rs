@@ -255,10 +255,7 @@ impl Cloudsmith {
     async fn complete_upload(&self, upload_id: &str) -> Result<(), CloudsmithError> {
         let url = self
             .url
-            .join(&format!(
-                "files/{}/{}/complete/",
-                self.owner, self.repo
-            ))
+            .join(&format!("files/{}/{}/complete/", self.owner, self.repo))
             .into_diagnostic()?;
 
         debug!("completing multi-part upload {upload_id}");
