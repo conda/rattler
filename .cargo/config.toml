@@ -79,3 +79,6 @@ rustflags = [
 [target.'wasm32-unknown-unknown']
 # See https://docs.rs/getrandom/latest/getrandom/#webassembly-support
 rustflags = ["--cfg", 'getrandom_backend="wasm_js"']
+
+[env]
+AWS_LC_SYS_NO_JITTER_ENTROPY = "1"
