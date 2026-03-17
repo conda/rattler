@@ -92,4 +92,50 @@ mod test {
 
         insta::assert_yaml_snapshot!(entry_point);
     }
+
+    #[test]
+    fn test_entry_point_errors() {
+        // Missing '=' separator entirely
+        assert!(EntryPoint::from_str("no_equals_sign").is_err());
+
+        // Missing ':' separator between module and function
+        assert!(EntryPoint::from_str("cmd = module_only").is_err());
+
+        // Empty string
+        assert!(EntryPoint::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_entry_point_display_roundtrip() {
+        let original = EntryPoint {
+            command: "my-tool".to_string(),
+            module: "my_package.cli".to_string(),
+            function: "run".to_string(),
+        };
+
+        // Display → string → FromStr should roundtrip
+        let displayed = original.to_string();
+        assert_eq!(displayed, "my-tool = my_package.cli:run");
+
+        let parsed = EntryPoint::from_str(&displayed).unwrap();
+        assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn test_entry_point_serde_roundtrip() {
+        let original = EntryPoint {
+            command: "pip".to_string(),
+            module: "pip._internal.cli.main".to_string(),
+            function: "main".to_string(),
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&original).unwrap();
+        // Serialization uses Display format (a plain string)
+        assert_eq!(json, r#""pip = pip._internal.cli.main:main""#);
+
+        // Deserialize back
+        let deserialized: EntryPoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, original);
+    }
 }
