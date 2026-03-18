@@ -109,6 +109,12 @@ impl ExtractError {
                     | std::io::ErrorKind::UnexpectedEof
                     | std::io::ErrorKind::TimedOut
                     | std::io::ErrorKind::WouldBlock
+                    // `Other` covers decompressor/zip-reader errors that arise from a
+                    // truncated network stream (e.g. async_zip maps upstream failures to
+                    // `std::io::Error::other`).  Permanent errors like `PermissionDenied`
+                    // and `NotFound` have their own explicit `ErrorKind` variants and are
+                    // never wrapped as `Other`, so this does not reintroduce the original bug.
+                    | std::io::ErrorKind::Other
             ),
             // CouldNotCreateDestination is always a local filesystem error — never retry.
             ExtractError::CouldNotCreateDestination(_) => false,
@@ -221,6 +227,13 @@ mod tests {
             std::io::ErrorKind::UnexpectedEof,
             "unexpected eof",
         ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_other() {
+        // `Other` covers decompressor/zip-reader errors from a truncated network stream.
+        let err = ExtractError::IoError(std::io::Error::other("zip reader failed"));
         assert!(err.should_retry());
     }
 
