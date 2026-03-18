@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.3...rattler_package_streaming-v0.24.4) - 2026-03-18
+
+### Fixed
+
+- allow external symlinks when extracting ([#2245](https://github.com/conda/rattler/pull/2245))
+
+### Other
+
+- bump dependency versions ([#2237](https://github.com/conda/rattler/pull/2237))
+
 ## [0.24.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.2...rattler_package_streaming-v0.24.3) - 2026-03-16
 
 ### Added

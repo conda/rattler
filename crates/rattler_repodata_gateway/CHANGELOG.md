@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.0...rattler_repodata_gateway-v0.27.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.27.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.2...rattler_repodata_gateway-v0.27.0) - 2026-03-16
 
 ### Added

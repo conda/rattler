@@ -45,11 +45,21 @@ chrono = { version = "0.4.40", features = ["wasmbind"] }
 reqwest = { version = "0.12.24", default-features = false }
 reqwest-middleware = { version = "0.4.2", default-features = false }
 
-# We have transient dependency on getrandom 0.2.16 which needs to have the `js` feature
-# enabled.
-[dependencies.getrandom]
-version = "*"
+# We have transient dependencies on getrandom 0.2 and 0.3 which need WASM features enabled.
+[dependencies.getrandom_v02]
+package = "getrandom"
+version = "0.2"
 features = ["js"]
+
+[dependencies.getrandom_v03]
+package = "getrandom"
+version = "0.3"
+features = ["wasm_js"]
+
+[dependencies.getrandom_v04]
+package = "getrandom"
+version = "0.4"
+features = ["wasm_js"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"

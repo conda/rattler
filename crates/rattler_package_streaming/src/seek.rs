@@ -27,7 +27,12 @@ fn stream_conda_zip_entry<'a>(
             return Err(ExtractError::UnsupportedCompressionMethod);
         }
 
-        (entry.data_start(), entry.size())
+        (
+            entry
+                .data_start()
+                .expect("data_start is available after reading entry"),
+            entry.size(),
+        )
     };
 
     // Seek to the position of the file
