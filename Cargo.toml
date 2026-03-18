@@ -67,11 +67,11 @@ console = { version = "0.16.0", features = ["windows-console-colors"] }
 criterion = "0.8"
 dashmap = "6.1.0"
 difference = "2.0.0"
-digest = "0.10.7"
+digest = "0.10"
 dirs = "6.0.0"
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
-fancy-regex = "0.16.0"
+fancy-regex = "0.17.0"
 filetime = "0.2.26"
 fs-err = { version = "3.1.0" }
 fslock = "0.2.1"
@@ -80,7 +80,7 @@ futures-util = "0.3.31"
 # lots of other crates are still stuck on older version which breaks `deserialize`
 # pinning to 0.14.7 because 0.14.8 introduces deprecation notices.
 generic-array = "=0.14.7"
-getrandom = { version = "0.3.3", default-features = false }
+getrandom = { version = "0.4", default-features = false }
 glob = "0.3.2"
 google-cloud-auth = { version = "1.6.0", default-features = false, features = [
   "default-rustls-provider",
@@ -89,14 +89,15 @@ aws-config = { version = "1.8.11", default-features = false }
 aws-sdk-s3 = { version = "1.115.0", default-features = false }
 aws-smithy-http-client = { version = "1.1.2", default-features = false }
 aws-credential-types = { version = "1.2.10", default-features = false }
-hashbrown = "0.15"
+hashbrown = "0.16"
 hex = "0.4.3"
 hex-literal = "1.0.0"
 http = "1.4"
+# Pinned to 2.x because 3.0 requires reqwest 0.13, and we're still on 0.12
 http-cache-semantics = "2.1.0"
 humansize = "2.1.3"
 humantime = "2.2.0"
-indexmap = "2.12.0"
+indexmap = "2.13.0"
 indicatif = "0.18.0"
 insta = { version = "1.44.3" }
 itertools = "0.14.0"
@@ -114,7 +115,7 @@ netrc-rs = "0.1.2"
 nom = "8.0.0"
 nom-language = "0.1.0"
 num_cpus = "1.16.0"
-opendal = { version = "0.54.0", default-features = false }
+opendal = { version = "0.55.0", default-features = false }
 once_cell = "1.21.3"
 open = "5"
 openidconnect = { version = "4", default-features = false, features = [
@@ -130,7 +131,7 @@ plist = "1"
 proptest = "1.7.0"
 purl = { version = "0.1.6", default-features = false, features = ["serde"] }
 quote = "1.0.40"
-rand = "0.9.1"
+rand = "0.10.0"
 rayon = "1.10.0"
 reflink-copy = "0.1.26"
 regex = "1.11.1"
@@ -164,12 +165,12 @@ smallvec = { version = "1.15.0", features = [
   "union",
 ] }
 sigstore-sign = { version = "0.6.2", default-features = false }
-strum = { version = "0.27.1", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.101"
-sysinfo = "0.37.2"
+sysinfo = "0.38"
 tar = "0.4.44"
-astral-tokio-tar = "0.5.3"
+astral-tokio-tar = "0.6"
 tempfile = "3.20.0"
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 test-log = "0.2.17"
@@ -194,7 +195,7 @@ wasmtimer = "0.4.1"
 which = "8.0.0"
 windows-sys = { version = "0.61.2", default-features = false }
 winver = { version = "1.0.0" }
-zip = { version = "6.0.0", default-features = false }
+zip = { version = "8.2.0", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.
