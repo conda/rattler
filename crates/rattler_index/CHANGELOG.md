@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.18](https://github.com/conda/rattler/compare/rattler_index-v0.27.17...rattler_index-v0.27.18) - 2026-03-18
+
+### Fixed
+
+- set AWS_LC_SYS_CMAKE_BUILDER in pixi-build package configs ([#2241](https://github.com/conda/rattler/pull/2241))
+
+### Other
+
+- bump dependency versions ([#2237](https://github.com/conda/rattler/pull/2237))
+
+## [0.27.17](https://github.com/conda/rattler/compare/rattler_index-v0.27.16...rattler_index-v0.27.17) - 2026-03-16
+
+### Fixed
+
+- *(rattler_index)* Remove non-existent packages from repodata ([#2196](https://github.com/conda/rattler/pull/2196))
+
 ## [0.27.16](https://github.com/conda/rattler/compare/rattler_index-v0.27.15...rattler_index-v0.27.16) - 2026-02-25
 
 ### Other
