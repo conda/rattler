@@ -14,6 +14,7 @@ use crate::{
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath,
+    Verbatim,
 };
 
 #[serde_as]
@@ -141,7 +142,7 @@ enum SerializablePackageSelector<'a> {
         conda_source: SourceIdentifier,
     },
     Pypi {
-        pypi: &'a UrlOrPath,
+        pypi: &'a Verbatim<UrlOrPath>,
     },
 }
 
@@ -224,10 +225,10 @@ impl Ord for SerializablePackageSelector<'_> {
             (
                 SerializablePackageSelector::Conda { conda: a },
                 SerializablePackageSelector::Conda { conda: b },
-            )
-            | (
-                SerializablePackageSelector::Pypi { pypi: a, .. },
-                SerializablePackageSelector::Pypi { pypi: b, .. },
+            ) => compare_url_by_location(a, b),
+            (
+                SerializablePackageSelector::Pypi { pypi: a },
+                SerializablePackageSelector::Pypi { pypi: b },
             ) => compare_url_by_location(a, b),
             // Different types are already handled by type_cmp above
             _ => unreachable!(),
