@@ -80,9 +80,11 @@ pub async fn extract_tar_bz2(
     })
 }
 
-/// Extracts a `.tar.bz2` package by first buffering the full stream into a
-/// `SpooledTempFile`, then decompressing. This allows the download to proceed
-/// at maximum speed without being throttled by bzip2 decompression.
+/// Extracts a `.tar.bz2` package by downloading and extracting concurrently
+/// through an in-memory duplex pipe. The download task writes data into one
+/// end of the pipe while the extraction task reads from the other end,
+/// decompressing bzip2 in parallel. A 5MB buffer absorbs speed differences
+/// between download and decompression, applying natural backpressure when full.
 pub async fn extract_tar_bz2_via_buffering(
     reader: impl AsyncRead + Send + Unpin + 'static,
     destination: &Path,
@@ -94,34 +96,40 @@ pub async fn extract_tar_bz2_via_buffering(
 
     let destination = destination.to_owned();
 
-    // Hash while downloading
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
+    // Create a duplex pipe with a 5MB buffer.
+    // The download task writes into `pipe_writer`, and the extraction task
+    // reads from `pipe_reader`. If bzip2 decompression is slower than the
+    // download, the buffer fills up and backpressure naturally slows the
+    // download — no data is lost and memory usage stays bounded.
+    let pipe_buffer_size = 5 * 1024 * 1024;
+    let (pipe_reader, mut pipe_writer) = tokio::io::duplex(pipe_buffer_size);
 
-    tracing::debug!("spooling up to 5MB of .tar.bz2 payload in memory");
-    // Buffer into SpooledTempFile (5MB in-memory, then disk)
-    let mut spooled = SpooledTempFile::new(5 * 1024 * 1024);
-    tokio::io::copy(&mut size_reader, &mut spooled)
-        .await
-        .map_err(ExtractError::IoError)?;
+    tracing::debug!(
+        "using duplex pipe with {}MB buffer for concurrent download+extract",
+        pipe_buffer_size / (1024 * 1024)
+    );
 
-    // Finalize hashes
-    let (_, total_size) = size_reader.finalize();
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
+    // Spawn the download task: reads from network, hashes, writes into pipe
+    let download_task = tokio::spawn(async move {
+        let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
+        let mut md5_reader =
+            rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+        let mut size_reader = SizeCountingReader::new(&mut md5_reader);
 
-    if total_size == 0 {
-        return Err(ExtractError::IoError(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "no data was read from the package stream - the stream may have been truncated",
-        )));
-    }
+        let copy_result = tokio::io::copy(&mut size_reader, &mut pipe_writer).await;
 
-    // Rewind and decompress
-    spooled.rewind().await.map_err(ExtractError::IoError)?;
-    let buf_reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, spooled);
+        // Drop pipe_writer to signal EOF to the extraction task
+        drop(pipe_writer);
+
+        let (_, total_size) = size_reader.finalize();
+        let (sha256_reader, md5) = md5_reader.finalize();
+        let (_, sha256) = sha256_reader.finalize();
+
+        copy_result.map(|_| (sha256, md5, total_size))
+    });
+
+    // Meanwhile, concurrently extract from the read end of the pipe
+    let buf_reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, pipe_reader);
     let decoder = BzDecoder::new(buf_reader);
     let archive = tokio_tar::ArchiveBuilder::new(decoder)
         .set_preserve_mtime(true)
@@ -130,6 +138,19 @@ pub async fn extract_tar_bz2_via_buffering(
         .set_allow_external_symlinks(false)
         .build();
     unpack_tar_archive(archive, &destination).await?;
+
+    // Wait for the download task to finish and collect the hashes
+    let (sha256, md5, total_size) = download_task
+        .await
+        .map_err(|e| ExtractError::IoError(std::io::Error::other(e)))?
+        .map_err(ExtractError::IoError)?;
+
+    if total_size == 0 {
+        return Err(ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "no data was read from the package stream - the stream may have been truncated",
+        )));
+    }
 
     Ok(ExtractResult {
         sha256,

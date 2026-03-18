@@ -296,12 +296,6 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
             benchmark_download_and_extract(concurrency, true, "Download+Extract (Spooled)").await?;
         print_results(&result);
         all_results.push(result);
-
-        // Scenario 4: Mixed workload
-        println!("\nRunning Scenario 4: Mixed Workload...");
-        let result = benchmark_extraction("Mixed Workload", &package_paths, concurrency).await?;
-        print_results(&result);
-        all_results.push(result);
     }
 
     // Save results
