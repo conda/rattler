@@ -31,7 +31,7 @@ pub enum CloudsmithError {
     },
 
     /// Failed to request a file upload slot.
-    #[error("failed to request file upload (HTTP {status})")]
+    #[error("failed to request file upload (HTTP {status}): {body}")]
     UploadRequestFailed {
         /// The HTTP status code.
         status: u16,
@@ -44,7 +44,7 @@ pub enum CloudsmithError {
     UploadFailed(#[source] reqwest::Error),
 
     /// Failed to complete a multi-part upload.
-    #[error("failed to complete multi-part upload (HTTP {status})")]
+    #[error("failed to complete multi-part upload (HTTP {status}): {body}")]
     UploadCompleteFailed {
         /// The HTTP status code.
         status: u16,
@@ -53,7 +53,7 @@ pub enum CloudsmithError {
     },
 
     /// Failed to create the package.
-    #[error("failed to create package (HTTP {status})")]
+    #[error("failed to create package (HTTP {status}): {body}")]
     PackageCreationFailed {
         /// The HTTP status code.
         status: u16,
@@ -163,7 +163,12 @@ impl Cloudsmith {
             return Err(CloudsmithError::UploadRequestFailed { status, body });
         }
 
-        resp.json().await.into_diagnostic().map_err(Into::into)
+        let upload_resp: UploadResponse = resp.json().await.into_diagnostic()?;
+        debug!(
+            "upload slot assigned for {filename}: identifier={}",
+            upload_resp.identifier
+        );
+        Ok(upload_resp)
     }
 
     /// Upload file data to a pre-signed URL (single-part, for files < 100 MB).
@@ -221,10 +226,15 @@ impl Cloudsmith {
         debug!("uploading {filename} (multi-part) to pre-signed URL");
 
         let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
+        let total_chunks = (content.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        info!(
+            "uploading {filename} ({} bytes, {total_chunks} chunks)",
+            content.len()
+        );
         let mut chunk_number: usize = 1;
 
         for chunk in content.chunks(CHUNK_SIZE) {
-            debug!("uploading chunk {chunk_number} for {filename}");
+            debug!("uploading chunk {chunk_number}/{total_chunks} for {filename}");
 
             let resp = reqwest::Client::new()
                 .put(upload_url)
@@ -277,6 +287,7 @@ impl Cloudsmith {
             return Err(CloudsmithError::UploadCompleteFailed { status, body });
         }
 
+        debug!("multi-part upload {upload_id} completed successfully");
         Ok(())
     }
 
