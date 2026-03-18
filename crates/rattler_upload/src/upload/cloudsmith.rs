@@ -226,7 +226,7 @@ impl Cloudsmith {
         debug!("uploading {filename} (multi-part) to pre-signed URL");
 
         let content = fs_err::tokio::read(file_path).await.into_diagnostic()?;
-        let total_chunks = (content.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        let total_chunks = content.len().div_ceil(CHUNK_SIZE);
         info!(
             "uploading {filename} ({} bytes, {total_chunks} chunks)",
             content.len()
