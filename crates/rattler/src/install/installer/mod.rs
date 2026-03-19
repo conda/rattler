@@ -32,7 +32,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+    unlink_package, AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions,
+    Prefix, Transaction,
 };
 use crate::{
     default_cache_dir,
@@ -76,7 +77,7 @@ pub struct Installer {
     ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
     link_options: LinkOptions,
-    allow_external_symlinks: bool,
+    external_symlink_policy: ExternalSymlinkPolicy,
 }
 
 #[derive(Debug)]
@@ -336,26 +337,27 @@ impl Installer {
         self
     }
 
-    /// Sets whether to allow symlinks that point outside the target prefix.
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
     ///
     /// Some packages (e.g. driver packages) legitimately ship symlinks to
-    /// paths outside the environment. When set to `false` (the default),
-    /// such symlinks cause the installation to fail. When set to `true`,
-    /// they are allowed with a warning.
+    /// paths outside the environment. The default policy is
+    /// [`ExternalSymlinkPolicy::Warn`].
     #[must_use]
-    pub fn with_allow_external_symlinks(self, allow: bool) -> Self {
+    pub fn with_external_symlink_policy(self, policy: ExternalSymlinkPolicy) -> Self {
         Self {
-            allow_external_symlinks: allow,
+            external_symlink_policy: policy,
             ..self
         }
     }
 
-    /// Sets whether to allow symlinks that point outside the target prefix.
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
     ///
-    /// This function is similar to [`Self::with_allow_external_symlinks`],
+    /// This function is similar to [`Self::with_external_symlink_policy`],
     /// but modifies an existing instance.
-    pub fn set_allow_external_symlinks(&mut self, allow: bool) -> &mut Self {
-        self.allow_external_symlinks = allow;
+    pub fn set_external_symlink_policy(&mut self, policy: ExternalSymlinkPolicy) -> &mut Self {
+        self.external_symlink_policy = policy;
         self
     }
 
@@ -540,7 +542,7 @@ impl Installer {
             allow_symbolic_links: self.link_options.allow_symbolic_links,
             allow_hard_links: self.link_options.allow_hard_links,
             allow_ref_links: self.link_options.allow_ref_links,
-            allow_external_symlinks: self.allow_external_symlinks,
+            external_symlink_policy: self.external_symlink_policy,
             ..InstallOptions::default()
         };
 

@@ -17,7 +17,7 @@ use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
-use super::Prefix;
+use super::{ExternalSymlinkPolicy, Prefix};
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -162,7 +162,7 @@ pub fn link_file(
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
-    allow_external_symlinks: bool,
+    external_symlink_policy: ExternalSymlinkPolicy,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -292,7 +292,7 @@ pub fn link_file(
             &source_path,
             &destination_path,
             target_dir.path(),
-            allow_external_symlinks,
+            external_symlink_policy,
         )?
     } else {
         copy_to_destination(&source_path, &destination_path)?
@@ -479,7 +479,7 @@ fn symlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
     target_prefix: &Path,
-    allow_external_symlinks: bool,
+    external_symlink_policy: ExternalSymlinkPolicy,
 ) -> Result<LinkMethod, LinkFileError> {
     let linked_path = source_path
         .read_link()
@@ -504,14 +504,18 @@ fn symlink_to_destination(
     }
 
     if !normalized.starts_with(target_prefix) {
-        if allow_external_symlinks {
-            tracing::warn!(
-                "symlink {} points outside the target prefix: {}",
-                destination_path.display(),
-                linked_path.display()
-            );
-        } else {
-            return Err(LinkFileError::SymlinkTargetEscapesPrefix);
+        match external_symlink_policy {
+            ExternalSymlinkPolicy::Allow => {}
+            ExternalSymlinkPolicy::Warn => {
+                tracing::warn!(
+                    "symlink {} points outside the target prefix: {}",
+                    destination_path.display(),
+                    linked_path.display()
+                );
+            }
+            ExternalSymlinkPolicy::Deny => {
+                return Err(LinkFileError::SymlinkTargetEscapesPrefix);
+            }
         }
     }
 
