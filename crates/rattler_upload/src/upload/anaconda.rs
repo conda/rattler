@@ -16,7 +16,7 @@ use url::Url;
 use crate::upload::opt::ForceOverwrite;
 
 use super::package::ExtractedPackage;
-use super::VERSION;
+use crate::tool_configuration::APP_USER_AGENT;
 
 /// Errors that can occur during Anaconda.org operations.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
@@ -142,7 +142,7 @@ impl Anaconda {
 
         let client = Client::builder()
             .no_gzip()
-            .user_agent(format!("rattler-build/{VERSION}"))
+            .user_agent(APP_USER_AGENT)
             .default_headers(default_headers)
             .build()
             .expect("failed to create client");

@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use tracing::{debug, info};
 
-use super::VERSION;
+use crate::tool_configuration::APP_USER_AGENT;
 
 /// Chunk size for multi-part uploads (100 MB).
 pub const CHUNK_SIZE: usize = 1024 * 1024 * 100;
@@ -114,7 +114,7 @@ impl Cloudsmith {
 
         let client = Client::builder()
             .no_gzip()
-            .user_agent(format!("rattler-build/{VERSION}"))
+            .user_agent(APP_USER_AGENT)
             .default_headers(default_headers)
             .build()
             .expect("failed to create client");

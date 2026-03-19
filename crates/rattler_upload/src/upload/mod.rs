@@ -44,8 +44,6 @@ pub use anaconda::AnacondaError;
 pub use cloudsmith::CloudsmithError;
 pub use prefix::{upload_package_to_prefix, PrefixUploadError};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 /// Returns the style to use for a progress bar that is currently in progress.
 fn default_bytes_style() -> Result<indicatif::ProgressStyle, TemplateError> {
     Ok(indicatif::ProgressStyle::default_bar()
