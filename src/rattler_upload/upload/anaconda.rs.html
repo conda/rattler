@@ -18,7 +18,7 @@
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::upload::opt::ForceOverwrite;
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">super</span>::package::ExtractedPackage;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">super</span>::VERSION;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::tool_configuration::APP_USER_AGENT;
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Errors that can occur during Anaconda.org operations.
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="attr">#[derive(Debug, thiserror::Error, miette::Diagnostic)]
@@ -144,7 +144,7 @@
 <a href=#142 id=142 data-nosnippet>142</a>
 <a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">let </span>client = Client::builder()
 <a href=#144 id=144 data-nosnippet>144</a>            .no_gzip()
-<a href=#145 id=145 data-nosnippet>145</a>            .user_agent(<span class="macro">format!</span>(<span class="string">"rattler-build/{VERSION}"</span>))
+<a href=#145 id=145 data-nosnippet>145</a>            .user_agent(APP_USER_AGENT)
 <a href=#146 id=146 data-nosnippet>146</a>            .default_headers(default_headers)
 <a href=#147 id=147 data-nosnippet>147</a>            .build()
 <a href=#148 id=148 data-nosnippet>148</a>            .expect(<span class="string">"failed to create client"</span>);
@@ -447,7 +447,7 @@
 <a href=#445 id=445 data-nosnippet>445</a>
 <a href=#446 id=446 data-nosnippet>446</a>        <span class="macro">debug!</span>(<span class="string">"Uploading file to S3 Bucket {}"</span>, parsed_response.post_url);
 <a href=#447 id=447 data-nosnippet>447</a>
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">let </span>base64_md5 = package.base64_md5().into_diagnostic()<span class="question-mark">?</span>;
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">let </span>md5_base64 = package.md5_base64().into_diagnostic()<span class="question-mark">?</span>;
 <a href=#449 id=449 data-nosnippet>449</a>        <span class="kw">let </span>file_size = package.file_size().into_diagnostic()<span class="question-mark">?</span>;
 <a href=#450 id=450 data-nosnippet>450</a>
 <a href=#451 id=451 data-nosnippet>451</a>        <span class="kw">let </span><span class="kw-2">mut </span>form_data = Form::new();
@@ -463,7 +463,7 @@
 <a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">let </span>content = fs::read(package.path()).<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
 <a href=#462 id=462 data-nosnippet>462</a>
 <a href=#463 id=463 data-nosnippet>463</a>        form_data = form_data.text(<span class="string">"Content-Length"</span>, file_size.to_string());
-<a href=#464 id=464 data-nosnippet>464</a>        form_data = form_data.text(<span class="string">"Content-MD5"</span>, base64_md5);
+<a href=#464 id=464 data-nosnippet>464</a>        form_data = form_data.text(<span class="string">"Content-MD5"</span>, md5_base64);
 <a href=#465 id=465 data-nosnippet>465</a>        form_data = form_data.part(<span class="string">"file"</span>, Part::bytes(content));
 <a href=#466 id=466 data-nosnippet>466</a>
 <a href=#467 id=467 data-nosnippet>467</a>        reqwest::Client::new()

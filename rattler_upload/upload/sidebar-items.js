@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AnacondaError","PrefixUploadError"],"fn":["upload_package_to_anaconda","upload_package_to_artifactory","upload_package_to_prefix","upload_package_to_quetz","upload_package_to_s3"],"mod":["attestation","conda_forge","opt"]};
+window.SIDEBAR_ITEMS = {"enum":["AnacondaError","CloudsmithError","PrefixUploadError"],"fn":["upload_package_to_anaconda","upload_package_to_artifactory","upload_package_to_cloudsmith","upload_package_to_prefix","upload_package_to_quetz","upload_package_to_s3"],"mod":["attestation","conda_forge","opt"]};
