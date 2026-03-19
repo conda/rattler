@@ -32,7 +32,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+    unlink_package, AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions,
+    Prefix, Transaction,
 };
 use crate::{
     default_cache_dir,
@@ -76,6 +77,7 @@ pub struct Installer {
     ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
     link_options: LinkOptions,
+    external_symlink_policy: ExternalSymlinkPolicy,
 }
 
 #[derive(Debug)]
@@ -335,6 +337,30 @@ impl Installer {
         self
     }
 
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
+    ///
+    /// Some packages (e.g. driver packages) legitimately ship symlinks to
+    /// paths outside the environment. The default policy is
+    /// [`ExternalSymlinkPolicy::Warn`].
+    #[must_use]
+    pub fn with_external_symlink_policy(self, policy: ExternalSymlinkPolicy) -> Self {
+        Self {
+            external_symlink_policy: policy,
+            ..self
+        }
+    }
+
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
+    ///
+    /// This function is similar to [`Self::with_external_symlink_policy`],
+    /// but modifies an existing instance.
+    pub fn set_external_symlink_policy(&mut self, policy: ExternalSymlinkPolicy) -> &mut Self {
+        self.external_symlink_policy = policy;
+        self
+    }
+
     /// Sets the requested specs for the installer. These will be used to
     /// populate the `requested_spec` field in generated `PrefixRecord`
     /// instances.
@@ -516,6 +542,7 @@ impl Installer {
             allow_symbolic_links: self.link_options.allow_symbolic_links,
             allow_hard_links: self.link_options.allow_hard_links,
             allow_ref_links: self.link_options.allow_ref_links,
+            external_symlink_policy: self.external_symlink_policy,
             ..InstallOptions::default()
         };
 
