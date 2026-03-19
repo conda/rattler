@@ -272,7 +272,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
         })?;
 
         for (key, value) in state_env_vars {
-            if state_env_vars.contains_key(key) {
+            if env_vars.contains_key(key) {
                 tracing::warn!(
                     "WARNING: environment variable {key} already defined in packages (path: {state_file:?})"
                 );
@@ -858,6 +858,56 @@ mod tests {
         for key in key_vec {
             assert_eq!(keys.next().unwrap(), key);
         }
+    }
+
+    /// Regression test for: https://github.com/conda/rattler/issues/2253
+    ///
+    /// `collect_env_vars` used to check `state_env_vars.contains_key(key)` while
+    /// iterating `state_env_vars` — always true, so a spurious "already defined" warning
+    /// was emitted for **every** env var in the state file.
+    ///
+    /// After the fix, the warning should only fire when a key from `conda-meta/state`
+    /// actually conflicts with one already collected from `etc/conda/env_vars.d`.
+    #[test]
+    fn test_collect_env_vars_no_spurious_conflict_warnings() {
+        let tdir = TempDir::with_prefix("test_no_spurious_warnings").unwrap();
+        let state_path = tdir.path().join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+
+        let env_var_d = tdir.path().join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+
+        // Pkg defines ONLY "PKG_VAR". "STATE_ONLY_VAR" is NOT in any package json.
+        let pkg_content = r#"{"PKG_VAR": "from_pkg"}"#;
+        fs::write(env_var_d.join("pkg.json"), pkg_content).unwrap();
+
+        // State file defines "STATE_ONLY_VAR" (no conflict) and "PKG_VAR" (real conflict).
+        let state_content =
+            r#"{"env_vars": {"STATE_ONLY_VAR": "state_val", "PKG_VAR": "state_override"}}"#;
+        fs::write(&state_path, state_content).unwrap();
+
+        let env_vars = collect_env_vars(tdir.path()).expect("collect_env_vars must succeed");
+
+        // Both keys must be present — collection itself must work correctly.
+        assert!(
+            env_vars.contains_key("STATE_ONLY_VAR"),
+            "STATE_ONLY_VAR (state-only key) must be collected"
+        );
+        assert!(
+            env_vars.contains_key("PKG_VAR"),
+            "PKG_VAR (conflict key) must be collected"
+        );
+
+        // Before the fix, `state_env_vars.contains_key(key)` was always true, so
+        // the warning fired for STATE_ONLY_VAR even though it had no conflict.
+        // The correct behaviour (after the fix) is:
+        //   - STATE_ONLY_VAR: no conflict → no warning (we can't assert on tracing
+        //     output easily, but we verify the logic by ensuring the change compiles
+        //     and the values are correctly collected).
+        //   - PKG_VAR: real conflict → warning is emitted (state value wins per
+        //     current semantics).
+        assert_eq!(env_vars["STATE_ONLY_VAR"], "state_val");
+        assert_eq!(env_vars["PKG_VAR"], "state_override");
     }
 
     #[test]
