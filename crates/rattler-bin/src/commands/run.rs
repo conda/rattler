@@ -26,13 +26,13 @@ pub async fn run(opt: Opt) -> miette::Result<()> {
 
     let shell = rattler_shell::shell::ShellEnum::from_env().unwrap_or_default();
     let cwd = opt.cwd.as_deref();
-    let env_vars = &std::collections::HashMap::new();
+    let env_vars = std::collections::HashMap::new();
 
     let status = rattler_shell::run_command_in_environment(
         &target_prefix,
         &opt.command,
         shell,
-        env_vars,
+        &env_vars,
         cwd,
     )
     .into_diagnostic()?;
