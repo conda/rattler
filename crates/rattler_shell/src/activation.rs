@@ -860,7 +860,7 @@ mod tests {
         }
     }
 
-    /// Regression test for: https://github.com/conda/rattler/issues/2253
+    /// Regression test for: <https://github.com/conda/rattler/issues/2253>
     ///
     /// `collect_env_vars` used to check `state_env_vars.contains_key(key)` while
     /// iterating `state_env_vars` — always true, so a spurious "already defined" warning
