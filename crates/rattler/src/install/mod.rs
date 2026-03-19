@@ -695,7 +695,7 @@ pub fn link_package_sync(
     } else {
         LinkType::Copy
     };
-    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
+    let mut allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
         match reflink_copy::check_reflink_support(package_dir, target_dir) {
             Ok(reflink_copy::ReflinkSupport::Supported) => true,
             Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
@@ -806,7 +806,14 @@ pub fn link_package_sync(
                     paths_by_directory = non_matching;
                 }
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+                Err(_) => {
+                    allow_ref_links = false;
+                    match fs::create_dir(&full_path) {
+                        Ok(_) => (),
+                        Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                        Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+                    }
+                }
             }
         } else {
             match fs::create_dir(&full_path) {
