@@ -893,6 +893,7 @@ impl FileType {
 
 #[cfg(test)]
 mod test {
+    use super::ExternalSymlinkPolicy;
     use super::PYTHON_REGEX;
     use fs_err as fs;
     use rattler_conda_types::Platform;
@@ -950,7 +951,7 @@ mod test {
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
-            false,
+            ExternalSymlinkPolicy::Deny,
         )
         .unwrap();
 
@@ -1010,7 +1011,7 @@ mod test {
             Platform::Linux64,
             AppleCodeSignBehavior::DoNothing,
             modification_time,
-            false,
+            ExternalSymlinkPolicy::Deny,
         )
         .unwrap();
 
@@ -1303,7 +1304,7 @@ mod test {
             &cache.join("lib/sneaky-link"),
             &prefix.join("lib/sneaky-link"),
             &prefix,
-            false,
+            ExternalSymlinkPolicy::Deny,
         );
         assert!(matches!(
             result.unwrap_err(),
@@ -1329,7 +1330,7 @@ mod test {
             &cache.join("lib/safe-link"),
             &prefix.join("lib/safe-link"),
             &prefix,
-            false,
+            ExternalSymlinkPolicy::Deny,
         );
         assert!(result.is_ok());
     }
