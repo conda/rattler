@@ -4,4 +4,5 @@
 pub mod activation;
 pub mod run;
 pub mod shell;
+pub use run::run_command_in_environment;
 pub use run::run_in_environment;

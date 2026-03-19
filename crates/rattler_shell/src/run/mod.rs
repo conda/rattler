@@ -1,7 +1,7 @@
 //! Helpers to run commands in an activated environment.
 
 use rattler_conda_types::Platform;
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
 use crate::activation::{ActivationError, PathModificationBehavior};
@@ -24,14 +24,17 @@ pub enum RunError {
     IoError(#[from] std::io::Error),
 }
 
+/// Runs a command in an activated conda environment.
+///
+/// Activates the environment at `prefix`, applies the resulting environment
+/// variables to the command, and spawns it with inherited stdio.
 pub fn run_command_in_environment(
     prefix: &Path,
     command: &[String],
     shell: ShellEnum,
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
-) -> Result<Output, RunError> {
-
+) -> Result<ExitStatus, RunError> {
     let activator = Activator::from_path(prefix, shell, Platform::current())?;
 
     let current_path = std::env::var("PATH")
@@ -50,7 +53,6 @@ pub fn run_command_in_environment(
 
     let activated_env = activator.run_activation(activation_vars, None)?;
 
-    // Run the command
     let mut cmd = Command::new(&command[0]);
     cmd.args(&command[1..]);
     cmd.envs(&activated_env);
@@ -59,14 +61,7 @@ pub fn run_command_in_environment(
         cmd.current_dir(cwd);
     }
 
-    Ok(cmd.output()?)
-
-    // Run the deactivation scripts
-
-    // deactivation(&self, env_vars, None) -> Result<ActivationResult<T>, ActivationError>;
-
-    // Exit with the return code of the command
-
+    Ok(cmd.status()?)
 }
 
 /// Execute a script in an activated environment.
