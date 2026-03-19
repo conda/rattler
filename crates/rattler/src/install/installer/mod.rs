@@ -76,6 +76,7 @@ pub struct Installer {
     ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
     link_options: LinkOptions,
+    allow_external_symlinks: bool,
 }
 
 #[derive(Debug)]
@@ -335,6 +336,29 @@ impl Installer {
         self
     }
 
+    /// Sets whether to allow symlinks that point outside the target prefix.
+    ///
+    /// Some packages (e.g. driver packages) legitimately ship symlinks to
+    /// paths outside the environment. When set to `false` (the default),
+    /// such symlinks cause the installation to fail. When set to `true`,
+    /// they are allowed with a warning.
+    #[must_use]
+    pub fn with_allow_external_symlinks(self, allow: bool) -> Self {
+        Self {
+            allow_external_symlinks: allow,
+            ..self
+        }
+    }
+
+    /// Sets whether to allow symlinks that point outside the target prefix.
+    ///
+    /// This function is similar to [`Self::with_allow_external_symlinks`],
+    /// but modifies an existing instance.
+    pub fn set_allow_external_symlinks(&mut self, allow: bool) -> &mut Self {
+        self.allow_external_symlinks = allow;
+        self
+    }
+
     /// Sets the requested specs for the installer. These will be used to
     /// populate the `requested_spec` field in generated `PrefixRecord`
     /// instances.
@@ -516,6 +540,7 @@ impl Installer {
             allow_symbolic_links: self.link_options.allow_symbolic_links,
             allow_hard_links: self.link_options.allow_hard_links,
             allow_ref_links: self.link_options.allow_ref_links,
+            allow_external_symlinks: self.allow_external_symlinks,
             ..InstallOptions::default()
         };
 
