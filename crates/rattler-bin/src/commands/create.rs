@@ -43,7 +43,7 @@ pub struct Opt {
     /// Channel to search for packages
     ///
     /// Example: -c conda-forge -c main
-    #[clap(short, long = "channel", visible_alias = "channels")]
+    #[clap(short, long = "channel")]
     channels: Option<Vec<String>>,
 
     /// Package specs to install
