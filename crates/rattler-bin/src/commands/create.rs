@@ -34,7 +34,7 @@ use reqwest::Client;
 
 use crate::{exclude_newer::ExcludeNewer, global_multi_progress};
 
-/// Create a conda environment from package specs
+/// Create a conda environment from package listing
 ///
 /// Resolves and installs the specified packages into a target prefix,
 /// pulling from the configured channels.
@@ -73,7 +73,6 @@ pub struct Opt {
     #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
     target_prefix: Option<PathBuf>,
 
-    /// Solve strategy for resolving conflicts
     #[clap(long)]
     strategy: Option<SolveStrategy>,
 
@@ -81,7 +80,7 @@ pub struct Opt {
     #[clap(long, group = "deps_mode")]
     only_deps: bool,
 
-    /// Only install package specs without dependencies
+    /// Only install package specifications without dependencies
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
 
