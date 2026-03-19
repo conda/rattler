@@ -24,6 +24,51 @@ pub enum RunError {
     IoError(#[from] std::io::Error),
 }
 
+pub fn run_command_in_environment(
+    prefix: &Path,
+    command: &[String],
+    shell: ShellEnum,
+    env_vars: &HashMap<String, String>,
+    cwd: Option<&Path>,
+) -> Result<Output, RunError> {
+
+    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+
+    let current_path = std::env::var("PATH")
+        .ok()
+        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+    let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(Into::into);
+
+    let activation_vars = ActivationVariables {
+        conda_prefix,
+        path: current_path,
+        path_modification_behavior: PathModificationBehavior::default(),
+        current_env: std::env::vars().collect(),
+    };
+
+    // Run activation scripts
+
+    let activated_env = activator.run_activation(activation_vars, None)?;
+
+    // Run the command
+    let mut cmd = Command::new(&command[0]);
+    cmd.args(&command[1..]);
+    cmd.envs(&activated_env);
+    cmd.envs(env_vars);
+    if let Some(cwd) = cwd {
+        cmd.current_dir(cwd);
+    }
+
+    Ok(cmd.output()?)
+
+    // Run the deactivation scripts
+
+    // deactivation(&self, env_vars, None) -> Result<ActivationResult<T>, ActivationError>;
+
+    // Exit with the return code of the command
+
+}
+
 /// Execute a script in an activated environment.
 pub fn run_in_environment(
     prefix: &Path,

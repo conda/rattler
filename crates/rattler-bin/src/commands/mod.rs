@@ -5,5 +5,6 @@ pub mod fetch_file;
 pub mod inspect;
 pub mod link;
 pub mod menu;
+pub mod run;
 pub mod search;
 pub mod virtual_packages;
