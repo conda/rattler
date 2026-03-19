@@ -458,7 +458,7 @@ pub struct CloudsmithOpts {
 
     /// The Cloudsmith API key, if none is provided, the token is read from the
     /// keychain / auth-file
-    #[arg(short = 'k', long, env = "CLOUDSMITH_API_KEY")]
+    #[arg(short = 'a', long, env = "CLOUDSMITH_API_KEY")]
     pub api_key: Option<String>,
 
     /// The URL to the Cloudsmith API server
