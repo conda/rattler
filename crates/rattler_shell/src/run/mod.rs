@@ -1,7 +1,7 @@
 //! Helpers to run commands in an activated environment.
 
 use rattler_conda_types::Platform;
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
 use crate::activation::{ActivationError, PathModificationBehavior};
@@ -33,8 +33,7 @@ pub fn run_command_in_environment(
     shell: ShellEnum,
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
-) -> Result<Output, RunError> {
-
+) -> Result<ExitStatus, RunError> {
     let activator = Activator::from_path(prefix, shell, Platform::current())?;
 
     let current_path = std::env::var("PATH")
@@ -62,7 +61,7 @@ pub fn run_command_in_environment(
         cmd.current_dir(cwd);
     }
 
-    Ok(cmd.output()?)
+    Ok(cmd.status()?)
 
     // Run the deactivation scripts
 
