@@ -12,7 +12,7 @@
     target_platform: Platform,
     apple_codesign_behavior: <a class="enum" href="../apple_codesign/enum.AppleCodeSignBehavior.html" title="enum rattler::install::apple_codesign::AppleCodeSignBehavior">AppleCodeSignBehavior</a>,
     modification_time: FileTime,
-    allow_external_symlinks: <a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.bool.html">bool</a>,
+    external_symlink_policy: <a class="enum" href="../enum.ExternalSymlinkPolicy.html" title="enum rattler::install::ExternalSymlinkPolicy">ExternalSymlinkPolicy</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.LinkedFile.html" title="struct rattler::install::link::LinkedFile">LinkedFile</a>, <a class="enum" href="enum.LinkFileError.html" title="enum rattler::install::link::LinkFileError">LinkFileError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Installs a single file from a <code>package_dir</code> to the the <code>target_dir</code>. Replaces any
 <code>prefix_placeholder</code> in the file with the <code>prefix</code>.</p>
 <p><code>relative_path</code> is the path of the file in the <code>package_dir</code> (and the <code>target_dir</code>).</p>
