@@ -108,7 +108,7 @@ pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use platform::{OwnedPlatform, ParsePlatformError, Platform, PlatformData, PlatformName};
-pub use pypi::{PypiPackageData, PypiSourceTreeHashable};
+pub use pypi::{PypiPackageData, PypiSourceData, PypiSourceTreeHashable, PypiWheelData};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::{Matches, RepoDataRecord};
 pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
@@ -536,7 +536,7 @@ impl<'lock> LockedPackageRef<'lock> {
     pub fn name(self) -> &'lock str {
         match self {
             LockedPackageRef::Conda(data) => data.name().as_source(),
-            LockedPackageRef::Pypi(data) => data.name.as_ref(),
+            LockedPackageRef::Pypi(data) => data.name().as_ref(),
         }
     }
 
@@ -544,7 +544,7 @@ impl<'lock> LockedPackageRef<'lock> {
     pub fn location(self) -> &'lock UrlOrPath {
         match self {
             LockedPackageRef::Conda(data) => data.location(),
-            LockedPackageRef::Pypi(data) => &data.location,
+            LockedPackageRef::Pypi(data) => data.location().inner(),
         }
     }
 
@@ -783,10 +783,15 @@ mod test {
         // Package from a custom index should have that index_url
         let requests = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "requests")
+            .find(|p| p.name().as_ref() == "requests")
             .expect("requests package");
         assert_eq!(
-            requests.index_url.as_ref().map(url::Url::as_str),
+            requests
+                .as_wheel()
+                .unwrap()
+                .index_url
+                .as_ref()
+                .map(url::Url::as_str),
             Some("https://my-custom-index.example.com/simple")
         );
 
@@ -794,19 +799,24 @@ mod test {
         // defaults to https://pypi.org/simple
         let numpy = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "numpy")
+            .find(|p| p.name().as_ref() == "numpy")
             .expect("numpy package");
         assert_eq!(
-            numpy.index_url.as_ref().map(url::Url::as_str),
+            numpy
+                .as_wheel()
+                .unwrap()
+                .index_url
+                .as_ref()
+                .map(url::Url::as_str),
             Some("https://pypi.org/simple")
         );
 
         // Path-based package has no index_url
         let local_pkg = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "local-pkg")
+            .find(|p| p.name().as_ref() == "local-pkg")
             .expect("local-pkg package");
-        assert!(local_pkg.index_url.is_none());
+        assert!(local_pkg.as_source().is_some());
     }
 
     #[test]
@@ -1072,47 +1082,42 @@ packages:
         // Check the root package (location = "./")
         let root_pkg = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "my-project")
+            .find(|p| p.name().as_ref() == "my-project")
             .expect("my-project package");
+        let root_source = root_pkg.as_source().unwrap();
         assert_eq!(
-            root_pkg.location.given(),
+            root_source.location.given(),
             Some("./"),
             "verbatim relative path for root should be preserved"
         );
         assert!(
-            root_pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages"
+            root_pkg.as_source().is_some(),
+            "local-path pypi packages must be the Source variant"
         );
-        assert!(
-            root_pkg.hash.is_none(),
-            "hash must be stripped for local-path pypi source packages"
-        );
-        assert_eq!(root_pkg.requires_dist.len(), 2);
-        assert!(
-            root_pkg.index_url.is_none(),
-            "path-based packages have no index_url"
-        );
+        assert_eq!(root_source.requires_dist.len(), 2);
 
         // Check the subdirectory package (location = "./my_subdir")
         let subdir_pkg = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "my-subdir")
+            .find(|p| p.name().as_ref() == "my-subdir")
             .expect("my-subdir package");
-        assert_eq!(subdir_pkg.location.given(), Some("./my_subdir"));
+        let subdir_source = subdir_pkg.as_source().unwrap();
+        assert_eq!(subdir_source.location.given(), Some("./my_subdir"));
         assert!(
-            subdir_pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages"
+            subdir_pkg.as_source().is_some(),
+            "local-path pypi packages must be the Source variant"
         );
 
         // Check the parent-relative package (location = "../external_pkg")
         let external_pkg = pypi_packages
             .iter()
-            .find(|p| p.name.as_ref() == "external-pkg")
+            .find(|p| p.name().as_ref() == "external-pkg")
             .expect("external-pkg package");
-        assert_eq!(external_pkg.location.given(), Some("../external_pkg"));
+        let external_source = external_pkg.as_source().unwrap();
+        assert_eq!(external_source.location.given(), Some("../external_pkg"));
         assert!(
-            external_pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages"
+            external_pkg.as_source().is_some(),
+            "local-path pypi packages must be the Source variant"
         );
 
         // Roundtrip: serialize → re-parse → re-serialize must be identical.
@@ -1258,17 +1263,10 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "local-pkg");
-        assert!(
-            pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
-        assert!(
-            pkg.hash.is_none(),
-            "hash must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
+        let source = pkg
+            .as_source()
+            .expect("local-path pypi package must be the Source variant");
+        assert_eq!(source.name.as_ref(), "local-pkg");
     }
 
     /// Same as above but for lockfile format version 6.
@@ -1301,17 +1299,10 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "local-pkg");
-        assert!(
-            pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
-        assert!(
-            pkg.hash.is_none(),
-            "hash must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
+        let source = pkg
+            .as_source()
+            .expect("local-path pypi package must be the Source variant");
+        assert_eq!(source.name.as_ref(), "local-pkg");
     }
 
     /// Same as above but for lockfile format version 7. In v7, local-path
@@ -1346,17 +1337,10 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "local-pkg");
-        assert!(
-            pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.version
-        );
-        assert!(
-            pkg.hash.is_none(),
-            "hash must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
+        let source = pkg
+            .as_source()
+            .expect("local-path pypi package must be the Source variant");
+        assert_eq!(source.name.as_ref(), "local-pkg");
     }
 
     /// Same as above but for v7 where the YAML *does* include a version field.
@@ -1393,17 +1377,10 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "local-pkg");
-        assert!(
-            pkg.version.is_none(),
-            "version must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.version
-        );
-        assert!(
-            pkg.hash.is_none(),
-            "hash must be stripped for local-path pypi source packages, got: {:?}",
-            pkg.hash
-        );
+        let source = pkg
+            .as_source()
+            .expect("local-path pypi package must be the Source variant");
+        assert_eq!(source.name.as_ref(), "local-pkg");
     }
 
     /// Verify that URL-based pypi packages still retain their version and
@@ -1439,14 +1416,191 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "numpy");
+        let wheel = pkg
+            .as_wheel()
+            .expect("URL-based pypi package must be the Wheel variant");
+        assert_eq!(wheel.name.as_ref(), "numpy");
         assert!(
-            pkg.version.is_some(),
-            "version must be preserved for URL-based pypi packages"
-        );
-        assert!(
-            pkg.hash.is_some(),
+            wheel.hash.is_some(),
             "hash must be preserved for URL-based pypi packages"
+        );
+    }
+
+    /// Verify that a local-path wheel file preserves version and hash in v5.
+    /// Wheel files are immutable artifacts, unlike source directories.
+    #[test]
+    fn v5_local_path_wheel_preserves_version_and_hash() {
+        let lock_file_str = "\
+version: 5
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
+packages:
+  - kind: pypi
+    name: my-pkg
+    version: '1.0.0'
+    path: ./dist/my_pkg-1.0.0-py3-none-any.whl
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let base_dir = test_path();
+        let lock_file =
+            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        let wheel = pkg
+            .as_wheel()
+            .expect("local wheel file must be the Wheel variant");
+        assert_eq!(wheel.name.as_ref(), "my-pkg");
+        assert_eq!(wheel.version.to_string(), "1.0.0");
+        assert!(
+            wheel.hash.is_some(),
+            "hash must be preserved for local wheel files, got None"
+        );
+    }
+
+    /// Verify that a local-path wheel file preserves version and hash in v6.
+    #[test]
+    fn v6_local_path_wheel_preserves_version_and_hash() {
+        let lock_file_str = "\
+version: 6
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
+packages:
+  - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
+    name: my-pkg
+    version: '1.0.0'
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        let wheel = pkg
+            .as_wheel()
+            .expect("local wheel file must be the Wheel variant");
+        assert_eq!(wheel.name.as_ref(), "my-pkg");
+        assert_eq!(wheel.version.to_string(), "1.0.0");
+        assert!(
+            wheel.hash.is_some(),
+            "hash must be preserved for local wheel files, got None"
+        );
+    }
+
+    /// Verify that a local-path wheel file preserves version and hash in v7.
+    #[test]
+    fn v7_local_path_wheel_preserves_version_and_hash() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
+packages:
+  - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
+    name: my-pkg
+    version: '1.0.0'
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        let wheel = pkg
+            .as_wheel()
+            .expect("local wheel file must be the Wheel variant");
+        assert_eq!(wheel.name.as_ref(), "my-pkg");
+        assert_eq!(wheel.version.to_string(), "1.0.0");
+        assert!(
+            wheel.hash.is_some(),
+            "hash must be preserved for local wheel files, got None"
+        );
+    }
+
+    /// Verify that a file:// URL pointing to a wheel preserves version and
+    /// hash — the file:// scheme doesn't change the fact that it's an
+    /// immutable artifact.
+    #[test]
+    fn v7_file_url_wheel_preserves_version_and_hash() {
+        let base_dir = test_path();
+        let lock_file_str = format!(
+            "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: file://{0}/dist/my_pkg-1.0.0-py3-none-any.whl
+packages:
+  - pypi: file://{0}/dist/my_pkg-1.0.0-py3-none-any.whl
+    name: my-pkg
+    version: 1.0.0
+    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+",
+            base_dir.display()
+        );
+        let lock_file =
+            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        let wheel = pkg
+            .as_wheel()
+            .expect("file:// wheel URL must be the Wheel variant");
+        assert_eq!(wheel.name.as_ref(), "my-pkg");
+        assert!(
+            wheel.hash.is_some(),
+            "hash must be preserved for file:// wheel URLs, got None"
         );
     }
 
@@ -1488,16 +1642,9 @@ packages:
             .find_map(super::LockedPackageRef::as_pypi)
             .expect("expected a pypi package");
 
-        assert_eq!(pkg.name.as_ref(), "my-pkg");
-        assert!(
-            pkg.version.is_none(),
-            "version must be stripped for file:// pypi packages (local path), got: {:?}",
-            pkg.version
-        );
-        assert!(
-            pkg.hash.is_none(),
-            "hash must be stripped for file:// pypi packages (local path), got: {:?}",
-            pkg.hash
-        );
+        let source = pkg
+            .as_source()
+            .expect("file:// pypi package (local path) must be the Source variant");
+        assert_eq!(source.name.as_ref(), "my-pkg");
     }
 }

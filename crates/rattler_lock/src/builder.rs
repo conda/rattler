@@ -49,7 +49,7 @@ impl LockedPackage {
     pub fn name(&self) -> &str {
         match self {
             LockedPackage::Conda(data) => data.name().as_source(),
-            LockedPackage::Pypi(data) => data.name.as_ref(),
+            LockedPackage::Pypi(data) => data.name().as_ref(),
         }
     }
 
@@ -57,7 +57,7 @@ impl LockedPackage {
     pub fn location(&self) -> &UrlOrPath {
         match self {
             LockedPackage::Conda(data) => data.location(),
-            LockedPackage::Pypi(data) => &data.location,
+            LockedPackage::Pypi(data) => data.location().inner(),
         }
     }
 

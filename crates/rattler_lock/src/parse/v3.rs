@@ -14,7 +14,7 @@ use crate::{
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PlatformData, PypiPackageData, SolveOptions, UrlOrPath, Verbatim,
+    PackageHashes, PlatformData, PypiPackageData, PypiWheelData, SolveOptions, UrlOrPath, Verbatim,
     DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
@@ -251,15 +251,15 @@ pub fn parse_v3_or_lower(
             }
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
-                    .insert_full(PypiPackageData {
+                    .insert_full(PypiPackageData::from(PypiWheelData {
                         name: pep508_rs::PackageName::new(pkg.name)?,
-                        version: Some(pkg.version),
+                        version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
                         location: Verbatim::new(UrlOrPath::Url(pkg.url)),
                         hash: pkg.hash,
                         index_url: None,
-                    })
+                    }))
                     .0;
                 EnvironmentPackageData::Pypi(deduplicated_index)
             }

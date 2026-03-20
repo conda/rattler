@@ -8,8 +8,8 @@ use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
     Channel, CondaPackageData, Environment, LockFile, LockedPackage, OwnedEnvironment,
-    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiPackageData, UrlOrPath, Verbatim,
-    DEFAULT_ENVIRONMENT_NAME,
+    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiPackageData, PypiWheelData,
+    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Mutex};
 
@@ -204,20 +204,18 @@ impl PyLockFile {
                 .into());
             }
 
-            let pkg_data = PypiPackageData {
+            let pkg_data = PypiPackageData::from(PypiWheelData {
                 name: pep508_rs::PackageName::from_str(&name)
                     .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
-                version: Some(
-                    pep440_rs::Version::from_str(&version)
-                        .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
-                ),
+                version: pep440_rs::Version::from_str(&version)
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
                 location: Verbatim::<UrlOrPath>::from_str(&location)
                     .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
                 hash: None,
                 index_url: None,
                 requires_dist: Vec::new(),
                 requires_python: None,
-            };
+            });
             state
                 .pypi_packages
                 .push((environment, platform_name, pkg_data));
@@ -690,7 +688,7 @@ impl PyLockedPackage {
     pub fn name(&self) -> String {
         match &self.inner {
             LockedPackage::Conda(data) => data.name().as_source().to_string(),
-            LockedPackage::Pypi(data) => data.name.to_string(),
+            LockedPackage::Pypi(data) => data.name().to_string(),
         }
     }
 
@@ -698,7 +696,7 @@ impl PyLockedPackage {
     pub fn location(&self) -> String {
         match &self.inner {
             LockedPackage::Conda(data) => data.location().to_string(),
-            LockedPackage::Pypi(data) => data.location.to_string(),
+            LockedPackage::Pypi(data) => data.location().to_string(),
         }
     }
 
@@ -711,7 +709,10 @@ impl PyLockedPackage {
 
     #[getter]
     pub fn pypi_version(&self) -> String {
-        self.as_pypi().version_string()
+        match self.as_pypi() {
+            PypiPackageData::Wheel(w) => w.version.to_string(),
+            PypiPackageData::Source(_) => "<dynamic>".to_string(),
+        }
     }
 
     // Hashes of the file pointed to by `url`.
@@ -727,7 +728,8 @@ impl PyLockedPackage {
                     (None, None) => None,
                 }
             }
-            LockedPackage::Pypi(data) => data.hash.clone(),
+            LockedPackage::Pypi(PypiPackageData::Wheel(w)) => w.hash.clone(),
+            LockedPackage::Pypi(PypiPackageData::Source(_)) => None,
         };
         hash.map(Into::into)
     }
@@ -735,21 +737,19 @@ impl PyLockedPackage {
     /// A list of dependencies on other packages.
     #[getter]
     pub fn pypi_requires_dist(&self) -> Vec<String> {
-        self.as_pypi()
-            .requires_dist
-            .clone()
-            .into_iter()
-            .map(|req| req.to_string())
-            .collect()
+        match self.as_pypi() {
+            PypiPackageData::Wheel(w) => w.requires_dist.iter().map(ToString::to_string).collect(),
+            PypiPackageData::Source(s) => s.requires_dist.iter().map(ToString::to_string).collect(),
+        }
     }
 
     /// The python version that this package requires.
     #[getter]
     pub fn pypi_requires_python(&self) -> Option<String> {
-        if let Some(specifier) = self.as_pypi().requires_python.clone() {
-            return Some(specifier.to_string());
+        match self.as_pypi() {
+            PypiPackageData::Wheel(w) => w.requires_python.as_ref().map(ToString::to_string),
+            PypiPackageData::Source(s) => s.requires_python.as_ref().map(ToString::to_string),
         }
-        None
     }
 
     pub fn pypi_satisfies(&self, spec: &str) -> PyResult<bool> {
@@ -807,66 +807,66 @@ impl From<PyPypiPackageData> for PypiPackageData {
 impl PyPypiPackageData {
     /// Returns true if this package satisfies the given `spec`.
     pub fn satisfies(&self, spec: String) -> PyResult<bool> {
-        Ok(self.inner.satisfies(
-            &Requirement::from_str(&spec)
-                .map_err(|e| PyRattlerError::RequirementError(e.to_string()))?,
-        ))
+        let req = Requirement::from_str(&spec)
+            .map_err(|e| PyRattlerError::RequirementError(e.to_string()))?;
+        Ok(self.inner.satisfies(&req))
     }
 
     /// The name of the package.
     #[getter]
     pub fn name(&self) -> String {
-        self.inner.name.to_string()
+        self.inner.name().to_string()
     }
 
     /// The version of the package.
     #[getter]
     pub fn version(&self) -> String {
-        self.inner.version_string()
+        match &self.inner {
+            PypiPackageData::Wheel(w) => w.version.to_string(),
+            PypiPackageData::Source(_) => "<dynamic>".to_string(),
+        }
     }
 
     /// The URL that points to where the artifact can be downloaded from.
     #[getter]
     pub fn location(&self) -> String {
-        self.inner.location.to_string()
+        self.inner.location().to_string()
     }
 
     /// Hashes of the file pointed to by `url`.
     #[getter]
     pub fn hash(&self) -> Option<PyPackageHashes> {
-        if let Some(hash) = self.inner.hash.clone() {
-            return Some(hash.into());
+        match &self.inner {
+            PypiPackageData::Wheel(w) => w.hash.clone().map(Into::into),
+            PypiPackageData::Source(_) => None,
         }
-        None
     }
 
     /// The index this came from. Might be None if the default index was used.
     #[getter]
     pub fn index_url(&self) -> Option<String> {
-        self.inner
-            .index_url
-            .as_ref()
-            .map(std::string::ToString::to_string)
+        match &self.inner {
+            PypiPackageData::Wheel(w) => w.index_url.as_ref().map(ToString::to_string),
+            PypiPackageData::Source(_) => None,
+        }
     }
 
     /// A list of dependencies on other packages.
     #[getter]
     pub fn requires_dist(&self) -> Vec<String> {
-        self.inner
-            .requires_dist
-            .clone()
-            .into_iter()
-            .map(|req| req.to_string())
-            .collect()
+        match &self.inner {
+            PypiPackageData::Wheel(w) => w.requires_dist.iter().map(ToString::to_string).collect(),
+            PypiPackageData::Source(s) => s.requires_dist.iter().map(ToString::to_string).collect(),
+        }
     }
 
     /// The python version that this package requires.
     #[getter]
     pub fn requires_python(&self) -> Option<String> {
-        if let Some(specifier) = self.inner.requires_python.clone() {
-            return Some(specifier.to_string());
+        match &self.inner {
+            PypiPackageData::Wheel(w) => w.requires_python.as_ref().map(ToString::to_string),
+            PypiPackageData::Source(s) => s.requires_python.as_ref().map(ToString::to_string),
         }
-        None
     }
 }
 
