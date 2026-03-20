@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.2](https://github.com/conda/rattler/compare/rattler-v0.40.1...rattler-v0.40.2) - 2026-03-20
+
+### Added
+
+- add allow external symlinks to options builder ([#2258](https://github.com/conda/rattler/pull/2258))
+
+### Fixed
+
+- Fall back to mkdir when clonefile fails on non-APFS filesystems ([#2260](https://github.com/conda/rattler/pull/2260))
+
+## [0.40.1](https://github.com/conda/rattler/compare/rattler-v0.40.0...rattler-v0.40.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.40.0](https://github.com/conda/rattler/compare/rattler-v0.39.15...rattler-v0.40.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+### Fixed
+
+- record actual link type in PrefixRecord ([#2169](https://github.com/conda/rattler/pull/2169))
+- validate symlink targets to prevent prefix escape ([#2143](https://github.com/conda/rattler/pull/2143))
+
 ## [0.39.15](https://github.com/conda/rattler/compare/rattler-v0.39.14...rattler-v0.39.15) - 2026-02-25
 
 ### Added

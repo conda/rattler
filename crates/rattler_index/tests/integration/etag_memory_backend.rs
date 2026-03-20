@@ -28,7 +28,6 @@ use std::{
 };
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use opendal::{
     raw::*, Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result,
 };
@@ -79,10 +78,7 @@ fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<(
 /// Returns `ConditionNotMatch` error if the file was modified after the
 /// provided timestamp.
 #[inline]
-fn check_if_unmodified_since(
-    last_modified: DateTime<Utc>,
-    cond: Option<DateTime<Utc>>,
-) -> Result<()> {
+fn check_if_unmodified_since(last_modified: Timestamp, cond: Option<Timestamp>) -> Result<()> {
     if let Some(if_unmodified_since) = cond {
         if last_modified > if_unmodified_since {
             return Err(Error::new(
@@ -102,7 +98,7 @@ fn check_if_unmodified_since(
 struct FileEntry {
     data: Bytes,
     etag: String,
-    last_modified: DateTime<Utc>,
+    last_modified: Timestamp,
     content_length: u64,
 }
 
@@ -113,7 +109,7 @@ impl FileEntry {
             content_length: data.len() as u64,
             data,
             etag,
-            last_modified: Utc::now(),
+            last_modified: Timestamp::now(),
         }
     }
 

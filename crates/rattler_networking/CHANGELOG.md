@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_networking-v0.26.4...rattler_networking-v0.26.5) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_networking-v0.26.3...rattler_networking-v0.26.4) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_networking-v0.26.2...rattler_networking-v0.26.3) - 2026-03-16
+
+### Fixed
+
+- fall back to AWS SDK credential chain for S3 when no rattler credentials ([#2222](https://github.com/conda/rattler/pull/2222))
+- preserve mirror URL path when rewriting requests ([#2183](https://github.com/conda/rattler/pull/2183))
+- replace panicking unwrap/expect in mirror, S3, and GCS middleware ([#2216](https://github.com/conda/rattler/pull/2216))
+- replace panicking unwraps in `OCIUrl::new` ([#2162](https://github.com/conda/rattler/pull/2162))
+- *(networking)* cache GCS OAuth2 token across requests ([#2114](https://github.com/conda/rattler/pull/2114))
+
 ## [0.26.2](https://github.com/conda/rattler/compare/rattler_networking-v0.26.1...rattler_networking-v0.26.2) - 2026-02-25
 
 ### Fixed

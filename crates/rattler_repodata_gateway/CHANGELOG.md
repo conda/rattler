@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.1...rattler_repodata_gateway-v0.27.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.0...rattler_repodata_gateway-v0.27.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.2...rattler_repodata_gateway-v0.27.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+### Fixed
+
+- bz2 cache overwritten with zst state in repodata cache ([#2180](https://github.com/conda/rattler/pull/2180))
+- enable deletion of memory mapped repodata on windows ([#2084](https://github.com/conda/rattler/pull/2084))
+
 ## [0.26.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.1...rattler_repodata_gateway-v0.26.2) - 2026-02-25
 
 ### Fixed

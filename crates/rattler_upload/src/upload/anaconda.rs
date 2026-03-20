@@ -16,7 +16,7 @@ use url::Url;
 use crate::upload::opt::ForceOverwrite;
 
 use super::package::ExtractedPackage;
-use super::VERSION;
+use crate::tool_configuration::APP_USER_AGENT;
 
 /// Errors that can occur during Anaconda.org operations.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
@@ -142,7 +142,7 @@ impl Anaconda {
 
         let client = Client::builder()
             .no_gzip()
-            .user_agent(format!("rattler-build/{VERSION}"))
+            .user_agent(APP_USER_AGENT)
             .default_headers(default_headers)
             .build()
             .expect("failed to create client");
@@ -445,7 +445,7 @@ impl Anaconda {
 
         debug!("Uploading file to S3 Bucket {}", parsed_response.post_url);
 
-        let base64_md5 = package.base64_md5().into_diagnostic()?;
+        let md5_base64 = package.md5_base64().into_diagnostic()?;
         let file_size = package.file_size().into_diagnostic()?;
 
         let mut form_data = Form::new();
@@ -461,7 +461,7 @@ impl Anaconda {
         let content = fs::read(package.path()).await.into_diagnostic()?;
 
         form_data = form_data.text("Content-Length", file_size.to_string());
-        form_data = form_data.text("Content-MD5", base64_md5);
+        form_data = form_data.text("Content-MD5", md5_base64);
         form_data = form_data.part("file", Part::bytes(content));
 
         reqwest::Client::new()

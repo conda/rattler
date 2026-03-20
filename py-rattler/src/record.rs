@@ -15,7 +15,8 @@ use rattler_conda_types::{
     package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
+    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
+    WhlPackageRecord,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use url::Url;
@@ -49,6 +50,7 @@ pub enum RecordInner {
     Prefix(Arc<PrefixRecord>),
     RepoData(Arc<RepoDataRecord>),
     Package(Arc<PackageRecord>),
+    Whl(Arc<WhlPackageRecord>),
 }
 
 impl PyRecord {
@@ -67,6 +69,9 @@ impl PyRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
         }
     }
 
@@ -76,6 +81,9 @@ impl PyRecord {
             RecordInner::RepoData(r) => Ok(Arc::make_mut(r)),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
             )),
         }
     }
@@ -89,6 +97,9 @@ impl PyRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
+            )),
         }
     }
 
@@ -100,6 +111,27 @@ impl PyRecord {
             )),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
+            )),
+        }
+    }
+
+    pub fn try_as_whl_package_record(&self) -> PyResult<&WhlPackageRecord> {
+        match &self.inner {
+            RecordInner::Whl(r) => Ok(r),
+            _ => Err(PyTypeError::new_err(
+                "Cannot use object as 'WhlPackageRecord'",
+            )),
+        }
+    }
+
+    pub fn try_as_whl_package_record_mut(&mut self) -> PyResult<&mut WhlPackageRecord> {
+        match &mut self.inner {
+            RecordInner::Whl(r) => Ok(Arc::make_mut(r)),
+            _ => Err(PyTypeError::new_err(
+                "Cannot use object as 'WhlPackageRecord'",
             )),
         }
     }
@@ -225,6 +257,24 @@ impl PyRecord {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (package_record, url))]
+    pub fn create_whl_record(package_record: PyRecord, url: &str) -> PyResult<Self> {
+        if !package_record.is_package_record() {
+            return Err(PyTypeError::new_err(
+                "package_record must be a PackageRecord",
+            ));
+        }
+        let package_record = package_record.as_package_record().clone();
+        let url: UrlOrPath = url.parse().map_err(PyRattlerError::from)?;
+        Ok(Self {
+            inner: RecordInner::Whl(Arc::new(WhlPackageRecord {
+                package_record,
+                url,
+            })),
+        })
+    }
+
+    #[staticmethod]
     #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, requested_specs=None, files=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn create_prefix_record(
@@ -298,6 +348,12 @@ impl PyRecord {
     #[getter]
     pub fn is_prefix_record(&self) -> bool {
         self.try_as_prefix_record().is_ok()
+    }
+
+    /// Checks whether if the current record is a `WhlPackageRecord`.
+    #[getter]
+    pub fn is_whl_package_record(&self) -> bool {
+        self.try_as_whl_package_record().is_ok()
     }
 
     /// Optionally the architecture the package supports.
@@ -586,12 +642,22 @@ impl PyRecord {
     /// The canonical URL from where to get this package.
     #[getter]
     pub fn url(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.url.to_string())
+        match &self.inner {
+            RecordInner::Whl(r) => Ok(r.url.as_str().to_string()),
+            _ => Ok(self.try_as_repodata_record()?.url.to_string()),
+        }
     }
 
     #[setter]
     pub fn set_url(&mut self, url: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
+        match &mut self.inner {
+            RecordInner::Whl(r) => {
+                Arc::make_mut(r).url = url.parse().map_err(PyRattlerError::from)?;
+            }
+            _ => {
+                self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
+            }
+        }
         Ok(())
     }
 
@@ -700,6 +766,7 @@ impl PyRecord {
             RecordInner::Prefix(r) => serde_json::to_string_pretty(r.as_ref()),
             RecordInner::RepoData(r) => serde_json::to_string_pretty(r.as_ref()),
             RecordInner::Package(r) => serde_json::to_string_pretty(r.as_ref()),
+            RecordInner::Whl(r) => serde_json::to_string_pretty(r.as_ref()),
         }
         .map_err(|e| PyValueError::new_err(format!("Failed to serialize record to JSON: {e}")))
     }
@@ -723,6 +790,9 @@ impl TryFrom<PyRecord> for PrefixRecord {
             )),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
             )),
         }
     }
@@ -770,6 +840,37 @@ impl TryFrom<PyRecord> for RepoDataRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+}
+
+impl From<WhlPackageRecord> for PyRecord {
+    fn from(value: WhlPackageRecord) -> Self {
+        Self {
+            inner: RecordInner::Whl(Arc::new(value)),
+        }
+    }
+}
+
+impl From<Arc<WhlPackageRecord>> for PyRecord {
+    fn from(value: Arc<WhlPackageRecord>) -> Self {
+        Self {
+            inner: RecordInner::Whl(value),
+        }
+    }
+}
+
+impl TryFrom<PyRecord> for WhlPackageRecord {
+    type Error = PyErr;
+    fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
+        match value.inner {
+            RecordInner::Whl(r) => Ok(Arc::unwrap_or_clone(r)),
+            _ => Err(PyTypeError::new_err(
+                "cannot use object as 'WhlPackageRecord'",
+            )),
         }
     }
 }
@@ -794,6 +895,7 @@ impl AsRef<PackageRecord> for PyRecord {
             RecordInner::Prefix(r) => &r.repodata_record.package_record,
             RecordInner::RepoData(r) => &r.package_record,
             RecordInner::Package(r) => r,
+            RecordInner::Whl(r) => &r.package_record,
         }
     }
 }
@@ -804,6 +906,7 @@ impl AsMut<PackageRecord> for PyRecord {
             RecordInner::Prefix(r) => &mut Arc::make_mut(r).repodata_record.package_record,
             RecordInner::RepoData(r) => &mut Arc::make_mut(r).package_record,
             RecordInner::Package(r) => Arc::make_mut(r),
+            RecordInner::Whl(r) => &mut Arc::make_mut(r).package_record,
         }
     }
 }
