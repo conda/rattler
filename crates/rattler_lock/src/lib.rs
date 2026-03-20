@@ -1079,14 +1079,14 @@ packages:
             Some("./"),
             "verbatim relative path for root should be preserved"
         );
-        assert_eq!(
-            root_pkg
-                .version
-                .as_ref()
-                .map(std::string::ToString::to_string),
-            Some("1.0.0".to_string())
+        assert!(
+            root_pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages"
         );
-        assert!(root_pkg.hash.is_some());
+        assert!(
+            root_pkg.hash.is_none(),
+            "hash must be stripped for local-path pypi source packages"
+        );
         assert_eq!(root_pkg.requires_dist.len(), 2);
         assert!(
             root_pkg.index_url.is_none(),
@@ -1099,12 +1099,9 @@ packages:
             .find(|p| p.name.as_ref() == "my-subdir")
             .expect("my-subdir package");
         assert_eq!(subdir_pkg.location.given(), Some("./my_subdir"));
-        assert_eq!(
-            subdir_pkg
-                .version
-                .as_ref()
-                .map(std::string::ToString::to_string),
-            Some("0.1.0".to_string())
+        assert!(
+            subdir_pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages"
         );
 
         // Check the parent-relative package (location = "../external_pkg")
@@ -1113,12 +1110,9 @@ packages:
             .find(|p| p.name.as_ref() == "external-pkg")
             .expect("external-pkg package");
         assert_eq!(external_pkg.location.given(), Some("../external_pkg"));
-        assert_eq!(
-            external_pkg
-                .version
-                .as_ref()
-                .map(std::string::ToString::to_string),
-            Some("2.0.0".to_string())
+        assert!(
+            external_pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages"
         );
 
         // Roundtrip: serialize → re-parse → re-serialize must be identical.
@@ -1227,5 +1221,283 @@ packages:
                  entry in the packages section (available: {package_pypi_keys:?})"
             );
         }
+    }
+
+    /// Verify that pypi source packages from local paths never expose hash
+    /// data, even when the lockfile YAML contains one.  Version 5 (v4/v5)
+    /// uses `kind: pypi` + `path:` for the location.
+    #[test]
+    fn v5_local_path_pypi_package_hash_is_stripped() {
+        let lock_file_str = "\
+version: 5
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./local-pkg
+packages:
+  - kind: pypi
+    name: local-pkg
+    version: '0.1.0'
+    path: ./local-pkg
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let base_dir = test_path();
+        let lock_file =
+            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "local-pkg");
+        assert!(
+            pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+        assert!(
+            pkg.hash.is_none(),
+            "hash must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+    }
+
+    /// Same as above but for lockfile format version 6.
+    #[test]
+    fn v6_local_path_pypi_package_hash_is_stripped() {
+        let lock_file_str = "\
+version: 6
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./local-pkg
+packages:
+  - pypi: ./local-pkg
+    name: local-pkg
+    version: '0.1.0'
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "local-pkg");
+        assert!(
+            pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+        assert!(
+            pkg.hash.is_none(),
+            "hash must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+    }
+
+    /// Same as above but for lockfile format version 7. In v7, local-path
+    /// pypi source packages never have a `version` field.
+    #[test]
+    fn v7_local_path_pypi_package_hash_is_stripped() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./local-pkg
+packages:
+  - pypi: ./local-pkg
+    name: local-pkg
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "local-pkg");
+        assert!(
+            pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.version
+        );
+        assert!(
+            pkg.hash.is_none(),
+            "hash must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+    }
+
+    /// Same as above but for v7 where the YAML *does* include a version field.
+    /// Even when present in the YAML, the version must be stripped for local
+    /// paths.
+    #[test]
+    fn v7_local_path_pypi_package_version_stripped_even_when_present() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./local-pkg
+packages:
+  - pypi: ./local-pkg
+    name: local-pkg
+    version: '3.2.1'
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "local-pkg");
+        assert!(
+            pkg.version.is_none(),
+            "version must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.version
+        );
+        assert!(
+            pkg.hash.is_none(),
+            "hash must be stripped for local-path pypi source packages, got: {:?}",
+            pkg.hash
+        );
+    }
+
+    /// Verify that URL-based pypi packages still retain their version and
+    /// hash (only local paths should have them stripped).
+    #[test]
+    fn v7_url_pypi_package_hash_is_preserved() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
+packages:
+  - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
+    name: numpy
+    version: 1.26.0
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "numpy");
+        assert!(
+            pkg.version.is_some(),
+            "version must be preserved for URL-based pypi packages"
+        );
+        assert!(
+            pkg.hash.is_some(),
+            "hash must be preserved for URL-based pypi packages"
+        );
+    }
+
+    /// Verify that `file://` URL pypi packages also have version and hash
+    /// stripped, since they resolve to local paths.
+    #[test]
+    fn v7_file_url_pypi_package_version_is_stripped() {
+        let base_dir = test_path();
+        let lock_file_str = format!(
+            "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: file://{0}/my_pkg
+packages:
+  - pypi: file://{0}/my_pkg
+    name: my-pkg
+    version: 1.0.0
+    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+",
+            base_dir.display()
+        );
+        let lock_file =
+            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(pkg.name.as_ref(), "my-pkg");
+        assert!(
+            pkg.version.is_none(),
+            "version must be stripped for file:// pypi packages (local path), got: {:?}",
+            pkg.version
+        );
+        assert!(
+            pkg.hash.is_none(),
+            "hash must be stripped for file:// pypi packages (local path), got: {:?}",
+            pkg.hash
+        );
     }
 }
