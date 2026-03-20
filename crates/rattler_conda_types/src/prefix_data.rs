@@ -40,8 +40,13 @@ impl PrefixData {
         &self.prefix_path
     }
 
+    /// Iterates over all record names
+    pub fn package_names(&self) -> impl Iterator<Item = &PackageName> {
+        self.records.keys()
+    }
+
     /// Discovers all packages in the `conda-meta` directory but does not parse the JSON yet.
-    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
+    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, PrefixDataError> {
         let prefix_path = prefix_path.into();
         let meta_dir = prefix_path.join("conda-meta");
         let mut records = HashMap::new();
@@ -98,6 +103,13 @@ impl PrefixData {
 
         // 3. .as_ref() elegantly converts &Result<T, E> into Result<&T, &E>
         Some(record_result.as_ref())
+    }
+
+    /// Iterates over all records, loading them on the spot
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = Option<Result<&PrefixRecord, &PrefixDataError>>> + '_ {
+        self.package_names().map(|name| self.get(name))
     }
 }
 
