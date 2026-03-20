@@ -69,7 +69,7 @@ use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
-use prefix_data::{PyPrefixData};
+use prefix_data::PyPrefixData;
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};

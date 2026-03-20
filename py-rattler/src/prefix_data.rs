@@ -40,7 +40,7 @@ impl PyPrefixData {
         match record {
             Some(Ok(record)) => Ok(Some(record.clone().into())),
             // TODO: Expose underlying error
-            Some(Err(_)) => Err(PyValueError::new_err("Could not process record").into()),
+            Some(Err(_)) => Err(PyValueError::new_err("Could not process record")),
             None => Ok(None),
         }
     }
