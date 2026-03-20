@@ -13,7 +13,7 @@ pub struct Opt {
     prefix: Option<PathBuf>,
 
     /// The name (or glob) of the packages to list
-    name: Option<PackageName>,
+    name: Option<PackageName>, // maybe this could be a full MatchSpec?
 
     /// Match full names only
     #[clap(short, long)]
@@ -24,10 +24,9 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     let prefix = if let Some(prefix) = opt.prefix {
         prefix
     } else if let Ok(prefix) = env::var("CONDA_PREFIX") {
-        //conda_prefix.into()
         PathBuf::from(prefix)
     } else {
-        miette::bail!("No environment detected or passed. Please use -p PATH.")
+        miette::bail!("No environment detected or passed. Tip: Use -p PATH.")
     };
 
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
@@ -35,14 +34,15 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         Some(name) => name.as_normalized().to_string(),
         None => "".to_string(),
     };
-    let mut widths = [6, 7, 5, 7];
-    let mut lines = vec![];
     let header = [[
         "# Name".to_string(),
         "Version".to_string(),
         "Build".to_string(),
         "Channel".to_string(),
     ]];
+    // These initial widths match the header columns length
+    let mut widths = [6, 7, 5, 7];
+    let mut lines = vec![];
     for record in prefix_data.iter() {
         match record {
             Some(Ok(record)) => {
@@ -61,11 +61,7 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
                     name,
                     record.version().as_str().to_string(),
                     record.build().to_string(),
-                    record
-                        .repodata_record
-                        .channel
-                        .clone()
-                        .unwrap_or_default(),
+                    record.repodata_record.channel.clone().unwrap_or_default(),
                 ];
                 for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
                     let field_len = field.len();
@@ -90,7 +86,7 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     println!("# packages in environment at {}", prefix.to_string_lossy());
     for line in header.iter().chain(lines.iter()) {
         for (i, field) in line.iter().enumerate() {
-            // Two spaces ----vv  as padding
+            // Two spaces ----vv as inter-column padding
             print!("{:<width$}  ", field, width = widths[i]);
         }
         println!();
