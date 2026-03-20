@@ -1,9 +1,8 @@
-use crate::{PackageHashes, UrlOrPath};
+use crate::{PackageHashes, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, PackageName, Requirement};
+use pep508_rs::{PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -14,10 +13,13 @@ pub struct PypiPackageData {
     pub name: PackageName,
 
     /// The version of the package.
-    pub version: pep440_rs::Version,
+    pub version: Option<pep440_rs::Version>,
 
     /// The location of the package. This can be a URL or a path.
-    pub location: UrlOrPath,
+    pub location: Verbatim<UrlOrPath>,
+
+    /// The index this came from. Is `None` for source dependencies
+    pub index_url: Option<url::Url>,
 
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
@@ -27,17 +29,6 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
-
-    /// Whether the projects should be installed in editable mode or not.
-    pub editable: bool,
-}
-
-/// Additional runtime configuration of a package. Multiple environments/platforms might refer to
-/// the same pypi package but with different extras enabled.
-#[derive(Clone, Debug, Default)]
-pub struct PypiPackageEnvironmentData {
-    /// The extras enabled for the package. Note that the order doesn't matter here but it does matter for serialization.
-    pub extras: BTreeSet<ExtraName>,
 }
 
 impl PartialOrd for PypiPackageData {
@@ -69,13 +60,18 @@ impl PypiPackageData {
             None => {}
             Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
             Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
-                if !spec.contains(&self.version) {
-                    return false;
-                }
+                return self.version.as_ref().is_none_or(|v| spec.contains(v))
             }
         }
 
         true
+    }
+
+    /// Return the the `version` as a `String` (or `<dynamic>` if the version is `None`)
+    pub fn version_string(&self) -> String {
+        self.version
+            .as_ref()
+            .map_or_else(|| "<dynamic>".to_string(), std::string::ToString::to_string)
     }
 }
 

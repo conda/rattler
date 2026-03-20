@@ -29,6 +29,7 @@ serde-value = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 typed-path = { workspace = true }
+xxhash-rust = { workspace = true, features = ["xxh3"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
