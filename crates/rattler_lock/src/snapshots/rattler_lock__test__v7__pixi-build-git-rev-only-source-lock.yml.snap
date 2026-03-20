@@ -17,6 +17,7 @@ packages:
     version: 0.5.0
     build: pyhbf21a9e_0
     subdir: noarch
+    timestamp: 0
     source:
       git: "https://github.com/example/pixi-package.git"
       rev: 123abc456def789012345678

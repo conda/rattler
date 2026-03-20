@@ -4128,7 +4128,7 @@ packages:
     md5: f1c6b41e0f56998ecd9a3e210faa1dc0
     license: LGPL-2.1
     size: 65388
-    timestamp: 1604417213
+    timestamp: 1604417213000
   - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/fribidi-1.0.10-h27ca646_0.tar.bz2"
     sha256: 4b37ea851a2cf85edf0a63d2a63266847ec3dcbba4a31156d430cdd6aa811303
     md5: c64443234ff91d70cb9c7dc926c58834
@@ -6200,7 +6200,7 @@ packages:
     license: BSD-2-Clause
     license_family: BSD
     size: 106190
-    timestamp: 1598867915
+    timestamp: 1598867915000
   - conda: "https://conda.anaconda.org/conda-forge/osx-64/libev-4.33-haf1e3a3_1.tar.bz2"
     sha256: c4154d424431898d84d6afb8b32e3ba749fe5d270d322bb0af74571a3cb09c6b
     md5: 79dc2be110b2a3d1e97ec21f691c50ad
@@ -20826,7 +20826,7 @@ packages:
       - ros-humble-ros-workspace *
       - vs2015_runtime >=14.29.30139
     size: 9712
-    timestamp: 1675793170
+    timestamp: 1675793170000
   - conda: "https://conda.anaconda.org/robostack-staging/linux-64/ros-humble-rmw-connextdds-common-0.11.1-py310h7c61026_3.tar.bz2"
     sha256: b8445959024e03aa44434d867c5901558ceac0b8caf381205a7b1c7a1d4a1a1b
     md5: a72063978d89fb1676a56f9d16084256
@@ -25389,7 +25389,7 @@ packages:
       - vs2015_runtime >=14.29.30139
       - ros-humble-rosidl-runtime-cpp *
     size: 32906
-    timestamp: 1675781380
+    timestamp: 1675781380000
   - conda: "https://conda.anaconda.org/robostack-staging/linux-64/ros-humble-rpyutils-0.2.1-py310h7c61026_3.tar.bz2"
     sha256: 4ab9271cbe2d634168c7d0beba357a8386d81f355db828b97b4031e86b2fc5e0
     md5: 3534f8593e526f37197acf0c87a3c75b

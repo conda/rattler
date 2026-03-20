@@ -32,26 +32,31 @@ packages:
     build: py38
     subdir: noarch
     noarch: python
+    timestamp: 0
   - conda_source: "b-python-project[cc8e28b0] @ ../a-python-project"
     version: "0.1"
     build: h398123
     subdir: noarch
     noarch: python
+    timestamp: 0
   - conda_source: "minimal-project[ac2e8eb3] @ ../minimal-project"
     version: "0.1"
     build: first
     subdir: linux-64
     depends:
       - __unix
+    timestamp: 0
   - conda_source: "minimal-project[1877194c] @ ../minimal-project"
     version: "0.1"
     build: first
     subdir: win-64
     depends:
       - __win
+    timestamp: 0
   - conda_source: "minimal-project[24438904] @ ../minimal-project"
     version: "0.1"
     build: second
     subdir: win-64
     depends:
       - __win
+    timestamp: 0
