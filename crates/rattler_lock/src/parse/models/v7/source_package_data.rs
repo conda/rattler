@@ -83,7 +83,7 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default")]
     #[serde_as(as = "crate::utils::serde::Timestamp")]
     pub timestamp: chrono::DateTime<chrono::Utc>,
 
@@ -101,6 +101,9 @@ pub(crate) struct SourcePackageDataModel<'a> {
 
 fn is_zero(value: &BuildNumber) -> bool {
     *value == 0
+}
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
 }
 
 impl<'a> SourcePackageDataModel<'a> {
