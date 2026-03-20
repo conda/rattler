@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 645
 expression: conda_lock
 ---
 version: 7
@@ -19,8 +20,6 @@ environments:
 packages:
   - pypi: "./local-pkg"
     name: local-pkg
-    version: 0.1.0
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   - pypi: "https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl"
     name: numpy
     version: 1.26.0
