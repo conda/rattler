@@ -51,12 +51,26 @@ impl PrefixData {
         let meta_dir = prefix_path.join("conda-meta");
         let mut records = HashMap::new();
 
-        if !meta_dir.exists() {
-            return Ok(Self {
-                prefix_path,
-                records,
-            });
-        }
+        if !prefix_path.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "Prefix {:#?} does not exist",
+                    prefix_path
+                ),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
+        if !meta_dir.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "{:#?} exists but it's not a valid conda environment",
+                    prefix_path
+                ),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
 
         for entry in fs::read_dir(meta_dir)? {
             let entry = entry?;
