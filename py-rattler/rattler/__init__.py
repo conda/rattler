@@ -28,7 +28,7 @@ from rattler.package import (
     NoArchType,
     NoArchLiteral,
 )
-from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
+from rattler.prefix import PrefixData, PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install, InstallerReporter
@@ -106,6 +106,7 @@ __all__ = [
     "NoArchLiteral",
     "Link",
     "LinkType",
+    "PrefixData",
 ]
 
 # PTY support - only available on Unix platforms
