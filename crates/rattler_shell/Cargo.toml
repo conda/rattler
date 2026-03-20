@@ -24,7 +24,7 @@ sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "rt", "process"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

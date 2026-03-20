@@ -24,10 +24,11 @@ pub enum RunError {
     IoError(#[from] std::io::Error),
 }
 
-/// Run a subprocess in an activated environment and capture stdout and stderr.
+/// Runs a command in an activated conda environment.
 ///
-/// Uses the full process environment for activation; [`run_in_environment`] seeds from `env_vars` only.
-pub fn run_command_in_environment(
+/// Activates the environment at `prefix`, applies the resulting environment
+/// variables to the command, and spawns it with inherited stdio.
+pub async fn run_command_in_environment(
     prefix: &Path,
     command: &[String],
     shell: ShellEnum,
@@ -50,10 +51,13 @@ pub fn run_command_in_environment(
 
     // Run activation scripts
 
-    let activated_env = activator.run_activation(activation_vars, None)?;
+    let activated_env =
+        tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
+            .await
+            .expect("Activated environment panicked")?;
 
     // Run the command
-    let mut cmd = Command::new(&command[0]);
+    let mut cmd = tokio::process::Command::new(&command[0]);
     cmd.args(&command[1..]);
     cmd.envs(&activated_env);
     cmd.envs(env_vars);
@@ -61,7 +65,7 @@ pub fn run_command_in_environment(
         cmd.current_dir(cwd);
     }
 
-    Ok(cmd.status()?)
+    Ok(cmd.status().await?)
 
     // Run the deactivation scripts
 
