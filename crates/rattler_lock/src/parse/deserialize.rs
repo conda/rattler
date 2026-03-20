@@ -380,12 +380,27 @@ fn convert_raw_pypi_package(
         raw_package.location
     };
 
+    // Local-path pypi source packages have no meaningful hash or version
+    // because the content can change at any time. Strip both fields so
+    // downstream consumers never rely on stale values.
+    let is_local_path = matches!(location.inner(), UrlOrPath::Path(_));
+    let hash = if is_local_path {
+        None
+    } else {
+        raw_package.hash
+    };
+    let version = if is_local_path {
+        None
+    } else {
+        raw_package.version
+    };
+
     Ok(PypiPackageData {
         name: raw_package.name,
-        version: raw_package.version,
+        version,
         location,
         index_url: raw_package.index_url,
-        hash: raw_package.hash,
+        hash,
         requires_dist,
         requires_python: raw_package.requires_python,
     })
