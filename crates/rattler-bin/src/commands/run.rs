@@ -35,6 +35,7 @@ pub async fn run(opt: Opt) -> miette::Result<()> {
         &env_vars,
         cwd,
     )
+    .await
     .into_diagnostic()?;
     let code = status.code().unwrap_or(1);
     if code != 0 {

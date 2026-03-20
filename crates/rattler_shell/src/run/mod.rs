@@ -28,7 +28,7 @@ pub enum RunError {
 ///
 /// Activates the environment at `prefix`, applies the resulting environment
 /// variables to the command, and spawns it with inherited stdio.
-pub fn run_command_in_environment(
+pub async fn run_command_in_environment(
     prefix: &Path,
     command: &[String],
     shell: ShellEnum,
@@ -51,9 +51,12 @@ pub fn run_command_in_environment(
 
     // Run activation scripts
 
-    let activated_env = activator.run_activation(activation_vars, None)?;
+    let activated_env =
+        tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
+            .await
+            .expect("Activated environment panicked")?;
 
-    let mut cmd = Command::new(&command[0]);
+    let mut cmd = tokio::process::Command::new(&command[0]);
     cmd.args(&command[1..]);
     cmd.envs(&activated_env);
     cmd.envs(env_vars);
@@ -61,7 +64,7 @@ pub fn run_command_in_environment(
         cmd.current_dir(cwd);
     }
 
-    Ok(cmd.status()?)
+    Ok(cmd.status().await?)
 }
 
 /// Execute a script in an activated environment.
