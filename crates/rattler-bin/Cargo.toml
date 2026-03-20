@@ -33,8 +33,8 @@ rustls-tls = [
   "rattler_networking/rustls-tls",
   "rattler_cache/rustls-tls",
 ]
-s3 = ["rattler_networking/s3", "rattler_upload/s3"]
-gcs = ["rattler_networking/gcs"]
+s3 = ["rattler_networking/s3", "rattler_upload/s3", "rattler_repodata_gateway/s3"]
+gcs = ["rattler_networking/gcs", "rattler_repodata_gateway/gcs"]
 
 [dependencies]
 anyhow = { workspace = true }

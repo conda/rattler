@@ -3,9 +3,8 @@ use std::sync::Arc;
 use coalesced_map::CoalescedMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_networking::LazyClient;
+use rattler_networking::{AuthenticationMiddleware, LazyClient};
 use reqwest::Client;
-use reqwest_middleware::ClientWithMiddleware;
 
 use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
 
@@ -137,9 +136,42 @@ impl GatewayBuilder {
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
             LazyClient::new(|| {
-                ClientWithMiddleware::from(
-                    Client::builder().user_agent(USER_AGENT).build().unwrap(),
-                )
+                let reqwest_client = Client::builder().user_agent(USER_AGENT).build().unwrap();
+                let mut builder = reqwest_middleware::ClientBuilder::new(reqwest_client.clone());
+
+                // Add authentication middleware so credentials from the auth
+                // storage (Bearer, Basic HTTP, Conda tokens, OAuth) are
+                // attached to outgoing requests.
+                if let Ok(auth_middleware) = AuthenticationMiddleware::from_env_and_defaults() {
+                    builder = builder.with(auth_middleware);
+                }
+
+                // Add OCI middleware.
+                builder = builder.with(rattler_networking::OciMiddleware::new(reqwest_client));
+
+                // Add S3 middleware when the `s3` feature is enabled so that
+                // `s3://` channel URLs are transparently converted to
+                // pre-signed HTTPS requests using AWS credentials from the
+                // environment / config.
+                #[cfg(feature = "s3")]
+                {
+                    if let Ok(auth_storage) =
+                        rattler_networking::AuthenticationStorage::from_env_and_defaults()
+                    {
+                        builder = builder.with(rattler_networking::S3Middleware::new(
+                            std::collections::HashMap::new(),
+                            auth_storage,
+                        ));
+                    }
+                }
+
+                // Add GCS middleware when the `gcs` feature is enabled.
+                #[cfg(feature = "gcs")]
+                {
+                    builder = builder.with(rattler_networking::GCSMiddleware::default());
+                }
+
+                builder.build()
             })
         });
 
