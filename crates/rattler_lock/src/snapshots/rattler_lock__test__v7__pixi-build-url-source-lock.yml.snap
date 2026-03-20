@@ -17,6 +17,7 @@ packages:
     version: 2.0.0
     build: pyhbf21a9e_0
     subdir: noarch
+    timestamp: 0
     source:
       url: "https://example.com/package.tar.gz"
       sha256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef

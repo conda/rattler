@@ -186,6 +186,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         package_build_source,
         variants,
         metadata,
+        timestamp,
 
         // These fields are already recorded in the source identifier, and
         // so they are not used for the hash here.
@@ -237,6 +238,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
             fields.insert("build_number", build_number);
             fields.insert("noarch", noarch);
             fields.insert("subdir", subdir);
+            fields.insert("timestamp", timestamp);
             fields.insert("version", version);
 
             if !depends.is_empty() {
@@ -452,6 +454,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             BTreeMap::new(),
+            chrono::DateTime::default(),
             None,
             package_record,
             BTreeMap::new(),
@@ -498,6 +501,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             variants,
+            chrono::DateTime::default(),
             None,
             package_record,
             BTreeMap::new(),
@@ -542,6 +546,7 @@ mod tests {
                 UrlOrPath::from_str(location).unwrap(),
                 None,
                 BTreeMap::new(),
+                chrono::DateTime::default(),
                 None,
                 package_record,
                 BTreeMap::new(),
@@ -637,6 +642,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             BTreeMap::new(),
+            chrono::DateTime::default(),
             None,
             name,
             vec![],
@@ -665,6 +671,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             BTreeMap::new(),
+            chrono::DateTime::default(),
             None,
             package_record,
             BTreeMap::new(),
@@ -685,6 +692,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             BTreeMap::new(),
+            chrono::DateTime::default(),
             None,
             name,
             vec!["dep-a".to_string()],
@@ -727,6 +735,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             variants1,
+            chrono::DateTime::default(),
             None,
             package_record.clone(),
             BTreeMap::new(),
@@ -743,6 +752,7 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             variants2,
+            chrono::DateTime::default(),
             None,
             package_record,
             BTreeMap::new(),

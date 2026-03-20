@@ -22,6 +22,7 @@ packages:
       - git_tag
       - git_rev
       - git_branch
+    timestamp: 0
     source_depends:
       git_branch:
         git: "https://github.com/example/baz.git"

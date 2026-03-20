@@ -3,9 +3,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use rattler_conda_types::{
-    utils::TimestampMs, BuildNumber, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
-};
+use rattler_conda_types::{BuildNumber, NoArchType, PackageRecord, PackageUrl, VersionWithSource};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -85,9 +83,9 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
+    #[serde_as(as = "crate::utils::serde::Timestamp")]
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
@@ -117,6 +115,8 @@ impl<'a> SourcePackageDataModel<'a> {
         // Extract name and location from the identifier, preserving the identifier itself
         let (name, hash, location) = self.conda_source.clone().into_parts();
 
+        let timestamp = self.timestamp;
+
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
             let subdir = subdir.into_owned();
@@ -144,7 +144,7 @@ impl<'a> SourcePackageDataModel<'a> {
                     purls: self.purls.into_owned(),
                     sha256: None,
                     size: self.size.into_owned(),
-                    timestamp: self.timestamp.map(Into::into),
+                    timestamp: Some(timestamp.into()),
                     track_features: self.track_features.into_owned(),
                     run_exports: None,
                     python_site_packages_path: self.python_site_packages_path.into_owned(),
@@ -162,6 +162,7 @@ impl<'a> SourcePackageDataModel<'a> {
         let source_data = CondaSourceData {
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
+            timestamp,
             package_build_source: self.source,
             identifier_hash: Some(hash),
             metadata,
@@ -201,7 +202,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     constrains: Cow::Borrowed(&r.constrains),
                     experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
                     size: Cow::Borrowed(&r.size),
-                    timestamp: r.timestamp.map(TimestampMs::into_datetime),
+                    timestamp: value.timestamp,
                     features: Cow::Borrowed(&r.features),
                     track_features: Cow::Borrowed(&r.track_features),
                     license: Cow::Borrowed(&r.license),
@@ -224,7 +225,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 constrains: Cow::Borrowed(&[]),
                 experimental_extra_depends: Cow::Owned(BTreeMap::new()),
                 size: Cow::Owned(None),
-                timestamp: None,
+                timestamp: value.timestamp,
                 features: Cow::Owned(None),
                 track_features: Cow::Borrowed(&[]),
                 license: Cow::Owned(None),

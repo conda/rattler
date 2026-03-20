@@ -33,13 +33,6 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
         // Convert the date to a timestamp
         let timestamp: i64 = source.timestamp_millis();
 
-        // Determine the precision of the timestamp.
-        let timestamp = if timestamp % 1000 == 0 {
-            timestamp / 1000
-        } else {
-            timestamp
-        };
-
         // Serialize the timestamp
         timestamp.serialize(serializer)
     }
