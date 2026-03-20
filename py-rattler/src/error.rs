@@ -179,7 +179,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::EnvironmentCreationError(err) => {
                 crate::exceptions::EnvironmentCreationError::new_err(err)
             }
-            PyRattlerError::LockFileError(err) => LockFileException::new_err(err),
+            PyRattlerError::LockFileError(err) => crate::exceptions::LockFileError::new_err(err),
             PyRattlerError::ExtractError(err) => {
                 crate::exceptions::ExtractError::new_err(pretty_print_error(&err))
             }

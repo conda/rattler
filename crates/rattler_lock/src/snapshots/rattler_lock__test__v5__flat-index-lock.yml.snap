@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 645
 expression: conda_lock
 ---
 version: 7
@@ -144,6 +143,7 @@ packages:
     timestamp: 1679532511311
   - pypi: "./links/requests-2.31.0-py3-none-any.whl"
     name: requests
+    version: 2.31.0
     requires_dist:
       - "charset-normalizer>=2,<4"
       - "idna>=2.5,<4"
