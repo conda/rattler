@@ -843,7 +843,10 @@ impl PyPypiPackageData {
     /// The index this came from. Might be None if the default index was used.
     #[getter]
     pub fn index_url(&self) -> Option<String> {
-        self.inner.index_url.as_ref().map(|url| url.to_string())
+        self.inner
+            .index_url
+            .as_ref()
+            .map(std::string::ToString::to_string)
     }
 
     /// A list of dependencies on other packages.
