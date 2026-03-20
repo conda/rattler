@@ -21,6 +21,22 @@ class PrefixData:
         self._prefix_data = PyPrefixData(str(prefix_path))
 
     def get(self, name: str | PackageName) -> Optional[PrefixRecord]:
+        """
+        Get record matching given name in target prefix. If not found, returns None.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler.prefix.prefix_data import PrefixData
+        >>> pd = PrefixData("../test-data/")
+        >>> r = pd.get("requests")
+        >>> r.name.normalized
+        'requests'
+        >>> pd.get("does-not-exist") is None
+        True
+        >>>
+        ```
+        """
         if isinstance(name, PackageName):
             name = name.normalized
         if pyrecord := self._prefix_data.get(PyPackageName(name)):
