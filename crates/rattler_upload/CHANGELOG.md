@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/conda/rattler/compare/rattler_upload-v0.5.1...rattler_upload-v0.5.2) - 2026-03-20
+
+### Added
+
+- *(rattler_upload)* add Cloudsmith upload target ([#2233](https://github.com/conda/rattler/pull/2233))
+
 ## [0.5.1](https://github.com/conda/rattler/compare/rattler_upload-v0.5.0...rattler_upload-v0.5.1) - 2026-03-18
 
 ### Other
