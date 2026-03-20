@@ -1,0 +1,103 @@
+# py-rattler
+
+# Home
+
+## What is rattler?
+
+Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda-conda-forge)). The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python. Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
+
+Rattler is written in Rust and tries to provide a clean API to its functionalities. With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects. Py-rattler is the python bindings for rattler.
+
+## Quick-Start
+
+Let's see an example to learn some of the functionality the library has to offer.
+
+```python
+import asyncio
+import tempfile
+
+from rattler import solve, install, VirtualPackage
+
+
+async def main() -> None:
+    # Start by solving the environment.
+    #
+    # Solving is the process of going from specifications of package and their
+    # version requirements to a list of concrete packages.
+    print("started solving the environment")
+    solved_records = await solve(
+        # Sources (channels or custom RepoDataSource) to use for solving
+        sources=["conda-forge"],
+        # The specs to solve for
+        specs=["python ~=3.12.0", "pip", "requests 2.31.0.*"],
+        # Virtual packages define the specifications of the environment
+        virtual_packages=VirtualPackage.detect(),
+    )
+    print("solved required dependencies")
+
+    # Install the packages into a new environment (or updates it if it already
+    # existed).
+    env_path = tempfile.mkdtemp()
+    await install(
+        records=solved_records,
+        target_prefix=env_path,
+    )
+
+    print(f"created environment: {env_path}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Py-rattler provides friendly high level functions to download dependencies and create environments. The `solve` and `install` functions are excellent examples of such high-level functions.
+
+## What is conda & conda-forge?
+
+The conda ecosystem provides **cross-platform**, **binary** packages that you can use with **any programming language**. `conda` is an open-source package management system and environment management system that can install and manage multiple versions of software packages and their dependencies. `conda` is written in Python. The aim of Rattler is to provide all functionality required to work with the conda ecosystem from Rust. Rattler is not a reimplementation of `conda`. `conda` is a package management tool. Rattler is a *library* to work with the conda ecosystem from different languages and applications. For example, it powers the backend of https://prefix.dev.
+
+`conda-forge` is a community-driven effort to bring new and existing software into the conda ecosystem. It provides *tens-of-thousands of up-to-date* packages that are maintained by a community of contributors. For an overview of available packages see https://prefix.dev.
+
+## How should I use the documentation?
+
+If you are getting started with the library, you should follow the 'First Steps' section in order. You can also use the menu on the left to quickly skip over sections and search for specific things.
+
+## Installation
+
+Py-Rattler is a python library, which means you need to download and install Python from https://www.python.org/downloads if you haven't already. Alternatively, you can use can get via conda.
+
+### Pypi
+
+```shell
+$ python3 -m pip install --upgrade py-rattler
+```
+
+### Pixi
+
+```shell
+$ pixi add py-rattler
+```
+
+### Conda
+
+```shell
+$ conda install py-rattler
+```
+
+### Mamba
+
+```shell
+$ mamba install py-rattler -c conda-forge
+```
+
+## Next Steps
+
+These basic first steps should have gotten you started with the library.
+
+By now, you should know how to download repo data, solve dependencies and create an environment.
+
+Next, we will see a quick reference summary of all the methods and properties that you will need when using the library. If you follow the links there, you will expand the documentation for the method and property, with more examples on how to use them.
+
+## Contributing 😍
+
+We would love to have you contribute! See the [CONTRIBUTION.md](https://github.com/conda/rattler/blob/main/CONTRIBUTING.md) for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).
