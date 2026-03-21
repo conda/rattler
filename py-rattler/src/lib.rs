@@ -16,6 +16,7 @@ mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
 mod platform;
+mod prefix_data;
 mod prefix_paths;
 #[cfg(feature = "pty")]
 mod pty;
@@ -68,6 +69,7 @@ use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
+use prefix_data::PyPrefixData;
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
@@ -155,6 +157,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyOverride>()?;
     m.add_class::<PyVirtualPackageOverrides>()?;
     m.add_class::<PyVirtualPackage>()?;
+    m.add_class::<PyPrefixData>()?;
     m.add_class::<PyPrefixPathsEntry>()?;
     m.add_class::<PyPrefixPathType>()?;
     m.add_class::<PyPrefixPaths>()?;
