@@ -78,7 +78,7 @@ struct Cli {
 
     /// The path to the config file to use to configure rattler-index.
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
-    #[arg(long)]
+    #[arg(long, global = true)]
     config: Option<PathBuf>,
 }
 
@@ -178,6 +178,13 @@ async fn main() -> anyhow::Result<()> {
                 credentials.endpoint_url = credentials
                     .endpoint_url
                     .or(s3_config.map(|c| c.endpoint_url.clone()));
+                if let Some(s3_config) = s3_config {
+                    credentials.addressing_style = if s3_config.force_path_style {
+                        rattler_s3::clap::S3AddressingStyleOpts::Path
+                    } else {
+                        rattler_s3::clap::S3AddressingStyleOpts::VirtualHost
+                    };
+                }
             }
 
             // Resolve the credentials
