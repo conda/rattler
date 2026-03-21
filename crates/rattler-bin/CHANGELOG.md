@@ -1,0 +1,251 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0](https://github.com/conda/rattler/releases/tag/rattler-bin-v0.1.0) - 2026-03-21
+
+### Added
+
+- `rattler create` doc improvements and `conda create` alignment ([#2264](https://github.com/conda/rattler/pull/2264))
+- Add support for downloading info files via range requests ([#1935](https://github.com/conda/rattler/pull/1935))
+- support glob and regex patterns in repodata queries ([#2036](https://github.com/conda/rattler/pull/2036))
+- Add CACHEDIR.TAG to environments and global cache ([#2011](https://github.com/conda/rattler/pull/2011))
+- add `rattler extract` utility to the rattler-bin crate ([#1832](https://github.com/conda/rattler/pull/1832))
+- implement `--exclude-newer` flag for `rattler create` command ([#1815](https://github.com/conda/rattler/pull/1815))
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+- ability to ignore packages in the installer ([#1612](https://github.com/conda/rattler/pull/1612))
+- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
+- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+- make rattler_networking system integration optional ([#1381](https://github.com/conda/rattler/pull/1381))
+- add reinstallation method to installer and transaction ([#1128](https://github.com/conda/rattler/pull/1128))
+- add `rattler_menuinst` crate ([#840](https://github.com/conda/rattler/pull/840))
+- implement `--no-deps` and `--only-deps` ([#1068](https://github.com/conda/rattler/pull/1068))
+- add S3 support ([#1008](https://github.com/conda/rattler/pull/1008))
+- Add support for optional dependencies ([#1019](https://github.com/conda/rattler/pull/1019))
+- speed up `PrefixRecord` loading ([#984](https://github.com/conda/rattler/pull/984))
+- improve performance when linking files using `rayon` ([#985](https://github.com/conda/rattler/pull/985))
+- merge pixi-build branch ([#950](https://github.com/conda/rattler/pull/950))
+- start adding interface to override ([#834](https://github.com/conda/rattler/pull/834))
+- add direct url repodata building ([#725](https://github.com/conda/rattler/pull/725))
+- add solve strategies ([#660](https://github.com/conda/rattler/pull/660))
+- exclude repodata records based on timestamp ([#654](https://github.com/conda/rattler/pull/654))
+- high level repodata access ([#560](https://github.com/conda/rattler/pull/560))
+- add channel priority to solve task and expose to python solve ([#598](https://github.com/conda/rattler/pull/598))
+- make root dir configurable in channel config ([#602](https://github.com/conda/rattler/pull/602))
+- proper archspec detection using archspec-rs ([#584](https://github.com/conda/rattler/pull/584))
+- [**breaking**] optional strict parsing of matchspec and versionspec ([#552](https://github.com/conda/rattler/pull/552))
+- use resolvo 0.4.0 ([#523](https://github.com/conda/rattler/pull/523))
+- add timeout parameter and SolverOptions to return early ([#499](https://github.com/conda/rattler/pull/499))
+- implement seperate auth stores and allow using only disk auth ([#435](https://github.com/conda/rattler/pull/435))
+- add channel priority and channel-specific selectors to solver info ([#394](https://github.com/conda/rattler/pull/394))
+- add strict channel priority option ([#385](https://github.com/conda/rattler/pull/385))
+- also fix bench
+- use PackageName everywhere
+- normalize package names where applicable
+- add rattler_networking and AuthenticatedClient to perform authenticated requests ([#191](https://github.com/conda/rattler/pull/191))
+- prepare for release ([#119](https://github.com/conda/rattler/pull/119))
+- better readme ([#118](https://github.com/conda/rattler/pull/118))
+- replace zulip with discord ([#116](https://github.com/conda/rattler/pull/116))
+- extra methods to query spare repodata ([#110](https://github.com/conda/rattler/pull/110))
+- allow caching repodata.json as .solv file ([#85](https://github.com/conda/rattler/pull/85))
+- implement sparse repodata loading ([#89](https://github.com/conda/rattler/pull/89))
+- create command ([#72](https://github.com/conda/rattler/pull/72))
+- stateless solver ([#75](https://github.com/conda/rattler/pull/75))
+- support installed (virtual) packages in libsolv ([#51](https://github.com/conda/rattler/pull/51))
+- download and cache repodata.json ([#55](https://github.com/conda/rattler/pull/55))
+- move all conda types to seperate crate
+- data models for extracting channel information ([#14](https://github.com/conda/rattler/pull/14))
+
+### Fixed
+
+- set AWS_LC_SYS_CMAKE_BUILDER in pixi-build package configs ([#2241](https://github.com/conda/rattler/pull/2241))
+- *(networking)* cache GCS OAuth2 token across requests ([#2114](https://github.com/conda/rattler/pull/2114))
+- reuse reqwest client in OCI middleware ([#2089](https://github.com/conda/rattler/pull/2089))
+- more reproducible builds with pixi install and source date epoch ([#1956](https://github.com/conda/rattler/pull/1956))
+- rename solver argument from lib-solv to libsolv ([#1833](https://github.com/conda/rattler/pull/1833))
+- fix login authentication ([#1600](https://github.com/conda/rattler/pull/1600))
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+- added missing hyphen to relative url linking to what-is-conda section in README.md ([#1192](https://github.com/conda/rattler/pull/1192))
+- use new PackageRecord when issuing reinstallation in `Transaction::from_current_and_desired` ([#1070](https://github.com/conda/rattler/pull/1070))
+- fix-up shebangs with spaces ([#887](https://github.com/conda/rattler/pull/887))
+- typos ([#849](https://github.com/conda/rattler/pull/849))
+- allow `gcs://` and `oci://` in gateway ([#845](https://github.com/conda/rattler/pull/845))
+- move more links to the conda org from conda-incubator ([#816](https://github.com/conda/rattler/pull/816))
+- use conda-incubator
+- use the output of `readlink` as hash for softlinks ([#643](https://github.com/conda/rattler/pull/643))
+- better value for `link` field ([#610](https://github.com/conda/rattler/pull/610))
+- no shebang on windows to make spaces in prefix work ([#611](https://github.com/conda/rattler/pull/611))
+- run post-link scripts ([#574](https://github.com/conda/rattler/pull/574))
+- dont use workspace dependencies for local crates ([#546](https://github.com/conda/rattler/pull/546))
+- initial releaze-pls config
+- remove drop-bomb, move empty folder removal to `post_process` ([#519](https://github.com/conda/rattler/pull/519))
+- consistent clobbering & removal of `__pycache__` ([#437](https://github.com/conda/rattler/pull/437))
+- add python docs badge
+- make FetchRepoDataOptions clonable ([#321](https://github.com/conda/rattler/pull/321))
+- add retry behavior for package cache downloads ([#280](https://github.com/conda/rattler/pull/280))
+- clippy warnings
+- allow downloading of repodata.json to fail for arch specific channels ([#174](https://github.com/conda/rattler/pull/174))
+- typo libsolve -> libsolv ([#164](https://github.com/conda/rattler/pull/164))
+- change urls from baszalmstra to mamba-org
+- build badge
+- tests and clippy
+- remove dependencies required for the library ([#15](https://github.com/conda/rattler/pull/15))
+
+### Other
+
+- Publish rattler-bin ([#2269](https://github.com/conda/rattler/pull/2269))
+- Improve range request API, fix 416 issue ([#2199](https://github.com/conda/rattler/pull/2199))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- Make s3 optional for rattler_index ([#1965](https://github.com/conda/rattler/pull/1965))
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+- release ([#1258](https://github.com/conda/rattler/pull/1258))
+- release ([#1244](https://github.com/conda/rattler/pull/1244))
+- release ([#1227](https://github.com/conda/rattler/pull/1227))
+- release ([#1171](https://github.com/conda/rattler/pull/1171))
+- release ([#1170](https://github.com/conda/rattler/pull/1170))
+- release ([#1161](https://github.com/conda/rattler/pull/1161))
+- release ([#1150](https://github.com/conda/rattler/pull/1150))
+- release ([#1137](https://github.com/conda/rattler/pull/1137))
+- release ([#1121](https://github.com/conda/rattler/pull/1121))
+- release ([#1106](https://github.com/conda/rattler/pull/1106))
+- Fix badge style ([#1110](https://github.com/conda/rattler/pull/1110))
+- release ([#1101](https://github.com/conda/rattler/pull/1101))
+- release ([#1071](https://github.com/conda/rattler/pull/1071))
+- release ([#1056](https://github.com/conda/rattler/pull/1056))
+- release ([#1050](https://github.com/conda/rattler/pull/1050))
+- release ([#1042](https://github.com/conda/rattler/pull/1042))
+- fix anchor link ([#1035](https://github.com/conda/rattler/pull/1035))
+- release ([#1025](https://github.com/conda/rattler/pull/1025))
+- Improve AuthenticationStorage ([#1026](https://github.com/conda/rattler/pull/1026))
+- release ([#1022](https://github.com/conda/rattler/pull/1022))
+- release ([#1021](https://github.com/conda/rattler/pull/1021))
+- release ([#1011](https://github.com/conda/rattler/pull/1011))
+- release ([#992](https://github.com/conda/rattler/pull/992))
+- release ([#986](https://github.com/conda/rattler/pull/986))
+- release ([#981](https://github.com/conda/rattler/pull/981))
+- release ([#978](https://github.com/conda/rattler/pull/978))
+- release ([#967](https://github.com/conda/rattler/pull/967))
+- release ([#952](https://github.com/conda/rattler/pull/952))
+- release ([#949](https://github.com/conda/rattler/pull/949))
+- release ([#947](https://github.com/conda/rattler/pull/947))
+- release ([#936](https://github.com/conda/rattler/pull/936))
+- enable using sharded repodata for custom channels ([#910](https://github.com/conda/rattler/pull/910))
+- release ([#928](https://github.com/conda/rattler/pull/928))
+- release ([#908](https://github.com/conda/rattler/pull/908))
+- update all versions of packages ([#886](https://github.com/conda/rattler/pull/886))
+- release ([#903](https://github.com/conda/rattler/pull/903))
+- release ([#890](https://github.com/conda/rattler/pull/890))
+- release ([#883](https://github.com/conda/rattler/pull/883))
+- release ([#878](https://github.com/conda/rattler/pull/878))
+- release ([#862](https://github.com/conda/rattler/pull/862))
+- release ([#856](https://github.com/conda/rattler/pull/856))
+- release ([#853](https://github.com/conda/rattler/pull/853))
+- release ([#846](https://github.com/conda/rattler/pull/846))
+- release ([#844](https://github.com/conda/rattler/pull/844))
+- release ([#836](https://github.com/conda/rattler/pull/836))
+- make virtual package overrides none by default consistently ([#842](https://github.com/conda/rattler/pull/842))
+- release ([#824](https://github.com/conda/rattler/pull/824))
+- *(rattler_virtual_packages)* release v1.0.4 ([#822](https://github.com/conda/rattler/pull/822))
+- *(rattler_repodata_gateway)* release v0.21.7 ([#820](https://github.com/conda/rattler/pull/820))
+- release ([#807](https://github.com/conda/rattler/pull/807))
+- change links from conda-incubator to conda ([#813](https://github.com/conda/rattler/pull/813))
+- update banner ([#808](https://github.com/conda/rattler/pull/808))
+- release ([#806](https://github.com/conda/rattler/pull/806))
+- release ([#802](https://github.com/conda/rattler/pull/802))
+- mark some crates 1.0 ([#789](https://github.com/conda/rattler/pull/789))
+- release ([#788](https://github.com/conda/rattler/pull/788))
+- release ([#785](https://github.com/conda/rattler/pull/785))
+- *(rattler_virtual_packages)* release v0.19.18 ([#780](https://github.com/conda/rattler/pull/780))
+- release ([#773](https://github.com/conda/rattler/pull/773))
+- bump dependencies and remove unused ones ([#771](https://github.com/conda/rattler/pull/771))
+- release ([#769](https://github.com/conda/rattler/pull/769))
+- release ([#727](https://github.com/conda/rattler/pull/727))
+- release
+- release ([#716](https://github.com/conda/rattler/pull/716))
+- *(rattler_solve)* release v0.23.2 ([#702](https://github.com/conda/rattler/pull/702))
+- release ([#699](https://github.com/conda/rattler/pull/699))
+- release ([#681](https://github.com/conda/rattler/pull/681))
+- introducing the installer ([#664](https://github.com/conda/rattler/pull/664))
+- release ([#659](https://github.com/conda/rattler/pull/659))
+- use semaphore for install driver ([#653](https://github.com/conda/rattler/pull/653))
+- release ([#652](https://github.com/conda/rattler/pull/652))
+- update README.md
+- release ([#638](https://github.com/conda/rattler/pull/638))
+- release ([#628](https://github.com/conda/rattler/pull/628))
+- release ([#625](https://github.com/conda/rattler/pull/625))
+- release ([#617](https://github.com/conda/rattler/pull/617))
+- release ([#595](https://github.com/conda/rattler/pull/595))
+- update dependencies incl. reqwest ([#606](https://github.com/conda/rattler/pull/606))
+- release ([#597](https://github.com/conda/rattler/pull/597))
+- *(rattler)* release v0.20.1 ([#591](https://github.com/conda/rattler/pull/591))
+- *(rattler)* release v0.20.0 ([#588](https://github.com/conda/rattler/pull/588))
+- release ([#583](https://github.com/conda/rattler/pull/583))
+- release ([#575](https://github.com/conda/rattler/pull/575))
+- *(rattler)* release v0.19.4 ([#571](https://github.com/conda/rattler/pull/571))
+- release ([#564](https://github.com/conda/rattler/pull/564))
+- add pixi badge ([#563](https://github.com/conda/rattler/pull/563))
+- release ([#559](https://github.com/conda/rattler/pull/559))
+- release ([#542](https://github.com/conda/rattler/pull/542))
+- every crate should have its own version ([#557](https://github.com/conda/rattler/pull/557))
+- move all dependencies to workspace ([#501](https://github.com/conda/rattler/pull/501))
+- Convert authenticated client to reqwest middleware ([#488](https://github.com/conda/rattler/pull/488))
+- Release
+- Release
+- Release
+- more clippy lint ([#462](https://github.com/conda/rattler/pull/462))
+- Release
+- Release
+- Release
+- Release
+- Release
+- Release
+- Release
+- update installation gif
+- update banner image
+- all dependencies ([#366](https://github.com/conda/rattler/pull/366))
+- Release
+- add fetch repo data to py-rattler ([#334](https://github.com/conda/rattler/pull/334))
+- remove rattler_libsolv_rs ([#350](https://github.com/conda/rattler/pull/350))
+- Release
+- Update all dependencies and fix chrono deprecation ([#302](https://github.com/conda/rattler/pull/302))
+- address issue #282 ([#283](https://github.com/conda/rattler/pull/283))
+- Release
+- Release
+- use `default_cache_dir` in rattler ([#269](https://github.com/conda/rattler/pull/269))
+- call codesign binary instead of using codesign crate ([#259](https://github.com/conda/rattler/pull/259))
+- add not found error to the fetch repo data errors  ([#256](https://github.com/conda/rattler/pull/256))
+- rename libsolv crates ([#253](https://github.com/conda/rattler/pull/253))
+- propose a repodata patch function to be able to add `pip` to the `pyt… ([#238](https://github.com/conda/rattler/pull/238))
+- make solver generic and add benchmarks ([#245](https://github.com/conda/rattler/pull/245))
+- Add libsolv_rs ([#243](https://github.com/conda/rattler/pull/243))
+- Release
+- Release
+- Release
+- update all dependencies ([#208](https://github.com/conda/rattler/pull/208))
+- Add an image to Readme ([#203](https://github.com/conda/rattler/pull/203))
+- add native-tls/rustls-tls features to rattler & more dependencies ([#181](https://github.com/conda/rattler/pull/181))
+- Improve getting started with a micromamba environment. ([#163](https://github.com/conda/rattler/pull/163))
+- Release
+- inherit workspace properties for crates
+- update dirs requirement from 4.0.0 to 5.0.0 ([#122](https://github.com/conda/rattler/pull/122))
+- rename SolverProblem to SolverTask ([#106](https://github.com/conda/rattler/pull/106))
+- do not emit codesign logs on macOS computers ([#90](https://github.com/conda/rattler/pull/90))
+- matchspec & version docs ([#82](https://github.com/conda/rattler/pull/82))
+- Misc/update readme ([#66](https://github.com/conda/rattler/pull/66))
+- add licenses ([#37](https://github.com/conda/rattler/pull/37))
+- update readme
+- layout the vision a little bit better
+- update clap requirement from 3.2.14 to 4.0.13 ([#23](https://github.com/conda/rattler/pull/23))
+- *(docs)* add build badge
+- matchspec parsing
