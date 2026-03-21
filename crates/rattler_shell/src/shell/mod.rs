@@ -30,7 +30,7 @@ use crate::activation::PathModificationBehavior;
 /// use rattler_shell::shell::Shell;
 ///
 /// let mut script = String::new();
-/// let shell = Bash;
+/// let shell = Bash::default();
 /// shell.set_env_var(&mut script, "FOO", "bar").unwrap();
 ///
 /// assert_eq!(script, "export FOO=bar\n");
@@ -266,9 +266,36 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
 
 type ShellResult = Result<(), ShellError>;
 
-/// A [`Shell`] implementation for the Bash shell.
+/// Selects which POSIX-compatible sh-family shell is in use.
+///
+/// All flavors share Bash's script generation logic (POSIX-compatible dot
+/// sourcing, `export`, `unset`, etc.).  The differences are:
+/// - `executable()` returns the correct binary name per flavor.
+/// - Bash-specific features like completion sourcing are only enabled for
+///   `BashFlavor::Bash`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum BashFlavor {
+    /// Standard GNU Bash – default.
+    #[default]
+    Bash,
+    /// POSIX `/bin/sh`.
+    Sh,
+    /// Debian Almquist Shell.
+    Dash,
+    /// `KornShell`.
+    Ksh,
+    /// `BusyBox` `sh` (identifies itself as `sh`).
+    BusyBox,
+}
+
+/// A [`Shell`] implementation for the Bash shell and compatible sh-family
+/// shells (`sh`, `dash`, `ksh`, `busybox`).
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Bash;
+pub struct Bash {
+    /// Which flavour of sh-compatible shell this instance represents.
+    pub flavor: BashFlavor,
+}
 
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
@@ -355,10 +382,18 @@ impl Shell for Bash {
     }
 
     fn completion_script_location(&self) -> Option<&'static Path> {
-        Some(Path::new("share/bash-completion/completions"))
+        // Only standard Bash has the bash-completion infrastructure.
+        match self.flavor {
+            BashFlavor::Bash => Some(Path::new("share/bash-completion/completions")),
+            _ => None,
+        }
     }
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
+        // The `source dir/*` glob pattern is a bashism – skip for POSIX shells.
+        if self.flavor != BashFlavor::Bash {
+            return Ok(());
+        }
         if completions_dir.exists() {
             // check if we are on Windows, and if yes, convert native path to unix for (Git)
             // Bash
@@ -381,7 +416,12 @@ impl Shell for Bash {
     }
 
     fn executable(&self) -> &str {
-        "bash"
+        match self.flavor {
+            BashFlavor::Bash => "bash",
+            BashFlavor::Sh | BashFlavor::BusyBox => "sh",
+            BashFlavor::Dash => "dash",
+            BashFlavor::Ksh => "ksh",
+        }
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {
@@ -895,7 +935,7 @@ impl Default for ShellEnum {
         if cfg!(windows) {
             CmdExe.into()
         } else {
-            Bash.into()
+            Bash::default().into()
         }
     }
 }
@@ -945,7 +985,12 @@ impl ShellEnum {
             let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
-                Some(Bash.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Bash,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("zsh") {
                 Some(Zsh.into())
             } else if parent_process_name.contains("xonsh")
@@ -972,6 +1017,36 @@ impl ShellEnum {
                 )
             } else if parent_process_name.contains("cmd.exe") {
                 Some(CmdExe.into())
+            } else if parent_process_name == "dash" {
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Dash,
+                    }
+                    .into(),
+                )
+            } else if parent_process_name == "ksh" || parent_process_name.starts_with("ksh") {
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Ksh,
+                    }
+                    .into(),
+                )
+            } else if parent_process_name == "busybox" {
+                Some(
+                    Bash {
+                        flavor: BashFlavor::BusyBox,
+                    }
+                    .into(),
+                )
+            } else if parent_process_name == "sh" {
+                // Generic POSIX sh – must come last so more specific shells
+                // (bash, dash, ksh) are matched first.
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Sh,
+                    }
+                    .into(),
+                )
             } else {
                 None
             };
@@ -1003,7 +1078,26 @@ impl FromStr for ShellEnum {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "bash" => Ok(Bash.into()),
+            "bash" => Ok(Bash {
+                flavor: BashFlavor::Bash,
+            }
+            .into()),
+            "sh" => Ok(Bash {
+                flavor: BashFlavor::Sh,
+            }
+            .into()),
+            "dash" => Ok(Bash {
+                flavor: BashFlavor::Dash,
+            }
+            .into()),
+            "ksh" => Ok(Bash {
+                flavor: BashFlavor::Ksh,
+            }
+            .into()),
+            "busybox" => Ok(Bash {
+                flavor: BashFlavor::BusyBox,
+            }
+            .into()),
             "zsh" => Ok(Zsh.into()),
             "xonsh" => Ok(Xonsh.into()),
             "fish" => Ok(Fish.into()),
@@ -1158,7 +1252,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
 
         let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
 
@@ -1242,7 +1336,7 @@ mod tests {
 
     #[test]
     fn test_path_separator() {
-        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Linux64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1251,7 +1345,7 @@ mod tests {
             .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
 
-        let mut script = ShellScript::new(Bash, Platform::Win64);
+        let mut script = ShellScript::new(Bash::default(), Platform::Win64);
         script
             .set_path(
                 &[PathBuf::from("/foo"), PathBuf::from("/bar")],
@@ -1259,6 +1353,91 @@ mod tests {
             )
             .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
+    }
+
+    #[test]
+    fn test_bash_flavor_from_str() {
+        use std::str::FromStr;
+        // Standard bash
+        let s = ShellEnum::from_str("bash").unwrap();
+        assert_eq!(s.executable(), "bash");
+        // POSIX sh
+        let s = ShellEnum::from_str("sh").unwrap();
+        assert_eq!(s.executable(), "sh");
+        // dash
+        let s = ShellEnum::from_str("dash").unwrap();
+        assert_eq!(s.executable(), "dash");
+        // ksh
+        let s = ShellEnum::from_str("ksh").unwrap();
+        assert_eq!(s.executable(), "ksh");
+        // busybox
+        let s = ShellEnum::from_str("busybox").unwrap();
+        assert_eq!(s.executable(), "sh");
+    }
+
+    #[test]
+    fn test_bash_flavor_script_generation() {
+        // All sh-family shells share the exact same script generation logic,
+        // so their output should be identical.
+        let flavors = [
+            BashFlavor::Bash,
+            BashFlavor::Sh,
+            BashFlavor::Dash,
+            BashFlavor::Ksh,
+            BashFlavor::BusyBox,
+        ];
+        let paths = vec![PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")];
+        let reference = {
+            let mut s = ShellScript::new(
+                Bash {
+                    flavor: BashFlavor::Bash,
+                },
+                Platform::Linux64,
+            );
+            s.set_env_var("FOO", "bar").unwrap();
+            s.set_path(&paths, PathModificationBehavior::Prepend)
+                .unwrap();
+            s.contents
+        };
+        for flavor in flavors {
+            let mut s = ShellScript::new(Bash { flavor }, Platform::Linux64);
+            s.set_env_var("FOO", "bar").unwrap();
+            s.set_path(&paths, PathModificationBehavior::Prepend)
+                .unwrap();
+            assert_eq!(
+                s.contents, reference,
+                "Script mismatch for flavor {flavor:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_bash_completion_location_only_for_bash_flavor() {
+        assert!(Bash {
+            flavor: BashFlavor::Bash
+        }
+        .completion_script_location()
+        .is_some());
+        assert!(Bash {
+            flavor: BashFlavor::Sh
+        }
+        .completion_script_location()
+        .is_none());
+        assert!(Bash {
+            flavor: BashFlavor::Dash
+        }
+        .completion_script_location()
+        .is_none());
+        assert!(Bash {
+            flavor: BashFlavor::Ksh
+        }
+        .completion_script_location()
+        .is_none());
+        assert!(Bash {
+            flavor: BashFlavor::BusyBox
+        }
+        .completion_script_location()
+        .is_none());
     }
 
     #[test]
