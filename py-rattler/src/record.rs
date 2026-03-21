@@ -416,6 +416,26 @@ impl PyRecord {
         self.as_package_record_mut().depends = depends;
     }
 
+    /// Conditional or optional dependencies. Maps a condition name to the list
+    /// of dependency specifications required when that condition is active.
+    #[getter]
+    pub fn extra_depends(&self) -> std::collections::HashMap<String, Vec<String>> {
+        self.as_package_record()
+            .experimental_extra_depends
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_extra_depends(
+        &mut self,
+        extra_depends: std::collections::HashMap<String, Vec<String>>,
+    ) {
+        self.as_package_record_mut().experimental_extra_depends =
+            extra_depends.into_iter().collect();
+    }
+
     /// Features are a deprecated way to specify different
     /// feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead,
