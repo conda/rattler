@@ -54,15 +54,15 @@ lock-file to be able to verify if the lock-file still satisfies an
 input/source without requiring additional input (e.g. network requests) or
 expensive solves. We call this static satisfiability verification.</p>
 <p>Conda-lock stores a custom <strong>partial</strong> representation of a
-[<code>rattler_conda_types::RepoDataRecord</code>] in the lock-file. This poses a
+<a href="../rattler_conda_types/repo_data_record/struct.RepoDataRecord.html" title="struct rattler_conda_types::repo_data_record::RepoDataRecord"><code>rattler_conda_types::RepoDataRecord</code></a> in the lock-file. This poses a
 problem when incrementally updating an environment. To only partially update
 packages in the lock-file without completely recreating it, the records
 stored in the lock-file need to be passed to the solver as “preferred”
-packages. Since [<code>rattler_conda_types::MatchSpec</code>] can match on any field
-present in a [<code>rattler_conda_types::PackageRecord</code>] we need to store all
+packages. Since <a href="../rattler_conda_types/match_spec/struct.MatchSpec.html" title="struct rattler_conda_types::match_spec::MatchSpec"><code>rattler_conda_types::MatchSpec</code></a> can match on any field
+present in a <a href="../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord"><code>rattler_conda_types::PackageRecord</code></a> we need to store all
 fields in the lock-file not just a subset.
 To that end this crate stores the full
-[<code>rattler_conda_types::PackageRecord</code>] in the lock-file. This allows
+<a href="../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord"><code>rattler_conda_types::PackageRecord</code></a> in the lock-file. This allows
 completely recreating the record that was read from repodata when the
 lock-file was created which will allow a correct incremental update.</p>
 <p>Conda-lock requires users to create multiple lock-files when they want to
