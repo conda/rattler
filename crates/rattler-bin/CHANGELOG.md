@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/conda/rattler/compare/rattler-bin-v0.1.0...rattler-bin-v0.1.1) - 2026-03-21
+
+### Other
+
+- *(rattler-bin)* release v0.1.0 ([#2270](https://github.com/conda/rattler/pull/2270))
+
 ## [0.1.0](https://github.com/conda/rattler/releases/tag/rattler-bin-v0.1.0) - 2026-03-21
 
 ### Added

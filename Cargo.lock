@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5117,7 +5117,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.19"
+version = "0.27.20"
 dependencies = [
  "ahash",
  "anyhow",
