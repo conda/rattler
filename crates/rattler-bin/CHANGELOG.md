@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [**breaking**] optional strict parsing of matchspec and versionspec ([#552](https://github.com/conda/rattler/pull/552))
 - use resolvo 0.4.0 ([#523](https://github.com/conda/rattler/pull/523))
 - add timeout parameter and SolverOptions to return early ([#499](https://github.com/conda/rattler/pull/499))
-- implement seperate auth stores and allow using only disk auth ([#435](https://github.com/conda/rattler/pull/435))
+- implement separate auth stores and allow using only disk auth ([#435](https://github.com/conda/rattler/pull/435))
 - add channel priority and channel-specific selectors to solver info ([#394](https://github.com/conda/rattler/pull/394))
 - add strict channel priority option ([#385](https://github.com/conda/rattler/pull/385))
 - also fix bench
@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - stateless solver ([#75](https://github.com/conda/rattler/pull/75))
 - support installed (virtual) packages in libsolv ([#51](https://github.com/conda/rattler/pull/51))
 - download and cache repodata.json ([#55](https://github.com/conda/rattler/pull/55))
-- move all conda types to seperate crate
+- move all conda types to separate crate
 - data models for extracting channel information ([#14](https://github.com/conda/rattler/pull/14))
 
 ### Fixed
@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - remove drop-bomb, move empty folder removal to `post_process` ([#519](https://github.com/conda/rattler/pull/519))
 - consistent clobbering & removal of `__pycache__` ([#437](https://github.com/conda/rattler/pull/437))
 - add python docs badge
-- make FetchRepoDataOptions clonable ([#321](https://github.com/conda/rattler/pull/321))
+- make FetchRepoDataOptions cloneable ([#321](https://github.com/conda/rattler/pull/321))
 - add retry behavior for package cache downloads ([#280](https://github.com/conda/rattler/pull/280))
 - clippy warnings
 - allow downloading of repodata.json to fail for arch specific channels ([#174](https://github.com/conda/rattler/pull/174))
