@@ -24,14 +24,37 @@ impl SimpleChannelServer {
 
 impl SimpleChannelServer {
     pub async fn new(path: impl AsRef<Path>) -> Self {
+        Self::with_cache_control(path, None).await
+    }
+
+    pub async fn with_cache_control(path: impl AsRef<Path>, cache_control: Option<&str>) -> Self {
         // Define a service to serve the contents of the folder. The `precompressed_gzip` method
         // adds the behavior that a file gzip compressed file called `<path>.gz` is preferred over
         // the original file. This is very useful because we can store gzipped compressed files in
         // the repository instead of the full-blown jsons.
         let service = get_service(ServeDir::new(path).precompressed_gzip());
 
+        let cache_control = cache_control.map(String::from);
+
         // Create a router that will serve the static files from the channel.
         let app = axum::Router::new().fallback_service(service);
+        let app = if let Some(cache_control) = cache_control {
+            app.layer(axum::middleware::from_fn(
+                move |req, next: axum::middleware::Next| {
+                    let cc = cache_control.clone();
+                    async move {
+                        let mut res = next.run(req).await;
+                        res.headers_mut().insert(
+                            axum::http::header::CACHE_CONTROL,
+                            axum::http::HeaderValue::from_str(&cc).unwrap(),
+                        );
+                        res
+                    }
+                },
+            ))
+        } else {
+            app
+        };
 
         // Construct the server that will listen on localhost but with a *random port*. The random
         // port is very important because it enables creating multiple instances at the same time.
