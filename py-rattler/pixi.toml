@@ -17,7 +17,7 @@ backend = { name = "pixi-build-python", git = "https://github.com/pavelzw/pixi",
 [package.host-dependencies]
 maturin = "*"
 python = "3.9.*"
-# python-abi3 = "*"
+python-abi3 = "*"
 [package.target.osx-arm64.build-dependencies]
 clangdev = "*"
 [package.build.config]
