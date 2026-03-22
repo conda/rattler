@@ -15,6 +15,34 @@ use crate::{
     GatewayError,
 };
 
+/// Returns `true` if the error is transient and the request should be retried.
+/// This includes 429 (Too Many Requests), 5xx server errors, and connection
+/// errors.
+fn is_transient_error(err: &GatewayError) -> bool {
+    match err {
+        GatewayError::FetchRepoDataError(fetch_err) => match fetch_err {
+            FetchRepoDataError::HttpError(err) => is_transient_reqwest_middleware_error(err),
+            _ => false,
+        },
+        GatewayError::ReqwestError(err) => is_transient_reqwest_error(err),
+        _ => false,
+    }
+}
+
+fn is_transient_reqwest_middleware_error(err: &reqwest_middleware::Error) -> bool {
+    match err {
+        reqwest_middleware::Error::Reqwest(err) => is_transient_reqwest_error(err),
+        _ => false,
+    }
+}
+
+fn is_transient_reqwest_error(err: &reqwest::Error) -> bool {
+    err.status()
+        .is_some_and(|s| s == http::StatusCode::TOO_MANY_REQUESTS || s.is_server_error())
+        || err.is_connect()
+        || err.is_timeout()
+}
+
 cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         mod wasm;
@@ -168,23 +196,34 @@ mod tests {
     use crate::gateway::subdir::SubdirClient;
     use axum::{
         body::Body,
+        extract::State,
         http::{Response, StatusCode},
         routing::get,
         Router,
     };
-    use rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{Channel, Shard, ShardedRepodata, ShardedSubdirInfo};
     use rattler_digest::{parse_digest_from_hex, Sha256};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
     use tokio::sync::oneshot;
     use url::Url;
 
     use super::ShardedSubdir;
 
+    /// Shared state for the mock server to track request counts.
+    #[derive(Clone)]
+    struct MockState {
+        shard_response: MockShardResponse,
+        request_count: Arc<AtomicU32>,
+    }
+
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        request_count: Arc<AtomicU32>,
         _shutdown_sender: oneshot::Sender<()>,
     }
 
@@ -213,6 +252,12 @@ mod tests {
             let index_bytes = rmp_serde::to_vec(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
+            let request_count = Arc::new(AtomicU32::new(0));
+            let state = MockState {
+                shard_response,
+                request_count: request_count.clone(),
+            };
+
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
@@ -226,8 +271,9 @@ mod tests {
                 )
                 .route(
                     "/linux-64/shards/{shard_file}",
-                    get(move || async move {
-                        match shard_response {
+                    get(|State(state): State<MockState>| async move {
+                        let count = state.request_count.fetch_add(1, Ordering::SeqCst);
+                        match state.shard_response {
                             MockShardResponse::Empty => Response::builder()
                                 .status(StatusCode::OK)
                                 .body(Body::empty())
@@ -239,9 +285,33 @@ mod tests {
                                     .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
                                     .unwrap()
                             }
+                            MockShardResponse::TooManyRequests { fail_count } => {
+                                if count < fail_count {
+                                    Response::builder()
+                                        .status(StatusCode::TOO_MANY_REQUESTS)
+                                        .body(Body::empty())
+                                        .unwrap()
+                                } else {
+                                    // Return a valid shard
+                                    let shard = Shard {
+                                        packages: Default::default(),
+                                        conda_packages: Default::default(),
+                                        removed: Default::default(),
+                                        experimental_v3: Default::default(),
+                                    };
+                                    let shard_bytes = rmp_serde::to_vec(&shard).unwrap();
+                                    let compressed =
+                                        zstd::encode_all(shard_bytes.as_slice(), 3).unwrap();
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .body(Body::from(compressed))
+                                        .unwrap()
+                                }
+                            }
                         }
                     }),
-                );
+                )
+                .with_state(state);
 
             let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
             let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
@@ -258,6 +328,7 @@ mod tests {
 
             Self {
                 local_addr,
+                request_count,
                 _shutdown_sender: tx,
             }
         }
@@ -269,12 +340,20 @@ mod tests {
         fn channel(&self) -> Channel {
             Channel::from_url(self.url())
         }
+
+        fn request_count(&self) -> u32 {
+            self.request_count.load(Ordering::SeqCst)
+        }
     }
 
     #[derive(Clone, Copy)]
     enum MockShardResponse {
         Empty,
         Truncated,
+        /// Return 429 for the first `fail_count` requests, then succeed.
+        TooManyRequests {
+            fail_count: u32,
+        },
     }
 
     #[tokio::test]
@@ -345,5 +424,74 @@ mod tests {
             .to_string();
 
         insta::assert_snapshot!("truncated_shard_response_error", err_string);
+    }
+
+    #[tokio::test]
+    async fn test_429_retry_succeeds() {
+        // Server returns 429 twice, then succeeds on the 3rd request
+        let server =
+            MockShardedServer::new(MockShardResponse::TooManyRequests { fail_count: 2 }).await;
+        let channel = server.channel();
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let client = rattler_networking::LazyClient::default();
+
+        let subdir = ShardedSubdir::new(
+            channel,
+            "linux-64".to_string(),
+            client,
+            cache_dir.path().to_path_buf(),
+            CacheAction::NoCache,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let package_name = "test-package".parse().unwrap();
+        let result = subdir.fetch_package_records(&package_name, None).await;
+
+        // Should succeed after retries
+        assert!(
+            result.is_ok(),
+            "expected success after retries, got: {result:?}"
+        );
+        // Should have made 3 requests (2 failures + 1 success)
+        assert_eq!(server.request_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_429_retry_exhausted() {
+        // Server always returns 429 (more failures than retries allow)
+        let server =
+            MockShardedServer::new(MockShardResponse::TooManyRequests { fail_count: 100 }).await;
+        let channel = server.channel();
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let client = rattler_networking::LazyClient::default();
+
+        let subdir = ShardedSubdir::new(
+            channel,
+            "linux-64".to_string(),
+            client,
+            cache_dir.path().to_path_buf(),
+            CacheAction::NoCache,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let package_name = "test-package".parse().unwrap();
+        let result = subdir.fetch_package_records(&package_name, None).await;
+
+        // Should fail after exhausting retries
+        let err = result.expect_err("should fail after exhausting retries");
+        assert!(
+            err.to_string().contains("429"),
+            "error should mention 429: {err}"
+        );
+        // default_retry_policy retries 3 times, so 4 total requests (1 initial + 3 retries)
+        assert_eq!(server.request_count(), 4);
     }
 }
