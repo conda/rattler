@@ -70,27 +70,20 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           lfs: false
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          manifest-path: js-rattler/pixi.toml
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: js-rattler
-      - name: Install Rust toolchain
-        run: |
-          rustup component add clippy rustfmt
-          rustup target add wasm32-unknown-unknown
-          rustup component add rust-src --target wasm32-unknown-unknown
-      - name: Install Node.js
+      - name: Install Node.js (for npm publish)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20.x"
           registry-url: "https://registry.npmjs.org"
-      - run: npm ci
+      - name: Build and pack
         working-directory: js-rattler
-      - run: npm run build
-        working-directory: js-rattler
-      - run: npm pack
-        working-directory: js-rattler
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pixi run pack
       - name: Upload package tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

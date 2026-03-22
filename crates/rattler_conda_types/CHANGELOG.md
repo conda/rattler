@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.1...rattler_conda_types-v0.44.2) - 2026-03-20
+
+### Added
+
+- implement lazy PrefixData primitive with tests ([#2074](https://github.com/conda/rattler/pull/2074))
+
+## [0.44.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.0...rattler_conda_types-v0.44.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.44.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.5...rattler_conda_types-v0.44.0) - 2026-03-16
+
+### Added
+
+- add FreeBSD 32-bit and ARM64 platform support ([#2227](https://github.com/conda/rattler/pull/2227))
+- Add support for downloading info files via range requests ([#1935](https://github.com/conda/rattler/pull/1935))
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+### Fixed
+
+- keep removed package metadata in repodata ([#2210](https://github.com/conda/rattler/pull/2210))
+
 ## [0.43.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.4...rattler_conda_types-v0.43.5) - 2026-02-25
 
 ### Other

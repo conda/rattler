@@ -34,38 +34,53 @@ use reqwest::Client;
 
 use crate::{exclude_newer::ExcludeNewer, global_multi_progress};
 
+/// Create a conda environment from package listing
+///
+/// Resolves and installs the specified packages into a target prefix,
+/// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    #[clap(short)]
+    /// Channel to search for packages
+    ///
+    /// Example: -c conda-forge -c main
+    #[clap(short, long = "channel")]
     channels: Option<Vec<String>>,
 
+    /// Package specs to install
     #[clap(required = true)]
     specs: Vec<String>,
 
+    /// Simulute command without installation
     #[clap(long)]
     dry_run: bool,
 
+    /// Target platform (e.g., linux-64, osx-arm64)
     #[clap(long)]
     platform: Option<String>,
 
     #[clap(long)]
     virtual_package: Option<Vec<String>>,
 
+    /// SAT Solver backend to use
     #[clap(long)]
     solver: Option<Solver>,
 
+    /// Request solver timeout in milliseconds
     #[clap(long)]
     timeout: Option<u64>,
 
-    #[clap(long)]
+    /// Target prefix (environment path) for package installation
+    #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
     target_prefix: Option<PathBuf>,
 
     #[clap(long)]
     strategy: Option<SolveStrategy>,
 
+    /// Only install dependencies of package specs
     #[clap(long, group = "deps_mode")]
     only_deps: bool,
 
+    /// Only install package specifications without dependencies
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
 

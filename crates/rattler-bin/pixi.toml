@@ -8,3 +8,12 @@ channels = [
     "https://prefix.dev/pixi-build-backends",
     "https://prefix.dev/conda-forge"
 ]
+
+# Use cmake to build aws-lc-sys, because conda's CFLAGS inject -O2 which
+# overrides the -O0 required by jitterentropy-base.c, causing a build failure.
+[package.build.config]
+env = { AWS_LC_SYS_CMAKE_BUILDER = "1" }
+
+[package.target.linux.build-dependencies]
+cmake = ">=3,<4"
+make = ">=4,<5"

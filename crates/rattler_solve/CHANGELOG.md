@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.2](https://github.com/conda/rattler/compare/rattler_solve-v5.0.1...rattler_solve-v5.0.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.0.1](https://github.com/conda/rattler/compare/rattler_solve-v5.0.0...rattler_solve-v5.0.1) - 2026-03-18
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types
+
+## [5.0.0](https://github.com/conda/rattler/compare/rattler_solve-v4.2.6...rattler_solve-v5.0.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+- add dependency override option to solver ([#2090](https://github.com/conda/rattler/pull/2090))
+
+### Fixed
+
+- exclude no-timestamp packages in resolvo min_age dedup ([#2185](https://github.com/conda/rattler/pull/2185))
+- merge issues on main ([#2156](https://github.com/conda/rattler/pull/2156))
+
 ## [4.2.6](https://github.com/conda/rattler/compare/rattler_solve-v4.2.5...rattler_solve-v4.2.6) - 2026-02-25
 
 ### Other

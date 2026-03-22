@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.14](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.13...rattler_virtual_packages-v2.3.14) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.13](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.12...rattler_virtual_packages-v2.3.13) - 2026-03-18
+
+### Fixed
+
+- *(virtual_packages)* handle invalid chars in LibC family ([#2209](https://github.com/conda/rattler/pull/2209))
+
+## [2.3.12](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.11...rattler_virtual_packages-v2.3.12) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [2.3.11](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.10...rattler_virtual_packages-v2.3.11) - 2026-02-25
 
 ### Other

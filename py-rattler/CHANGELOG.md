@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-03-19
+
+### Added
+
+- Expose `WhlPackageRecord` to Python by @Anshgrover23 in [#2221](https://github.com/conda/rattler/pull/2221)
+- Add custom progress reporter callbacks to installer by @ritankarsaha in [#2187](https://github.com/conda/rattler/pull/2187)
+- Add FreeBSD 32-bit and ARM64 platform support by @wolfv in [#2227](https://github.com/conda/rattler/pull/2227)
+
+### Changed
+
+- Bump dependency versions in [#2237](https://github.com/conda/rattler/pull/2237)
+- Improve Windows GUI app launching and file extension registration in [#2135](https://github.com/conda/rattler/pull/2135)
+
+### Fixed
+
+- Handle invalid characters in LibC family for virtual packages in [#2209](https://github.com/conda/rattler/pull/2209)
+- Fall back to AWS SDK credential chain for S3 when no rattler credentials are set in [#2222](https://github.com/conda/rattler/pull/2222)
+- Fix upload token matching for anaconda.org in [#2231](https://github.com/conda/rattler/pull/2231)
+- Preserve mirror URL path when rewriting requests in [#2183](https://github.com/conda/rattler/pull/2183)
+- Replace panicking unwrap/expect in mirror, S3, and GCS middleware in [#2216](https://github.com/conda/rattler/pull/2216)
+- Keep removed package metadata in repodata in [#2210](https://github.com/conda/rattler/pull/2210)
+
+## [0.23.1] - 2026-03-10
+
+### Added
+
+- Add methods to download a file by @pavelzw in [#2201](https://github.com/conda/rattler/pull/2201)
+
 ## [0.23.0] - 2026-03-06
 
 ### Added
@@ -53,5 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized repodata loading: up to 65x faster for in-memory queries and 2.4x faster for warm disk cache ([#2058](https://github.com/conda/rattler/pull/2058))
 - Speed up matchspec parsing by ~2x ([#2066](https://github.com/conda/rattler/pull/2066))
 
-[Unreleased]: https://github.com/conda/rattler/compare/py-rattler-v0.23.0...HEAD
+[Unreleased]: https://github.com/conda/rattler/compare/py-rattler-v0.23.1...HEAD
 [0.23.0]: https://github.com/conda/rattler/compare/py-rattler-v0.22.0...py-rattler-v0.23.0
+[0.23.1]: https://github.com/conda/rattler/compare/py-rattler-v0.23.0...py-rattler-v0.23.1
