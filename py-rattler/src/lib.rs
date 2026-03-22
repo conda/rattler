@@ -29,6 +29,7 @@ mod virtual_package;
 
 mod exceptions;
 mod index_json;
+mod package_cache;
 mod run_exports_json;
 
 use std::ops::Deref;
@@ -41,10 +42,10 @@ use exceptions::{
     ConversionError, ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError,
     FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
     InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
-    InvalidVersionSpecError, IoError, LinkError, PackageNameMatcherParseError, ParseArchError,
-    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
-    ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    InvalidVersionSpecError, IoError, LinkError, PackageCacheError, PackageNameMatcherParseError,
+    ParseArchError, ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError,
+    RequirementError, ShellError, SolverError, TransactionError, ValidatePackageRecordsError,
+    VersionBumpError, VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -64,6 +65,7 @@ use networking::middleware::{
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
+use package_cache::{PyPackageCache, PyValidationMode};
 use package_name::PyPackageName;
 use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
@@ -200,6 +202,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
+    m.add_class::<PyPackageCache>()?;
+    m.add_class::<PyValidationMode>()?;
 
     // Exceptions
     m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
@@ -281,6 +285,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "InvalidHeaderValueError",
         py.get_type::<InvalidHeaderValueError>(),
     )?;
+
+    m.add("PackageCacheError", py.get_type::<PackageCacheError>())?;
 
     Ok(())
 }

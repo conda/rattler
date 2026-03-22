@@ -3780,6 +3780,7 @@ dependencies = [
  "pyo3-file",
  "pythonize",
  "rattler",
+ "rattler_cache",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
