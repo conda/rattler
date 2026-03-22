@@ -40,6 +40,8 @@ impl PyClientWithMiddleware {
             client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
         }
 
+        let has_headers = headers.is_some();
+
         if let Some(headers) = headers {
             let mut header_map = HeaderMap::new();
             for (key, value) in headers {
@@ -53,7 +55,7 @@ impl PyClientWithMiddleware {
 
         if let Some(user_agent) = user_agent {
             client_builder = client_builder.user_agent(user_agent);
-        } else if headers.is_none() {
+        } else if !has_headers {
             client_builder = client_builder.user_agent(RATTLER_USER_AGENT);
         }
 
