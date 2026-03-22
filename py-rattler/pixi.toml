@@ -16,29 +16,13 @@ name = "py-rattler"
 backend = { name = "pixi-build-python", version = "*" }
 [package.host-dependencies]
 maturin = "*"
-python = "*"
+python = "3.8.*"
 [package.target.osx-arm64.build-dependencies]
 clangdev = "*"
 [package.build.config]
 abi3 = true
 compilers = ["c", "rust"]
 env = { MATURIN_PEP517_ARGS = "--features pty" }
-
-[feature.build.dependencies]
-maturin = ">=1.9.0,<2"
-pip = "~=23.2.1"
-rust = "~=1.93.1"
-
-[feature.build.tasks]
-build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
-build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --features pty"
-
-[feature.build.target.win-64.tasks]
-build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
-build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
-
-[feature.build.target.linux-64.dependencies]
-patchelf = "~=0.17.2"
 
 [feature.test.dependencies]
 # Python 3.8 is the minimum supported version, so we use that for testing
@@ -63,9 +47,7 @@ types-networkx = "*"
 boto3 = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = [
-  "build",
-] }
+test = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py"
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
@@ -78,7 +60,7 @@ lint = { depends-on = [
   "lint-python",
   "lint-rust",
 ] }
-type-check = { cmd = "mypy", depends-on = ["build"] }
+type-check = "mypy"
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
@@ -115,16 +97,15 @@ deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = [
 [feature.repl.dependencies]
 ipython = ">=8.29.0,<9"
 [feature.repl.tasks]
-repl = { depends-on = ["build"], cmd = "ipython" }
+repl = "ipython"
 
 [feature.integration.dependencies]
 py-rattler = { path = "." }
 
 [environments]
-test = { features = ["build", "test"], solve-group = "default" }
+test = { features = ["test", "integration"], solve-group = "default" }
 docs = ["docs"]
 repl = ["repl"]
-integration = { features = ["integration"], no-default-feature = true }
 
 [dependencies]
 requests = ">=2.32.3,<2.33"
