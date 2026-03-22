@@ -41,29 +41,29 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    #[command(about = "Manage authentication for package servers")]
+    /// Manage authentication for package servers
     Auth(commands::auth::Opt),
-    #[command(about = "Create a conda environment from package specs")]
+    /// Create a conda environment from package specs
     Create(commands::create::Opt),
-    #[command(about = "Download an arbitrary file")]
+    /// Download an arbitrary file
     Download(commands::download::Opt),
-    #[command(about = "Read a file from inside a remote conda package")]
+    /// Read a file from inside a remote conda package
     FetchFile(commands::fetch_file::Opt),
-    #[command(about = "Inspect package metadata from a remote conda package")]
+    /// Inspect package metadata from a remote conda package
     Inspect(commands::inspect::Opt),
-    #[command(about = "Search channel repodata for matching packages")]
+    /// Search channel repodata for matching packages
     Search(commands::search::Opt),
-    #[command(about = "Print detected virtual packages")]
+    /// Print detected virtual packages
     VirtualPackages(commands::virtual_packages::Opt),
-    #[command(about = "Install menu items for an installed package")]
+    /// Install menu items for an installed package
     InstallMenu(commands::menu::InstallOpt),
-    #[command(about = "Remove installed menu items for a package")]
+    /// Remove installed menu items for a package
     RemoveMenu(commands::menu::InstallOpt),
-    #[command(about = "Extract a local or remote conda package")]
+    /// Extract a local or remote conda package
     Extract(commands::extract::Opt),
-    #[command(about = "Link an extracted package into a prefix")]
+    /// Link an extracted package into a prefix
     Link(commands::link::Opt),
-    #[command(about = "Upload packages to a remote server")]
+    /// Upload packages to a remote server
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
 }
 

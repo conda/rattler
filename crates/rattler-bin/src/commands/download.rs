@@ -1,5 +1,6 @@
 use std::{io::Write, path::PathBuf};
 
+use futures_util::StreamExt;
 use miette::{Context, IntoDiagnostic};
 use tokio::io::AsyncWriteExt;
 use url::Url;
@@ -44,19 +45,19 @@ pub async fn download(opt: Opt) -> miette::Result<()> {
         .error_for_status()
         .into_diagnostic()
         .with_context(|| format!("server returned an error for {}", opt.url))?;
-
-    let bytes = response
-        .bytes()
-        .await
-        .into_diagnostic()
-        .with_context(|| format!("failed to read response body from {}", opt.url))?;
+    let mut stream = response.bytes_stream();
 
     if write_to_stdout {
         let mut stdout = std::io::stdout();
-        stdout
-            .write_all(&bytes)
-            .into_diagnostic()
-            .context("failed to write to stdout")?;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk
+                .into_diagnostic()
+                .with_context(|| format!("failed to read response body from {}", opt.url))?;
+            stdout
+                .write_all(&chunk)
+                .into_diagnostic()
+                .context("failed to write to stdout")?;
+        }
         stdout
             .flush()
             .into_diagnostic()
@@ -66,10 +67,15 @@ pub async fn download(opt: Opt) -> miette::Result<()> {
             .await
             .into_diagnostic()
             .with_context(|| format!("failed to create {}", output.display()))?;
-        file.write_all(&bytes)
-            .await
-            .into_diagnostic()
-            .with_context(|| format!("failed to write {}", output.display()))?;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk
+                .into_diagnostic()
+                .with_context(|| format!("failed to read response body from {}", opt.url))?;
+            file.write_all(&chunk)
+                .await
+                .into_diagnostic()
+                .with_context(|| format!("failed to write {}", output.display()))?;
+        }
         file.flush()
             .await
             .into_diagnostic()
