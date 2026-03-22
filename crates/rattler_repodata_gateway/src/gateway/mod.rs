@@ -1716,4 +1716,73 @@ mod test {
             "glob should find all lib-* packages across both sources and both subdirs"
         );
     }
+
+    /// Regression test: when two patterns both match the same package name,
+    /// ALL matching patterns' specs must be collected, not just the first one.
+    #[tokio::test]
+    async fn test_multi_pattern_all_specs_applied() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        // Source has three python records at different versions.
+        let mut source = MockRepoDataSource::new();
+        source.add_record(
+            Platform::Linux64,
+            make_test_record("python", "2.7.18", "linux-64"),
+        );
+        source.add_record(
+            Platform::Linux64,
+            make_test_record("python", "3.8.20", "linux-64"),
+        );
+        source.add_record(
+            Platform::Linux64,
+            make_test_record("python", "3.10.14", "linux-64"),
+        );
+
+        let spec1 = MatchSpec::from_str(
+            "py* >=3.0",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        let spec2 = MatchSpec::from_str(
+            "python* <3.9",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let src: Arc<dyn super::RepoDataSource> = Arc::new(source);
+
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(src)],
+                vec![Platform::Linux64],
+                vec![spec1, spec2].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let mut versions: Vec<_> = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .map(|r| r.package_record.version.to_string())
+            .collect();
+        versions.sort();
+
+        assert_eq!(
+            versions,
+            vec!["2.7.18", "3.10.14", "3.8.20"],
+            "all three python versions should be returned: \
+             2.7.18 satisfies the second pattern (<3.9), \
+             3.8.20 and 3.10.14 satisfy the first pattern (>=3.0). \
+             If only 3.8.20 and 3.10.14 are returned the bug is present."
+        );
+    }
 }
