@@ -9,10 +9,19 @@ use std::fs::File;
 use std::io::Write;
 use std::{
     io::{Read, Seek, SeekFrom},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use tar::Archive;
 use zip::CompressionMethod;
+
+/// A file entry in a Conda package archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageFileEntry {
+    /// The path of the file relative to the listing root.
+    pub path: PathBuf,
+    /// The uncompressed size of the file in bytes.
+    pub size: u64,
+}
 
 fn stream_conda_zip_entry<'a>(
     mut archive: zip::ZipArchive<impl Read + Seek + 'a>,
@@ -90,6 +99,38 @@ fn get_file_from_archive(
     Err(ExtractError::MissingComponent)
 }
 
+fn list_files_in_archive(
+    archive: &mut Archive<impl Read>,
+    root: Option<&Path>,
+) -> Result<Vec<PackageFileEntry>, ExtractError> {
+    let mut entries = Vec::new();
+    for entry in archive.entries()? {
+        let entry = entry?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path()?.into_owned();
+        let relative_path = match root {
+            Some(root) => match path.strip_prefix(root) {
+                Ok(relative_path) if !relative_path.as_os_str().is_empty() => {
+                    relative_path.to_owned()
+                }
+                _ => continue,
+            },
+            None => path,
+        };
+
+        entries.push(PackageFileEntry {
+            path: relative_path,
+            size: entry.size(),
+        });
+    }
+
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
 /// Read a package file content from archive based on the path
 pub fn read_package_file_content<'a>(
     file: impl Read + Seek + 'a,
@@ -153,4 +194,20 @@ pub fn extract_package_file<'a, P: PackageFile>(
     writer.flush()?;
 
     Ok(())
+}
+
+/// List all files in the `info/` section of a local package archive.
+pub fn list_info_files(path: impl AsRef<Path>) -> Result<Vec<PackageFileEntry>, ExtractError> {
+    let path = path.as_ref();
+    let file = File::open(path)?;
+    match CondaArchiveType::try_from(path).ok_or(ExtractError::UnsupportedArchiveType)? {
+        CondaArchiveType::TarBz2 => {
+            let mut archive = stream_tar_bz2(file);
+            list_files_in_archive(&mut archive, Some(Path::new("info")))
+        }
+        CondaArchiveType::Conda => {
+            let mut archive = stream_conda_info(file)?;
+            list_files_in_archive(&mut archive, Some(Path::new("info")))
+        }
+    }
 }

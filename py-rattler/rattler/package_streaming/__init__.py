@@ -9,6 +9,30 @@ from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import extract as py_extract
 from rattler.rattler import extract_tar_bz2 as py_extract_tar_bz2
 from rattler.rattler import fetch_raw_package_file_from_url as py_fetch_raw_package_file_from_url
+from rattler.rattler import list_info_files as py_list_info_files
+from rattler.rattler import list_info_files_from_url as py_list_info_files_from_url
+from rattler.rattler import PyPackageFileEntry
+
+
+class PackageFileEntry:
+    _inner: PyPackageFileEntry
+
+    @property
+    def path(self):
+        return self._inner.path
+
+    @property
+    def size(self) -> int:
+        return self._inner.size
+
+    @classmethod
+    def _from_py_package_file_entry(cls, entry: PyPackageFileEntry) -> "PackageFileEntry":
+        result = cls.__new__(cls)
+        result._inner = entry
+        return result
+
+    def __repr__(self) -> str:
+        return repr(self._inner)
 
 
 def extract(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
@@ -66,3 +90,16 @@ async def fetch_raw_package_file_from_url(client: Client, url: str, path: str) -
     range requests.
     """
     return await py_fetch_raw_package_file_from_url(client._client, url, path)
+
+
+def list_info_files(path: PathLike[str]) -> list[PackageFileEntry]:
+    """List files in the `info/` section of a local package archive."""
+    return [PackageFileEntry._from_py_package_file_entry(entry) for entry in py_list_info_files(path)]
+
+
+async def list_info_files_from_url(client: Client, url: str) -> list[PackageFileEntry]:
+    """List files in the `info/` section of a remote package archive."""
+    return [
+        PackageFileEntry._from_py_package_file_entry(entry)
+        for entry in await py_list_info_files_from_url(client._client, url)
+    ]

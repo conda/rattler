@@ -167,6 +167,17 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
         .starts_with(&name));
 }
 
+#[test]
+fn test_list_info_files_local() {
+    let file_path = test_data_dir().join("clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda");
+    let entries = rattler_package_streaming::seek::list_info_files(&file_path).unwrap();
+
+    assert!(entries
+        .iter()
+        .any(|entry| entry.path == Path::new("index.json")));
+    assert!(entries.iter().all(|entry| !entry.path.starts_with("info")));
+}
+
 #[apply(tar_bz2_archives)]
 fn test_extract_tar_bz2(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));

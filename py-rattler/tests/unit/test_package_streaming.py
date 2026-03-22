@@ -9,6 +9,8 @@ from rattler.package_streaming import (
     download_to_path,
     download_to_writer,
     extract,
+    list_info_files,
+    list_info_files_from_url,
 )
 from rattler.networking.client import Client
 
@@ -26,6 +28,13 @@ def test_extract(tmpdir: Path) -> None:
     assert (dest / "info").exists()
     assert (dest / "info" / "index.json").exists()
     assert (dest / "info" / "paths.json").exists()
+
+
+def test_list_info_files() -> None:
+    entries = list_info_files(get_test_data())
+
+    assert any(str(entry.path) == "index.json" for entry in entries)
+    assert all(not str(entry.path).startswith("info") for entry in entries)
 
 
 @pytest.mark.asyncio
@@ -107,6 +116,18 @@ async def test_download_and_extract(tmpdir: Path) -> None:
     assert (dest / "info" / "index.json").exists()
     assert (dest / "info" / "paths.json").exists()
     assert (dest / "site-packages/boltons-24.0.0.dist-info").exists()
+
+
+@pytest.mark.asyncio
+async def test_list_info_files_from_url() -> None:
+    client = Client.default_client()
+
+    entries = await list_info_files_from_url(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+    )
+
+    assert any(str(entry.path) == "index.json" for entry in entries)
 
 
 @pytest.mark.asyncio
