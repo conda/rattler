@@ -17,9 +17,10 @@ backend = { name = "pixi-build-python", version = "*" }
 [package.host-dependencies]
 maturin = "*"
 python = "*"
-[package.target.osx.build-dependencies]
-clangdev = "*"
+# [package.target.osx.build-dependencies]
+# clangdev = "*"
 [package.build.config]
+abi3 = true
 compilers = ["c", "rust"]
 env = { MATURIN_PEP517_ARGS = "--features pty" }
 
@@ -104,8 +105,12 @@ docs = { cmd = "mkdocs serve", description = "Serve the docs locally", depends-o
 ] }
 build-docs = { cmd = "mkdocs build --strict", depends-on = ["download-font"] }
 download-font = { cmd = "bash docs/layouts/download-font-to-cache.sh" }
-deploy-latest = { cmd = "mike deploy --push --update-aliases $RELEASE_VERSION latest", depends-on = ["download-font"] }
-deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = ["download-font"] }
+deploy-latest = { cmd = "mike deploy --push --update-aliases $RELEASE_VERSION latest", depends-on = [
+  "download-font",
+] }
+deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = [
+  "download-font",
+] }
 
 [feature.repl.dependencies]
 ipython = ">=8.29.0,<9"
