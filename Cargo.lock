@@ -4955,6 +4955,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_repodata_gateway",
+ "rattler_shell",
  "rattler_solve",
  "rattler_upload",
  "rattler_virtual_packages",

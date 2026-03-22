@@ -52,6 +52,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 rattler_repodata_gateway = { workspace = true, default-features = false, features = [
   "gateway",
 ] }
+rattler_shell = { workspace = true }
 rattler_solve = { workspace = true, default-features = false, features = [
   "resolvo",
   "libsolv_c",

@@ -1,7 +1,7 @@
 //! Helpers to run commands in an activated environment.
 
 use rattler_conda_types::Platform;
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
 use crate::activation::{ActivationError, PathModificationBehavior};
@@ -22,6 +22,49 @@ pub enum RunError {
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+}
+
+/// Runs a command in an activated conda environment.
+///
+/// Activates the environment at `prefix`, applies the resulting environment
+/// variables to the command, and spawns it with inherited stdio.
+pub async fn run_command_in_environment(
+    prefix: &Path,
+    command: &[String],
+    shell: ShellEnum,
+    env_vars: &HashMap<String, String>,
+    cwd: Option<&Path>,
+) -> Result<ExitStatus, RunError> {
+    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+
+    let current_path = std::env::var("PATH")
+        .ok()
+        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+    let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(Into::into);
+
+    let activation_vars = ActivationVariables {
+        conda_prefix,
+        path: current_path,
+        path_modification_behavior: PathModificationBehavior::default(),
+        current_env: std::env::vars().collect(),
+    };
+
+    // Run activation scripts
+
+    let activated_env =
+        tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
+            .await
+            .expect("Activated environment panicked")?;
+
+    let mut cmd = tokio::process::Command::new(&command[0]);
+    cmd.args(&command[1..]);
+    cmd.envs(&activated_env);
+    cmd.envs(env_vars);
+    if let Some(cwd) = cwd {
+        cmd.current_dir(cwd);
+    }
+
+    Ok(cmd.status().await?)
 }
 
 /// Execute a script in an activated environment.
