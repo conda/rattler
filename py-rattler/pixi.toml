@@ -19,6 +19,7 @@ maturin = "*"
 python = "3.9.*"
 python-abi3 = "*"
 [package.target.osx-arm64.build-dependencies]
+# https://conda-forge.zulipchat.com/#narrow/channel/457337-general/topic/macOS.20clang.2021.20.2F.20LTO.20issues/near/578390360
 clangdev = "*"
 [package.build.config]
 abi3 = true
