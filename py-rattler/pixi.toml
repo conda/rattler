@@ -23,7 +23,7 @@ clangdev = "*"
 [package.build.config]
 abi3 = true
 compilers = ["c", "rust"]
-env = { MATURIN_PEP517_ARGS = "--features pty" }
+env = { MATURIN_PEP517_ARGS = "--features pty --locked" }
 
 [feature.test.dependencies]
 py-rattler = { path = "." }
