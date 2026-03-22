@@ -81,7 +81,7 @@ pub async fn download(opt: Opt) -> miette::Result<()> {
             .into_diagnostic()
             .with_context(|| format!("failed to flush {}", output.display()))?;
 
-        println!("Downloaded {} to {}", opt.url, output.display());
+        eprintln!("Downloaded {} to {}", opt.url, output.display());
     }
     Ok(())
 }
