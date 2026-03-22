@@ -41,29 +41,17 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    /// Manage authentication for package servers
     Auth(commands::auth::Opt),
-    /// Create a conda environment from package specs
     Create(commands::create::Opt),
-    /// Download an arbitrary file
     Download(commands::download::Opt),
-    /// Read a file from inside a remote conda package
     FetchFile(commands::fetch_file::Opt),
-    /// Inspect package metadata from a remote conda package
     Inspect(commands::inspect::Opt),
-    /// Search channel repodata for matching packages
     Search(commands::search::Opt),
-    /// Print detected virtual packages
     VirtualPackages(commands::virtual_packages::Opt),
-    /// Install menu items for an installed package
     InstallMenu(commands::menu::InstallOpt),
-    /// Remove installed menu items for a package
-    RemoveMenu(commands::menu::InstallOpt),
-    /// Extract a local or remote conda package
+    RemoveMenu(commands::menu::RemoveOpt),
     Extract(commands::extract::Opt),
-    /// Link an extracted package into a prefix
     Link(commands::link::Opt),
-    /// Upload packages to a remote server
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
 }
 

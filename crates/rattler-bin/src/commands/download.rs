@@ -5,8 +5,8 @@ use miette::{Context, IntoDiagnostic};
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
+/// Download an arbitrary file.
 #[derive(Debug, clap::Parser)]
-#[command(about = "Download an arbitrary file")]
 pub struct Opt {
     /// URL of the file to download
     #[clap(required = true)]

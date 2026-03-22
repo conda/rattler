@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use miette::{Context, IntoDiagnostic};
 use url::Url;
 
+/// Extract a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// Path or URL to the conda package archive (.tar.bz2 or .conda)

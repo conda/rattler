@@ -4,6 +4,7 @@ use clap::Parser;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{menuinst::MenuMode, PackageName, Platform, PrefixRecord};
 
+/// Install menu items for an installed package.
 #[derive(Debug, Parser)]
 pub struct InstallOpt {
     /// Target prefix to look for the package (defaults to `.prefix`)
@@ -11,6 +12,17 @@ pub struct InstallOpt {
     target_prefix: PathBuf,
 
     /// Name of the package for which to install menu items
+    package_name: PackageName,
+}
+
+/// Remove installed menu items for a package.
+#[derive(Debug, Parser)]
+pub struct RemoveOpt {
+    /// Target prefix to look for the package (defaults to `.prefix`)
+    #[clap(long, short, default_value = ".prefix")]
+    target_prefix: PathBuf,
+
+    /// Name of the package for which to remove menu items
     package_name: PackageName,
 }
 
@@ -41,7 +53,7 @@ pub async fn install_menu(opts: InstallOpt) -> miette::Result<()> {
     Ok(())
 }
 
-pub async fn remove_menu(opts: InstallOpt) -> miette::Result<()> {
+pub async fn remove_menu(opts: RemoveOpt) -> miette::Result<()> {
     // Find the prefix record in the target_prefix and call `remove_menu` on it
     let records: Vec<PrefixRecord> =
         PrefixRecord::collect_from_prefix(&opts.target_prefix).into_diagnostic()?;
