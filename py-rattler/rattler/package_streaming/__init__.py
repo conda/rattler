@@ -1,4 +1,5 @@
 from os import PathLike
+from pathlib import Path
 from typing import Optional, Tuple
 
 from rattler.networking.client import Client
@@ -18,7 +19,7 @@ class PackageFileEntry:
     _inner: PyPackageFileEntry
 
     @property
-    def path(self):
+    def path(self) -> Path:
         return self._inner.path
 
     @property

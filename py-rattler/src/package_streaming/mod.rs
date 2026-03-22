@@ -2,8 +2,8 @@ use futures::StreamExt;
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
-use rattler_package_streaming::ExtractResult;
 use rattler_package_streaming::seek::PackageFileEntry;
+use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use url::Url;
@@ -189,7 +189,6 @@ pub fn list_info_files_from_url<'a>(
 
     future_into_py(py, future)
 }
-
 
 #[pyfunction]
 pub fn download_to_path<'a>(
