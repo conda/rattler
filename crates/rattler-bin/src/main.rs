@@ -41,16 +41,29 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
+    #[command(about = "Manage authentication for package servers")]
     Auth(commands::auth::Opt),
+    #[command(about = "Create a conda environment from package specs")]
     Create(commands::create::Opt),
+    #[command(about = "Download an arbitrary file")]
+    Download(commands::download::Opt),
+    #[command(about = "Read a file from inside a remote conda package")]
     FetchFile(commands::fetch_file::Opt),
+    #[command(about = "Inspect package metadata from a remote conda package")]
     Inspect(commands::inspect::Opt),
+    #[command(about = "Search channel repodata for matching packages")]
     Search(commands::search::Opt),
+    #[command(about = "Print detected virtual packages")]
     VirtualPackages(commands::virtual_packages::Opt),
+    #[command(about = "Install menu items for an installed package")]
     InstallMenu(commands::menu::InstallOpt),
+    #[command(about = "Remove installed menu items for a package")]
     RemoveMenu(commands::menu::InstallOpt),
+    #[command(about = "Extract a local or remote conda package")]
     Extract(commands::extract::Opt),
+    #[command(about = "Link an extracted package into a prefix")]
     Link(commands::link::Opt),
+    #[command(about = "Upload packages to a remote server")]
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
 }
 
@@ -101,6 +114,7 @@ async fn async_main() -> miette::Result<()> {
     match opt.command {
         Command::Auth(opts) => commands::auth::auth(opts).await,
         Command::Create(opts) => commands::create::create(opts).await,
+        Command::Download(opts) => commands::download::download(opts).await,
         Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts).await,
         Command::Inspect(opts) => commands::inspect::inspect(opts).await,
         Command::Search(opts) => commands::search::search(opts).await,
