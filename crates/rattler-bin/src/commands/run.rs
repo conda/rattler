@@ -2,7 +2,7 @@ use miette::IntoDiagnostic;
 use rattler_shell;
 use std::{env, path::PathBuf};
 
-/// Run a command in a workspace
+/// Run a command in an activated conda environment.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     #[clap(long)]
