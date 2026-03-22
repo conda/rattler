@@ -26,12 +26,12 @@ env = { MATURIN_PEP517_ARGS = "--features pty" }
 
 [feature.test.dependencies]
 py-rattler = { path = "." }
-python = "*"
+python = "3.10.*"
 # boto3 = "*"
-# types-networkx = "*"
 
 requests = ">=2.32.3,<3"
 types-requests = ">=2.32,<3"
+types-networkx = "*"
 
 ruff = ">=0.14.1"
 mypy = ">=1.17.0,<2"
@@ -44,6 +44,7 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
+# rust = ">=1.93.1"
 rust-src = ">=1.93.1"
 
 [feature.test.tasks]
