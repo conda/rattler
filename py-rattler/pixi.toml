@@ -13,10 +13,11 @@ preview = ["pixi-build"]
 name = "py-rattler"
 
 [package.build]
-backend = { name = "pixi-build-python", version = "*" }
+backend = { name = "pixi-build-python", git = "https://github.com/pavelzw/pixi", branch = "abi3", subdirectory = "crates/pixi_build_python" }
 [package.host-dependencies]
 maturin = "*"
 python = "3.9.*"
+# python-abi3 = "*"
 [package.target.osx-arm64.build-dependencies]
 clangdev = "*"
 [package.build.config]
