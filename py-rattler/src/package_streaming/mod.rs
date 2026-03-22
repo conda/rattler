@@ -2,6 +2,7 @@ use futures::StreamExt;
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
+use rattler_package_streaming::seek::PackageFileEntry;
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
@@ -23,6 +24,39 @@ fn parse_url(url: &str) -> PyResult<Url> {
 
 fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyIOError, _>(error.to_string())
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyPackageFileEntry {
+    pub(crate) inner: PackageFileEntry,
+}
+
+impl From<PackageFileEntry> for PyPackageFileEntry {
+    fn from(value: PackageFileEntry) -> Self {
+        Self { inner: value }
+    }
+}
+
+#[pymethods]
+impl PyPackageFileEntry {
+    #[getter]
+    pub fn path(&self) -> PathBuf {
+        self.inner.path.clone()
+    }
+
+    #[getter]
+    pub fn size(&self) -> u64 {
+        self.inner.size
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PackageFileEntry(path='{}', size={})",
+            self.inner.path.display(),
+            self.inner.size
+        )
+    }
 }
 
 #[pyfunction]
@@ -117,6 +151,40 @@ pub fn fetch_raw_package_file_from_url<'a>(
         })?;
 
         Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn list_info_files(path: PathBuf) -> PyResult<Vec<PyPackageFileEntry>> {
+    rattler_package_streaming::seek::list_info_files(&path)
+        .map(|entries| entries.into_iter().map(Into::into).collect())
+        .map_err(io_error)
+}
+
+#[pyfunction]
+pub fn list_info_files_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let future = async move {
+        let entries = rattler_package_streaming::reqwest::fetch::list_info_files_from_remote_url(
+            client.into(),
+            url,
+        )
+        .await
+        .map_err(io_error)?;
+
+        Python::with_gil(|py| {
+            let items = entries
+                .into_iter()
+                .map(|entry| Py::new(py, PyPackageFileEntry::from(entry)))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(pyo3::types::PyList::new(py, items)?.into_any().unbind())
+        })
     };
 
     future_into_py(py, future)

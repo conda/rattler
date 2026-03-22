@@ -41,6 +41,8 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, instrument};
 use url::Url;
 
+use crate::seek::PackageFileEntry;
+use crate::tokio::async_read::list_files_in_tar_archive;
 use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
 use crate::ExtractError;
 
@@ -175,6 +177,75 @@ pub async fn fetch_package_file_sparse<P: PackageFile>(
         .ok_or(ExtractError::MissingComponent)?;
     P::from_slice(&bytes)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
+}
+
+/// List files from the `info/` section of a remote `.conda` package using HTTP range requests.
+pub async fn list_info_files_from_remote_sparse(
+    client: ClientWithMiddleware,
+    url: Url,
+) -> Result<Vec<PackageFileEntry>, ExtractError> {
+    let target_path = Path::new("info");
+    let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
+        .ok_or(ExtractError::UnsupportedArchiveType)?;
+
+    if archive_type != CondaArchiveType::Conda {
+        return Err(ExtractError::UnsupportedArchiveType);
+    }
+
+    let (reader, _headers) = AsyncHttpRangeReader::new(
+        client,
+        url,
+        CheckSupportMethod::NegativeRangeRequest(DEFAULT_TAIL_SIZE),
+        HeaderMap::default(),
+    )
+    .await?;
+
+    let buf_reader = futures::io::BufReader::new(reader.compat());
+    let mut zip_reader = ZipFileReader::new(buf_reader).await?;
+
+    let prefix = conda_entry_prefix(target_path);
+    let (index, _) = zip_reader
+        .file()
+        .entries()
+        .iter()
+        .enumerate()
+        .find(|(_, e)| {
+            e.filename()
+                .as_str()
+                .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
+                .unwrap_or(false)
+        })
+        .ok_or(ExtractError::MissingComponent)?;
+
+    let entry = &zip_reader.file().entries()[index];
+    let offset = entry.header_offset();
+    let size = entry.header_size() + entry.compressed_size();
+    zip_reader
+        .inner_mut()
+        .get_mut()
+        .get_mut()
+        .prefetch(offset..offset + size)
+        .await;
+
+    let entry_reader = zip_reader.reader_without_entry(index).await?;
+    let tokio_reader = entry_reader.compat();
+    let buf_reader = tokio::io::BufReader::new(tokio_reader);
+    let zstd_decoder = ZstdDecoder::new(buf_reader);
+    let mut tar = tokio_tar::Archive::new(zstd_decoder);
+
+    let result = list_files_in_tar_archive(&mut tar, Some(Path::new("info"))).await?;
+
+    debug!(
+        "Requested ranges: {:?}",
+        zip_reader
+            .inner_mut()
+            .get_mut()
+            .get_mut()
+            .requested_ranges()
+            .await
+    );
+
+    Ok(result)
 }
 
 #[cfg(test)]
