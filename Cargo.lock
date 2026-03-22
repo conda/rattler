@@ -4944,6 +4944,7 @@ dependencies = [
  "chrono",
  "clap",
  "console 0.16.3",
+ "futures-util",
  "indicatif",
  "itertools 0.14.0",
  "miette",

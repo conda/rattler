@@ -1,5 +1,7 @@
 pub mod auth;
+pub mod client;
 pub mod create;
+pub mod download;
 pub mod extract;
 pub mod fetch_file;
 pub mod inspect;

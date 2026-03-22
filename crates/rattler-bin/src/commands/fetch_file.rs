@@ -8,6 +8,7 @@ use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url;
 use reqwest::Client;
 use url::Url;
 
+/// Read a file from inside a remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// URL of the conda package (.conda or .tar.bz2 archive)

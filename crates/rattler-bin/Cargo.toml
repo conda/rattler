@@ -40,6 +40,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
+futures-util = { workspace = true }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
