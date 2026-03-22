@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "py-rattler"
 version = "0.23.0"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
 authors = [
