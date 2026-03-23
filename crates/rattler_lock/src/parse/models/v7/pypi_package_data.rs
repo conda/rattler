@@ -71,27 +71,46 @@ static PYPI_URL: LazyLock<url::Url> =
 
 impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
     fn from(value: &'a PypiPackageData) -> Self {
-        let requires_dist = value
-            .requires_dist
-            .iter()
-            .map(requirement_to_string)
-            .collect::<Vec<_>>();
-        let index_url = value.index_url.as_ref().and_then(|i| {
-            if *i == *PYPI_URL {
-                None
-            } else {
-                Some(Cow::Borrowed(i))
+        match value {
+            PypiPackageData::Wheel(w) => {
+                let requires_dist = w
+                    .requires_dist
+                    .iter()
+                    .map(requirement_to_string)
+                    .collect::<Vec<_>>();
+                let index_url = w.index_url.as_ref().and_then(|i| {
+                    if *i == *PYPI_URL {
+                        None
+                    } else {
+                        Some(Cow::Borrowed(i))
+                    }
+                });
+                Self {
+                    name: Cow::Borrowed(&w.name),
+                    version: Some(Cow::Borrowed(&w.version)),
+                    location: Cow::Borrowed(&w.location),
+                    hash: Cow::Borrowed(&w.hash),
+                    index: index_url,
+                    requires_dist: requires_dist.into(),
+                    requires_python: Cow::Borrowed(&w.requires_python),
+                }
             }
-        });
-
-        Self {
-            name: Cow::Borrowed(&value.name),
-            version: value.version.as_ref().map(Cow::Borrowed),
-            location: Cow::Borrowed(&value.location),
-            hash: Cow::Borrowed(&value.hash),
-            index: index_url,
-            requires_dist: requires_dist.into(),
-            requires_python: Cow::Borrowed(&value.requires_python),
+            PypiPackageData::Source(s) => {
+                let requires_dist = s
+                    .requires_dist
+                    .iter()
+                    .map(requirement_to_string)
+                    .collect::<Vec<_>>();
+                Self {
+                    name: Cow::Borrowed(&s.name),
+                    version: None,
+                    location: Cow::Borrowed(&s.location),
+                    hash: Cow::Owned(None),
+                    index: None,
+                    requires_dist: requires_dist.into(),
+                    requires_python: Cow::Borrowed(&s.requires_python),
+                }
+            }
         }
     }
 }
@@ -208,15 +227,16 @@ mod tests {
 
     #[test]
     fn serialization_elides_default_pypi_url() {
-        let data = crate::PypiPackageData {
+        let data = crate::PypiWheelData {
             name: "test-pkg".parse().unwrap(),
-            version: None,
+            version: "1.0.0".parse().unwrap(),
             location: url_location("https://files.pythonhosted.org/pkg-1.0.whl"),
             index_url: Some(PYPI_URL.clone()),
             hash: None,
             requires_dist: vec![],
             requires_python: None,
         };
+        let data = crate::PypiPackageData::from(data);
         let model = PypiPackageDataModel::from(&data);
         assert!(
             model.index.is_none(),
@@ -227,30 +247,29 @@ mod tests {
     #[test]
     fn serialization_keeps_custom_index_url() {
         let custom = url::Url::parse("https://custom.index/simple").unwrap();
-        let data = crate::PypiPackageData {
+        let data = crate::PypiWheelData {
             name: "test-pkg".parse().unwrap(),
-            version: None,
+            version: "1.0.0".parse().unwrap(),
             location: url_location("https://custom.index/packages/pkg-1.0.whl"),
             index_url: Some(custom.clone()),
             hash: None,
             requires_dist: vec![],
             requires_python: None,
         };
+        let data = crate::PypiPackageData::from(data);
         let model = PypiPackageDataModel::from(&data);
         assert_eq!(model.index.as_deref(), Some(&custom),);
     }
 
     #[test]
     fn serialization_none_index_url_stays_none() {
-        let data = crate::PypiPackageData {
+        let data = crate::PypiSourceData {
             name: "test-pkg".parse().unwrap(),
-            version: None,
             location: path_location("./my-pkg"),
-            index_url: None,
-            hash: None,
             requires_dist: vec![],
             requires_python: None,
         };
+        let data = crate::PypiPackageData::from(data);
         let model = PypiPackageDataModel::from(&data);
         assert!(model.index.is_none());
     }
