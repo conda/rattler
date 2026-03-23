@@ -54,17 +54,14 @@ impl PrefixData {
         if !prefix_path.is_dir() {
             let io_err = std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Prefix {:#?} does not exist", prefix_path),
+                format!("Prefix {prefix_path:#?} does not exist"),
             );
             return Err(PrefixDataError(Arc::new(io_err)));
         };
         if !meta_dir.is_dir() {
             let io_err = std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!(
-                    "{:#?} exists but it's not a valid conda environment",
-                    prefix_path
-                ),
+                format!("{prefix_path:#?} exists but it's not a valid conda environment"),
             );
             return Err(PrefixDataError(Arc::new(io_err)));
         };
