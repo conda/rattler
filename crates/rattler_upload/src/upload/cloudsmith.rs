@@ -390,84 +390,60 @@ mod test {
 
     #[tokio::test]
     async fn test_cloudsmith_multipart_upload_flow() {
-        use std::net::SocketAddr;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::sync::Arc;
+        let mut server = mockito::Server::new_async().await;
+        let upload_url = format!("{}/s3-upload", server.url());
 
-        use axum::{http::StatusCode, routing::post, Router};
-        use url::Url;
-
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url: Url = format!("http://{}:{}", addr.ip(), addr.port())
-            .parse()
-            .unwrap();
-
-        let chunk_count = Arc::new(AtomicUsize::new(0));
-        let chunk_count_clone = chunk_count.clone();
-
-        let upload_handler = {
-            let base_url = base_url.clone();
-            move || {
-                let base_url = base_url.clone();
-                async move {
-                    let upload_url = base_url.join("s3-upload").unwrap();
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "identifier": "multipart-test-id",
-                            "upload_url": upload_url.to_string(),
-                            "upload_fields": {}
-                        })
-                        .to_string(),
-                    )
-                }
-            }
-        };
-
-        let router = Router::new()
-            .route("/files/{owner}/{repo}/", post(upload_handler))
-            .route(
-                "/s3-upload",
-                axum::routing::put({
-                    let chunk_count = chunk_count_clone;
-                    move || {
-                        let chunk_count = chunk_count.clone();
-                        async move {
-                            chunk_count.fetch_add(1, Ordering::SeqCst);
-                            StatusCode::OK
-                        }
-                    }
-                }),
+        // Request upload slot
+        let files_mock = server
+            .mock("POST", "/files/test-owner/test-repo/")
+            .match_header("X-Api-Key", "test-api-key")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "identifier": "multipart-test-id",
+                    "upload_url": upload_url,
+                    "upload_fields": {}
+                })
+                .to_string(),
             )
-            .route(
-                "/files/{owner}/{repo}/complete/",
-                post(|| async { StatusCode::OK }),
-            )
-            .route(
-                "/packages/{owner}/{repo}/upload/conda/",
-                post(|| async {
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "slug_perm": "mp-slug-perm",
-                            "slug": "mp-slug"
-                        })
-                        .to_string(),
-                    )
-                }),
-            );
+            .create_async()
+            .await;
 
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
+        // Chunk uploads (PUT) - expect at least 1 chunk
+        let chunk_mock = server
+            .mock("PUT", "/s3-upload")
+            .match_query(mockito::Matcher::Any)
+            .expect_at_least(1)
+            .with_status(200)
+            .create_async()
+            .await;
+
+        // Complete multipart upload
+        let complete_mock = server
+            .mock("POST", "/files/test-owner/test-repo/complete/")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        // Create package
+        let packages_mock = server
+            .mock("POST", "/packages/test-owner/test-repo/upload/conda/")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "slug_perm": "mp-slug-perm",
+                    "slug": "mp-slug"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
         let client = Cloudsmith::new(
             "test-api-key".to_string(),
-            base_url.into(),
+            server.url().parse::<url::Url>().unwrap().into(),
             "test-owner".to_string(),
             "test-repo".to_string(),
         );
@@ -490,13 +466,15 @@ mod test {
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
 
-        // The test package is small, so we expect exactly 1 chunk
-        assert!(chunk_count.load(Ordering::SeqCst) >= 1);
-
         let pkg = client
             .create_package(&upload_resp.identifier)
             .await
             .expect("create_package failed");
         assert_eq!(pkg.slug_perm, "mp-slug-perm");
+
+        files_mock.assert_async().await;
+        chunk_mock.assert_async().await;
+        complete_mock.assert_async().await;
+        packages_mock.assert_async().await;
     }
 }

@@ -5500,7 +5500,6 @@ dependencies = [
 name = "rattler_upload"
 version = "0.5.1"
 dependencies = [
- "axum",
  "base64 0.22.1",
  "clap",
  "fs-err",

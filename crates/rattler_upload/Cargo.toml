@@ -79,5 +79,4 @@ sha2 = { workspace = true, features = ["asm"] }
 sha2 = { workspace = true }
 
 [dev-dependencies]
-axum = { workspace = true }
 mockito = { workspace = true }
