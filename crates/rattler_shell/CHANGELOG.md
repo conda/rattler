@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_shell-v0.26.4...rattler_shell-v0.26.5) - 2026-03-20
+
+### Fixed
+
+- logic bug in collect_env_vars causing spurious warnings ([#2254](https://github.com/conda/rattler/pull/2254))
+
 ## [0.26.4](https://github.com/conda/rattler/compare/rattler_shell-v0.26.3...rattler_shell-v0.26.4) - 2026-03-18
 
 ### Other
