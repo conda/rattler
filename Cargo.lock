@@ -5507,6 +5507,7 @@ dependencies = [
  "futures",
  "indicatif",
  "miette",
+ "mockito",
  "opendal",
  "rattler_conda_types",
  "rattler_config",

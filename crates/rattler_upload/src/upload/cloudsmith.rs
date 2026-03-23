@@ -328,21 +328,18 @@ impl Cloudsmith {
 
 #[cfg(test)]
 mod test {
-    use std::net::SocketAddr;
-
-    use axum::{http::StatusCode, routing::post, Router};
-    use url::Url;
-
     use super::Cloudsmith;
 
     #[tokio::test]
     async fn test_cloudsmith_client_sends_api_key_header() {
-        let router = Router::new().fallback(|headers: axum::http::HeaderMap| async move {
-            let api_key = headers.get("X-Api-Key").unwrap().to_str().unwrap();
-            assert_eq!(api_key, "test-api-key");
-            (
-                StatusCode::OK,
-                [("content-type", "application/json")],
+        let mut server = mockito::Server::new_async().await;
+
+        let mock = server
+            .mock("POST", "/files/test-owner/test-repo/")
+            .match_header("X-Api-Key", "test-api-key")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
                 serde_json::json!({
                     "identifier": "test-id",
                     "upload_url": "http://localhost/upload",
@@ -350,12 +347,12 @@ mod test {
                 })
                 .to_string(),
             )
-        });
+            .create_async()
+            .await;
 
-        let url = crate::upload::test_utils::start_test_server(router).await;
         let client = Cloudsmith::new(
             "test-api-key".to_string(),
-            url.into(),
+            server.url().parse::<url::Url>().unwrap().into(),
             "test-owner".to_string(),
             "test-repo".to_string(),
         );
@@ -364,16 +361,22 @@ mod test {
             .request_upload("test.conda", "d41d8cd98f00b204e9800998ecf8427e", false)
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_cloudsmith_request_upload_failure() {
-        let router = Router::new().fallback(|| async { StatusCode::UNAUTHORIZED });
+        let mut server = mockito::Server::new_async().await;
 
-        let url = crate::upload::test_utils::start_test_server(router).await;
+        let mock = server
+            .mock("POST", "/files/test-owner/test-repo/")
+            .with_status(401)
+            .create_async()
+            .await;
+
         let client = Cloudsmith::new(
             "bad-key".to_string(),
-            url.into(),
+            server.url().parse::<url::Url>().unwrap().into(),
             "test-owner".to_string(),
             "test-repo".to_string(),
         );
@@ -382,12 +385,17 @@ mod test {
             .request_upload("test.conda", "d41d8cd98f00b204e9800998ecf8427e", false)
             .await;
         assert!(result.is_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_cloudsmith_multipart_upload_flow() {
+        use std::net::SocketAddr;
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+
+        use axum::{http::StatusCode, routing::post, Router};
+        use url::Url;
 
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();

@@ -586,66 +586,51 @@ mod test {
 
     #[tokio::test]
     async fn test_cloudsmith_upload_success() {
-        use axum::routing::post;
-        use std::net::SocketAddr;
+        let mut server = mockito::Server::new_async().await;
+        let upload_url = format!("{}/s3-upload", server.url());
 
-        // Bind the listener first so we know the port for the upload_url response
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
-            .parse()
-            .unwrap();
+        let files_mock = server
+            .mock("POST", "/files/test-owner/test-repo/")
+            .match_header("X-Api-Key", "test-api-key")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "identifier": "test-file-id",
+                    "upload_url": upload_url,
+                    "upload_fields": {"key": "value"}
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
-        let upload_handler = {
-            let base_url = base_url.clone();
-            move |headers: axum::http::HeaderMap| {
-                let base_url = base_url.clone();
-                async move {
-                    assert!(headers.get("X-Api-Key").is_some());
-                    let upload_url = base_url.join("s3-upload").unwrap();
-                    (
-                        axum::http::StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "identifier": "test-file-id",
-                            "upload_url": upload_url.to_string(),
-                            "upload_fields": {"key": "value"}
-                        })
-                        .to_string(),
-                    )
-                }
-            }
-        };
+        let s3_mock = server
+            .mock("POST", "/s3-upload")
+            .with_status(200)
+            .create_async()
+            .await;
 
-        let router = Router::new()
-            .route("/files/{owner}/{repo}/", post(upload_handler))
-            .route("/s3-upload", post(|| async { StatusCode::OK }))
-            .route(
-                "/packages/{owner}/{repo}/upload/conda/",
-                post(|| async {
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "slug_perm": "test-slug-perm",
-                            "slug": "test-slug"
-                        })
-                        .to_string(),
-                    )
-                }),
-            );
-
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
+        let packages_mock = server
+            .mock("POST", "/packages/test-owner/test-repo/upload/conda/")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "slug_perm": "test-slug-perm",
+                    "slug": "test-slug"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
         let storage = AuthenticationStorage::empty();
         let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
             "test-owner".to_string(),
             "test-repo".to_string(),
             Some("test-api-key".to_string()),
-            Some(base_url),
+            Some(server.url().parse().unwrap()),
         );
         let result = super::upload_package_to_cloudsmith(
             &storage,
@@ -654,6 +639,9 @@ mod test {
         )
         .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        files_mock.assert_async().await;
+        s3_mock.assert_async().await;
+        packages_mock.assert_async().await;
     }
 
     #[tokio::test]
