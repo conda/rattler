@@ -52,6 +52,7 @@ enum Command {
     Extract(commands::extract::Opt),
     Link(commands::link::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
+    List(commands::list::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -104,6 +105,7 @@ async fn async_main() -> miette::Result<()> {
         Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts).await,
         Command::Inspect(opts) => commands::inspect::inspect(opts).await,
         Command::Search(opts) => commands::search::search(opts).await,
+        Command::List(opts) => commands::list::list(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,

@@ -40,18 +40,31 @@ impl PrefixData {
         &self.prefix_path
     }
 
+    /// Iterates over all record names
+    pub fn package_names(&self) -> impl Iterator<Item = &PackageName> {
+        self.records.keys()
+    }
+
     /// Discovers all packages in the `conda-meta` directory but does not parse the JSON yet.
-    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
+    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, PrefixDataError> {
         let prefix_path = prefix_path.into();
         let meta_dir = prefix_path.join("conda-meta");
         let mut records = HashMap::new();
 
-        if !meta_dir.exists() {
-            return Ok(Self {
-                prefix_path,
-                records,
-            });
-        }
+        if !prefix_path.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Prefix {prefix_path:#?} does not exist"),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
+        if !meta_dir.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{prefix_path:#?} exists but it's not a valid conda environment"),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
 
         for entry in fs::read_dir(meta_dir)? {
             let entry = entry?;
@@ -98,6 +111,13 @@ impl PrefixData {
 
         // 3. .as_ref() elegantly converts &Result<T, E> into Result<&T, &E>
         Some(record_result.as_ref())
+    }
+
+    /// Iterates over all records, loading them on the spot
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = Option<Result<&PrefixRecord, &PrefixDataError>>> + '_ {
+        self.package_names().map(|name| self.get(name))
     }
 }
 
