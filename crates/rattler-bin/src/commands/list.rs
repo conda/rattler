@@ -44,40 +44,36 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     let mut widths = [6, 7, 5, 7];
     let mut lines = vec![];
     for record in prefix_data.iter() {
-        match record {
-            Some(Ok(record)) => {
-                let name = record.name().as_normalized().to_string();
-                if !query.is_empty() {
-                    if opt.full_name {
-                        if name != query {
-                            continue;
-                        }
-                    } else if !name.contains(&query) {
+        if let Some(Ok(record)) = record {
+            let name = record.name().as_normalized().to_string();
+            if !query.is_empty() {
+                if opt.full_name {
+                    if name != query {
                         continue;
                     }
-                };
-
-                let fields = [
-                    name,
-                    record.version().as_str().to_string(),
-                    record.build().to_string(),
-                    record.repodata_record.channel.clone().unwrap_or_default(),
-                ];
-                for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
-                    let field_len = field.len();
-                    if field_len > width {
-                        widths[i] = field_len;
-                    };
+                } else if !name.contains(&query) {
+                    continue;
                 }
-                lines.push(fields);
+            };
+
+            let fields = [
+                name,
+                record.version().as_str().to_string(),
+                record.build().to_string(),
+                record.repodata_record.channel.clone().unwrap_or_default(),
+            ];
+            for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
+                let field_len = field.len();
+                if field_len > width {
+                    widths[i] = field_len;
+                };
             }
-            Some(Err(_)) => continue,
-            None => continue,
+            lines.push(fields);
         }
     }
 
     if lines.is_empty() && !query.is_empty() {
-        // No matches, that's a query error
+        // If user queried a package but we didn't get matches, that's an error
         miette::bail!("No packages matched query '{}'", query);
     }
 
