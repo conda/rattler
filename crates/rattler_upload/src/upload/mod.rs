@@ -482,7 +482,13 @@ mod test {
     async fn test_quetz_upload_success() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("POST", mockito::Matcher::Any)
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(
+                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
+                        .to_string(),
+                ),
+            )
             .match_header("x-api-key", "test-api-key")
             .with_status(200)
             .create_async()
@@ -503,8 +509,14 @@ mod test {
     #[tokio::test]
     async fn test_quetz_upload_auth_failure() {
         let mut server = mockito::Server::new_async().await;
-        let _mock = server
-            .mock("POST", mockito::Matcher::Any)
+        let mock = server
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(
+                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
+                        .to_string(),
+                ),
+            )
             .with_status(401)
             .create_async()
             .await;
@@ -515,13 +527,20 @@ mod test {
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
         assert!(result.is_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_quetz_upload_conflict() {
         let mut server = mockito::Server::new_async().await;
-        let _mock = server
-            .mock("POST", mockito::Matcher::Any)
+        let mock = server
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(
+                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
+                        .to_string(),
+                ),
+            )
             .with_status(409)
             .create_async()
             .await;
@@ -535,13 +554,17 @@ mod test {
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
         assert!(result.is_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_artifactory_upload_success() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock("PUT", mockito::Matcher::Any)
+            .mock(
+                "PUT",
+                "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda",
+            )
             .match_header("authorization", "Bearer test-token")
             .with_status(200)
             .create_async()
@@ -566,8 +589,11 @@ mod test {
     #[tokio::test]
     async fn test_artifactory_upload_auth_failure() {
         let mut server = mockito::Server::new_async().await;
-        let _mock = server
-            .mock("PUT", mockito::Matcher::Any)
+        let mock = server
+            .mock(
+                "PUT",
+                "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda",
+            )
             .with_status(401)
             .create_async()
             .await;
@@ -585,6 +611,7 @@ mod test {
         )
         .await;
         assert!(result.is_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
