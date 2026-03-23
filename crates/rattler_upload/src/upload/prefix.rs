@@ -480,7 +480,7 @@ mod test {
     async fn test_prefix_upload_missing_api_key() {
         let storage = AuthenticationStorage::empty();
         let prefix_data = PrefixData::new(
-            "https://prefix.dev".parse().unwrap(),
+            "http://127.0.0.1:1".parse().unwrap(),
             "test-channel".to_string(),
             None,
             AttestationSource::NoAttestation,
