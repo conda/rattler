@@ -80,3 +80,4 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 mockito = { workspace = true }
+rstest = { workspace = true }

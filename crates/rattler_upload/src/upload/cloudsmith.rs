@@ -330,8 +330,26 @@ impl Cloudsmith {
 mod test {
     use super::Cloudsmith;
 
+    fn make_client(server: &mockito::Server, api_key: &str) -> Cloudsmith {
+        Cloudsmith::new(
+            api_key.to_string(),
+            server.url().parse::<url::Url>().unwrap().into(),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+        )
+    }
+
+    fn upload_response_body(server: &mockito::Server, identifier: &str) -> String {
+        serde_json::json!({
+            "identifier": identifier,
+            "upload_url": format!("{}/s3-upload", server.url()),
+            "upload_fields": {"key": "value"}
+        })
+        .to_string()
+    }
+
     #[tokio::test]
-    async fn test_cloudsmith_client_sends_api_key_header() {
+    async fn test_request_upload_sends_api_key() {
         let mut server = mockito::Server::new_async().await;
 
         let mock = server
@@ -339,24 +357,11 @@ mod test {
             .match_header("X-Api-Key", "test-api-key")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(
-                serde_json::json!({
-                    "identifier": "test-id",
-                    "upload_url": "http://localhost/upload",
-                    "upload_fields": {"key": "value"}
-                })
-                .to_string(),
-            )
+            .with_body(upload_response_body(&server, "test-id"))
             .create_async()
             .await;
 
-        let client = Cloudsmith::new(
-            "test-api-key".to_string(),
-            server.url().parse::<url::Url>().unwrap().into(),
-            "test-owner".to_string(),
-            "test-repo".to_string(),
-        );
-
+        let client = make_client(&server, "test-api-key");
         let result = client
             .request_upload("test.conda", "d41d8cd98f00b204e9800998ecf8427e", false)
             .await;
@@ -365,7 +370,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_cloudsmith_request_upload_failure() {
+    async fn test_request_upload_failure() {
         let mut server = mockito::Server::new_async().await;
 
         let mock = server
@@ -374,13 +379,7 @@ mod test {
             .create_async()
             .await;
 
-        let client = Cloudsmith::new(
-            "bad-key".to_string(),
-            server.url().parse::<url::Url>().unwrap().into(),
-            "test-owner".to_string(),
-            "test-repo".to_string(),
-        );
-
+        let client = make_client(&server, "bad-key");
         let result = client
             .request_upload("test.conda", "d41d8cd98f00b204e9800998ecf8427e", false)
             .await;
@@ -389,28 +388,17 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_cloudsmith_multipart_upload_flow() {
+    async fn test_multipart_upload_flow() {
         let mut server = mockito::Server::new_async().await;
-        let upload_url = format!("{}/s3-upload", server.url());
 
-        // Request upload slot
         let files_mock = server
             .mock("POST", "/files/test-owner/test-repo/")
             .match_header("X-Api-Key", "test-api-key")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(
-                serde_json::json!({
-                    "identifier": "multipart-test-id",
-                    "upload_url": upload_url,
-                    "upload_fields": {}
-                })
-                .to_string(),
-            )
+            .with_body(upload_response_body(&server, "multipart-test-id"))
             .create_async()
             .await;
-
-        // Chunk uploads (PUT) - expect at least 1 chunk
         let chunk_mock = server
             .mock("PUT", "/s3-upload")
             .match_query(mockito::Matcher::Any)
@@ -418,15 +406,11 @@ mod test {
             .with_status(200)
             .create_async()
             .await;
-
-        // Complete multipart upload
         let complete_mock = server
             .mock("POST", "/files/test-owner/test-repo/complete/")
             .with_status(200)
             .create_async()
             .await;
-
-        // Create package
         let packages_mock = server
             .mock("POST", "/packages/test-owner/test-repo/upload/conda/")
             .with_status(200)
@@ -441,30 +425,23 @@ mod test {
             .create_async()
             .await;
 
-        let client = Cloudsmith::new(
-            "test-api-key".to_string(),
-            server.url().parse::<url::Url>().unwrap().into(),
-            "test-owner".to_string(),
-            "test-repo".to_string(),
-        );
-
+        let client = make_client(&server, "test-api-key");
         let package_path = crate::upload::test_utils::test_package_path();
 
         let upload_resp = client
             .request_upload("test.conda", "d41d8cd98f00b204e9800998ecf8427e", true)
             .await
             .expect("request_upload failed");
-
         assert_eq!(upload_resp.identifier, "multipart-test-id");
 
-        let result = client
+        client
             .upload_file_multipart(
                 &upload_resp.upload_url,
                 &upload_resp.identifier,
                 &package_path,
             )
-            .await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+            .await
+            .expect("upload_file_multipart failed");
 
         let pkg = client
             .create_package(&upload_resp.identifier)
@@ -472,9 +449,8 @@ mod test {
             .expect("create_package failed");
         assert_eq!(pkg.slug_perm, "mp-slug-perm");
 
-        files_mock.assert_async().await;
-        chunk_mock.assert_async().await;
-        complete_mock.assert_async().await;
-        packages_mock.assert_async().await;
+        for m in [files_mock, chunk_mock, complete_mock, packages_mock] {
+            m.assert_async().await;
+        }
     }
 }

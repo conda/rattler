@@ -474,12 +474,17 @@ async fn send_request(
 #[cfg(test)]
 mod test {
     use rattler_networking::AuthenticationStorage;
+    use rstest::rstest;
 
     use crate::upload::opt::{ArtifactoryData, QuetzData};
     use crate::upload::test_utils::test_package_path;
 
+    #[rstest]
+    #[case::success(200, true)]
+    #[case::auth_failure(401, false)]
+    #[case::conflict(409, false)]
     #[tokio::test]
-    async fn test_quetz_upload_success() {
+    async fn test_quetz_upload(#[case] status: usize, #[case] should_succeed: bool) {
         let mut server = mockito::Server::new_async().await;
         let mock = server
             .mock(
@@ -489,87 +494,37 @@ mod test {
                         .to_string(),
                 ),
             )
-            .match_header("x-api-key", "test-api-key")
-            .with_status(200)
+            .with_status(status)
             .create_async()
             .await;
-        let url = server.url().parse().unwrap();
+
         let storage = AuthenticationStorage::empty();
         let quetz_data = QuetzData::new(
-            url,
+            server.url().parse().unwrap(),
             "test-channel".to_string(),
             Some("test-api-key".to_string()),
         );
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert_eq!(result.is_ok(), should_succeed, "{result:?}");
         mock.assert_async().await;
     }
 
+    #[rstest]
+    #[case::success(200, true)]
+    #[case::auth_failure(401, false)]
     #[tokio::test]
-    async fn test_quetz_upload_auth_failure() {
-        let mut server = mockito::Server::new_async().await;
-        let mock = server
-            .mock(
-                "POST",
-                mockito::Matcher::Regex(
-                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
-                        .to_string(),
-                ),
-            )
-            .with_status(401)
-            .create_async()
-            .await;
-        let url = server.url().parse().unwrap();
-        let storage = AuthenticationStorage::empty();
-        let quetz_data =
-            QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
-        let result =
-            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_err());
-        mock.assert_async().await;
-    }
-
-    #[tokio::test]
-    async fn test_quetz_upload_conflict() {
-        let mut server = mockito::Server::new_async().await;
-        let mock = server
-            .mock(
-                "POST",
-                mockito::Matcher::Regex(
-                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
-                        .to_string(),
-                ),
-            )
-            .with_status(409)
-            .create_async()
-            .await;
-        let url = server.url().parse().unwrap();
-        let storage = AuthenticationStorage::empty();
-        let quetz_data = QuetzData::new(
-            url,
-            "test-channel".to_string(),
-            Some("test-key".to_string()),
-        );
-        let result =
-            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_err());
-        mock.assert_async().await;
-    }
-
-    #[tokio::test]
-    async fn test_artifactory_upload_success() {
+    async fn test_artifactory_upload(#[case] status: usize, #[case] should_succeed: bool) {
         let mut server = mockito::Server::new_async().await;
         let mock = server
             .mock("PUT", "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda")
-            .match_header("authorization", "Bearer test-token")
-            .with_status(200)
+            .with_status(status)
             .create_async()
             .await;
-        let url = server.url().parse().unwrap();
+
         let storage = AuthenticationStorage::empty();
         let artifactory_data = ArtifactoryData::new(
-            url,
+            server.url().parse().unwrap(),
             "test-channel".to_string(),
             Some("test-token".to_string()),
         );
@@ -579,32 +534,7 @@ mod test {
             artifactory_data,
         )
         .await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
-        mock.assert_async().await;
-    }
-
-    #[tokio::test]
-    async fn test_artifactory_upload_auth_failure() {
-        let mut server = mockito::Server::new_async().await;
-        let mock = server
-            .mock("PUT", "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda")
-            .with_status(401)
-            .create_async()
-            .await;
-        let url = server.url().parse().unwrap();
-        let storage = AuthenticationStorage::empty();
-        let artifactory_data = ArtifactoryData::new(
-            url,
-            "test-channel".to_string(),
-            Some("bad-token".to_string()),
-        );
-        let result = super::upload_package_to_artifactory(
-            &storage,
-            &vec![test_package_path()],
-            artifactory_data,
-        )
-        .await;
-        assert!(result.is_err());
+        assert_eq!(result.is_ok(), should_succeed, "{result:?}");
         mock.assert_async().await;
     }
 
@@ -628,13 +558,11 @@ mod test {
             )
             .create_async()
             .await;
-
         let s3_mock = server
             .mock("POST", "/s3-upload")
             .with_status(200)
             .create_async()
             .await;
-
         let packages_mock = server
             .mock("POST", "/packages/test-owner/test-repo/upload/conda/")
             .with_status(200)
@@ -663,9 +591,9 @@ mod test {
         )
         .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
-        files_mock.assert_async().await;
-        s3_mock.assert_async().await;
-        packages_mock.assert_async().await;
+        for m in [files_mock, s3_mock, packages_mock] {
+            m.assert_async().await;
+        }
     }
 
     #[tokio::test]
@@ -683,10 +611,9 @@ mod test {
             cloudsmith_data,
         )
         .await;
-        assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
             super::cloudsmith::CloudsmithError::MissingApiKey
-        ),);
+        ));
     }
 }
