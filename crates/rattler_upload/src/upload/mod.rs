@@ -561,10 +561,7 @@ mod test {
     async fn test_artifactory_upload_success() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock(
-                "PUT",
-                "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda",
-            )
+            .mock("PUT", "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda")
             .match_header("authorization", "Bearer test-token")
             .with_status(200)
             .create_async()
@@ -590,10 +587,7 @@ mod test {
     async fn test_artifactory_upload_auth_failure() {
         let mut server = mockito::Server::new_async().await;
         let mock = server
-            .mock(
-                "PUT",
-                "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda",
-            )
+            .mock("PUT", "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda")
             .with_status(401)
             .create_async()
             .await;
