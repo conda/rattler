@@ -473,41 +473,21 @@ async fn send_request(
 
 #[cfg(test)]
 mod test {
-    use axum::{http::StatusCode, Router};
     use rattler_networking::AuthenticationStorage;
 
     use crate::upload::opt::{ArtifactoryData, QuetzData};
-    use crate::upload::test_utils::{start_test_server, test_package_path};
-
-    async fn ok_with_api_key(
-        headers: axum::http::HeaderMap,
-        _body: axum::body::Bytes,
-    ) -> StatusCode {
-        assert!(headers.get("x-api-key").is_some());
-        StatusCode::OK
-    }
-
-    async fn ok_with_bearer(
-        headers: axum::http::HeaderMap,
-        _body: axum::body::Bytes,
-    ) -> StatusCode {
-        let auth = headers.get("authorization").unwrap().to_str().unwrap();
-        assert!(auth.starts_with("Bearer "));
-        StatusCode::OK
-    }
-
-    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::UNAUTHORIZED
-    }
-
-    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::CONFLICT
-    }
+    use crate::upload::test_utils::test_package_path;
 
     #[tokio::test]
     async fn test_quetz_upload_success() {
-        let router = Router::new().fallback(ok_with_api_key);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", mockito::Matcher::Any)
+            .match_header("x-api-key", "test-api-key")
+            .with_status(200)
+            .create_async()
+            .await;
+        let url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let quetz_data = QuetzData::new(
             url,
@@ -517,12 +497,18 @@ mod test {
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_quetz_upload_auth_failure() {
-        let router = Router::new().fallback(unauthorized);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("POST", mockito::Matcher::Any)
+            .with_status(401)
+            .create_async()
+            .await;
+        let url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let quetz_data =
             QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
@@ -533,8 +519,13 @@ mod test {
 
     #[tokio::test]
     async fn test_quetz_upload_conflict() {
-        let router = Router::new().fallback(conflict);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("POST", mockito::Matcher::Any)
+            .with_status(409)
+            .create_async()
+            .await;
+        let url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let quetz_data = QuetzData::new(
             url,
@@ -548,8 +539,14 @@ mod test {
 
     #[tokio::test]
     async fn test_artifactory_upload_success() {
-        let router = Router::new().fallback(ok_with_bearer);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("PUT", mockito::Matcher::Any)
+            .match_header("authorization", "Bearer test-token")
+            .with_status(200)
+            .create_async()
+            .await;
+        let url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let artifactory_data = ArtifactoryData::new(
             url,
@@ -563,12 +560,18 @@ mod test {
         )
         .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_artifactory_upload_auth_failure() {
-        let router = Router::new().fallback(unauthorized);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("PUT", mockito::Matcher::Any)
+            .with_status(401)
+            .create_async()
+            .await;
+        let url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let artifactory_data = ArtifactoryData::new(
             url,

@@ -507,27 +507,30 @@ impl Anaconda {
 
 #[cfg(test)]
 mod test {
-    use std::net::SocketAddr;
-
-    use axum::{
-        http::StatusCode,
-        routing::{get, post},
-        Router,
-    };
     use url::Url;
 
     use super::{Anaconda, AnacondaError};
+    use crate::upload::opt::ForceOverwrite;
     use crate::upload::package::ExtractedPackage;
     use crate::upload::test_utils::test_package_path;
-    use crate::upload::{opt::ForceOverwrite, test_utils};
 
     #[tokio::test]
     async fn test_anaconda_create_package() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-        );
-        let url = test_utils::start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+
+        let get_mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let post_mock = server
+            .mock("POST", "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let url: Url = server.url().parse().unwrap();
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -537,15 +540,28 @@ mod test {
             .create_or_update_package("test-owner", &package)
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+
+        get_mock.assert_async().await;
+        post_mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_anaconda_update_existing_package() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
-        );
-        let url = test_utils::start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+
+        let get_mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let patch_mock = server
+            .mock("PATCH", "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let url: Url = server.url().parse().unwrap();
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -555,15 +571,22 @@ mod test {
             .create_or_update_package("test-owner", &package)
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+
+        get_mock.assert_async().await;
+        patch_mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_anaconda_create_package_server_error() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
-        );
-        let url = test_utils::start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+
+        let mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(500)
+            .create_async()
+            .await;
+
+        let url: Url = server.url().parse().unwrap();
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -577,15 +600,21 @@ mod test {
             matches!(err, AnacondaError::UnexpectedStatus { status: 500 }),
             "expected UnexpectedStatus(500), got: {err:?}"
         );
+
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_anaconda_upload_file_conflict_without_force() {
-        let router = Router::new().route(
-            "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
-            post(|| async { StatusCode::CONFLICT }),
-        );
-        let url = test_utils::start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+
+        let mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/stage/.*".to_string()))
+            .with_status(409)
+            .create_async()
+            .await;
+
+        let url: Url = server.url().parse().unwrap();
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let package_path = test_package_path();
@@ -604,6 +633,8 @@ mod test {
             matches!(err, AnacondaError::FileAlreadyExists(..)),
             "expected FileAlreadyExists, got: {err:?}"
         );
+
+        mock.assert_async().await;
     }
 
     #[tokio::test]
@@ -626,56 +657,66 @@ mod test {
 
     #[tokio::test]
     async fn test_anaconda_upload_file_full_flow() {
-        // Bind the listener first so we know the port for the stage response's post_url
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url: Url = format!("http://{}:{}", addr.ip(), addr.port())
-            .parse()
-            .unwrap();
+        let mut server = mockito::Server::new_async().await;
 
-        let stage_handler = {
-            let base_url = base_url.clone();
-            move || {
-                let base_url = base_url.clone();
-                async move {
-                    let post_url = base_url.join("s3-upload").unwrap();
-                    let body = serde_json::json!({
-                        "post_url": post_url.to_string(),
-                        "form_data": {"key": "value"},
-                        "dist_id": "test-dist-id"
-                    });
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        body.to_string(),
-                    )
-                }
-            }
-        };
+        let base_url: Url = server.url().parse().unwrap();
+        let post_url = base_url.join("s3-upload").unwrap();
 
-        let router = Router::new()
-            .route(
-                "/package/{owner}/{name}",
-                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-            )
-            .route(
-                "/release/{owner}/{name}/{version}",
-                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-            )
-            .route(
-                "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
-                post(stage_handler),
-            )
-            .route("/s3-upload", post(|| async { StatusCode::OK }))
-            .route(
-                "/commit/{owner}/{name}/{version}/{subdir}/{filename}",
-                post(|| async { StatusCode::OK }),
-            );
+        // Package GET (check existence) -> 404 (not found)
+        let pkg_get_mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(404)
+            .create_async()
+            .await;
 
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+        // Package POST (create) -> 200
+        let pkg_post_mock = server
+            .mock("POST", "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        // Release GET (check existence) -> 404 (not found)
+        let rel_get_mock = server
+            .mock("GET", mockito::Matcher::Regex(r"^/release/.*".to_string()))
+            .with_status(404)
+            .create_async()
+            .await;
+
+        // Release POST (create) -> 200
+        let rel_post_mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/release/.*".to_string()))
+            .with_status(200)
+            .create_async()
+            .await;
+
+        // Stage POST -> 200 with JSON response
+        let stage_body = serde_json::json!({
+            "post_url": post_url.to_string(),
+            "form_data": {"key": "value"},
+            "dist_id": "test-dist-id"
         });
+        let stage_mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/stage/.*".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(stage_body.to_string())
+            .create_async()
+            .await;
+
+        // S3 upload POST -> 200
+        let s3_mock = server
+            .mock("POST", "/s3-upload")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        // Commit POST -> 200
+        let commit_mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/commit/.*".to_string()))
+            .with_status(200)
+            .create_async()
+            .await;
 
         let anaconda = Anaconda::new("test-token".to_string(), base_url.into());
 
@@ -702,5 +743,13 @@ mod test {
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
         assert!(result.unwrap(), "upload_file should return true on success");
+
+        pkg_get_mock.assert_async().await;
+        pkg_post_mock.assert_async().await;
+        rel_get_mock.assert_async().await;
+        rel_post_mock.assert_async().await;
+        stage_mock.assert_async().await;
+        s3_mock.assert_async().await;
+        commit_mock.assert_async().await;
     }
 }

@@ -431,29 +431,11 @@ pub async fn upload_package_to_prefix(
 
 #[cfg(test)]
 mod test {
-    use axum::{http::StatusCode, Router};
     use rattler_networking::AuthenticationStorage;
 
     use super::{upload_package_to_prefix, PrefixUploadError};
     use crate::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
-    use crate::upload::test_utils::{start_test_server, test_package_path};
-
-    async fn ok_with_bearer(
-        headers: axum::http::HeaderMap,
-        _body: axum::body::Bytes,
-    ) -> StatusCode {
-        let auth = headers.get("authorization").unwrap().to_str().unwrap();
-        assert!(auth.starts_with("Bearer "));
-        StatusCode::OK
-    }
-
-    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::UNAUTHORIZED
-    }
-
-    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::CONFLICT
-    }
+    use crate::upload::test_utils::test_package_path;
 
     fn make_prefix_data(url: url::Url, skip_existing: bool) -> PrefixData {
         PrefixData::new(
@@ -469,30 +451,51 @@ mod test {
 
     #[tokio::test]
     async fn test_prefix_upload_success() {
-        let router = Router::new().fallback(ok_with_bearer);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/upload/test-channel")
+            .match_header("authorization", "Bearer test-token")
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let url: url::Url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let prefix_data = make_prefix_data(url, false);
         let result =
             upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_prefix_upload_skip_existing() {
-        let router = Router::new().fallback(conflict);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/upload/test-channel")
+            .with_status(409)
+            .create_async()
+            .await;
+
+        let url: url::Url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let prefix_data = make_prefix_data(url, true);
         let result =
             upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_prefix_upload_conflict_without_skip() {
-        let router = Router::new().fallback(conflict);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/upload/test-channel")
+            .with_status(409)
+            .create_async()
+            .await;
+
+        let url: url::Url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let prefix_data = make_prefix_data(url, false);
         let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
@@ -502,12 +505,19 @@ mod test {
             matches!(err, PrefixUploadError::Conflict { .. }),
             "expected Conflict, got: {err:?}"
         );
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_prefix_upload_auth_failure() {
-        let router = Router::new().fallback(unauthorized);
-        let url = start_test_server(router).await;
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/upload/test-channel")
+            .with_status(401)
+            .create_async()
+            .await;
+
+        let url: url::Url = server.url().parse().unwrap();
         let storage = AuthenticationStorage::empty();
         let prefix_data = make_prefix_data(url, false);
         let err = upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data)
@@ -520,15 +530,14 @@ mod test {
             ),
             "expected AuthenticationFailed, got: {err:?}"
         );
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_prefix_upload_missing_api_key() {
-        let router = Router::new().fallback(ok_with_bearer);
-        let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
         let prefix_data = PrefixData::new(
-            url,
+            "https://prefix.dev".parse().unwrap(),
             "test-channel".to_string(),
             None,
             AttestationSource::NoAttestation,
