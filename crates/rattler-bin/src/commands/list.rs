@@ -30,10 +30,6 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     };
 
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
-    let query = match opt.name {
-        Some(name) => name.as_normalized().to_string(),
-        None => "".to_string(),
-    };
     let header = [[
         "# Name".to_string(),
         "Version".to_string(),
@@ -45,19 +41,20 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     let mut lines = vec![];
     for record in prefix_data.iter() {
         if let Some(Ok(record)) = record {
-            let name = record.name().as_normalized().to_string();
-            if !query.is_empty() {
+            let name = record.name().as_normalized();
+            if let Some(query) = &opt.name {
+                let normalized_query = query.as_normalized();
                 if opt.full_name {
-                    if name != query {
+                    if normalized_query != name {
                         continue;
                     }
-                } else if !name.contains(&query) {
+                } else if !name.contains(normalized_query) {
                     continue;
                 }
             };
 
             let fields = [
-                name,
+                name.to_string(),
                 record.version().as_str().to_string(),
                 record.build().to_string(),
                 record.repodata_record.channel.clone().unwrap_or_default(),
@@ -72,9 +69,15 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    if lines.is_empty() && !query.is_empty() {
-        // If user queried a package but we didn't get matches, that's an error
-        miette::bail!("No packages matched query '{}'", query);
+    if let Some(query) = &opt.name {
+        if lines.is_empty() {
+            // If user queried a package but we didn't get matches, that's an error
+            miette::bail!(
+                "No packages matched {}query '{}'",
+                if opt.full_name { "exact " } else { "" },
+                query.as_normalized()
+            );
+        }
     }
 
     lines.sort();
