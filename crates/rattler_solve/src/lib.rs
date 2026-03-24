@@ -9,7 +9,7 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use chrono::{DateTime, Utc};
@@ -102,7 +102,9 @@ impl fmt::Display for SolveError {
 /// // Only allow packages that have been published for at least 1 hour
 /// let config = MinimumAgeConfig::new(Duration::from_secs(60 * 60))
 ///     // But allow "my-internal-package" to bypass this check
-///     .with_exempt_package("my-internal-package".parse().unwrap());
+///     .with_exempt_package("my-internal-package".parse().unwrap())
+///     // And allow a trusted internal channel to skip the delay entirely
+///     .with_channel_min_age("my-internal-channel", Duration::ZERO);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MinimumAgeConfig {
@@ -113,6 +115,12 @@ pub struct MinimumAgeConfig {
     /// For example, if set to 7 days, only packages that were published at
     /// least 7 days ago will be considered.
     pub min_age: std::time::Duration,
+
+    /// Channel-specific minimum ages that override [`Self::min_age`] for
+    /// records from matching channels.
+    ///
+    /// The key is matched against [`RepoDataRecord::channel`] exactly.
+    pub channel_min_age: HashMap<String, std::time::Duration>,
 
     /// The reference time to use when calculating the cutoff date.
     /// Packages published after `now - min_age` will be excluded.
@@ -137,6 +145,7 @@ impl Default for MinimumAgeConfig {
     fn default() -> Self {
         Self {
             min_age: std::time::Duration::default(),
+            channel_min_age: HashMap::new(),
             now: Utc::now(),
             exempt_packages: HashSet::new(),
             include_unknown_timestamp: false,
@@ -150,6 +159,7 @@ impl MinimumAgeConfig {
     pub fn new(min_age: std::time::Duration) -> Self {
         Self {
             min_age,
+            channel_min_age: HashMap::new(),
             now: Utc::now(),
             exempt_packages: HashSet::new(),
             include_unknown_timestamp: false,
@@ -174,6 +184,16 @@ impl MinimumAgeConfig {
         self
     }
 
+    /// Sets the minimum age override for a specific channel.
+    pub fn with_channel_min_age(
+        mut self,
+        channel: impl Into<String>,
+        min_age: std::time::Duration,
+    ) -> Self {
+        self.channel_min_age.insert(channel.into(), min_age);
+        self
+    }
+
     /// Sets whether packages without a timestamp should be included.
     ///
     /// By default, packages without a timestamp are excluded. Call this with
@@ -189,10 +209,22 @@ impl MinimumAgeConfig {
         self.exempt_packages.contains(package)
     }
 
+    /// Returns the effective minimum age for a record from the given channel.
+    pub fn min_age_for_channel(&self, channel: Option<&str>) -> std::time::Duration {
+        channel
+            .and_then(|channel| self.channel_min_age.get(channel).copied())
+            .unwrap_or(self.min_age)
+    }
+
     /// Computes the cutoff time. Packages published after this time will be
     /// excluded (unless exempt).
     pub fn cutoff(&self) -> DateTime<Utc> {
-        let duration = chrono::Duration::from_std(self.min_age)
+        self.cutoff_for_channel(None)
+    }
+
+    /// Computes the cutoff time for records from the given channel.
+    pub fn cutoff_for_channel(&self, channel: Option<&str>) -> DateTime<Utc> {
+        let duration = chrono::Duration::from_std(self.min_age_for_channel(channel))
             .expect("min_release_age duration is too large");
         self.now - duration
     }

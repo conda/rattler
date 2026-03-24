@@ -307,10 +307,6 @@ impl<'a> CondaDependencyProvider<'a> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
-        // Compute the cutoff time for min_age.
-        // Packages published after this time will be excluded (unless exempt).
-        let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
-
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
             let name = pool.intern_package_name(&virtual_package.name);
@@ -359,19 +355,19 @@ impl<'a> CondaDependencyProvider<'a> {
                         if record_timestamp > exclude_newer);
 
                 // Determine if this record will be excluded by min_age.
-                let excluded_by_age =
-                    match (&min_age, &min_age_cutoff, &record.package_record.timestamp) {
-                        (Some(config), Some(cutoff), Some(timestamp)) => {
-                            // Exclude if published after cutoff and not exempt
-                            timestamp > cutoff && !config.is_exempt(&record.package_record.name)
-                        }
-                        (Some(config), Some(_), None) => {
-                            // Exclude if no timestamp and unknown timestamps are not allowed
-                            !config.include_unknown_timestamp
-                                && !config.is_exempt(&record.package_record.name)
-                        }
-                        _ => false,
-                    };
+                let excluded_by_age = match (&min_age, &record.package_record.timestamp) {
+                    (Some(config), Some(timestamp)) => {
+                        // Exclude if published after the effective cutoff and not exempt.
+                        let cutoff = config.cutoff_for_channel(record.channel.as_deref());
+                        *timestamp > cutoff && !config.is_exempt(&record.package_record.name)
+                    }
+                    (Some(config), None) => {
+                        // Exclude if no timestamp and unknown timestamps are not allowed.
+                        !config.include_unknown_timestamp
+                            && !config.is_exempt(&record.package_record.name)
+                    }
+                    _ => false,
+                };
 
                 let excluded = excluded_by_newer || excluded_by_age;
 
@@ -444,11 +440,14 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Filter out any records that haven't been published long enough.
-                if let (Some(config), Some(cutoff)) = (&min_age, &min_age_cutoff) {
+                if let Some(config) = &min_age {
                     if !config.is_exempt(&record.package_record.name) {
+                        let cutoff = config.cutoff_for_channel(record.channel.as_deref());
                         let exclude_reason = match &record.package_record.timestamp {
-                            Some(timestamp) if timestamp > cutoff => {
-                                let age = humantime::format_duration(config.min_age);
+                            Some(timestamp) if *timestamp > cutoff => {
+                                let age = humantime::format_duration(
+                                    config.min_age_for_channel(record.channel.as_deref()),
+                                );
                                 Some(format!("the package was published less than {age} ago"))
                             }
                             None if !config.include_unknown_timestamp => {

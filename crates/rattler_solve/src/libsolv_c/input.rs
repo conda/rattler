@@ -115,10 +115,6 @@ pub fn add_repodata_records<'a>(
     // details)
     let data = repo.add_repodata();
 
-    // Compute the cutoff time for min_age.
-    // Packages published after this time will be excluded (unless exempt).
-    let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
-
     let mut solvable_ids = Vec::new();
 
     // Track all extras we encounter so we can create synthetic solvables for them
@@ -131,10 +127,11 @@ pub fn add_repodata_records<'a>(
         }
 
         // Skip packages that haven't been published long enough (unless exempt)
-        if let (Some(config), Some(cutoff)) = (min_age, &min_age_cutoff) {
+        if let Some(config) = min_age {
             if !config.is_exempt(&repo_data.package_record.name) {
+                let cutoff = config.cutoff_for_channel(repo_data.channel.as_deref());
                 match repo_data.package_record.timestamp.as_ref() {
-                    Some(timestamp) if *timestamp > *cutoff => continue,
+                    Some(timestamp) if *timestamp > cutoff => continue,
                     None if !config.include_unknown_timestamp => continue,
                     _ => {}
                 }

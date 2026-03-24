@@ -192,3 +192,41 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
         .expect_present(["pkg-no-ts", "pkg-old"])
         .run::<T>();
 }
+
+/// Test that channel-specific minimum ages override the global minimum age.
+pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .channel("stable")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .channel("stable")
+            .timestamp("2024-06-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-b")
+            .version("1.0")
+            .channel("internal")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-b")
+            .version("2.0")
+            .channel("internal")
+            .timestamp("2024-06-15T12:00:00Z")
+            .build(),
+    ];
+
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+    let config =
+        MinimumAgeConfig::new(min_age).with_channel_min_age("internal", std::time::Duration::ZERO);
+
+    SolverCase::new("min_age per channel")
+        .repository(repo)
+        .specs(["pkg-a", "pkg-b"])
+        .min_age(config)
+        .expect_present([("pkg-a", "1.0"), ("pkg-b", "2.0")])
+        .expect_absent([("pkg-a", "2.0"), ("pkg-b", "1.0")])
+        .run::<T>();
+}

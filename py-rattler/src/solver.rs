@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::DateTime;
 use pyo3::{
@@ -64,17 +64,28 @@ impl PyMinimumAgeConfig {
     ///         from the minimum age requirement.
     ///     `include_unknown_timestamp`: Whether to include packages without a
     ///         timestamp. Defaults to False (exclude them).
+    ///     `per_channel_seconds`: Optional mapping of channel name to minimum
+    ///         age in seconds, overriding the default for matching channels.
     #[new]
-    #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false))]
+    #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false, per_channel_seconds=None))]
     pub fn new(
         seconds: u64,
         exempt_packages: Option<Vec<PyPackageName>>,
         include_unknown_timestamp: bool,
+        per_channel_seconds: Option<HashMap<String, u64>>,
     ) -> Self {
         let mut config = MinimumAgeConfig::new(std::time::Duration::from_secs(seconds));
         if let Some(exempt) = exempt_packages {
             let exempt_set: HashSet<PackageName> = exempt.into_iter().map(Into::into).collect();
             config = config.with_exempt_packages(exempt_set);
+        }
+        if let Some(per_channel_seconds) = per_channel_seconds {
+            for (channel, seconds) in per_channel_seconds {
+                config = config.with_channel_min_age(
+                    channel,
+                    std::time::Duration::from_secs(seconds),
+                );
+            }
         }
         config = config.with_include_unknown_timestamp(include_unknown_timestamp);
         Self { inner: config }
@@ -101,6 +112,16 @@ impl PyMinimumAgeConfig {
     #[getter]
     pub fn include_unknown_timestamp(&self) -> bool {
         self.inner.include_unknown_timestamp
+    }
+
+    /// The channel-specific minimum ages in seconds.
+    #[getter]
+    pub fn per_channel_seconds(&self) -> HashMap<String, u64> {
+        self.inner
+            .channel_min_age
+            .iter()
+            .map(|(channel, duration)| (channel.clone(), duration.as_secs()))
+            .collect()
     }
 }
 
