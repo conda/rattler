@@ -1,6 +1,7 @@
 import io
 
 import pytest
+import rattler.package_streaming as package_streaming
 from pathlib import Path
 from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import (
@@ -127,20 +128,90 @@ async def test_fetch_raw_package_files_from_url() -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_remote_package_single_use() -> None:
+async def test_open_remote_package_lazy_api() -> None:
     client = Client.default_client()
 
     async with open_remote_package(
         client,
         "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
     ) as package:
-        files = await package.read_files(["info/index.json", "info/paths.json"])
+        paths = await package.paths()
+        assert "site-packages/boltons/cacheutils.py" in paths
+        assert await package.exists("info/index.json")
+        assert not await package.exists("does/not/exist")
+
+        raw = await package.read_bytes("info/index.json")
+        text = await package.read_text("info/index.json")
+        files = await package.read_many(["info/index.json", "info/paths.json", "info/index.json"])
+
+        assert raw
+        assert text
         assert list(files) == ["info/index.json", "info/paths.json"]
-        assert files["info/index.json"]
+        assert files["info/index.json"] == raw
         assert files["info/paths.json"]
 
-        with pytest.raises(RuntimeError):
-            await package.read_files(["info/about.json"])
+    with pytest.raises(RuntimeError):
+        await package.paths()
+
+
+@pytest.mark.asyncio
+async def test_open_remote_package_caches_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeEntry:
+        def __init__(self, path: str) -> None:
+            self.relative_path = path
+
+    class FakePathsJson:
+        def __init__(self) -> None:
+            self.paths = [FakeEntry("info/index.json"), FakeEntry("lib/libfoo.so")]
+
+    calls = 0
+
+    async def fake_from_remote_url(client: object, url: str) -> FakePathsJson:
+        nonlocal calls
+        calls += 1
+        return FakePathsJson()
+
+    monkeypatch.setattr(package_streaming.PathsJson, "from_remote_url", fake_from_remote_url)
+
+    package = open_remote_package(Client.default_client(), "https://example.invalid/test.conda")
+
+    assert await package.paths() == ("info/index.json", "lib/libfoo.so")
+    assert await package.paths() == ("info/index.json", "lib/libfoo.so")
+    assert await package.exists("lib/libfoo.so")
+    assert not await package.exists("missing")
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_open_remote_package_read_many_uses_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    file_calls: list[str] = []
+    many_calls: list[list[str]] = []
+
+    async def fake_fetch_file(client: object, url: str, path: str) -> bytes:
+        file_calls.append(path)
+        return f"single:{path}".encode()
+
+    async def fake_fetch_files(client: object, url: str, paths: list[str]) -> dict[str, bytes]:
+        many_calls.append(paths)
+        return {path: f"many:{path}".encode() for path in paths}
+
+    monkeypatch.setattr(package_streaming, "fetch_raw_package_file_from_url", fake_fetch_file)
+    monkeypatch.setattr(package_streaming, "fetch_raw_package_files_from_url", fake_fetch_files)
+
+    package = open_remote_package(Client.default_client(), "https://example.invalid/test.conda")
+
+    first = await package.read_bytes("info/index.json")
+    second = await package.read_bytes("info/index.json")
+    many = await package.read_many(["info/index.json", "info/about.json", "info/about.json"])
+
+    assert first == b"single:info/index.json"
+    assert second == b"single:info/index.json"
+    assert many == {
+        "info/index.json": b"single:info/index.json",
+        "info/about.json": b"many:info/about.json",
+    }
+    assert file_calls == ["info/index.json"]
+    assert many_calls == [["info/about.json"]]
 
 
 @pytest.mark.asyncio
