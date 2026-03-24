@@ -4,9 +4,20 @@
 //! packages that have been published too recently, helping reduce the risk
 //! of installing compromised packages.
 
+use chrono::{DateTime, Utc};
 use rattler_solve::{MinimumAgeConfig, SolverImpl};
 
 use crate::helpers::{PackageBuilder, SolverCase};
+
+fn fixed_now() -> DateTime<Utc> {
+    "2026-03-24T00:00:00Z"
+        .parse()
+        .expect("invalid fixed test timestamp")
+}
+
+fn min_age_config(min_age: std::time::Duration) -> MinimumAgeConfig {
+    MinimumAgeConfig::new(min_age).with_now(fixed_now())
+}
 
 /// Creates a repository with packages that have different timestamps.
 ///
@@ -41,13 +52,13 @@ pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
     // 1000 days minimum age - this filters out 2024 packages
-    // (from ~Nov 2025, the cutoff would be ~March 2023)
+    // (from 2026-03-24, the cutoff is 2023-06-28)
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
     SolverCase::new("min_age filters new packages")
         .repository(repo)
         .specs(["pkg-a"])
-        .min_age(MinimumAgeConfig::new(min_age))
+        .min_age(min_age_config(min_age))
         .expect_present([("pkg-a", "1.0")])
         .expect_absent([("pkg-a", "2.0")])
         .run::<T>();
@@ -61,7 +72,7 @@ pub fn solve_min_age_with_exemption<T: SolverImpl + Default>() {
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
     // But we exempt "pkg-a" from the filter
-    let config = MinimumAgeConfig::new(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    let config = min_age_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
 
     SolverCase::new("min_age with exemption")
         .repository(repo)
@@ -81,7 +92,7 @@ pub fn solve_min_age_with_dependencies<T: SolverImpl + Default>() {
     SolverCase::new("min_age with dependencies")
         .repository(repo)
         .specs(["pkg-b"])
-        .min_age(MinimumAgeConfig::new(min_age))
+        .min_age(min_age_config(min_age))
         // pkg-b 2.0 requires pkg-a >=2, but pkg-a 2.0 is too new
         // So we should get pkg-b 1.0 and pkg-a 1.0
         .expect_present([("pkg-b", "1.0"), ("pkg-a", "1.0")])
@@ -97,7 +108,7 @@ pub fn solve_min_age_exempt_dependency<T: SolverImpl + Default>() {
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
     // Exempt pkg-a but not pkg-b
-    let config = MinimumAgeConfig::new(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    let config = min_age_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
 
     SolverCase::new("min_age exempt dependency")
         .repository(repo)
@@ -130,7 +141,7 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age excludes unknown timestamp by default")
         .repository(repo)
         .specs(["pkg-a"])
-        .min_age(MinimumAgeConfig::new(min_age))
+        .min_age(min_age_config(min_age))
         // pkg-a 2.0 has no timestamp and should be excluded
         // pkg-a 1.0 has an old timestamp and should be selected
         .expect_present([("pkg-a", "1.0")])
@@ -155,7 +166,7 @@ pub fn solve_min_age_exempt_no_timestamp<T: SolverImpl + Default>() {
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
     // Exempt pkg-a from the filter
-    let config = MinimumAgeConfig::new(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    let config = min_age_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
 
     SolverCase::new("min_age exempt package without timestamp")
         .repository(repo)
@@ -185,7 +196,7 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age with include_unknown_timestamp")
         .repository(repo)
         .specs(["pkg-no-ts", "pkg-old"])
-        .min_age(MinimumAgeConfig::new(min_age).with_include_unknown_timestamp(true))
+        .min_age(min_age_config(min_age).with_include_unknown_timestamp(true))
         // Both packages should be available:
         // - pkg-no-ts has no timestamp but we explicitly include unknown timestamps
         // - pkg-old has an old timestamp so it passes the filter
@@ -220,7 +231,7 @@ pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
 
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
     let config =
-        MinimumAgeConfig::new(min_age).with_channel_min_age("internal", std::time::Duration::ZERO);
+        min_age_config(min_age).with_channel_min_age("internal", std::time::Duration::ZERO);
 
     SolverCase::new("min_age per channel")
         .repository(repo)
