@@ -1,7 +1,8 @@
 use futures::StreamExt;
-use pyo3::{prelude::*, types::PyBytes};
+use pyo3::{prelude::*, types::PyBytes, types::PyDict};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_file::PyFileLikeObject;
+use rattler_package_streaming::ExtractError;
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
@@ -23,6 +24,22 @@ fn parse_url(url: &str) -> PyResult<Url> {
 
 fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyIOError, _>(error.to_string())
+}
+
+fn package_streaming_error(error: ExtractError) -> PyErr {
+    match error {
+        ExtractError::MissingPaths { paths } => {
+            PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                "file(s) not found in package: {}",
+                paths
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
+        other => PyErr::new::<pyo3::exceptions::PyIOError, _>(other.to_string()),
+    }
 }
 
 #[pyfunction]
@@ -117,6 +134,35 @@ pub fn fetch_raw_package_file_from_url<'a>(
         })?;
 
         Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+    };
+
+    future_into_py(py, future)
+}
+
+#[pyfunction]
+pub fn fetch_raw_package_files_from_url<'a>(
+    py: Python<'a>,
+    client: PyClientWithMiddleware,
+    url: String,
+    paths: Vec<String>,
+) -> PyResult<Bound<'a, PyAny>> {
+    let url = parse_url(&url)?;
+    let paths = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
+    let future = async move {
+        let files =
+            rattler_package_streaming::reqwest::fetch::fetch_files_from_remote_url(client.into(), url, paths)
+                .await
+                .map_err(package_streaming_error)?;
+
+        Python::with_gil(|py| {
+            let dict = PyDict::new(py);
+            for (path, bytes) in files {
+                let key = path.to_string_lossy().into_owned();
+                let value = PyBytes::new(py, &bytes).into_any().unbind();
+                dict.set_item(key, value)?;
+            }
+            Ok(dict.into_any().unbind())
+        })
     };
 
     future_into_py(py, future)

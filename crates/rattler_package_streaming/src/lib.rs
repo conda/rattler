@@ -52,6 +52,12 @@ pub enum ExtractError {
     #[error("a component is missing from the Conda archive")]
     MissingComponent,
 
+    #[error(
+        "file(s) not found in package: {}",
+        paths.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", ")
+    )]
+    MissingPaths { paths: Vec<PathBuf> },
+
     #[error("unsupported compression method")]
     UnsupportedCompressionMethod,
 

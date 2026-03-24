@@ -196,6 +196,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(
         wrap_pyfunction!(package_streaming::fetch_raw_package_file_from_url, &m).unwrap(),
     )?;
+    m.add_function(
+        wrap_pyfunction!(package_streaming::fetch_raw_package_files_from_url, &m).unwrap(),
+    )?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;

@@ -34,6 +34,8 @@
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use rattler_conda_types::package::PackageFile;
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 use url::Url;
 
@@ -41,8 +43,26 @@ pub use super::full_download::{
     fetch_file_from_remote_full_download, fetch_package_file_full_download,
 };
 use super::sparse::fetch_package_file_sparse;
-use crate::reqwest::sparse::fetch_file_from_remote_sparse;
+use crate::reqwest::sparse::fetch_files_from_remote_sparse;
 use crate::ExtractError;
+
+fn normalize_target_paths<I, P>(target_paths: I) -> Vec<PathBuf>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for path in target_paths {
+        let path = path.as_ref().to_path_buf();
+        if seen.insert(path.clone()) {
+            normalized.push(path);
+        }
+    }
+
+    normalized
+}
 
 /// Fetch and parse a specific [`PackageFile`] from a remote package.
 ///
@@ -123,7 +143,34 @@ pub async fn fetch_file_from_remote_url(
     url: Url,
     target_path: &std::path::Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
-    match fetch_file_from_remote_sparse(client.clone(), url.clone(), target_path).await {
+    match fetch_files_from_remote_url(client, url, [target_path.to_path_buf()]).await {
+        Ok(mut files) => Ok(files.pop().map(|(_, bytes)| bytes)),
+        Err(ExtractError::MissingPaths { .. }) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Fetch the raw bytes for multiple file paths inside a remote package.
+///
+/// The function deduplicates `target_paths` while preserving first-seen order.
+/// It first attempts the sparse range-request path for `.conda` packages and
+/// falls back to a single full-download streaming pass when sparse access is
+/// unavailable.
+pub async fn fetch_files_from_remote_url<I, P>(
+    client: ClientWithMiddleware,
+    url: Url,
+    target_paths: I,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ExtractError>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let target_paths = normalize_target_paths(target_paths);
+    if target_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    match fetch_files_from_remote_sparse(client.clone(), url.clone(), target_paths.clone()).await {
         Ok(result) => return Ok(result),
         Err(ExtractError::UnsupportedArchiveType) => {
             debug!("archive type not supported for range requests, falling back to full download");
@@ -142,7 +189,7 @@ pub async fn fetch_file_from_remote_url(
         Err(e) => return Err(e),
     }
 
-    fetch_file_from_remote_full_download(&client, &url, target_path).await
+    super::full_download::fetch_files_from_remote_full_download(&client, &url, target_paths).await
 }
 
 #[cfg(test)]
@@ -230,6 +277,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_fetch_multiple_files_from_remote() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_files_from_remote_url(
+            client,
+            url,
+            [
+                PathBuf::from("info/index.json"),
+                PathBuf::from("info/index.json"),
+                PathBuf::from("info/about.json"),
+                PathBuf::from("clobber"),
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(raw.len(), 3);
+        assert_eq!(raw[0].0, PathBuf::from("info/index.json"));
+        assert_eq!(raw[1].0, PathBuf::from("info/about.json"));
+        assert_eq!(raw[2].0, PathBuf::from("clobber"));
+        assert!(raw.iter().all(|(_, bytes)| !bytes.is_empty()));
+    }
+
+    #[tokio::test]
     async fn test_fetch_file_from_remote_tar_bz2_fallback() {
         let tar_bz2 = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
@@ -242,5 +314,52 @@ mod tests {
             .expect("file should exist in archive");
 
         assert!(!raw.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_multiple_files_from_remote_tar_bz2_fallback() {
+        let tar_bz2 = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let url = test_server::serve_file(tar_bz2).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_files_from_remote_url(
+            client,
+            url,
+            [
+                PathBuf::from("info/index.json"),
+                PathBuf::from("info/paths.json"),
+                PathBuf::from("info/about.json"),
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(raw.len(), 3);
+        assert!(raw.iter().all(|(_, bytes)| !bytes.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_multiple_files_missing_path() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let err = fetch_files_from_remote_url(
+            client,
+            url,
+            [
+                PathBuf::from("info/index.json"),
+                PathBuf::from("does/not/exist"),
+            ],
+        )
+        .await
+        .unwrap_err();
+
+        match err {
+            ExtractError::MissingPaths { paths } => {
+                assert_eq!(paths, vec![PathBuf::from("does/not/exist")]);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

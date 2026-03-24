@@ -6,7 +6,8 @@
 //! They are primarily used as a fallback for the higher-level APIs in
 //! [`super::fetch`] when sparse range-request access is unavailable.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use async_compression::tokio::bufread::{BzDecoder, ZstdDecoder};
 use async_zip::base::read::stream::ZipFileReader;
@@ -17,7 +18,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tokio_util::io::StreamReader;
 use url::Url;
 
-use crate::tokio::async_read::get_file_from_tar_archive;
+use crate::tokio::async_read::{conda_entry_prefix, get_files_from_tar_archive};
 use crate::ExtractError;
 
 /// Stream the full package response and extract a single file by path.
@@ -28,8 +29,32 @@ pub async fn fetch_file_from_remote_full_download(
     url: &Url,
     target_path: &Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
+    match fetch_files_from_remote_full_download(client, url, [target_path.to_path_buf()]).await {
+        Ok(mut files) => Ok(files.pop().map(|(_, bytes)| bytes)),
+        Err(ExtractError::MissingPaths { .. }) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Stream the full package response and extract multiple files by path.
+///
+/// The package archive is scanned once and the returned vector preserves the
+/// first-seen order of `target_paths`.
+pub async fn fetch_files_from_remote_full_download<I>(
+    client: &ClientWithMiddleware,
+    url: &Url,
+    target_paths: I,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ExtractError>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
     let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?;
+
+    let target_paths: Vec<PathBuf> = target_paths.into_iter().collect();
+    if target_paths.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let response = client
         .get(url.clone())
@@ -51,12 +76,15 @@ pub async fn fetch_file_from_remote_full_download(
     });
     let stream_reader = StreamReader::new(byte_stream);
 
-    let content = match archive_type {
+    let mut found_files = match archive_type {
         CondaArchiveType::TarBz2 => {
             let buf_reader = tokio::io::BufReader::new(stream_reader);
             let decoder = BzDecoder::new(buf_reader);
             let mut archive = tokio_tar::Archive::new(decoder);
-            get_file_from_tar_archive(&mut archive, target_path).await?
+            get_files_from_tar_archive(&mut archive, &target_paths)
+                .await?
+                .into_iter()
+                .collect::<HashMap<_, _>>()
         }
         CondaArchiveType::Conda => {
             // async_zip uses futures IO traits, so bridge tokio → futures
@@ -64,8 +92,19 @@ pub async fn fetch_file_from_remote_full_download(
             let mut buf_reader = futures::io::BufReader::new(compat_reader);
             let mut zip_reader = ZipFileReader::new(&mut buf_reader);
 
-            let mut found: Option<Vec<u8>> = None;
-            let prefix = crate::tokio::async_read::conda_entry_prefix(target_path);
+            let mut grouped_paths: HashMap<&'static str, Vec<PathBuf>> = HashMap::new();
+            for path in &target_paths {
+                grouped_paths
+                    .entry(conda_entry_prefix(path))
+                    .or_default()
+                    .push(path.clone());
+            }
+
+            let mut found = HashMap::with_capacity(target_paths.len());
+            let mut remaining = target_paths
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>();
 
             while let Some(mut entry) = zip_reader
                 .next_with_entry()
@@ -76,14 +115,31 @@ pub async fn fetch_file_from_remote_full_download(
                     ExtractError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
                 })?;
 
-                if filename.starts_with(prefix) && filename.ends_with(".tar.zst") {
+                let component_paths =
+                    if filename.starts_with("info-") && filename.ends_with(".tar.zst") {
+                        grouped_paths.get("info-")
+                    } else if filename.starts_with("pkg-") && filename.ends_with(".tar.zst") {
+                        grouped_paths.get("pkg-")
+                    } else {
+                        None
+                    };
+
+                if let Some(component_paths) = component_paths {
                     // Bridge the entry reader back from futures → tokio
                     let compat_entry = entry.reader_mut().compat();
                     let buf_entry = tokio::io::BufReader::new(compat_entry);
                     let decoder = ZstdDecoder::new(buf_entry);
                     let mut archive = tokio_tar::Archive::new(decoder);
-                    found = get_file_from_tar_archive(&mut archive, target_path).await?;
-                    break;
+                    for (path, bytes) in
+                        get_files_from_tar_archive(&mut archive, component_paths).await?
+                    {
+                        remaining.remove(&path);
+                        found.insert(path, bytes);
+                    }
+
+                    if remaining.is_empty() {
+                        break;
+                    }
                 }
 
                 // Skip to the next entry (required by async_zip API)
@@ -96,7 +152,22 @@ pub async fn fetch_file_from_remote_full_download(
             found
         }
     };
-    Ok(content)
+
+    let missing_paths = target_paths
+        .iter()
+        .filter(|path| !found_files.contains_key(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_paths.is_empty() {
+        return Err(ExtractError::MissingPaths {
+            paths: missing_paths,
+        });
+    }
+
+    Ok(target_paths
+        .into_iter()
+        .filter_map(|path| found_files.remove(&path).map(|bytes| (path, bytes)))
+        .collect())
 }
 
 /// Stream the full package response and extract a single typed [`PackageFile`].
@@ -106,9 +177,13 @@ pub async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
 ) -> Result<P, ExtractError> {
-    let content = fetch_file_from_remote_full_download(client, url, P::package_path())
-        .await?
-        .ok_or(ExtractError::MissingComponent)?;
+    let content =
+        fetch_files_from_remote_full_download(client, url, [P::package_path().to_path_buf()])
+            .await?
+            .into_iter()
+            .next()
+            .map(|(_, bytes)| bytes)
+            .ok_or(ExtractError::MissingComponent)?;
     P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }

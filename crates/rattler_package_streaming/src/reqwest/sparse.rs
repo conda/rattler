@@ -28,7 +28,8 @@
 //! # }
 //! ```
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use async_compression::tokio::bufread::ZstdDecoder;
 use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
@@ -41,7 +42,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
+use crate::tokio::async_read::{conda_entry_prefix, get_files_from_tar_archive};
 use crate::ExtractError;
 
 /// Default number of bytes to fetch from the end of the file.
@@ -65,11 +66,36 @@ pub async fn fetch_file_from_remote_sparse(
     url: Url,
     target_path: &Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
+    match fetch_files_from_remote_sparse(client, url, [target_path.to_path_buf()]).await {
+        Ok(mut files) => Ok(files.pop().map(|(_, bytes)| bytes)),
+        Err(ExtractError::MissingPaths { .. }) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Fetch the raw bytes for multiple files from a remote `.conda` package using
+/// HTTP range requests.
+///
+/// Streams each required inner tarball at most once and returns the files in the
+/// first-seen order of `target_paths`.
+pub async fn fetch_files_from_remote_sparse<I>(
+    client: ClientWithMiddleware,
+    url: Url,
+    target_paths: I,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ExtractError>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
     let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?;
 
     if archive_type != CondaArchiveType::Conda {
         return Err(ExtractError::UnsupportedArchiveType);
+    }
+
+    let target_paths: Vec<PathBuf> = target_paths.into_iter().collect();
+    if target_paths.is_empty() {
+        return Ok(Vec::new());
     }
 
     // Create range reader (fetches last 64KB on construction)
@@ -87,46 +113,55 @@ pub async fn fetch_file_from_remote_sparse(
     // Open ZIP (parses EOCD + central directory, data already cached from range request)
     let mut zip_reader = ZipFileReader::new(buf_reader).await?;
 
-    // Find the tar.zst entry that contains the target path
-    let prefix = conda_entry_prefix(target_path);
-    let (index, _) = zip_reader
-        .file()
-        .entries()
-        .iter()
-        .enumerate()
-        .find(|(_, e)| {
-            e.filename()
-                .as_str()
-                .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
-                .unwrap_or(false)
-        })
-        .ok_or(ExtractError::MissingComponent)?;
+    let mut grouped_paths: HashMap<&'static str, Vec<PathBuf>> = HashMap::new();
+    for path in &target_paths {
+        grouped_paths
+            .entry(conda_entry_prefix(path))
+            .or_default()
+            .push(path.clone());
+    }
 
-    // Prefetch the entire info entry in a single HTTP request so the
-    // streaming pipeline doesn't trigger many small range requests.
-    let entry = &zip_reader.file().entries()[index];
-    let offset = entry.header_offset();
-    let size = entry.header_size() + entry.compressed_size();
-    zip_reader
-        .inner_mut()
-        .get_mut()
-        .get_mut()
-        .prefetch(offset..offset + size)
-        .await;
+    let mut found_files = HashMap::with_capacity(target_paths.len());
+    for prefix in ["info-", "pkg-"] {
+        let Some(component_paths) = grouped_paths.get(prefix) else {
+            continue;
+        };
 
-    // Get a streaming reader for the ZIP entry (futures::io::AsyncRead).
-    // This does NOT buffer the entire entry — bytes are fetched on demand
-    // via HTTP range requests as the downstream decompressor/tar reader
-    // consumes them.
-    let entry_reader = zip_reader.reader_without_entry(index).await?;
+        let (index, _) = zip_reader
+            .file()
+            .entries()
+            .iter()
+            .enumerate()
+            .find(|(_, e)| {
+                e.filename()
+                    .as_str()
+                    .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
+                    .unwrap_or(false)
+            })
+            .ok_or(ExtractError::MissingComponent)?;
 
-    // Pipeline: async ZIP entry reader -> tokio compat -> buffered -> zstd decoder -> tar
-    let tokio_reader = entry_reader.compat();
-    let buf_reader = tokio::io::BufReader::new(tokio_reader);
-    let zstd_decoder = ZstdDecoder::new(buf_reader);
-    let mut tar = tokio_tar::Archive::new(zstd_decoder);
+        // Prefetch the entire tar.zst entry in a single HTTP request so the
+        // streaming pipeline doesn't trigger many small range requests.
+        let entry = &zip_reader.file().entries()[index];
+        let offset = entry.header_offset();
+        let size = entry.header_size() + entry.compressed_size();
+        zip_reader
+            .inner_mut()
+            .get_mut()
+            .get_mut()
+            .prefetch(offset..offset + size)
+            .await;
 
-    let result = get_file_from_tar_archive(&mut tar, target_path).await?;
+        let entry_reader = zip_reader.reader_without_entry(index).await?;
+        let tokio_reader = entry_reader.compat();
+        let buf_reader = tokio::io::BufReader::new(tokio_reader);
+        let zstd_decoder = ZstdDecoder::new(buf_reader);
+        let mut tar = tokio_tar::Archive::new(zstd_decoder);
+
+        for (path, bytes) in get_files_from_tar_archive(&mut tar, component_paths).await? {
+            found_files.insert(path, bytes);
+        }
+    }
 
     debug!(
         "Requested ranges: {:?}",
@@ -138,7 +173,21 @@ pub async fn fetch_file_from_remote_sparse(
             .await
     );
 
-    Ok(result)
+    let missing_paths = target_paths
+        .iter()
+        .filter(|path| !found_files.contains_key(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_paths.is_empty() {
+        return Err(ExtractError::MissingPaths {
+            paths: missing_paths,
+        });
+    }
+
+    Ok(target_paths
+        .into_iter()
+        .filter_map(|path| found_files.remove(&path).map(|bytes| (path, bytes)))
+        .collect())
 }
 
 /// Fetch and parse a typed [`PackageFile`] from a remote `.conda` package
@@ -170,8 +219,11 @@ pub async fn fetch_package_file_sparse<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
-    let bytes = fetch_file_from_remote_sparse(client, url, P::package_path())
+    let bytes = fetch_files_from_remote_sparse(client, url, [P::package_path().to_path_buf()])
         .await?
+        .into_iter()
+        .next()
+        .map(|(_, bytes)| bytes)
         .ok_or(ExtractError::MissingComponent)?;
     P::from_slice(&bytes)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
@@ -227,5 +279,29 @@ mod tests {
             .expect("file should exist in pkg section");
         let content = String::from_utf8(raw).unwrap();
         insta::assert_snapshot!(content, @"clobber-fd-1");
+    }
+
+    #[tokio::test]
+    async fn test_fetch_multiple_files_sparse() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let files = fetch_files_from_remote_sparse(
+            client,
+            url,
+            [
+                PathBuf::from("info/index.json"),
+                PathBuf::from("info/about.json"),
+                PathBuf::from("clobber"),
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].0, PathBuf::from("info/index.json"));
+        assert_eq!(files[1].0, PathBuf::from("info/about.json"));
+        assert_eq!(files[2].0, PathBuf::from("clobber"));
+        assert!(files.iter().all(|(_, bytes)| !bytes.is_empty()));
     }
 }

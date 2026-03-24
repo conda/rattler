@@ -2,6 +2,7 @@
 //! that implement the [`tokio::io::AsyncRead`] trait.
 
 use std::path::Path;
+use std::{collections::HashMap, collections::HashSet, path::PathBuf};
 
 use async_compression::tokio::bufread::BzDecoder;
 use async_spooled_tempfile::SpooledTempFile;
@@ -238,31 +239,40 @@ pub(crate) fn conda_entry_prefix(target_path: &Path) -> &'static str {
     }
 }
 
-/// Async equivalent of [`crate::seek::get_file_from_archive`].
+/// Async tar archive lookup for multiple paths in a single streaming pass.
 ///
-/// Iterates entries of a tar archive, returning the contents of the first
-/// entry whose path matches `file_name`. Because the reader is streaming,
-/// only the bytes up to (and including) the target entry are consumed.
+/// The returned vector preserves the first-seen order of `file_names`.
 #[cfg(feature = "reqwest")]
-pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
+pub(crate) async fn get_files_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     archive: &mut tokio_tar::Archive<R>,
-    file_name: &Path,
-) -> Result<Option<Vec<u8>>, ExtractError> {
+    file_names: &[PathBuf],
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ExtractError> {
+    let mut remaining: HashSet<PathBuf> = file_names.iter().cloned().collect();
+    let mut found = HashMap::with_capacity(file_names.len());
     let mut entries = archive.entries().map_err(ExtractError::IoError)?;
-    while let Some(entry) = entries.next().await {
+
+    while !remaining.is_empty() {
+        let Some(entry) = entries.next().await else {
+            break;
+        };
+
         let mut entry = entry.map_err(ExtractError::IoError)?;
-        let path = entry.path().map_err(ExtractError::IoError)?;
-        if path.as_ref() == file_name {
+        let path = entry.path().map_err(ExtractError::IoError)?.into_owned();
+        if remaining.remove(&path) {
             let size = entry.header().size().map_err(ExtractError::IoError)?;
             let mut buf = Vec::with_capacity(size as usize);
             entry
                 .read_to_end(&mut buf)
                 .await
                 .map_err(ExtractError::IoError)?;
-            return Ok(Some(buf));
+            found.insert(path, buf);
         }
     }
-    Ok(None)
+
+    Ok(file_names
+        .iter()
+        .filter_map(|path| found.remove(path).map(|buf| (path.clone(), buf)))
+        .collect())
 }
 
 #[cfg(all(test, feature = "reqwest"))]

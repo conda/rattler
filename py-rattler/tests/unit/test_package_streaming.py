@@ -9,6 +9,8 @@ from rattler.package_streaming import (
     download_to_path,
     download_to_writer,
     extract,
+    fetch_raw_package_files_from_url,
+    open_remote_package,
 )
 from rattler.networking.client import Client
 
@@ -107,6 +109,38 @@ async def test_download_and_extract(tmpdir: Path) -> None:
     assert (dest / "info" / "index.json").exists()
     assert (dest / "info" / "paths.json").exists()
     assert (dest / "site-packages/boltons-24.0.0.dist-info").exists()
+
+
+@pytest.mark.asyncio
+async def test_fetch_raw_package_files_from_url() -> None:
+    client = Client.default_client()
+
+    files = await fetch_raw_package_files_from_url(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+        ["info/index.json", "info/about.json", "info/index.json"],
+    )
+
+    assert list(files) == ["info/index.json", "info/about.json"]
+    assert files["info/index.json"]
+    assert files["info/about.json"]
+
+
+@pytest.mark.asyncio
+async def test_open_remote_package_single_use() -> None:
+    client = Client.default_client()
+
+    async with open_remote_package(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+    ) as package:
+        files = await package.read_files(["info/index.json", "info/paths.json"])
+        assert list(files) == ["info/index.json", "info/paths.json"]
+        assert files["info/index.json"]
+        assert files["info/paths.json"]
+
+        with pytest.raises(RuntimeError):
+            await package.read_files(["info/about.json"])
 
 
 @pytest.mark.asyncio

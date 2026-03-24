@@ -1,5 +1,5 @@
 from os import PathLike
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from rattler.networking.client import Client
 from rattler.rattler import download_bytes as py_download_bytes
@@ -9,6 +9,7 @@ from rattler.rattler import download_and_extract as py_download_and_extract
 from rattler.rattler import extract as py_extract
 from rattler.rattler import extract_tar_bz2 as py_extract_tar_bz2
 from rattler.rattler import fetch_raw_package_file_from_url as py_fetch_raw_package_file_from_url
+from rattler.rattler import fetch_raw_package_files_from_url as py_fetch_raw_package_files_from_url
 
 
 def extract(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, bytes]:
@@ -66,3 +67,41 @@ async def fetch_raw_package_file_from_url(client: Client, url: str, path: str) -
     range requests.
     """
     return await py_fetch_raw_package_file_from_url(client._client, url, path)
+
+
+async def fetch_raw_package_files_from_url(
+    client: Client, url: str, paths: Sequence[str]
+) -> dict[str, bytes]:
+    """
+    Fetch raw bytes for multiple files inside a remote package in one archive scan.
+
+    Duplicate paths are ignored after their first occurrence, and the returned
+    dictionary preserves the first-seen path order.
+    """
+    return await py_fetch_raw_package_files_from_url(client._client, url, list(paths))
+
+
+class RemotePackageSession:
+    """Single-use async session for reading multiple files from one remote package."""
+
+    def __init__(self, client: Client, url: str) -> None:
+        self._client = client
+        self._url = url
+        self._used = False
+
+    async def __aenter__(self) -> "RemotePackageSession":
+        return self
+
+    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        return False
+
+    async def read_files(self, paths: Sequence[str]) -> dict[str, bytes]:
+        if self._used:
+            raise RuntimeError("RemotePackageSession.read_files() can only be called once")
+        self._used = True
+        return await fetch_raw_package_files_from_url(self._client, self._url, paths)
+
+
+def open_remote_package(client: Client, url: str) -> RemotePackageSession:
+    """Open a remote package for a single bulk file read."""
+    return RemotePackageSession(client, url)
