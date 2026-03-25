@@ -5,6 +5,7 @@ use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
+use rattler_digest::digest::Digest;
 use rattler_digest::Sha256;
 use rattler_digest::Sha256Hash;
 use reflink_copy::reflink;
@@ -15,6 +16,7 @@ use std::fmt::Formatter;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 use super::{ExternalSymlinkPolicy, Prefix};
@@ -206,25 +208,30 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        let patched_bytes = render_patched_contents(
+        let metadata = fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
+        let temporary_destination = temporary_destination(&destination_path)?;
+        let temporary_destination_path = temporary_destination.path().to_path_buf();
+
+        copy_file_to_destination(&source_path, &temporary_destination_path)?;
+        make_destination_writable_for_patching(
+            &temporary_destination_path,
+            &metadata.permissions(),
+        )?;
+        let patched_file = patch_copied_destination_with_file(
+            temporary_destination.reopen().map_err(|err| {
+                LinkFileError::IoError(String::from("reopening temporary patched destination"), err)
+            })?,
             source.as_ref(),
             placeholder,
             &target_prefix,
             &target_platform,
             *file_mode,
-        )
-        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+        )?;
 
-        let metadata = fs::symlink_metadata(&source_path)
-            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-
-        copy_file_to_destination(&source_path, &destination_path)?;
-        make_destination_writable_for_patching(&destination_path, &metadata.permissions())?;
-        patch_copied_destination(&destination_path, source.as_ref(), &patched_bytes)?;
-
-        let current_hash = rattler_digest::compute_bytes_digest::<Sha256>(&patched_bytes);
-        sha256 = Some(current_hash);
-        file_size = Some(patched_bytes.len() as u64);
+        sha256 = Some(patched_file.sha256);
+        file_size = Some(patched_file.file_size);
 
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
@@ -234,15 +241,11 @@ pub fn link_file(
             && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
-            // Did the binary actually change?
-            let mut content_changed = false;
-            if let Some(original_hash) = &path_json_entry.sha256 {
-                content_changed = original_hash != &current_hash;
-            }
-
             // If the binary changed it requires resigning.
-            if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
-                match codesign(&destination_path) {
+            if patched_file.content_changed
+                && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing
+            {
+                match codesign(&temporary_destination_path) {
                     Ok(_) => {}
                     Err(e) => {
                         if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
@@ -254,11 +257,11 @@ pub fn link_file(
                 // The file on disk changed from the original file so the hash and file size
                 // also became invalid. Let's recompute them.
                 sha256 = Some(
-                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                    rattler_digest::compute_file_digest::<Sha256>(&temporary_destination_path)
                         .map_err(LinkFileError::FailedToComputeSha)?,
                 );
                 file_size = Some(
-                    fs::symlink_metadata(&destination_path)
+                    fs::symlink_metadata(&temporary_destination_path)
                         .map_err(LinkFileError::FailedToOpenDestinationFile)?
                         .len(),
                 );
@@ -267,10 +270,15 @@ pub fn link_file(
 
         // Set timestamps before restoring read-only permissions. Windows refuses
         // to update file times on read-only files.
-        filetime::set_file_times(&destination_path, modification_time, modification_time)
-            .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
-        fs::set_permissions(&destination_path, metadata.permissions())
+        filetime::set_file_times(
+            &temporary_destination_path,
+            modification_time,
+            modification_time,
+        )
+        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+        fs::set_permissions(&temporary_destination_path, metadata.permissions())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        persist_temporary_destination(temporary_destination, &destination_path)?;
 
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
@@ -341,23 +349,192 @@ pub fn link_file(
     })
 }
 
-fn render_patched_contents(
+struct PatchedFile {
+    sha256: Sha256Hash,
+    file_size: u64,
+    content_changed: bool,
+}
+
+trait PatchSink {
+    fn copy_from_source(&mut self, bytes: &[u8]) -> Result<(), std::io::Error>;
+    fn replace_from_source(
+        &mut self,
+        source_len: usize,
+        replacement: &[u8],
+    ) -> Result<(), std::io::Error>;
+}
+
+struct WritePatchSink<W> {
+    destination: W,
+}
+
+impl<W> WritePatchSink<W> {
+    fn new(destination: W) -> Self {
+        Self { destination }
+    }
+}
+
+impl<W: Write> PatchSink for WritePatchSink<W> {
+    fn copy_from_source(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        self.destination.write_all(bytes)
+    }
+
+    fn replace_from_source(
+        &mut self,
+        _source_len: usize,
+        replacement: &[u8],
+    ) -> Result<(), std::io::Error> {
+        self.destination.write_all(replacement)
+    }
+}
+
+struct InPlacePatchSink<'a> {
+    destination: std::fs::File,
+    source_bytes: &'a [u8],
+    source_offset: usize,
+    file_size: u64,
+    hasher: Sha256,
+    content_changed: bool,
+    rewriting_tail: bool,
+}
+
+impl<'a> InPlacePatchSink<'a> {
+    fn new(destination: std::fs::File, source_bytes: &'a [u8]) -> Self {
+        Self {
+            destination,
+            source_bytes,
+            source_offset: 0,
+            file_size: 0,
+            hasher: Sha256::default(),
+            content_changed: false,
+            rewriting_tail: false,
+        }
+    }
+
+    fn finish(mut self) -> Result<PatchedFile, std::io::Error> {
+        self.destination.flush()?;
+        Ok(PatchedFile {
+            sha256: self.hasher.finalize(),
+            file_size: self.file_size,
+            content_changed: self.content_changed,
+        })
+    }
+
+    fn source_segment(&self, len: usize) -> Result<&'a [u8], std::io::Error> {
+        let end = self
+            .source_offset
+            .checked_add(len)
+            .ok_or_else(|| std::io::Error::other("source offset overflow"))?;
+        self.source_bytes
+            .get(self.source_offset..end)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "patch operation exceeded source length",
+                )
+            })
+    }
+
+    fn record_output(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        self.hasher.update(bytes);
+        self.file_size = self
+            .file_size
+            .checked_add(bytes.len() as u64)
+            .ok_or_else(|| std::io::Error::other("patched file size overflow"))?;
+        Ok(())
+    }
+
+    fn switch_to_tail_rewrite(&mut self) -> Result<(), std::io::Error> {
+        self.destination.seek(SeekFrom::Start(self.file_size))?;
+        self.destination.set_len(self.file_size)?;
+        self.rewriting_tail = true;
+        self.content_changed = true;
+        Ok(())
+    }
+}
+
+impl PatchSink for InPlacePatchSink<'_> {
+    fn copy_from_source(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        let source_segment = self.source_segment(bytes.len())?;
+        if source_segment != bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "copy segment diverged from source",
+            ));
+        }
+
+        if self.rewriting_tail {
+            self.destination.write_all(bytes)?;
+        }
+
+        self.source_offset += bytes.len();
+        self.record_output(bytes)
+    }
+
+    fn replace_from_source(
+        &mut self,
+        source_len: usize,
+        replacement: &[u8],
+    ) -> Result<(), std::io::Error> {
+        let source_segment = self.source_segment(source_len)?;
+
+        if self.rewriting_tail {
+            self.destination.write_all(replacement)?;
+        } else if source_len == replacement.len() {
+            if write_changed_ranges(
+                &mut self.destination,
+                self.file_size,
+                source_segment,
+                replacement,
+            )? {
+                self.content_changed = true;
+            }
+        } else {
+            self.switch_to_tail_rewrite()?;
+            self.destination.write_all(replacement)?;
+        }
+
+        self.source_offset += source_len;
+        self.record_output(replacement)
+    }
+}
+
+fn write_changed_ranges(
+    destination: &mut std::fs::File,
+    start_offset: u64,
     source_bytes: &[u8],
-    prefix_placeholder: &str,
-    target_prefix: &str,
-    target_platform: &Platform,
-    file_mode: FileMode,
-) -> Result<Vec<u8>, std::io::Error> {
-    let mut patched_bytes = Vec::with_capacity(source_bytes.len());
-    copy_and_replace_placeholders(
-        source_bytes,
-        &mut patched_bytes,
-        prefix_placeholder,
-        target_prefix,
-        target_platform,
-        file_mode,
-    )?;
-    Ok(patched_bytes)
+    replacement: &[u8],
+) -> Result<bool, std::io::Error> {
+    if source_bytes.len() != replacement.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "changed ranges require equal-length inputs",
+        ));
+    }
+
+    let mut changed = false;
+    let mut index = 0;
+
+    while index < source_bytes.len() {
+        while index < source_bytes.len() && source_bytes[index] == replacement[index] {
+            index += 1;
+        }
+
+        if index == source_bytes.len() {
+            break;
+        }
+
+        changed = true;
+        let start = index;
+        while index < source_bytes.len() && source_bytes[index] != replacement[index] {
+            index += 1;
+        }
+
+        destination.seek(SeekFrom::Start(start_offset + start as u64))?;
+        destination.write_all(&replacement[start..index])?;
+    }
+
+    Ok(changed)
 }
 
 fn make_destination_writable_for_patching(
@@ -389,72 +566,77 @@ fn writable_permissions_for_patching(source_permissions: &Permissions) -> Permis
     writable_permissions
 }
 
+fn temporary_destination(destination_path: &Path) -> Result<NamedTempFile, LinkFileError> {
+    let parent = destination_path.parent().ok_or_else(|| {
+        LinkFileError::IoError(
+            String::from("resolving temporary destination parent"),
+            std::io::Error::other("destination path has no parent directory"),
+        )
+    })?;
+
+    tempfile::Builder::new()
+        .prefix(".rattler-link-")
+        .tempfile_in(parent)
+        .map_err(|err| LinkFileError::IoError(String::from("creating temporary destination"), err))
+}
+
+fn persist_temporary_destination(
+    temporary_destination: NamedTempFile,
+    destination_path: &Path,
+) -> Result<(), LinkFileError> {
+    temporary_destination
+        .persist(destination_path)
+        .map(|_| ())
+        .map_err(|err| {
+            LinkFileError::IoError(String::from("persisting patched destination"), err.error)
+        })
+}
+
+#[cfg(test)]
 fn patch_copied_destination(
     destination_path: &Path,
     source_bytes: &[u8],
-    patched_bytes: &[u8],
-) -> Result<(), LinkFileError> {
-    let mut destination = fs::OpenOptions::new()
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+) -> Result<PatchedFile, LinkFileError> {
+    let destination = std::fs::OpenOptions::new()
         .write(true)
         .open(destination_path)
         .map_err(LinkFileError::FailedToOpenDestinationFile)?;
 
-    if source_bytes.len() == patched_bytes.len() {
-        let mut index = 0;
-        while index < source_bytes.len() {
-            while index < source_bytes.len() && source_bytes[index] == patched_bytes[index] {
-                index += 1;
-            }
+    patch_copied_destination_with_file(
+        destination,
+        source_bytes,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        file_mode,
+    )
+}
 
-            if index == source_bytes.len() {
-                break;
-            }
+fn patch_copied_destination_with_file(
+    destination: std::fs::File,
+    source_bytes: &[u8],
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+) -> Result<PatchedFile, LinkFileError> {
+    let mut sink = InPlacePatchSink::new(destination, source_bytes);
+    copy_and_replace_placeholders_with_sink(
+        source_bytes,
+        &mut sink,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        file_mode,
+    )
+    .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
 
-            let start = index;
-            while index < source_bytes.len() && source_bytes[index] != patched_bytes[index] {
-                index += 1;
-            }
-
-            destination
-                .seek(SeekFrom::Start(start as u64))
-                .map_err(|err| {
-                    LinkFileError::IoError(String::from("seeking patched destination"), err)
-                })?;
-            destination
-                .write_all(&patched_bytes[start..index])
-                .map_err(|err| {
-                    LinkFileError::IoError(String::from("writing patched destination"), err)
-                })?;
-        }
-    } else {
-        let common_prefix_len = source_bytes
-            .iter()
-            .zip(patched_bytes.iter())
-            .take_while(|(source, patched)| source == patched)
-            .count();
-
-        destination
-            .seek(SeekFrom::Start(common_prefix_len as u64))
-            .map_err(|err| {
-                LinkFileError::IoError(String::from("seeking patched destination"), err)
-            })?;
-        destination
-            .set_len(common_prefix_len as u64)
-            .map_err(|err| {
-                LinkFileError::IoError(String::from("truncating patched destination"), err)
-            })?;
-        destination
-            .write_all(&patched_bytes[common_prefix_len..])
-            .map_err(|err| {
-                LinkFileError::IoError(String::from("writing patched destination"), err)
-            })?;
-    }
-
-    destination
-        .flush()
-        .map_err(|err| LinkFileError::IoError(String::from("flushing patched destination"), err))?;
-
-    Ok(())
+    sink.finish()
+        .map_err(|err| LinkFileError::IoError(String::from("flushing patched destination"), err))
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -699,7 +881,26 @@ fn copy_to_destination(
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
 pub fn copy_and_replace_placeholders(
     source_bytes: &[u8],
-    mut destination: impl Write,
+    destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+) -> Result<(), std::io::Error> {
+    let mut sink = WritePatchSink::new(destination);
+    copy_and_replace_placeholders_with_sink(
+        source_bytes,
+        &mut sink,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        file_mode,
+    )
+}
+
+fn copy_and_replace_placeholders_with_sink(
+    source_bytes: &[u8],
+    sink: &mut impl PatchSink,
     prefix_placeholder: &str,
     target_prefix: &str,
     target_platform: &Platform,
@@ -707,9 +908,9 @@ pub fn copy_and_replace_placeholders(
 ) -> Result<(), std::io::Error> {
     match file_mode {
         FileMode::Text => {
-            copy_and_replace_textual_placeholder(
+            copy_and_replace_textual_placeholder_with_sink(
                 source_bytes,
-                destination,
+                sink,
                 prefix_placeholder,
                 target_prefix,
                 target_platform,
@@ -719,11 +920,11 @@ pub fn copy_and_replace_placeholders(
             // conda does not replace the prefix in the binary files on windows
             // DLLs are loaded quite differently anyways (there is no rpath, for example).
             if target_platform.is_windows() {
-                destination.write_all(source_bytes)?;
+                sink.copy_from_source(source_bytes)?;
             } else {
-                copy_and_replace_cstring_placeholder(
+                copy_and_replace_cstring_placeholder_with_sink(
                     source_bytes,
-                    destination,
+                    sink,
                     prefix_placeholder,
                     target_prefix,
                 )?;
@@ -836,8 +1037,25 @@ fn replace_shebang<'a>(
 /// important. See [`copy_and_replace_cstring_placeholder`] when you are dealing with binary
 /// content.
 pub fn copy_and_replace_textual_placeholder(
+    source_bytes: &[u8],
+    destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+) -> Result<(), std::io::Error> {
+    let mut sink = WritePatchSink::new(destination);
+    copy_and_replace_textual_placeholder_with_sink(
+        source_bytes,
+        &mut sink,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+    )
+}
+
+fn copy_and_replace_textual_placeholder_with_sink(
     mut source_bytes: &[u8],
-    mut destination: impl Write,
+    sink: &mut impl PatchSink,
     prefix_placeholder: &str,
     target_prefix: &str,
     target_platform: &Platform,
@@ -858,22 +1076,21 @@ pub fn copy_and_replace_textual_placeholder(
             (prefix_placeholder, target_prefix),
             target_platform,
         );
-        // let replaced = first_line.replace(prefix_placeholder, target_prefix);
-        destination.write_all(new_shebang.as_bytes())?;
+        sink.replace_from_source(first.len(), new_shebang.as_bytes())?;
         source_bytes = rest;
     }
 
     let mut last_match = 0;
 
     for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
-        destination.write_all(&source_bytes[last_match..index])?;
-        destination.write_all(new_prefix)?;
+        sink.copy_from_source(&source_bytes[last_match..index])?;
+        sink.replace_from_source(old_prefix.len(), new_prefix)?;
         last_match = index + old_prefix.len();
     }
 
     // Write remaining bytes
     if last_match < source_bytes.len() {
-        destination.write_all(&source_bytes[last_match..])?;
+        sink.copy_from_source(&source_bytes[last_match..])?;
     }
 
     Ok(())
@@ -888,8 +1105,23 @@ pub fn copy_and_replace_textual_placeholder(
 /// This function replaces binary c-style strings. If you want to simply find-and-replace text in a
 /// file instead use the [`copy_and_replace_textual_placeholder`] function.
 pub fn copy_and_replace_cstring_placeholder(
+    source_bytes: &[u8],
+    destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+) -> Result<(), std::io::Error> {
+    let mut sink = WritePatchSink::new(destination);
+    copy_and_replace_cstring_placeholder_with_sink(
+        source_bytes,
+        &mut sink,
+        prefix_placeholder,
+        target_prefix,
+    )
+}
+
+fn copy_and_replace_cstring_placeholder_with_sink(
     mut source_bytes: &[u8],
-    mut destination: impl Write,
+    sink: &mut impl PatchSink,
     prefix_placeholder: &str,
     target_prefix: &str,
 ) -> Result<(), std::io::Error> {
@@ -909,7 +1141,7 @@ pub fn copy_and_replace_cstring_placeholder(
     loop {
         if let Some(index) = finder.find(source_bytes) {
             // write all bytes up to the old prefix, followed by the new prefix.
-            destination.write_all(&source_bytes[..index])?;
+            sink.copy_from_source(&source_bytes[..index])?;
 
             // Find the end of the c-style string. The null terminator basically.
             let mut end = index + old_prefix.len();
@@ -917,7 +1149,7 @@ pub fn copy_and_replace_cstring_placeholder(
                 end += 1;
             }
 
-            let mut out = Vec::new();
+            let mut out = Vec::with_capacity(end - index);
             let mut old_bytes = &source_bytes[index..end];
             let old_len = old_bytes.len();
 
@@ -928,26 +1160,16 @@ pub fn copy_and_replace_cstring_placeholder(
                 old_bytes = &old_bytes[index + old_prefix.len()..];
             }
             out.write_all(old_bytes)?;
-            // write everything up to the old length
-            if out.len() > old_len {
-                destination.write_all(&out[..old_len])?;
-            } else {
-                destination.write_all(&out)?;
-            }
-
-            // Compute the padding required when replacing the old prefix(es) with the new one. If the old
-            // prefix is longer than the new one we need to add padding to ensure that the entire part
-            // will hold the same number of bytes. We do this by adding '\0's (e.g. null terminators). This
-            // ensures that the text will remain a valid null-terminated string.
-            let padding = old_len.saturating_sub(out.len());
-            destination.write_all(&vec![0; padding])?;
+            out.truncate(old_len);
+            out.resize(old_len, 0);
+            sink.replace_from_source(old_len, &out)?;
 
             // Continue with the rest of the bytes.
             source_bytes = &source_bytes[end..];
         } else {
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
-            destination.write_all(source_bytes)?;
+            sink.copy_from_source(source_bytes)?;
 
             return Ok(());
         }
@@ -1011,7 +1233,9 @@ mod test {
     use super::ExternalSymlinkPolicy;
     use super::PYTHON_REGEX;
     use fs_err as fs;
+    use rattler_conda_types::package::FileMode;
     use rattler_conda_types::Platform;
+    use rattler_digest::Sha256;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -1140,6 +1364,112 @@ mod test {
         assert!(!content.contains("/old/placeholder/path"));
     }
 
+    #[test]
+    fn test_failed_binary_patch_does_not_overwrite_existing_destination() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(package_dir.join("binary.bin"), b"prefix=/short\x00suffix").unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let destination_path = target_dir.path().join("binary.bin");
+        fs::write(&destination_path, b"existing destination").unwrap();
+
+        let mut existing_permissions = fs::metadata(&destination_path).unwrap().permissions();
+        existing_permissions.set_readonly(true);
+        fs::set_permissions(&destination_path, existing_permissions).unwrap();
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("binary.bin"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Binary,
+                placeholder: "/short".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("binary.bin"),
+            &package_dir,
+            &target_dir,
+            "/a/very/long/prefix",
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::from_unix_time(2_000_000, 0),
+            ExternalSymlinkPolicy::Deny,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read(&destination_path).unwrap(),
+            b"existing destination"
+        );
+        assert!(fs::metadata(&destination_path)
+            .unwrap()
+            .permissions()
+            .readonly());
+    }
+
+    #[test]
+    fn test_failed_binary_patch_does_not_leave_destination_file() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(package_dir.join("binary.bin"), b"prefix=/short\x00suffix").unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let destination_path = target_dir.path().join("binary.bin");
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("binary.bin"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Binary,
+                placeholder: "/short".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("binary.bin"),
+            &package_dir,
+            &target_dir,
+            "/a/very/long/prefix",
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::from_unix_time(2_000_000, 0),
+            ExternalSymlinkPolicy::Deny,
+        );
+
+        assert!(result.is_err());
+        assert!(!destination_path.exists());
+    }
+
     /// Files without `prefix_placeholder` are reflinked/hardlinked/copied and
     /// must keep their original mtime, not receive `modification_time`.
     #[test]
@@ -1215,9 +1545,23 @@ mod test {
 
         fs::write(&destination_path, source).unwrap();
 
-        super::patch_copied_destination(&destination_path, source, patched).unwrap();
+        let result = super::patch_copied_destination(
+            &destination_path,
+            source,
+            "placeholder",
+            "target-path",
+            &Platform::Linux64,
+            FileMode::Text,
+        )
+        .unwrap();
 
         assert_eq!(fs::read(&destination_path).unwrap(), patched);
+        assert!(result.content_changed);
+        assert_eq!(result.file_size, patched.len() as u64);
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_bytes_digest::<Sha256>(patched)
+        );
     }
 
     #[test]
@@ -1230,9 +1574,23 @@ mod test {
 
         fs::write(&destination_path, source).unwrap();
 
-        super::patch_copied_destination(&destination_path, source, patched).unwrap();
+        let result = super::patch_copied_destination(
+            &destination_path,
+            source,
+            "/old",
+            "/a/much/longer/prefix",
+            &Platform::Linux64,
+            FileMode::Text,
+        )
+        .unwrap();
 
         assert_eq!(fs::read(&destination_path).unwrap(), patched);
+        assert!(result.content_changed);
+        assert_eq!(result.file_size, patched.len() as u64);
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_bytes_digest::<Sha256>(patched)
+        );
     }
 
     #[rstest]
