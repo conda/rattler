@@ -215,15 +215,17 @@ pub fn link_file(
         )
         .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
 
+        let metadata = fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
         copy_to_destination(&source_path, &destination_path)?;
+        make_destination_writable_for_patching(&destination_path, &metadata.permissions())?;
         patch_copied_destination(&destination_path, source.as_ref(), &patched_bytes)?;
 
         let current_hash = rattler_digest::compute_bytes_digest::<Sha256>(&patched_bytes);
         sha256 = Some(current_hash);
         file_size = Some(patched_bytes.len() as u64);
 
-        let metadata = fs::symlink_metadata(&source_path)
-            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
@@ -355,6 +357,35 @@ fn render_patched_contents(
         file_mode,
     )?;
     Ok(patched_bytes)
+}
+
+fn make_destination_writable_for_patching(
+    destination_path: &Path,
+    source_permissions: &Permissions,
+) -> Result<(), LinkFileError> {
+    fs::set_permissions(
+        destination_path,
+        writable_permissions_for_patching(source_permissions),
+    )
+    .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)
+}
+
+fn writable_permissions_for_patching(source_permissions: &Permissions) -> Permissions {
+    let mut writable_permissions = source_permissions.clone();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        writable_permissions.set_mode(source_permissions.mode() | 0o200);
+    }
+
+    #[cfg(windows)]
+    {
+        writable_permissions.set_readonly(false);
+    }
+
+    writable_permissions
 }
 
 fn patch_copied_destination(
@@ -1041,6 +1072,62 @@ mod test {
             dest_mtime, modification_time,
             "patched file should have modification_time ({modification_time}), not source mtime ({source_time})",
         );
+    }
+
+    #[test]
+    fn test_patched_read_only_file_restores_permissions() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        let source_path = package_dir.join("config.py");
+        fs::write(&source_path, "prefix = '/old/placeholder/path'\n").unwrap();
+
+        let mut read_only_permissions = fs::metadata(&source_path).unwrap().permissions();
+        read_only_permissions.set_readonly(true);
+        fs::set_permissions(&source_path, read_only_permissions).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Text,
+                placeholder: "/old/placeholder/path".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        super::link_file(
+            &entry,
+            PathBuf::from("config.py"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            filetime::FileTime::from_unix_time(2_000_000, 0),
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap();
+
+        let destination_path = target_dir.path().join("config.py");
+        let destination_permissions = fs::metadata(&destination_path).unwrap().permissions();
+        assert!(destination_permissions.readonly());
+
+        let content = fs::read_to_string(destination_path).unwrap();
+        assert!(content.contains(target_dir.path().to_str().unwrap()));
+        assert!(!content.contains("/old/placeholder/path"));
     }
 
     /// Files without `prefix_placeholder` are reflinked/hardlinked/copied and
