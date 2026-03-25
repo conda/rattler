@@ -27,6 +27,7 @@ pub mod minimal_prefix_record;
 pub mod package;
 mod package_name;
 pub mod prefix;
+pub mod prefix_data;
 pub mod prefix_record;
 mod record_traits;
 
@@ -56,6 +57,7 @@ pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
+pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
