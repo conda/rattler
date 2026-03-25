@@ -218,7 +218,7 @@ pub fn link_file(
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
-        copy_to_destination(&source_path, &destination_path)?;
+        copy_file_to_destination(&source_path, &destination_path)?;
         make_destination_writable_for_patching(&destination_path, &metadata.permissions())?;
         patch_copied_destination(&destination_path, source.as_ref(), &patched_bytes)?;
 
@@ -653,12 +653,12 @@ fn symlink_to_destination(
     }
 }
 
-/// Copy the specified file from the source (or cached) directory. If the file already exists it is
-/// removed and the operation is retried.
-fn copy_to_destination(
+/// Copy the specified file from the source (or cached) directory without copying metadata.
+/// If the file already exists it is removed and the operation is retried.
+fn copy_file_to_destination(
     source_path: &Path,
     destination_path: &Path,
-) -> Result<LinkMethod, LinkFileError> {
+) -> Result<(), LinkFileError> {
     loop {
         match fs::copy(source_path, destination_path) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -667,19 +667,28 @@ fn copy_to_destination(
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
-            Ok(_) => {
-                // Copy file modification times, fs::copy transfers file permissions automatically
-                let metadata = fs::symlink_metadata(source_path)
-                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
-                filetime::set_file_times(destination_path, file_time, file_time)
-                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
-
-                return Ok(LinkMethod::Copy);
-            }
+            Ok(_) => return Ok(()),
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
+}
+
+/// Copy the specified file from the source (or cached) directory. If the file already exists it is
+/// removed and the operation is retried.
+fn copy_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
+    copy_file_to_destination(source_path, destination_path)?;
+
+    // Copy file modification times, fs::copy transfers file permissions automatically
+    let metadata =
+        fs::symlink_metadata(source_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+    filetime::set_file_times(destination_path, file_time, file_time)
+        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+    Ok(LinkMethod::Copy)
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
