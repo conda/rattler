@@ -265,11 +265,12 @@ pub fn link_file(
             }
         }
 
-        // Copy file permissions and timestamps
-        fs::set_permissions(&destination_path, metadata.permissions())
-            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        // Set timestamps before restoring read-only permissions. Windows refuses
+        // to update file times on read-only files.
         filetime::set_file_times(&destination_path, modification_time, modification_time)
             .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+        fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
