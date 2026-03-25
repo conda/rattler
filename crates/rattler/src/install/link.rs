@@ -210,15 +210,13 @@ pub fn link_file(
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+        let source_permissions = metadata.permissions();
 
         let temporary_destination = temporary_destination(&destination_path)?;
         let temporary_destination_path = temporary_destination.path().to_path_buf();
 
         copy_file_to_destination(&source_path, &temporary_destination_path)?;
-        make_destination_writable_for_patching(
-            &temporary_destination_path,
-            &metadata.permissions(),
-        )?;
+        make_destination_writable_for_patching(&temporary_destination_path, &source_permissions)?;
         let patched_file = patch_copied_destination_with_file(
             temporary_destination.reopen().map_err(|err| {
                 LinkFileError::IoError(String::from("reopening temporary patched destination"), err)
@@ -236,8 +234,7 @@ pub fn link_file(
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
+        if (has_executable_permissions(&source_permissions) || file_type == Some(FileType::MachO))
             && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
@@ -276,9 +273,20 @@ pub fn link_file(
             modification_time,
         )
         .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
-        fs::set_permissions(&temporary_destination_path, metadata.permissions())
+
+        #[cfg(not(windows))]
+        fs::set_permissions(&temporary_destination_path, source_permissions.clone())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+
         persist_temporary_destination(temporary_destination, &destination_path)?;
+
+        #[cfg(windows)]
+        {
+            // `tempfile::NamedTempFile::persist` resets file attributes to normal on Windows,
+            // so restore the original permissions after the temporary file is moved in place.
+            fs::set_permissions(&destination_path, source_permissions)
+                .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        }
 
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
