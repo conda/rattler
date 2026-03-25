@@ -6,14 +6,14 @@ use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
 use rattler_digest::Sha256;
-use rattler_digest::{HashingWriter, Sha256Hash};
+use rattler_digest::Sha256Hash;
 use reflink_copy::reflink;
 use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
@@ -185,14 +185,6 @@ pub fn link_file(
         // Detect file type from the content
         let file_type = FileType::detect(source.as_ref());
 
-        // Open the destination file
-        let destination = BufWriter::with_capacity(
-            50 * 1024,
-            fs::File::create(&destination_path)
-                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
-        );
-        let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
-
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
         // string escaping. For instance if we replace the prefix in the following text
         //
@@ -214,10 +206,8 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placeholders(
+        let patched_bytes = render_patched_contents(
             source.as_ref(),
-            &mut destination_writer,
             placeholder,
             &target_prefix,
             &target_platform,
@@ -225,15 +215,12 @@ pub fn link_file(
         )
         .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
 
-        let (mut file, current_hash) = destination_writer.finalize();
+        copy_to_destination(&source_path, &destination_path)?;
+        patch_copied_destination(&destination_path, source.as_ref(), &patched_bytes)?;
 
-        // We computed the hash of the file while writing and from the file we can also infer the
-        // size of it.
+        let current_hash = rattler_digest::compute_bytes_digest::<Sha256>(&patched_bytes);
         sha256 = Some(current_hash);
-        file_size = file.stream_position().ok();
-
-        // We no longer need the file.
-        drop(file);
+        file_size = Some(patched_bytes.len() as u64);
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
@@ -349,6 +336,93 @@ pub fn link_file(
         method: link_method,
         prefix_placeholder,
     })
+}
+
+fn render_patched_contents(
+    source_bytes: &[u8],
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+) -> Result<Vec<u8>, std::io::Error> {
+    let mut patched_bytes = Vec::with_capacity(source_bytes.len());
+    copy_and_replace_placeholders(
+        source_bytes,
+        &mut patched_bytes,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        file_mode,
+    )?;
+    Ok(patched_bytes)
+}
+
+fn patch_copied_destination(
+    destination_path: &Path,
+    source_bytes: &[u8],
+    patched_bytes: &[u8],
+) -> Result<(), LinkFileError> {
+    let mut destination = fs::OpenOptions::new()
+        .write(true)
+        .open(destination_path)
+        .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+
+    if source_bytes.len() == patched_bytes.len() {
+        let mut index = 0;
+        while index < source_bytes.len() {
+            while index < source_bytes.len() && source_bytes[index] == patched_bytes[index] {
+                index += 1;
+            }
+
+            if index == source_bytes.len() {
+                break;
+            }
+
+            let start = index;
+            while index < source_bytes.len() && source_bytes[index] != patched_bytes[index] {
+                index += 1;
+            }
+
+            destination
+                .seek(SeekFrom::Start(start as u64))
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("seeking patched destination"), err)
+                })?;
+            destination
+                .write_all(&patched_bytes[start..index])
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("writing patched destination"), err)
+                })?;
+        }
+    } else {
+        let common_prefix_len = source_bytes
+            .iter()
+            .zip(patched_bytes.iter())
+            .take_while(|(source, patched)| source == patched)
+            .count();
+
+        destination
+            .seek(SeekFrom::Start(common_prefix_len as u64))
+            .map_err(|err| {
+                LinkFileError::IoError(String::from("seeking patched destination"), err)
+            })?;
+        destination
+            .set_len(common_prefix_len as u64)
+            .map_err(|err| {
+                LinkFileError::IoError(String::from("truncating patched destination"), err)
+            })?;
+        destination
+            .write_all(&patched_bytes[common_prefix_len..])
+            .map_err(|err| {
+                LinkFileError::IoError(String::from("writing patched destination"), err)
+            })?;
+    }
+
+    destination
+        .flush()
+        .map_err(|err| LinkFileError::IoError(String::from("flushing patched destination"), err))?;
+
+    Ok(())
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -1030,6 +1104,38 @@ mod test {
             dest_mtime, source_time,
             "unpatched file should keep source mtime ({source_time}), not modification_time ({modification_time})",
         );
+    }
+
+    #[test]
+    fn test_patch_copied_destination_updates_only_changed_ranges_when_lengths_match() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let destination_path = temp_dir.path().join("patched.txt");
+
+        let source = b"aaa placeholder bbb placeholder ccc";
+        let patched = b"aaa target-path bbb target-path ccc";
+
+        assert_eq!(source.len(), patched.len());
+
+        fs::write(&destination_path, source).unwrap();
+
+        super::patch_copied_destination(&destination_path, source, patched).unwrap();
+
+        assert_eq!(fs::read(&destination_path).unwrap(), patched);
+    }
+
+    #[test]
+    fn test_patch_copied_destination_rewrites_from_first_difference_when_length_changes() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let destination_path = temp_dir.path().join("patched.txt");
+
+        let source = b"prefix=/old\nsuffix=unchanged\n";
+        let patched = b"prefix=/a/much/longer/prefix\nsuffix=unchanged\n";
+
+        fs::write(&destination_path, source).unwrap();
+
+        super::patch_copied_destination(&destination_path, source, patched).unwrap();
+
+        assert_eq!(fs::read(&destination_path).unwrap(), patched);
     }
 
     #[rstest]
