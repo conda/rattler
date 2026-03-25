@@ -283,11 +283,128 @@ impl Borrow<str> for PackageName {
     }
 }
 
+/// A package name in its original source form (not normalized).
+///
+/// This is a newtype around [`String`] that preserves the exact casing and
+/// formatting as written by the user (e.g. `MyPackage` instead of `mypackage`).
+///
+/// Use this type when you only care about the source name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourcePackageName(String);
+
+impl SourcePackageName {
+    /// Returns the source package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SourcePackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for SourcePackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.as_source().to_string())
+    }
+}
+
+impl From<SourcePackageName> for PackageName {
+    fn from(name: SourcePackageName) -> Self {
+        PackageName::try_from(name.0).expect("SourcePackageName is always a valid PackageName")
+    }
+}
+
+impl AsRef<str> for SourcePackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A normalized package name (always lowercase).
+///
+/// This is a newtype around [`String`] that guarantees the package name is in
+/// its normalized (lowercase) form.
+///
+/// Use this type when you only care about the normalized name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NormalizedPackageName(String);
+
+impl NormalizedPackageName {
+    /// Returns the normalized package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for NormalizedPackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for NormalizedPackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.as_normalized().to_string())
+    }
+}
+
+impl From<NormalizedPackageName> for PackageName {
+    fn from(name: NormalizedPackageName) -> Self {
+        PackageName {
+            normalized: None,
+            source: name.0,
+        }
+    }
+}
+
+impl AsRef<str> for NormalizedPackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;
 
     use super::*;
+
+    #[test]
+    fn test_normalized_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let normalized = NormalizedPackageName::from(name);
+        assert_eq!(normalized.as_str(), "cudnn");
+        assert_eq!(normalized.to_string(), "cudnn");
+
+        // Convert back to PackageName
+        let back = PackageName::from(normalized);
+        assert_eq!(back.as_source(), "cudnn");
+        assert_eq!(back.as_normalized(), "cudnn");
+
+        // Round-trip: two different source names produce the same normalized name
+        let a = NormalizedPackageName::from(PackageName::try_from("cuDNN").unwrap());
+        let b = NormalizedPackageName::from(PackageName::try_from("cudnn").unwrap());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_source_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let source = SourcePackageName::from(name);
+        assert_eq!(source.as_str(), "cuDNN");
+        assert_eq!(source.to_string(), "cuDNN");
+
+        // Equality is exact (not normalized)
+        let name_lower = PackageName::try_from("cudnn").unwrap();
+        assert_ne!(source, SourcePackageName::from(name_lower));
+    }
 
     #[test]
     fn test_package_name_basics() {
