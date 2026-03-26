@@ -1299,44 +1299,6 @@ packages:
         assert_eq!(source.name.as_ref(), "local-pkg");
     }
 
-    /// Same as above but for lockfile format version 7. In v7, local-path
-    /// pypi source packages never have a `version` field.
-    #[test]
-    fn v7_local_path_pypi_package_hash_is_stripped() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./local-pkg
-packages:
-  - pypi: ./local-pkg
-    name: local-pkg
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let source = pkg
-            .as_source()
-            .expect("local-path pypi package must be the Source variant");
-        assert_eq!(source.name.as_ref(), "local-pkg");
-    }
-
     /// Same as above but for v7 where the YAML *does* include a version field.
     /// Even when present in the YAML, the version must be stripped for local
     /// paths.

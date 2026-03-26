@@ -365,12 +365,7 @@ pub fn parse_from_document_v7(
 /// rather than a mutable source directory.
 fn is_wheel_or_archive_location(location: &UrlOrPath) -> bool {
     let archives = [
-        ".whl",
-        ".tar.gz",
-        ".tar.bz2",
-        ".tar.zstd",
-        ".tar.zs",
-        ".zip",
+        ".whl", ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.Z", ".tgz", ".tbz", ".tar", ".zip",
     ];
     match location {
         UrlOrPath::Url(url) => {
@@ -414,7 +409,9 @@ fn convert_raw_pypi_package(
     // absent → Source.  For older formats we fall back to the location
     // heuristic.
     let is_distribution = if file_version >= FileFormatVersion::V7 {
-        raw_package.version.is_some()
+        raw_package.hash.is_some()
+            || raw_package.version.is_some()
+            || raw_package.index_url.is_some()
     } else {
         is_wheel_or_archive_location(location.inner())
     };
