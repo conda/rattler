@@ -41,13 +41,14 @@ impl PackageFile for PathsJson {
     }
 
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
-        let mut paths_json: Self = serde_json::from_str(str).map_err(Into::into)?;
+        let mut paths_json: PathsJson = serde_json::from_str(str).map_err(std::io::Error::from)?;
         paths_json.sort();
         Ok(paths_json)
     }
 
     fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
-        let mut paths_json: Self = serde_json::from_slice(slice).map_err(Into::into)?;
+        let mut paths_json: PathsJson =
+            serde_json::from_slice(slice).map_err(std::io::Error::from)?;
         paths_json.sort();
         Ok(paths_json)
     }
@@ -365,13 +366,14 @@ mod test {
 
     #[test]
     pub fn test_internal_paths_sorted() {
-        use super::PathsEntry;
+        use super::{PathType, PathsEntry};
         use std::path::PathBuf;
 
-        let mut paths = vec![
+        // test sort() method directly
+        let paths = vec![
             PathsEntry {
                 relative_path: PathBuf::from("b"),
-                path_type: super::PathType::HardLink,
+                path_type: PathType::HardLink,
                 prefix_placeholder: None,
                 no_link: false,
                 sha256: None,
@@ -379,7 +381,7 @@ mod test {
             },
             PathsEntry {
                 relative_path: PathBuf::from("a"),
-                path_type: super::PathType::HardLink,
+                path_type: PathType::HardLink,
                 prefix_placeholder: None,
                 no_link: false,
                 sha256: None,
@@ -388,7 +390,7 @@ mod test {
         ];
 
         let mut paths_json = PathsJson {
-            paths: paths.clone(),
+            paths,
             paths_version: 1,
         };
 
@@ -397,11 +399,11 @@ mod test {
 
         paths_json.sort();
 
-        // After sorting
+        // After sorting, entries should be in alphabetical order
         assert_eq!(paths_json.paths[0].relative_path, PathBuf::from("a"));
         assert_eq!(paths_json.paths[1].relative_path, PathBuf::from("b"));
 
-        // Test sorting via from_deprecated
+        // Test that from_deprecated also sorts entries
         let reconstructed = PathsJson::from_deprecated(
             crate::package::Files {
                 files: vec![PathBuf::from("z"), PathBuf::from("y")],
@@ -409,7 +411,7 @@ mod test {
             None,
             None,
             None,
-            |_| Ok::<_, std::io::Error>(super::PathType::HardLink),
+            |_| Ok::<_, std::io::Error>(PathType::HardLink),
         )
         .unwrap();
 
