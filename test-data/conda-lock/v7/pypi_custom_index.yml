@@ -26,5 +26,3 @@ packages:
     requires_python: ">=3.9"
   - pypi: ./local-pkg
     name: local-pkg
-    version: 0.1.0
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
