@@ -34,3 +34,4 @@ packages:
         url: https://example.com/foobar.tar.gz
         sha256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
         md5: 1234567890abcdef1234567890abcdef
+    timestamp: 1622537600

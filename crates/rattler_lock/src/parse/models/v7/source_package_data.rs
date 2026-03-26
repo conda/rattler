@@ -83,9 +83,9 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
 
-    #[serde(default, skip_serializing_if = "is_default")]
-    #[serde_as(as = "crate::utils::serde::Timestamp")]
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "is_default")]
+    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
@@ -118,7 +118,7 @@ impl<'a> SourcePackageDataModel<'a> {
         // Extract name and location from the identifier, preserving the identifier itself
         let (name, hash, location) = self.conda_source.clone().into_parts();
 
-        let timestamp = self.timestamp;
+        let timestamp = self.timestamp.unwrap_or_else(chrono::Utc::now);
 
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
@@ -205,7 +205,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     constrains: Cow::Borrowed(&r.constrains),
                     experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
                     size: Cow::Borrowed(&r.size),
-                    timestamp: value.timestamp,
+                    timestamp: Some(value.timestamp),
                     features: Cow::Borrowed(&r.features),
                     track_features: Cow::Borrowed(&r.track_features),
                     license: Cow::Borrowed(&r.license),
@@ -228,7 +228,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 constrains: Cow::Borrowed(&[]),
                 experimental_extra_depends: Cow::Owned(BTreeMap::new()),
                 size: Cow::Owned(None),
-                timestamp: value.timestamp,
+                timestamp: Some(value.timestamp),
                 features: Cow::Owned(None),
                 track_features: Cow::Borrowed(&[]),
                 license: Cow::Owned(None),
