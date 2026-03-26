@@ -6,22 +6,33 @@ use std::cmp::Ordering;
 use std::fs;
 use std::path::Path;
 
-/// A pinned Pypi package
+/// A pinned `PyPI` package, either a wheel (immutable artifact) or a source
+/// directory (mutable local path).
 #[derive(Eq, PartialEq, Clone, Debug, Hash)]
-pub struct PypiPackageData {
+pub enum PypiPackageData {
+    /// A wheel package — an immutable artifact with a known version.
+    Distribution(Box<PypiDistributionData>),
+
+    /// A local source directory whose content can change at any time.
+    Source(Box<PypiSourceData>),
+}
+
+/// Data for a wheel package (index-served or local `.whl` file).
+#[derive(Eq, PartialEq, Clone, Debug, Hash)]
+pub struct PypiDistributionData {
     /// The name of the package.
     pub name: PackageName,
 
     /// The version of the package.
-    pub version: Option<pep440_rs::Version>,
+    pub version: pep440_rs::Version,
 
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
 
-    /// The index this came from. Is `None` for source dependencies
+    /// The index this came from. Is `None` for local wheel files.
     pub index_url: Option<url::Url>,
 
-    /// Hashes of the file pointed to by `url`.
+    /// Hashes of the file pointed to by the location.
     pub hash: Option<PackageHashes>,
 
     /// A list of dependencies on other packages.
@@ -29,6 +40,52 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
+}
+
+/// Data for a local source directory package.
+#[derive(Eq, PartialEq, Clone, Debug, Hash)]
+pub struct PypiSourceData {
+    /// The name of the package.
+    pub name: PackageName,
+
+    /// The location of the source directory.
+    pub location: Verbatim<UrlOrPath>,
+
+    /// A list of dependencies on other packages.
+    pub requires_dist: Vec<Requirement>,
+
+    /// The python version that this package requires.
+    pub requires_python: Option<VersionSpecifiers>,
+}
+
+impl PartialOrd for PypiDistributionData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PypiDistributionData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.location.cmp(&other.location))
+            .then_with(|| self.hash.cmp(&other.hash))
+    }
+}
+
+impl PartialOrd for PypiSourceData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PypiSourceData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| self.location.cmp(&other.location))
+    }
 }
 
 impl PartialOrd for PypiPackageData {
@@ -39,39 +96,135 @@ impl PartialOrd for PypiPackageData {
 
 impl Ord for PypiPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.name
-            .cmp(&other.name)
-            .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.location.cmp(&other.location))
-            .then_with(|| self.hash.cmp(&other.hash))
+        match (self, other) {
+            (Self::Distribution(a), Self::Distribution(b)) => a.cmp(b),
+            (Self::Source(a), Self::Source(b)) => a.cmp(b),
+            (Self::Distribution(_), Self::Source(_)) => Ordering::Less,
+            (Self::Source(_), Self::Distribution(_)) => Ordering::Greater,
+        }
     }
 }
 
 impl PypiPackageData {
+    /// Returns the name of the package.
+    pub fn name(&self) -> &PackageName {
+        match self {
+            Self::Distribution(w) => &w.name,
+            Self::Source(s) => &s.name,
+        }
+    }
+
+    /// Return the `version` (which will be `None` for `PypiSourcePackage`s)
+    pub fn version(&self) -> Option<&pep440_rs::Version> {
+        self.as_wheel().map(|w| &w.version)
+    }
+
+    /// Return the `version_string` (which will be `<unknown>` for `PypiSourcePackage`s)
+    pub fn version_string(&self) -> String {
+        self.version().map_or_else(
+            || String::from("<unknown>"),
+            std::string::ToString::to_string,
+        )
+    }
+
+    /// Returns the location of the package.
+    pub fn location(&self) -> &Verbatim<UrlOrPath> {
+        match self {
+            Self::Distribution(w) => &w.location,
+            Self::Source(s) => &s.location,
+        }
+    }
+
+    /// Return `requires_dist`
+    pub fn requires_dist(&self) -> &[Requirement] {
+        match self {
+            PypiPackageData::Distribution(w) => &w.requires_dist,
+            PypiPackageData::Source(s) => &s.requires_dist,
+        }
+    }
+
+    /// Return `requires_python`
+    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            PypiPackageData::Distribution(w) => w.requires_python.as_ref(),
+            PypiPackageData::Source(s) => s.requires_python.as_ref(),
+        }
+    }
+
     /// Returns true if this package satisfies the given `spec`.
     pub fn satisfies(&self, spec: &Requirement) -> bool {
-        // Check if the name matches
-        if spec.name != self.name {
+        if spec.name != *self.name() {
             return false;
         }
 
-        // Check if the version of the requirement matches
         match &spec.version_or_url {
-            None => {}
-            Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
-            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
-                return self.version.as_ref().is_none_or(|v| spec.contains(v))
-            }
+            None => true,
+            Some(pep508_rs::VersionOrUrl::Url(_)) => false,
+            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => match self {
+                Self::Distribution(w) => spec.contains(&w.version),
+                Self::Source(_) => true,
+            },
         }
-
-        true
     }
 
-    /// Return the the `version` as a `String` (or `<dynamic>` if the version is `None`)
-    pub fn version_string(&self) -> String {
-        self.version
-            .as_ref()
-            .map_or_else(|| "<dynamic>".to_string(), std::string::ToString::to_string)
+    /// Returns a reference to the wheel data if this is a wheel.
+    pub fn as_wheel(&self) -> Option<&PypiDistributionData> {
+        match self {
+            Self::Distribution(w) => Some(w),
+            Self::Source(_) => None,
+        }
+    }
+
+    /// Returns a reference to the source data if this is a source directory.
+    pub fn as_source(&self) -> Option<&PypiSourceData> {
+        match self {
+            Self::Distribution(_) => None,
+            Self::Source(s) => Some(s),
+        }
+    }
+
+    /// Returns a reference to the wheel data if this is a wheel.
+    pub fn as_wheel_mut(&mut self) -> Option<&mut PypiDistributionData> {
+        match self {
+            Self::Distribution(w) => Some(w),
+            Self::Source(_) => None,
+        }
+    }
+
+    /// Returns a reference to the source data if this is a source directory.
+    pub fn as_source_mut(&mut self) -> Option<&mut PypiSourceData> {
+        match self {
+            Self::Distribution(_) => None,
+            Self::Source(s) => Some(s),
+        }
+    }
+
+    /// Consumes self and returns the wheel data if this is a wheel.
+    pub fn into_wheel(self) -> Option<PypiDistributionData> {
+        match self {
+            Self::Distribution(w) => Some(*w),
+            Self::Source(_) => None,
+        }
+    }
+
+    /// Consumes self and returns the source data if this is a source directory.
+    pub fn into_source(self) -> Option<PypiSourceData> {
+        match self {
+            Self::Distribution(_) => None,
+            Self::Source(s) => Some(*s),
+        }
+    }
+}
+
+impl From<PypiDistributionData> for PypiPackageData {
+    fn from(value: PypiDistributionData) -> Self {
+        Self::Distribution(Box::new(value))
+    }
+}
+
+impl From<PypiSourceData> for PypiPackageData {
+    fn from(value: PypiSourceData) -> Self {
+        Self::Source(Box::new(value))
     }
 }
 

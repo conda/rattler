@@ -181,7 +181,7 @@ impl<'a> SerializablePackageSelector<'a> {
         _used_pypi_packages: &HashSet<usize>,
     ) -> Self {
         Self::Pypi {
-            pypi: &package.location,
+            pypi: package.location(),
         }
     }
 }
@@ -377,7 +377,7 @@ impl PackageData<'_> {
     fn source_name(&self) -> &str {
         match self {
             PackageData::Conda(p) => p.name().as_source(),
-            PackageData::Pypi(p) => p.name.as_ref(),
+            PackageData::Pypi(p) => p.name().as_ref(),
         }
     }
 }

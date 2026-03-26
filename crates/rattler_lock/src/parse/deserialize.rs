@@ -19,7 +19,8 @@ use crate::{
     },
     Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData,
     EnvironmentPackageData, LockFile, LockFileInner, PackageHashes, ParseCondaLockError,
-    PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath, Verbatim,
+    PypiDistributionData, PypiIndexes, PypiPackageData, PypiSourceData, SolveOptions,
+    SourceIdentifier, UrlOrPath, Verbatim,
 };
 
 #[serde_as]
@@ -104,20 +105,25 @@ pub struct PypiPackageDataRaw {
 
 impl From<PypiPackageData> for PypiPackageDataRaw {
     fn from(value: PypiPackageData) -> Self {
-        let requires_dist = value
-            .requires_dist
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect();
-
-        Self {
-            name: value.name.clone(),
-            version: value.version.clone(),
-            location: value.location.clone(),
-            hash: value.hash.clone(),
-            index_url: value.index_url.clone(),
-            requires_dist,
-            requires_python: value.requires_python.clone(),
+        match value {
+            PypiPackageData::Distribution(w) => Self {
+                name: w.name,
+                version: Some(w.version),
+                location: w.location,
+                hash: w.hash,
+                index_url: w.index_url,
+                requires_dist: w.requires_dist.iter().map(ToString::to_string).collect(),
+                requires_python: w.requires_python,
+            },
+            PypiPackageData::Source(s) => Self {
+                name: s.name,
+                version: None,
+                location: s.location,
+                hash: None,
+                index_url: None,
+                requires_dist: s.requires_dist.iter().map(ToString::to_string).collect(),
+                requires_python: s.requires_python,
+            },
         }
     }
 }
@@ -355,6 +361,25 @@ pub fn parse_from_document_v7(
     parse_from_lock(FileFormatVersion::V7, raw, base_dir)
 }
 
+/// Returns `true` if the location refers to an immutable wheel artifact
+/// rather than a mutable source directory.
+fn is_wheel_or_archive_location(location: &UrlOrPath) -> bool {
+    let archives = [
+        ".whl", ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.Z", ".tgz", ".tbz", ".tar", ".zip",
+    ];
+    match location {
+        UrlOrPath::Url(url) => {
+            if url.scheme() == "file" {
+                let path = url.path();
+                archives.iter().any(|a| path.ends_with(a))
+            } else {
+                true
+            }
+        }
+        UrlOrPath::Path(path) => archives.iter().any(|a| path.to_string().ends_with(a)),
+    }
+}
+
 fn convert_raw_pypi_package(
     file_version: FileFormatVersion,
     raw_package: PypiPackageDataRaw,
@@ -380,15 +405,39 @@ fn convert_raw_pypi_package(
         raw_package.location
     };
 
-    Ok(PypiPackageData {
-        name: raw_package.name,
-        version: raw_package.version,
-        location,
-        index_url: raw_package.index_url,
-        hash: raw_package.hash,
-        requires_dist,
-        requires_python: raw_package.requires_python,
-    })
+    // In v7+ the version field is authoritative: present → Distribution,
+    // absent → Source.  For older formats we fall back to the location
+    // heuristic.
+    let is_distribution = if file_version >= FileFormatVersion::V7 {
+        raw_package.hash.is_some()
+            || raw_package.version.is_some()
+            || raw_package.index_url.is_some()
+    } else {
+        is_wheel_or_archive_location(location.inner())
+    };
+
+    if is_distribution {
+        Ok(PypiPackageData::Distribution(Box::new(
+            PypiDistributionData {
+                name: raw_package.name,
+                version: raw_package
+                    .version
+                    .unwrap_or_else(|| pep440_rs::MIN_VERSION.clone()),
+                location,
+                index_url: raw_package.index_url,
+                hash: raw_package.hash,
+                requires_dist,
+                requires_python: raw_package.requires_python,
+            },
+        )))
+    } else {
+        Ok(PypiPackageData::Source(Box::new(PypiSourceData {
+            name: raw_package.name,
+            location,
+            requires_dist,
+            requires_python: raw_package.requires_python,
+        })))
+    }
 }
 
 /// Checks if a legacy conda package matches the given selector fields.
@@ -506,7 +555,7 @@ fn parse_from_lock_legacy<P>(
     let pypi_url_lookup = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.location, idx))
+        .map(|(idx, p)| (p.location(), idx))
         .collect::<ahash::HashMap<_, _>>();
 
     let environments = raw
@@ -707,7 +756,7 @@ fn parse_from_lock<P>(
     let pypi_url_lookup: ahash::HashMap<_, _> = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.location, idx))
+        .map(|(idx, p)| (p.location(), idx))
         .collect();
 
     // Parse environments
