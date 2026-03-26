@@ -41,11 +41,15 @@ impl PackageFile for PathsJson {
     }
 
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
-        serde_json::from_str(str).map_err(Into::into)
+        let mut paths_json: Self = serde_json::from_str(str).map_err(Into::into)?;
+        paths_json.sort();
+        Ok(paths_json)
     }
 
     fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
-        serde_json::from_slice(slice).map_err(Into::into)
+        let mut paths_json: Self = serde_json::from_slice(slice).map_err(Into::into)?;
+        paths_json.sort();
+        Ok(paths_json)
     }
 }
 
@@ -107,7 +111,7 @@ impl PathsJson {
             .collect();
 
         // Iterate over all files and create entries
-        Ok(Self {
+        let mut paths_json = Self {
             paths: files
                 .files
                 .into_iter()
@@ -132,7 +136,11 @@ impl PathsJson {
                 })
                 .collect::<Result<_, _>>()?,
             paths_version: 1,
-        })
+        };
+
+        paths_json.sort();
+
+        Ok(paths_json)
     }
 
     /// Constructs a new instance by reading older (deprecated) files from a package directory.
@@ -172,6 +180,12 @@ impl PathsJson {
                 }
             })
         })
+    }
+
+    /// Sorts the entries in the `paths.json` by their relative path.
+    pub fn sort(&mut self) {
+        self.paths
+            .sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     }
 }
 
@@ -268,7 +282,6 @@ mod test {
 
     #[test]
     pub fn roundtrip_paths_json() {
-        // TODO make sure that paths.json is sorted by `_path`!
         let package_dir = tempfile::tempdir().unwrap();
         let package_path = tools::download_and_cache_file(
             "https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2"
@@ -348,5 +361,59 @@ mod test {
             paths,
             paths_version: 1
         });
+    }
+
+    #[test]
+    pub fn test_internal_paths_sorted() {
+        use super::PathsEntry;
+        use std::path::PathBuf;
+
+        let mut paths = vec![
+            PathsEntry {
+                relative_path: PathBuf::from("b"),
+                path_type: super::PathType::HardLink,
+                prefix_placeholder: None,
+                no_link: false,
+                sha256: None,
+                size_in_bytes: None,
+            },
+            PathsEntry {
+                relative_path: PathBuf::from("a"),
+                path_type: super::PathType::HardLink,
+                prefix_placeholder: None,
+                no_link: false,
+                sha256: None,
+                size_in_bytes: None,
+            },
+        ];
+
+        let mut paths_json = PathsJson {
+            paths: paths.clone(),
+            paths_version: 1,
+        };
+
+        // Before sorting
+        assert_eq!(paths_json.paths[0].relative_path, PathBuf::from("b"));
+
+        paths_json.sort();
+
+        // After sorting
+        assert_eq!(paths_json.paths[0].relative_path, PathBuf::from("a"));
+        assert_eq!(paths_json.paths[1].relative_path, PathBuf::from("b"));
+
+        // Test sorting via from_deprecated
+        let reconstructed = PathsJson::from_deprecated(
+            crate::package::Files {
+                files: vec![PathBuf::from("z"), PathBuf::from("y")],
+            },
+            None,
+            None,
+            None,
+            |_| Ok::<_, std::io::Error>(super::PathType::HardLink),
+        )
+        .unwrap();
+
+        assert_eq!(reconstructed.paths[0].relative_path, PathBuf::from("y"));
+        assert_eq!(reconstructed.paths[1].relative_path, PathBuf::from("z"));
     }
 }
