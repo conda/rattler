@@ -196,159 +196,156 @@
 <a href=#194 id=194 data-nosnippet>194</a>                    <span class="kw-2">&amp;</span>repo,
 <a href=#195 id=195 data-nosnippet>195</a>                    repodata.records.iter().copied(),
 <a href=#196 id=196 data-nosnippet>196</a>                    task.exclude_newer.as_ref(),
-<a href=#197 id=197 data-nosnippet>197</a>                    task.min_age.as_ref(),
-<a href=#198 id=198 data-nosnippet>198</a>                )<span class="question-mark">?</span>;
-<a href=#199 id=199 data-nosnippet>199</a>            }
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="comment">// Keep our own info about repodata_records
-<a href=#202 id=202 data-nosnippet>202</a>            </span>repo_mapping.insert(repo.id(), repo_mapping.len());
-<a href=#203 id=203 data-nosnippet>203</a>            all_repodata_records.push(repodata.records.clone());
-<a href=#204 id=204 data-nosnippet>204</a>        }
-<a href=#205 id=205 data-nosnippet>205</a>
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="comment">// Create a special pool for records that are already installed or locked.
-<a href=#207 id=207 data-nosnippet>207</a>        </span><span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, <span class="string">"locked"</span>, highest_priority);
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>installed_solvables =
-<a href=#209 id=209 data-nosnippet>209</a>            add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, <span class="kw-2">&amp;</span>task.locked_packages, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="comment">// Also add the installed records to the repodata
-<a href=#212 id=212 data-nosnippet>212</a>        </span>repo_mapping.insert(repo.id(), repo_mapping.len());
-<a href=#213 id=213 data-nosnippet>213</a>        all_repodata_records.push(task.locked_packages.iter().collect());
-<a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="comment">// Create a special pool for records that are pinned and cannot be changed.
-<a href=#216 id=216 data-nosnippet>216</a>        </span><span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, <span class="string">"pinned"</span>, highest_priority);
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">let </span>pinned_solvables =
-<a href=#218 id=218 data-nosnippet>218</a>            add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, <span class="kw-2">&amp;</span>task.pinned_packages, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="comment">// Also add the installed records to the repodata
-<a href=#221 id=221 data-nosnippet>221</a>        </span>repo_mapping.insert(repo.id(), repo_mapping.len());
-<a href=#222 id=222 data-nosnippet>222</a>        all_repodata_records.push(task.pinned_packages.iter().collect());
+<a href=#197 id=197 data-nosnippet>197</a>                )<span class="question-mark">?</span>;
+<a href=#198 id=198 data-nosnippet>198</a>            }
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="comment">// Keep our own info about repodata_records
+<a href=#201 id=201 data-nosnippet>201</a>            </span>repo_mapping.insert(repo.id(), repo_mapping.len());
+<a href=#202 id=202 data-nosnippet>202</a>            all_repodata_records.push(repodata.records.clone());
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="comment">// Create a special pool for records that are already installed or locked.
+<a href=#206 id=206 data-nosnippet>206</a>        </span><span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, <span class="string">"locked"</span>, highest_priority);
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">let </span>installed_solvables = add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, <span class="kw-2">&amp;</span>task.locked_packages, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="comment">// Also add the installed records to the repodata
+<a href=#210 id=210 data-nosnippet>210</a>        </span>repo_mapping.insert(repo.id(), repo_mapping.len());
+<a href=#211 id=211 data-nosnippet>211</a>        all_repodata_records.push(task.locked_packages.iter().collect());
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="comment">// Create a special pool for records that are pinned and cannot be changed.
+<a href=#214 id=214 data-nosnippet>214</a>        </span><span class="kw">let </span>repo = Repo::new(<span class="kw-2">&amp;</span>pool, <span class="string">"pinned"</span>, highest_priority);
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span>pinned_solvables = add_repodata_records(<span class="kw-2">&amp;</span>pool, <span class="kw-2">&amp;</span>repo, <span class="kw-2">&amp;</span>task.pinned_packages, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="comment">// Also add the installed records to the repodata
+<a href=#218 id=218 data-nosnippet>218</a>        </span>repo_mapping.insert(repo.id(), repo_mapping.len());
+<a href=#219 id=219 data-nosnippet>219</a>        all_repodata_records.push(task.pinned_packages.iter().collect());
+<a href=#220 id=220 data-nosnippet>220</a>
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="comment">// Create data-structures for solving
+<a href=#222 id=222 data-nosnippet>222</a>        </span>pool.create_whatprovides();
 <a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="comment">// Create data-structures for solving
-<a href=#225 id=225 data-nosnippet>225</a>        </span>pool.create_whatprovides();
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="comment">// Add matchspec to the queue
+<a href=#225 id=225 data-nosnippet>225</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>goal = SolveGoal::default();
 <a href=#226 id=226 data-nosnippet>226</a>
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="comment">// Add matchspec to the queue
-<a href=#228 id=228 data-nosnippet>228</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>goal = SolveGoal::default();
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="comment">// Favor the currently installed packages
-<a href=#231 id=231 data-nosnippet>231</a>        </span><span class="kw">for </span>favor_solvable <span class="kw">in </span>installed_solvables {
-<a href=#232 id=232 data-nosnippet>232</a>            goal.favor(favor_solvable);
-<a href=#233 id=233 data-nosnippet>233</a>        }
-<a href=#234 id=234 data-nosnippet>234</a>
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="comment">// Lock the currently pinned packages
-<a href=#236 id=236 data-nosnippet>236</a>        </span><span class="kw">for </span>locked_solvable <span class="kw">in </span>pinned_solvables {
-<a href=#237 id=237 data-nosnippet>237</a>            goal.lock(locked_solvable);
-<a href=#238 id=238 data-nosnippet>238</a>        }
-<a href=#239 id=239 data-nosnippet>239</a>
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="comment">// Specify the matchspec requests
-<a href=#241 id=241 data-nosnippet>241</a>        </span><span class="kw">for </span>spec <span class="kw">in </span>task.specs {
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="comment">// Strip extras and condition from the spec before passing to libsolv
-<a href=#243 id=243 data-nosnippet>243</a>            // (libsolv doesn't understand extras or conditional syntax directly)
-<a href=#244 id=244 data-nosnippet>244</a>            </span><span class="kw">let </span>(base_spec, extras_opt, condition_opt) = {
-<a href=#245 id=245 data-nosnippet>245</a>                <span class="kw">let </span><span class="kw-2">mut </span>base = spec.clone();
-<a href=#246 id=246 data-nosnippet>246</a>                <span class="kw">let </span>extras = base.extras.take();
-<a href=#247 id=247 data-nosnippet>247</a>                <span class="kw">let </span>condition = base.condition.take();
-<a href=#248 id=248 data-nosnippet>248</a>                (base, extras, condition)
-<a href=#249 id=249 data-nosnippet>249</a>            };
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="comment">// Favor the currently installed packages
+<a href=#228 id=228 data-nosnippet>228</a>        </span><span class="kw">for </span>favor_solvable <span class="kw">in </span>installed_solvables {
+<a href=#229 id=229 data-nosnippet>229</a>            goal.favor(favor_solvable);
+<a href=#230 id=230 data-nosnippet>230</a>        }
+<a href=#231 id=231 data-nosnippet>231</a>
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="comment">// Lock the currently pinned packages
+<a href=#233 id=233 data-nosnippet>233</a>        </span><span class="kw">for </span>locked_solvable <span class="kw">in </span>pinned_solvables {
+<a href=#234 id=234 data-nosnippet>234</a>            goal.lock(locked_solvable);
+<a href=#235 id=235 data-nosnippet>235</a>        }
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="comment">// Specify the matchspec requests
+<a href=#238 id=238 data-nosnippet>238</a>        </span><span class="kw">for </span>spec <span class="kw">in </span>task.specs {
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="comment">// Strip extras and condition from the spec before passing to libsolv
+<a href=#240 id=240 data-nosnippet>240</a>            // (libsolv doesn't understand extras or conditional syntax directly)
+<a href=#241 id=241 data-nosnippet>241</a>            </span><span class="kw">let </span>(base_spec, extras_opt, condition_opt) = {
+<a href=#242 id=242 data-nosnippet>242</a>                <span class="kw">let </span><span class="kw-2">mut </span>base = spec.clone();
+<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">let </span>extras = base.extras.take();
+<a href=#244 id=244 data-nosnippet>244</a>                <span class="kw">let </span>condition = base.condition.take();
+<a href=#245 id=245 data-nosnippet>245</a>                (base, extras, condition)
+<a href=#246 id=246 data-nosnippet>246</a>            };
+<a href=#247 id=247 data-nosnippet>247</a>
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="comment">// Create the base matchspec ID
+<a href=#249 id=249 data-nosnippet>249</a>            </span><span class="kw">let </span>base_id = pool.intern_matchspec(<span class="kw-2">&amp;</span>base_spec);
 <a href=#250 id=250 data-nosnippet>250</a>
-<a href=#251 id=251 data-nosnippet>251</a>            <span class="comment">// Create the base matchspec ID
-<a href=#252 id=252 data-nosnippet>252</a>            </span><span class="kw">let </span>base_id = pool.intern_matchspec(<span class="kw-2">&amp;</span>base_spec);
-<a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>            <span class="comment">// If there's a condition, wrap the dependency with rel_cond
-<a href=#255 id=255 data-nosnippet>255</a>            </span><span class="kw">let </span>id = <span class="kw">if let </span><span class="prelude-val">Some</span>(condition) = condition_opt.as_ref() {
-<a href=#256 id=256 data-nosnippet>256</a>                <span class="kw">let </span>condition_id = parse_condition(condition, <span class="kw-2">&amp;</span>pool);
-<a href=#257 id=257 data-nosnippet>257</a>                MatchSpecId(pool.rel_cond(base_id.into(), condition_id))
-<a href=#258 id=258 data-nosnippet>258</a>            } <span class="kw">else </span>{
-<a href=#259 id=259 data-nosnippet>259</a>                base_id
-<a href=#260 id=260 data-nosnippet>260</a>            };
-<a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a>            goal.install(id, <span class="bool-val">false</span>);
-<a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a>            <span class="comment">// If the spec includes extras, also add dependencies on the synthetic extra solvables
-<a href=#265 id=265 data-nosnippet>265</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(extras) = extras_opt {
-<a href=#266 id=266 data-nosnippet>266</a>                <span class="comment">// Only exact package names support extras
-<a href=#267 id=267 data-nosnippet>267</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(exact_name) = spec.name.as_exact() {
-<a href=#268 id=268 data-nosnippet>268</a>                    <span class="kw">for </span>extra <span class="kw">in </span>extras.iter() {
-<a href=#269 id=269 data-nosnippet>269</a>                        <span class="comment">// Create a dependency on the synthetic "package[extra]" solvable
-<a href=#270 id=270 data-nosnippet>270</a>                        // We can't use MatchSpec::from_str or conda_matchspec because brackets
-<a href=#271 id=271 data-nosnippet>271</a>                        // have special meaning in conda matchspecs. Instead, we intern the name
-<a href=#272 id=272 data-nosnippet>272</a>                        // directly and use it as an Id
-<a href=#273 id=273 data-nosnippet>273</a>                        </span><span class="kw">let </span>extra_name = <span class="macro">format!</span>(<span class="string">"{}[{}]"</span>, exact_name.as_normalized(), extra);
-<a href=#274 id=274 data-nosnippet>274</a>                        <span class="kw">let </span>name_id = pool.intern_str(extra_name.as_str());
-<a href=#275 id=275 data-nosnippet>275</a>                        <span class="comment">// Convert StringId to MatchSpecId - this works because libsolv can use
-<a href=#276 id=276 data-nosnippet>276</a>                        // a simple name as a dependency specification
-<a href=#277 id=277 data-nosnippet>277</a>                        </span><span class="kw">let </span>extra_id = MatchSpecId(name_id.into());
-<a href=#278 id=278 data-nosnippet>278</a>                        goal.install(extra_id, <span class="bool-val">false</span>);
-<a href=#279 id=279 data-nosnippet>279</a>                    }
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>            }
-<a href=#282 id=282 data-nosnippet>282</a>        }
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">for </span>spec <span class="kw">in </span>task.constraints {
-<a href=#285 id=285 data-nosnippet>285</a>            <span class="kw">let </span>id = pool.intern_matchspec(<span class="kw-2">&amp;</span>spec);
-<a href=#286 id=286 data-nosnippet>286</a>            goal.install(id, <span class="bool-val">true</span>);
-<a href=#287 id=287 data-nosnippet>287</a>        }
-<a href=#288 id=288 data-nosnippet>288</a>
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="comment">// Add virtual packages to the queue. We want to install these as part of the
-<a href=#290 id=290 data-nosnippet>290</a>        // solution as well. This ensures that if a package only has a constraint on a
-<a href=#291 id=291 data-nosnippet>291</a>        // virtual package, the virtual package is installed.
-<a href=#292 id=292 data-nosnippet>292</a>        </span><span class="kw">for </span>virtual_package <span class="kw">in </span>task.virtual_packages {
-<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">let </span>id = pool.intern_matchspec(<span class="kw-2">&amp;</span>MatchSpec::from_nameless(
-<a href=#294 id=294 data-nosnippet>294</a>                NamelessMatchSpec::default(),
-<a href=#295 id=295 data-nosnippet>295</a>                PackageNameMatcher::Exact(virtual_package.name),
-<a href=#296 id=296 data-nosnippet>296</a>            ));
-<a href=#297 id=297 data-nosnippet>297</a>            goal.install(id, <span class="bool-val">false</span>);
-<a href=#298 id=298 data-nosnippet>298</a>        }
-<a href=#299 id=299 data-nosnippet>299</a>
-<a href=#300 id=300 data-nosnippet>300</a>        <span class="comment">// Construct a solver and solve the problems in the queue
-<a href=#301 id=301 data-nosnippet>301</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>solver = pool.create_solver();
-<a href=#302 id=302 data-nosnippet>302</a>        solver.set_flag(SolverFlag::allow_uninstall(), <span class="bool-val">true</span>);
-<a href=#303 id=303 data-nosnippet>303</a>        solver.set_flag(SolverFlag::allow_downgrade(), <span class="bool-val">true</span>);
-<a href=#304 id=304 data-nosnippet>304</a>        solver.set_flag(
-<a href=#305 id=305 data-nosnippet>305</a>            SolverFlag::strict_channel_priority(),
-<a href=#306 id=306 data-nosnippet>306</a>            task.channel_priority == ChannelPriority::Strict,
-<a href=#307 id=307 data-nosnippet>307</a>        );
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>transaction = solver.solve(<span class="kw-2">&amp;mut </span>goal).map_err(SolveError::Unsolvable)<span class="question-mark">?</span>;
-<a href=#310 id=310 data-nosnippet>310</a>
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">let </span>SolverOutput {
-<a href=#312 id=312 data-nosnippet>312</a>            packages: required_records,
-<a href=#313 id=313 data-nosnippet>313</a>            extras,
-<a href=#314 id=314 data-nosnippet>314</a>        } = get_required_packages(
-<a href=#315 id=315 data-nosnippet>315</a>            <span class="kw-2">&amp;</span>pool,
-<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw-2">&amp;</span>repo_mapping,
-<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw-2">&amp;</span>transaction,
-<a href=#318 id=318 data-nosnippet>318</a>            all_repodata_records.as_slice(),
-<a href=#319 id=319 data-nosnippet>319</a>        )
-<a href=#320 id=320 data-nosnippet>320</a>        .map_err(|unsupported_operation_ids| {
-<a href=#321 id=321 data-nosnippet>321</a>            SolveError::UnsupportedOperations(
-<a href=#322 id=322 data-nosnippet>322</a>                unsupported_operation_ids
-<a href=#323 id=323 data-nosnippet>323</a>                    .into_iter()
-<a href=#324 id=324 data-nosnippet>324</a>                    .map(|id| <span class="macro">format!</span>(<span class="string">"libsolv operation {id}"</span>))
-<a href=#325 id=325 data-nosnippet>325</a>                    .collect(),
-<a href=#326 id=326 data-nosnippet>326</a>            )
-<a href=#327 id=327 data-nosnippet>327</a>        })<span class="question-mark">?</span>;
-<a href=#328 id=328 data-nosnippet>328</a>
-<a href=#329 id=329 data-nosnippet>329</a>        <span class="prelude-val">Ok</span>(SolverResult {
-<a href=#330 id=330 data-nosnippet>330</a>            records: required_records,
-<a href=#331 id=331 data-nosnippet>331</a>            extras,
-<a href=#332 id=332 data-nosnippet>332</a>        })
-<a href=#333 id=333 data-nosnippet>333</a>    }
-<a href=#334 id=334 data-nosnippet>334</a>}
-<a href=#335 id=335 data-nosnippet>335</a>
-<a href=#336 id=336 data-nosnippet>336</a><span class="attr">#[cfg(test)]
-<a href=#337 id=337 data-nosnippet>337</a></span><span class="kw">mod </span>test {
-<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">use </span>rstest::rstest;
-<a href=#339 id=339 data-nosnippet>339</a>
-<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#341 id=341 data-nosnippet>341</a>
-<a href=#342 id=342 data-nosnippet>342</a>    <span class="attr">#[rstest]
-<a href=#343 id=343 data-nosnippet>343</a>    #[case(<span class="string">""</span>, <span class="string">""</span>)]
-<a href=#344 id=344 data-nosnippet>344</a>    #[case(<span class="string">"a\0b\0c\0d\0"</span>, <span class="string">"a b c d "</span>)]
-<a href=#345 id=345 data-nosnippet>345</a>    #[case(<span class="string">"a b c d"</span>, <span class="string">"a b c d"</span>)]
-<a href=#346 id=346 data-nosnippet>346</a>    #[case(<span class="string">"😒"</span>, <span class="string">"😒"</span>)]
-<a href=#347 id=347 data-nosnippet>347</a>    </span><span class="kw">fn </span>test_c_string(<span class="attr">#[case] </span>input: <span class="kw-2">&amp;</span>str, <span class="attr">#[case] </span>expected_output: <span class="kw-2">&amp;</span>str) {
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span>output = c_string(input);
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="macro">assert_eq!</span>(output.as_bytes(), expected_output.as_bytes());
-<a href=#350 id=350 data-nosnippet>350</a>    }
-<a href=#351 id=351 data-nosnippet>351</a>}
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="comment">// If there's a condition, wrap the dependency with rel_cond
+<a href=#252 id=252 data-nosnippet>252</a>            </span><span class="kw">let </span>id = <span class="kw">if let </span><span class="prelude-val">Some</span>(condition) = condition_opt.as_ref() {
+<a href=#253 id=253 data-nosnippet>253</a>                <span class="kw">let </span>condition_id = parse_condition(condition, <span class="kw-2">&amp;</span>pool);
+<a href=#254 id=254 data-nosnippet>254</a>                MatchSpecId(pool.rel_cond(base_id.into(), condition_id))
+<a href=#255 id=255 data-nosnippet>255</a>            } <span class="kw">else </span>{
+<a href=#256 id=256 data-nosnippet>256</a>                base_id
+<a href=#257 id=257 data-nosnippet>257</a>            };
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>            goal.install(id, <span class="bool-val">false</span>);
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="comment">// If the spec includes extras, also add dependencies on the synthetic extra solvables
+<a href=#262 id=262 data-nosnippet>262</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(extras) = extras_opt {
+<a href=#263 id=263 data-nosnippet>263</a>                <span class="comment">// Only exact package names support extras
+<a href=#264 id=264 data-nosnippet>264</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(exact_name) = spec.name.as_exact() {
+<a href=#265 id=265 data-nosnippet>265</a>                    <span class="kw">for </span>extra <span class="kw">in </span>extras.iter() {
+<a href=#266 id=266 data-nosnippet>266</a>                        <span class="comment">// Create a dependency on the synthetic "package[extra]" solvable
+<a href=#267 id=267 data-nosnippet>267</a>                        // We can't use MatchSpec::from_str or conda_matchspec because brackets
+<a href=#268 id=268 data-nosnippet>268</a>                        // have special meaning in conda matchspecs. Instead, we intern the name
+<a href=#269 id=269 data-nosnippet>269</a>                        // directly and use it as an Id
+<a href=#270 id=270 data-nosnippet>270</a>                        </span><span class="kw">let </span>extra_name = <span class="macro">format!</span>(<span class="string">"{}[{}]"</span>, exact_name.as_normalized(), extra);
+<a href=#271 id=271 data-nosnippet>271</a>                        <span class="kw">let </span>name_id = pool.intern_str(extra_name.as_str());
+<a href=#272 id=272 data-nosnippet>272</a>                        <span class="comment">// Convert StringId to MatchSpecId - this works because libsolv can use
+<a href=#273 id=273 data-nosnippet>273</a>                        // a simple name as a dependency specification
+<a href=#274 id=274 data-nosnippet>274</a>                        </span><span class="kw">let </span>extra_id = MatchSpecId(name_id.into());
+<a href=#275 id=275 data-nosnippet>275</a>                        goal.install(extra_id, <span class="bool-val">false</span>);
+<a href=#276 id=276 data-nosnippet>276</a>                    }
+<a href=#277 id=277 data-nosnippet>277</a>                }
+<a href=#278 id=278 data-nosnippet>278</a>            }
+<a href=#279 id=279 data-nosnippet>279</a>        }
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">for </span>spec <span class="kw">in </span>task.constraints {
+<a href=#282 id=282 data-nosnippet>282</a>            <span class="kw">let </span>id = pool.intern_matchspec(<span class="kw-2">&amp;</span>spec);
+<a href=#283 id=283 data-nosnippet>283</a>            goal.install(id, <span class="bool-val">true</span>);
+<a href=#284 id=284 data-nosnippet>284</a>        }
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="comment">// Add virtual packages to the queue. We want to install these as part of the
+<a href=#287 id=287 data-nosnippet>287</a>        // solution as well. This ensures that if a package only has a constraint on a
+<a href=#288 id=288 data-nosnippet>288</a>        // virtual package, the virtual package is installed.
+<a href=#289 id=289 data-nosnippet>289</a>        </span><span class="kw">for </span>virtual_package <span class="kw">in </span>task.virtual_packages {
+<a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">let </span>id = pool.intern_matchspec(<span class="kw-2">&amp;</span>MatchSpec::from_nameless(
+<a href=#291 id=291 data-nosnippet>291</a>                NamelessMatchSpec::default(),
+<a href=#292 id=292 data-nosnippet>292</a>                PackageNameMatcher::Exact(virtual_package.name),
+<a href=#293 id=293 data-nosnippet>293</a>            ));
+<a href=#294 id=294 data-nosnippet>294</a>            goal.install(id, <span class="bool-val">false</span>);
+<a href=#295 id=295 data-nosnippet>295</a>        }
+<a href=#296 id=296 data-nosnippet>296</a>
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="comment">// Construct a solver and solve the problems in the queue
+<a href=#298 id=298 data-nosnippet>298</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>solver = pool.create_solver();
+<a href=#299 id=299 data-nosnippet>299</a>        solver.set_flag(SolverFlag::allow_uninstall(), <span class="bool-val">true</span>);
+<a href=#300 id=300 data-nosnippet>300</a>        solver.set_flag(SolverFlag::allow_downgrade(), <span class="bool-val">true</span>);
+<a href=#301 id=301 data-nosnippet>301</a>        solver.set_flag(
+<a href=#302 id=302 data-nosnippet>302</a>            SolverFlag::strict_channel_priority(),
+<a href=#303 id=303 data-nosnippet>303</a>            task.channel_priority == ChannelPriority::Strict,
+<a href=#304 id=304 data-nosnippet>304</a>        );
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>transaction = solver.solve(<span class="kw-2">&amp;mut </span>goal).map_err(SolveError::Unsolvable)<span class="question-mark">?</span>;
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>SolverOutput {
+<a href=#309 id=309 data-nosnippet>309</a>            packages: required_records,
+<a href=#310 id=310 data-nosnippet>310</a>            extras,
+<a href=#311 id=311 data-nosnippet>311</a>        } = get_required_packages(
+<a href=#312 id=312 data-nosnippet>312</a>            <span class="kw-2">&amp;</span>pool,
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="kw-2">&amp;</span>repo_mapping,
+<a href=#314 id=314 data-nosnippet>314</a>            <span class="kw-2">&amp;</span>transaction,
+<a href=#315 id=315 data-nosnippet>315</a>            all_repodata_records.as_slice(),
+<a href=#316 id=316 data-nosnippet>316</a>        )
+<a href=#317 id=317 data-nosnippet>317</a>        .map_err(|unsupported_operation_ids| {
+<a href=#318 id=318 data-nosnippet>318</a>            SolveError::UnsupportedOperations(
+<a href=#319 id=319 data-nosnippet>319</a>                unsupported_operation_ids
+<a href=#320 id=320 data-nosnippet>320</a>                    .into_iter()
+<a href=#321 id=321 data-nosnippet>321</a>                    .map(|id| <span class="macro">format!</span>(<span class="string">"libsolv operation {id}"</span>))
+<a href=#322 id=322 data-nosnippet>322</a>                    .collect(),
+<a href=#323 id=323 data-nosnippet>323</a>            )
+<a href=#324 id=324 data-nosnippet>324</a>        })<span class="question-mark">?</span>;
+<a href=#325 id=325 data-nosnippet>325</a>
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="prelude-val">Ok</span>(SolverResult {
+<a href=#327 id=327 data-nosnippet>327</a>            records: required_records,
+<a href=#328 id=328 data-nosnippet>328</a>            extras,
+<a href=#329 id=329 data-nosnippet>329</a>        })
+<a href=#330 id=330 data-nosnippet>330</a>    }
+<a href=#331 id=331 data-nosnippet>331</a>}
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a><span class="attr">#[cfg(test)]
+<a href=#334 id=334 data-nosnippet>334</a></span><span class="kw">mod </span>test {
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">use </span>rstest::rstest;
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#338 id=338 data-nosnippet>338</a>
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="attr">#[rstest]
+<a href=#340 id=340 data-nosnippet>340</a>    #[case(<span class="string">""</span>, <span class="string">""</span>)]
+<a href=#341 id=341 data-nosnippet>341</a>    #[case(<span class="string">"a\0b\0c\0d\0"</span>, <span class="string">"a b c d "</span>)]
+<a href=#342 id=342 data-nosnippet>342</a>    #[case(<span class="string">"a b c d"</span>, <span class="string">"a b c d"</span>)]
+<a href=#343 id=343 data-nosnippet>343</a>    #[case(<span class="string">"😒"</span>, <span class="string">"😒"</span>)]
+<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="kw">fn </span>test_c_string(<span class="attr">#[case] </span>input: <span class="kw-2">&amp;</span>str, <span class="attr">#[case] </span>expected_output: <span class="kw-2">&amp;</span>str) {
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>output = c_string(input);
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">assert_eq!</span>(output.as_bytes(), expected_output.as_bytes());
+<a href=#347 id=347 data-nosnippet>347</a>    }
+<a href=#348 id=348 data-nosnippet>348</a>}
 </code></pre></div></section></main></body></html>
