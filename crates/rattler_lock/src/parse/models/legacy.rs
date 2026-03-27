@@ -21,10 +21,6 @@
 //! environment references, making exact matching possible. However, the merging
 //! logic is retained here for parsing older format versions.
 
-use std::{borrow::Cow, collections::BTreeMap};
-
-use rattler_conda_types::{package::DistArchiveIdentifier, ChannelUrl, PackageRecord};
-
 use crate::{
     conda::{
         CondaBinaryData, CondaSourceData, FullSourceMetadata, PackageBuildSource, SourceMetadata,
@@ -33,6 +29,9 @@ use crate::{
     source::SourceLocation,
     CondaPackageData, UrlOrPath,
 };
+use rattler_conda_types::utils::TimestampMs;
+use rattler_conda_types::{package::DistArchiveIdentifier, ChannelUrl, PackageRecord};
+use std::{borrow::Cow, collections::BTreeMap};
 
 /// Intermediate representation of a conda package during legacy deserialization.
 ///
@@ -168,6 +167,10 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                     location: data.location,
                     package_build_source: data.package_build_source,
                     variants: data.variants,
+                    timestamp: data
+                        .package_record
+                        .timestamp
+                        .map_or_else(default_legacy_source_timestamp, TimestampMs::into_datetime),
                     identifier_hash: None,
                     metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
                         package_record: data.package_record,
@@ -176,6 +179,17 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                 }))
             }
         }
+    }
+}
+
+/// When computing a default timestamp for legacy source packages, use the
+/// current time. However, that really screws with our tests, so we're using a
+/// default timestamp for tests.
+fn default_legacy_source_timestamp() -> chrono::DateTime<chrono::Utc> {
+    if cfg!(test) {
+        chrono::DateTime::from_timestamp(1774019949, 622000).unwrap()
+    } else {
+        chrono::Utc::now()
     }
 }
 
