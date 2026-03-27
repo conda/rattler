@@ -16,6 +16,12 @@ impl From<ExcludeNewer> for DateTime<Utc> {
     }
 }
 
+impl From<ExcludeNewer> for rattler_solve::ExcludeNewer {
+    fn from(value: ExcludeNewer) -> Self {
+        rattler_solve::ExcludeNewer::from_datetime(value.0)
+    }
+}
+
 impl FromStr for ExcludeNewer {
     type Err = chrono::ParseError;
 

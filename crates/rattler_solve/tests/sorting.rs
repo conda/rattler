@@ -50,7 +50,6 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         None,
         ChannelPriority::default(),
         None,
-        None, // min_age
         strategy,
         Vec::new(), // dependency_overrides
     )

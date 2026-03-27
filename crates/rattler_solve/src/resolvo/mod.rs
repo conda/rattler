@@ -8,7 +8,6 @@ use std::{
     marker::PhantomData,
 };
 
-use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
@@ -27,7 +26,7 @@ use resolvo::{
 };
 
 use crate::{
-    resolvo::conda_sorting::CompareStrategy, ChannelPriority, IntoRepoData, MinimumAgeConfig,
+    resolvo::conda_sorting::CompareStrategy, ChannelPriority, ExcludeNewer, IntoRepoData,
     SolveError, SolveStrategy, SolverRepoData, SolverTask,
 };
 
@@ -299,8 +298,7 @@ impl<'a> CondaDependencyProvider<'a> {
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
         channel_priority: ChannelPriority,
-        exclude_newer: Option<DateTime<Utc>>,
-        min_age: Option<&MinimumAgeConfig>,
+        exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
     ) -> Result<Self, SolveError> {
@@ -350,26 +348,16 @@ impl<'a> CondaDependencyProvider<'a> {
 
             for record in repo_data.records {
                 // Determine if this record will be excluded by exclude_newer.
-                let excluded_by_newer = matches!((&exclude_newer, &record.package_record.timestamp),
-                    (Some(exclude_newer), Some(record_timestamp))
-                        if record_timestamp > exclude_newer);
-
-                // Determine if this record will be excluded by min_age.
-                let excluded_by_age = match (&min_age, &record.package_record.timestamp) {
-                    (Some(config), Some(timestamp)) => {
-                        // Exclude if published after the effective cutoff and not exempt.
-                        let cutoff = config.cutoff_for_channel(record.channel.as_deref());
-                        *timestamp > cutoff && !config.is_exempt(&record.package_record.name)
-                    }
-                    (Some(config), None) => {
-                        // Exclude if no timestamp and unknown timestamps are not allowed.
-                        !config.include_unknown_timestamp
-                            && !config.is_exempt(&record.package_record.name)
-                    }
-                    _ => false,
-                };
-
-                let excluded = excluded_by_newer || excluded_by_age;
+                let excluded = exclude_newer
+                    .as_ref()
+                    .and_then(|config| {
+                        config.exclusion_reason(
+                            &record.package_record.name,
+                            record.channel.as_deref(),
+                            record.package_record.timestamp.as_ref(),
+                        )
+                    })
+                    .is_some();
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;
@@ -426,39 +414,14 @@ impl<'a> CondaDependencyProvider<'a> {
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
-                // Filter out any records that are newer than a specific date.
-                match (&exclude_newer, &record.package_record.timestamp) {
-                    (Some(exclude_newer), Some(record_timestamp))
-                        if record_timestamp > exclude_newer =>
-                    {
-                        let reason = pool.intern_string(format!(
-                            "the package is uploaded after the cutoff date of {exclude_newer}"
-                        ));
+                if let Some(config) = &exclude_newer {
+                    if let Some(reason) = config.exclusion_reason(
+                        &record.package_record.name,
+                        record.channel.as_deref(),
+                        record.package_record.timestamp.as_ref(),
+                    ) {
+                        let reason = pool.intern_string(reason);
                         candidates.excluded.push((solvable_id, reason));
-                    }
-                    _ => {}
-                }
-
-                // Filter out any records that haven't been published long enough.
-                if let Some(config) = &min_age {
-                    if !config.is_exempt(&record.package_record.name) {
-                        let cutoff = config.cutoff_for_channel(record.channel.as_deref());
-                        let exclude_reason = match &record.package_record.timestamp {
-                            Some(timestamp) if *timestamp > cutoff => {
-                                let age = humantime::format_duration(
-                                    config.min_age_for_channel(record.channel.as_deref()),
-                                );
-                                Some(format!("the package was published less than {age} ago"))
-                            }
-                            None if !config.include_unknown_timestamp => {
-                                Some("the package has no timestamp".to_string())
-                            }
-                            _ => None,
-                        };
-                        if let Some(reason) = exclude_reason {
-                            let reason = pool.intern_string(reason);
-                            candidates.excluded.push((solvable_id, reason));
-                        }
                     }
                 }
 
@@ -968,8 +931,7 @@ impl super::SolverImpl for Solver {
             task.specs.clone().as_ref(),
             stop_time,
             task.channel_priority,
-            task.exclude_newer,
-            task.min_age.as_ref(),
+            task.exclude_newer.as_ref(),
             task.strategy,
             dependency_overrides,
         )?;
