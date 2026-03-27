@@ -19,17 +19,17 @@ pub struct Opt {
 #[allow(clippy::enum_variant_names)]
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum Shell {
-    /// Bourne Again SHell (bash)
+    /// Bash shell
     Bash,
     /// Elvish shell
     Elvish,
-    /// Friendly Interactive SHell (fish)
+    /// Fish shell
     Fish,
     /// Nushell
     Nushell,
-    /// PowerShell
+    /// `PowerShell` shell
     Powershell,
-    /// Z SHell (zsh)
+    /// Zsh shell
     Zsh,
 }
 
