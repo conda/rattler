@@ -199,9 +199,7 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age with include_unknown_timestamp")
         .repository(repo)
         .specs(["pkg-no-ts", "pkg-old"])
-        .exclude_newer(
-            exclude_newer_duration_config(min_age).with_include_unknown_timestamp(true),
-        )
+        .exclude_newer(exclude_newer_duration_config(min_age).with_include_unknown_timestamp(true))
         // Both packages should be available:
         // - pkg-no-ts has no timestamp but we explicitly include unknown timestamps
         // - pkg-old has an old timestamp so it passes the filter
