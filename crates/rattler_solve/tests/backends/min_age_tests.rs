@@ -16,7 +16,7 @@ fn fixed_now() -> DateTime<Utc> {
 }
 
 fn exclude_newer_duration_config(min_age: std::time::Duration) -> ExcludeNewer {
-    ExcludeNewer::from_duration(min_age).with_now(fixed_now())
+    ExcludeNewer::from_duration_with_now(min_age, fixed_now())
 }
 
 /// Creates a repository with packages that have different timestamps.
@@ -235,8 +235,11 @@ pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
     ];
 
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
-    let config = exclude_newer_duration_config(min_age)
-        .with_channel_duration("internal", std::time::Duration::ZERO);
+    let config = exclude_newer_duration_config(min_age).with_channel_duration_with_now(
+        "internal",
+        std::time::Duration::ZERO,
+        fixed_now(),
+    );
 
     SolverCase::new("min_age per channel")
         .repository(repo)

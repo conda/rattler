@@ -119,14 +119,11 @@ pub fn add_repodata_records<'a>(
     let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         if let Some(config) = exclude_newer {
-            if config
-                .exclusion_reason(
-                    &repo_data.package_record.name,
-                    repo_data.channel.as_deref(),
-                    repo_data.package_record.timestamp.as_ref(),
-                )
-                .is_some()
-            {
+            if config.is_excluded(
+                &repo_data.package_record.name,
+                repo_data.channel.as_deref(),
+                repo_data.package_record.timestamp.as_ref(),
+            ) {
                 continue;
             }
         }

@@ -107,63 +107,33 @@ impl fmt::Display for SolveError {
 ///     .with_channel_duration("my-internal-channel", Duration::ZERO);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExcludeNewer {
-    /// Exclude packages uploaded after a fixed cutoff date.
-    DateTime {
-        /// The cutoff date. Packages uploaded after this date are excluded.
-        cutoff: DateTime<Utc>,
+pub struct ExcludeNewer {
+    /// The default cutoff date. Packages uploaded after this date are excluded.
+    cutoff: DateTime<Utc>,
 
-        /// Channel-specific cutoff dates that override [`Self::DateTime::cutoff`]
-        /// for records from matching channels.
-        ///
-        /// The key is matched against [`RepoDataRecord::channel`] exactly.
-        channel_cutoffs: HashMap<String, DateTime<Utc>>,
+    /// Channel-specific cutoff dates that override [`Self::cutoff`] for
+    /// records from matching channels.
+    ///
+    /// The key is matched against [`RepoDataRecord::channel`] exactly.
+    channel_cutoffs: HashMap<String, DateTime<Utc>>,
 
-        /// Packages that are exempt from the cutoff requirement.
-        exempt_packages: HashSet<PackageName>,
+    /// Packages that are exempt from the cutoff requirement.
+    exempt_packages: HashSet<PackageName>,
 
-        /// Whether to include packages that don't have a timestamp.
-        ///
-        /// By default, absolute cutoff dates keep packages with unknown
-        /// timestamps to preserve the previous `exclude_newer` behavior.
-        include_unknown_timestamp: bool,
-    },
-
-    /// Exclude packages uploaded more recently than a duration ago.
-    Duration {
-        /// The minimum age a package must have before it can be considered for
-        /// installation. Packages published more recently than this duration
-        /// ago will be excluded from the solve.
-        duration: std::time::Duration,
-
-        /// Channel-specific durations that override [`Self::Duration::duration`]
-        /// for records from matching channels.
-        ///
-        /// The key is matched against [`RepoDataRecord::channel`] exactly.
-        channel_durations: HashMap<String, std::time::Duration>,
-
-        /// The reference time to use when calculating the cutoff date.
-        /// Packages published after `now - duration` will be excluded.
-        ///
-        /// Defaults to the current time when [`ExcludeNewer::from_duration`] is
-        /// called.
-        now: DateTime<Utc>,
-
-        /// Packages that are exempt from the cutoff requirement.
-        exempt_packages: HashSet<PackageName>,
-
-        /// Whether to include packages that don't have a timestamp.
-        ///
-        /// By default, duration-based cutoffs exclude packages without a
-        /// timestamp to preserve the previous `min_age` behavior.
-        include_unknown_timestamp: bool,
-    },
+    /// Whether to include packages that don't have a timestamp.
+    include_unknown_timestamp: bool,
 }
 
 impl ExcludeNewer {
+    fn cutoff_from_duration(duration: std::time::Duration, now: DateTime<Utc>) -> DateTime<Utc> {
+        let duration =
+            chrono::Duration::from_std(duration).expect("exclude_newer duration is too large");
+        now - duration
+    }
+
     /// Creates a new configuration from an absolute cutoff date.
     pub fn from_datetime(cutoff: DateTime<Utc>) -> Self {
-        Self::DateTime {
+        Self {
             cutoff,
             channel_cutoffs: HashMap::new(),
             exempt_packages: HashSet::new(),
@@ -173,52 +143,29 @@ impl ExcludeNewer {
 
     /// Creates a new configuration from a relative duration.
     pub fn from_duration(duration: std::time::Duration) -> Self {
-        Self::Duration {
-            duration,
-            channel_durations: HashMap::new(),
-            now: Utc::now(),
+        Self::from_duration_with_now(duration, Utc::now())
+    }
+
+    /// Creates a new configuration from a relative duration and explicit
+    /// reference time.
+    pub fn from_duration_with_now(duration: std::time::Duration, now: DateTime<Utc>) -> Self {
+        Self {
+            cutoff: Self::cutoff_from_duration(duration, now),
+            channel_cutoffs: HashMap::new(),
             exempt_packages: HashSet::new(),
             include_unknown_timestamp: false,
         }
     }
 
-    /// Sets the reference time to use when calculating duration-based cutoffs.
-    pub fn with_now(mut self, now: DateTime<Utc>) -> Self {
-        if let Self::Duration {
-            now: current_now, ..
-        } = &mut self
-        {
-            *current_now = now;
-        }
-        self
-    }
-
     /// Adds a package to the set of exempt packages.
     pub fn with_exempt_package(mut self, package: PackageName) -> Self {
-        match &mut self {
-            Self::DateTime {
-                exempt_packages, ..
-            }
-            | Self::Duration {
-                exempt_packages, ..
-            } => {
-                exempt_packages.insert(package);
-            }
-        }
+        self.exempt_packages.insert(package);
         self
     }
 
     /// Sets the set of exempt packages.
     pub fn with_exempt_packages(mut self, packages: impl IntoIterator<Item = PackageName>) -> Self {
-        let packages = packages.into_iter().collect();
-        match &mut self {
-            Self::DateTime {
-                exempt_packages, ..
-            }
-            | Self::Duration {
-                exempt_packages, ..
-            } => *exempt_packages = packages,
-        }
+        self.exempt_packages = packages.into_iter().collect();
         self
     }
 
@@ -228,12 +175,23 @@ impl ExcludeNewer {
         channel: impl Into<String>,
         duration: std::time::Duration,
     ) -> Self {
-        if let Self::Duration {
-            channel_durations, ..
-        } = &mut self
-        {
-            channel_durations.insert(channel.into(), duration);
-        }
+        self.channel_cutoffs.insert(
+            channel.into(),
+            Self::cutoff_from_duration(duration, Utc::now()),
+        );
+        self
+    }
+
+    /// Sets the duration override for a specific channel using an explicit
+    /// reference time.
+    pub fn with_channel_duration_with_now(
+        mut self,
+        channel: impl Into<String>,
+        duration: std::time::Duration,
+        now: DateTime<Utc>,
+    ) -> Self {
+        self.channel_cutoffs
+            .insert(channel.into(), Self::cutoff_from_duration(duration, now));
         self
     }
 
@@ -243,132 +201,50 @@ impl ExcludeNewer {
         channel: impl Into<String>,
         cutoff: DateTime<Utc>,
     ) -> Self {
-        if let Self::DateTime {
-            channel_cutoffs, ..
-        } = &mut self
-        {
-            channel_cutoffs.insert(channel.into(), cutoff);
-        }
+        self.channel_cutoffs.insert(channel.into(), cutoff);
         self
     }
 
     /// Sets whether packages without a timestamp should be included.
     ///
-    /// By default, packages without a timestamp are excluded. Call this with
-    /// `true` to include them.
+    /// Call this to override the constructor default.
     pub fn with_include_unknown_timestamp(mut self, include: bool) -> Self {
-        match &mut self {
-            Self::DateTime {
-                include_unknown_timestamp,
-                ..
-            }
-            | Self::Duration {
-                include_unknown_timestamp,
-                ..
-            } => *include_unknown_timestamp = include,
-        }
+        self.include_unknown_timestamp = include;
         self
     }
 
     /// Returns `true` if the given package is exempt from the minimum release
     /// age check.
     pub fn is_exempt(&self, package: &PackageName) -> bool {
-        match self {
-            Self::DateTime {
-                exempt_packages, ..
-            }
-            | Self::Duration {
-                exempt_packages, ..
-            } => exempt_packages.contains(package),
-        }
+        self.exempt_packages.contains(package)
     }
 
     /// Returns whether packages without a timestamp are included.
     pub fn include_unknown_timestamp(&self) -> bool {
-        match self {
-            Self::DateTime {
-                include_unknown_timestamp,
-                ..
-            }
-            | Self::Duration {
-                include_unknown_timestamp,
-                ..
-            } => *include_unknown_timestamp,
-        }
-    }
-
-    /// Returns the effective duration for a record from the given channel.
-    pub fn duration_for_channel(&self, channel: Option<&str>) -> Option<std::time::Duration> {
-        match self {
-            Self::DateTime { .. } => None,
-            Self::Duration {
-                duration,
-                channel_durations,
-                ..
-            } => Some(
-                channel
-                    .and_then(|channel| channel_durations.get(channel).copied())
-                    .unwrap_or(*duration),
-            ),
-        }
+        self.include_unknown_timestamp
     }
 
     /// Computes the cutoff time for records from the given channel.
     pub fn cutoff_for_channel(&self, channel: Option<&str>) -> DateTime<Utc> {
-        match self {
-            Self::DateTime {
-                cutoff,
-                channel_cutoffs,
-                ..
-            } => channel
-                .and_then(|channel| channel_cutoffs.get(channel).copied())
-                .unwrap_or(*cutoff),
-            Self::Duration { now, .. } => {
-                let duration = chrono::Duration::from_std(
-                    self.duration_for_channel(channel)
-                        .expect("duration-based config must return a duration"),
-                )
-                .expect("exclude_newer duration is too large");
-                *now - duration
-            }
-        }
+        channel
+            .and_then(|channel| self.channel_cutoffs.get(channel).copied())
+            .unwrap_or(self.cutoff)
     }
 
-    /// Returns the reason a package should be excluded, if any.
-    pub fn exclusion_reason(
+    /// Returns whether a package should be excluded.
+    pub fn is_excluded(
         &self,
         package: &PackageName,
         channel: Option<&str>,
         timestamp: Option<&TimestampMs>,
-    ) -> Option<String> {
+    ) -> bool {
         if self.is_exempt(package) {
-            return None;
+            return false;
         }
 
         match timestamp {
-            Some(timestamp) => {
-                let cutoff = self.cutoff_for_channel(channel);
-                if *timestamp <= cutoff {
-                    return None;
-                }
-
-                Some(match self {
-                    Self::DateTime { .. } => {
-                        format!("the package is uploaded after the cutoff date of {cutoff}")
-                    }
-                    Self::Duration { .. } => {
-                        let duration = humantime::format_duration(
-                            self.duration_for_channel(channel)
-                                .expect("duration-based config must return a duration"),
-                        );
-                        format!("the package was published less than {duration} ago")
-                    }
-                })
-            }
-            None if !self.include_unknown_timestamp() => {
-                Some("the package has no timestamp".to_string())
-            }
-            None => None,
+            Some(timestamp) => *timestamp > self.cutoff_for_channel(channel),
+            None => !self.include_unknown_timestamp(),
         }
     }
 }
