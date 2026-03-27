@@ -247,35 +247,17 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
     let name = Path::new(filename);
     println!("Name: {}", name.display());
 
+    let target_dir = temp_dir.join(name);
     let url = url::Url::parse(url).unwrap();
-    let mut attempt = 1;
-    let result = loop {
-        let target_dir = temp_dir.join(format!("{}-{attempt}", name.display()));
-
-        match rattler_package_streaming::reqwest::tokio::extract(
-            ClientWithMiddleware::from(Client::new()),
-            url.clone(),
-            &target_dir,
-            None,
-            None,
-        )
-        .await
-        {
-            Ok(result) => break result,
-            Err(err)
-                if attempt < 4
-                    && matches!(
-                        err,
-                        ExtractError::IoError(_) | ExtractError::ReqwestError(_)
-                    ) =>
-            {
-                eprintln!("retrying {url} after transient error on attempt {attempt}: {err}");
-                attempt += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-            Err(err) => panic!("failed to extract {url} after {attempt} attempt(s): {err}"),
-        }
-    };
+    let result = rattler_package_streaming::reqwest::tokio::extract(
+        ClientWithMiddleware::from(Client::new()),
+        url,
+        &target_dir,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
