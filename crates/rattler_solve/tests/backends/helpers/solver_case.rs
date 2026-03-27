@@ -112,7 +112,7 @@ impl<'a> SolverCase<'a> {
     }
 
     /// Excludes packages newer than the given timestamp.
-    pub fn exclude_newer(mut self, timestamp: &str) -> Self {
+    pub fn exclude_newer_timestamp(mut self, timestamp: &str) -> Self {
         self.exclude_newer = Some(ExcludeNewer::from_datetime(
             timestamp.parse().expect("invalid timestamp format"),
         ));
@@ -120,7 +120,7 @@ impl<'a> SolverCase<'a> {
     }
 
     /// Sets the package cutoff configuration for filtering.
-    pub fn exclude_newer_config(mut self, config: ExcludeNewer) -> Self {
+    pub fn exclude_newer(mut self, config: ExcludeNewer) -> Self {
         self.exclude_newer = Some(config);
         self
     }

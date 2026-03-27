@@ -81,13 +81,13 @@ pub(super) fn solve_exclude_newer<T: SolverImpl + Default>() {
         SolverCase::new("exclude_newer filters out packages newer than timestamp")
             .repository([foo_old, foo_new])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer_timestamp("2022-01-01T00:00:00Z")
             .expect_present([("foo", "1.0")]),
         // When .conda is filtered by timestamp, fall back to .tar.bz2
         SolverCase::new("exclude_newer prefers .tar.bz2 when .conda is too new")
             .repository([foo_tarbz2.clone(), foo_conda, foo_newer_version])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer_timestamp("2022-01-01T00:00:00Z")
             .expect_present([foo_tarbz2]),
     ]);
 }

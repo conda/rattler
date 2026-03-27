@@ -58,7 +58,7 @@ pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
     SolverCase::new("min_age filters new packages")
         .repository(repo)
         .specs(["pkg-a"])
-        .exclude_newer_config(exclude_newer_duration_config(min_age))
+        .exclude_newer(exclude_newer_duration_config(min_age))
         .expect_present([("pkg-a", "1.0")])
         .expect_absent([("pkg-a", "2.0")])
         .run::<T>();
@@ -78,7 +78,7 @@ pub fn solve_min_age_with_exemption<T: SolverImpl + Default>() {
     SolverCase::new("min_age with exemption")
         .repository(repo)
         .specs(["pkg-a"])
-        .exclude_newer_config(config)
+        .exclude_newer(config)
         .expect_present([("pkg-a", "2.0")]) // Gets latest because it's exempt
         .run::<T>();
 }
@@ -93,7 +93,7 @@ pub fn solve_min_age_with_dependencies<T: SolverImpl + Default>() {
     SolverCase::new("min_age with dependencies")
         .repository(repo)
         .specs(["pkg-b"])
-        .exclude_newer_config(exclude_newer_duration_config(min_age))
+        .exclude_newer(exclude_newer_duration_config(min_age))
         // pkg-b 2.0 requires pkg-a >=2, but pkg-a 2.0 is too new
         // So we should get pkg-b 1.0 and pkg-a 1.0
         .expect_present([("pkg-b", "1.0"), ("pkg-a", "1.0")])
@@ -115,7 +115,7 @@ pub fn solve_min_age_exempt_dependency<T: SolverImpl + Default>() {
     SolverCase::new("min_age exempt dependency")
         .repository(repo)
         .specs(["pkg-b"])
-        .exclude_newer_config(config)
+        .exclude_newer(config)
         // pkg-b 2.0 is too new and not exempt, so we get pkg-b 1.0
         // pkg-a is exempt, but pkg-b 1.0 only requires "pkg-a" (any version)
         // so the solver can choose either pkg-a 1.0 or 2.0
@@ -143,7 +143,7 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age excludes unknown timestamp by default")
         .repository(repo)
         .specs(["pkg-a"])
-        .exclude_newer_config(exclude_newer_duration_config(min_age))
+        .exclude_newer(exclude_newer_duration_config(min_age))
         // pkg-a 2.0 has no timestamp and should be excluded
         // pkg-a 1.0 has an old timestamp and should be selected
         .expect_present([("pkg-a", "1.0")])
@@ -174,7 +174,7 @@ pub fn solve_min_age_exempt_no_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age exempt package without timestamp")
         .repository(repo)
         .specs(["pkg-a"])
-        .exclude_newer_config(config)
+        .exclude_newer(config)
         // pkg-a 2.0 has no timestamp but is exempt, so it should be selected
         .expect_present([("pkg-a", "2.0")])
         .run::<T>();
@@ -199,7 +199,7 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
     SolverCase::new("min_age with include_unknown_timestamp")
         .repository(repo)
         .specs(["pkg-no-ts", "pkg-old"])
-        .exclude_newer_config(
+        .exclude_newer(
             exclude_newer_duration_config(min_age).with_include_unknown_timestamp(true),
         )
         // Both packages should be available:
@@ -244,7 +244,7 @@ pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
     SolverCase::new("min_age per channel")
         .repository(repo)
         .specs(["pkg-a", "pkg-b"])
-        .exclude_newer_config(config)
+        .exclude_newer(config)
         .expect_present([("pkg-a", "1.0"), ("pkg-b", "2.0")])
         .expect_absent([("pkg-a", "2.0"), ("pkg-b", "1.0")])
         .run::<T>();
