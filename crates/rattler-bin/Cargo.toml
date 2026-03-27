@@ -39,6 +39,8 @@ gcs = ["rattler_networking/gcs"]
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+clap_complete = { workspace = true }
+clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 futures-util = { workspace = true }
 indicatif = { workspace = true }

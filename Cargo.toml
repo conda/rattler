@@ -61,6 +61,8 @@ clap = { version = "4.5.38", features = [
   "suggestions",
   "error-context",
 ] }
+clap_complete = "4.5.46"
+clap_complete_nushell = "4.5.5"
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }

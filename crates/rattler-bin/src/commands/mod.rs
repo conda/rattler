@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod client;
+pub mod completion;
 pub mod create;
 pub mod download;
 pub mod extract;
