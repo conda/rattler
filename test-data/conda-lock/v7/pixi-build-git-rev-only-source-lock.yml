@@ -16,3 +16,4 @@ packages:
     source:
       git: https://github.com/example/pixi-package.git
       rev: 123abc456def789012345678
+    timestamp: 1622537600
