@@ -17,3 +17,4 @@ packages:
       git: https://github.com/example/pixi-package.git
       branch: main
       rev: abcdef123456789
+    timestamp: 1622537600

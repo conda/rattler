@@ -17,3 +17,4 @@ packages:
       git: https://github.com/example/pixi-package.git
       tag: v1.2.0
       rev: def456789012345
+    timestamp: 1622537600
