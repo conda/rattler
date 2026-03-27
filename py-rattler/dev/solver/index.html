@@ -3345,11 +3345,12 @@ that should be present in the environment.</p>
                 <code>exclude_newer</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span>]</code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Exclude any record that is newer than the given datetime.</p>
+                <p>Exclude any record that is newer than the given datetime,
+or newer than the cutoff produced by subtracting a timedelta from now.</p>
               </div>
             </td>
             <td>
@@ -3613,11 +3614,12 @@ repodata.</p>
                 <code>exclude_newer</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span>]</code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="datetime.datetime">datetime</span> | <span title="datetime.timedelta">timedelta</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Exclude any record that is newer than the given datetime.</p>
+                <p>Exclude any record that is newer than the given datetime,
+or newer than the cutoff produced by subtracting a timedelta from now.</p>
               </div>
             </td>
             <td>
