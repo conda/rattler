@@ -120,7 +120,7 @@ impl<'a> SolverCase<'a> {
     }
 
     /// Sets the package cutoff configuration for filtering.
-    pub fn exclude_newer(mut self, config: ExcludeNewer) -> Self {
+    pub fn exclude_newer_config(mut self, config: ExcludeNewer) -> Self {
         self.exclude_newer = Some(config);
         self
     }
