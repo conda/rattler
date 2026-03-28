@@ -2,6 +2,7 @@ use miette::IntoDiagnostic;
 use rattler_conda_types::GenericVirtualPackage;
 use rattler_virtual_packages::VirtualPackageOverrides;
 
+/// Print detected virtual packages.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {}
 

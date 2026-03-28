@@ -4,6 +4,7 @@ from rattler.repo_data import (
     PackageRecord,
     RepoData,
     RepoDataRecord,
+    WhlPackageRecord,
     PatchInstructions,
     SparseRepoData,
     Gateway,
@@ -30,7 +31,7 @@ from rattler.package import (
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
-from rattler.install import install
+from rattler.install import install, InstallerReporter
 from rattler.index import index
 from rattler.lock import (
     LockFile,
@@ -61,6 +62,7 @@ __all__ = [
     "Client",
     "PatchInstructions",
     "RepoDataRecord",
+    "WhlPackageRecord",
     "RepoData",
     "fetch_repo_data",
     "GenericVirtualPackage",
@@ -87,6 +89,7 @@ __all__ = [
     "solve_with_sparse_repodata",
     "Platform",
     "install",
+    "InstallerReporter",
     "index",
     "AboutJson",
     "RunExportsJson",

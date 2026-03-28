@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
+use pythonize::{depythonize, pythonize};
 use rattler_conda_types::package::{AboutJson, PackageFile};
 use url::Url;
 
@@ -80,12 +81,13 @@ impl PyAboutJson {
         })?;
 
         future_into_py(py, async move {
-            let about_json = rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
-                AboutJson,
-            >(client.into(), url)
-            .await
-            .map(PyAboutJson::from)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+            let about_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    AboutJson,
+                >(client.into(), url)
+                .await
+                .map(PyAboutJson::from)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
 
             Python::with_gil(|py| Ok(Py::new(py, about_json)?.into_any()))
         })
@@ -164,6 +166,19 @@ impl PyAboutJson {
                     .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
             })
             .collect::<Result<_, _>>()?;
+        Ok(())
+    }
+
+    /// Extra metadata that was passed during the build
+    #[getter]
+    pub fn extra<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        pythonize(py, &self.inner.extra).map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+
+    #[setter]
+    pub fn set_extra(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.inner.extra =
+            depythonize(&value).map_err(|err| PyValueError::new_err(err.to_string()))?;
         Ok(())
     }
 

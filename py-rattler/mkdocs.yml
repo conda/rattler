@@ -129,6 +129,7 @@ nav:
           - PackageRecord: package_record.md
           - PatchInstructions: patch_instructions.md
           - RepoDataRecord: repo_data_record.md
+          - WhlPackageRecord: whl_package_record.md
           - Repodata: repo_data.md
           - SparseRepoData: sparse_repo_data.md
       - version:
@@ -162,6 +163,8 @@ nav:
           - TransactionError: transaction_error.md
 
 extra:
+  version:
+    provider: mike
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/prefix-dev
@@ -175,6 +178,8 @@ extra:
       link: https://twitter.com/prefix_dev
 
 plugins:
+  - mike:
+      deploy_prefix: py-rattler
   - mkdocstrings:
       handlers:
         python:

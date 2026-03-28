@@ -3,10 +3,11 @@ use std::sync::Arc;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use rattler_package_streaming::reqwest::sparse::fetch_package_file_sparse;
+use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
 use reqwest::Client;
 use url::Url;
 
+/// Inspect package metadata from a remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// URL of the conda package to inspect (must be a .conda archive)
@@ -30,7 +31,7 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         )))
         .build();
 
-    let index_json: IndexJson = fetch_package_file_sparse(client.clone(), opt.url.clone())
+    let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
         .await
         .into_diagnostic()
         .context("failed to read index.json")?;
@@ -57,7 +58,7 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    let paths_json: PathsJson = fetch_package_file_sparse(client, opt.url)
+    let paths_json: PathsJson = fetch_package_file_from_remote_url(client, opt.url)
         .await
         .into_diagnostic()
         .context("failed to read paths.json")?;

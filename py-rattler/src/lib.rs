@@ -79,7 +79,7 @@ use repo_data::{
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::{py_solve, py_solve_with_sparse_repodata, PyMinimumAgeConfig};
+use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
@@ -179,7 +179,6 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
 
-    m.add_class::<PyMinimumAgeConfig>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
@@ -189,6 +188,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_to_path, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_bytes, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_to_writer, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
     m.add_function(
         wrap_pyfunction!(package_streaming::fetch_raw_package_file_from_url, &m).unwrap(),

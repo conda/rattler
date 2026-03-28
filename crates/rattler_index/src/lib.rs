@@ -19,7 +19,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
-use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
@@ -378,7 +377,7 @@ pub struct RepodataFileMetadata {
     /// The `ETag` of the file, if available
     pub etag: Option<String>,
     /// The last modified timestamp of the file, if available
-    pub last_modified: Option<DateTime<Utc>>,
+    pub last_modified: Option<opendal::raw::Timestamp>,
     /// Whether the file existed when metadata was collected
     pub file_existed: bool,
     /// The precondition checks configuration when this metadata was collected
@@ -687,6 +686,10 @@ async fn index_subdir_inner(
         packages_to_delete.len(),
         subdir
     );
+
+    for filename in &packages_to_delete {
+        registered_packages.remove(filename);
+    }
 
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())

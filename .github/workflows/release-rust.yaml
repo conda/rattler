@@ -25,7 +25,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           lfs: false
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install Rust toolchain
         run: rustup show
 
@@ -68,7 +68,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           lfs: false
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install Rust toolchain
         run: rustup show
 
@@ -94,3 +94,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Set up pixi
+        if: steps.release-plz.outputs.prs_created == 'true'
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+
+      - name: Update pixi lockfile on release branch
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          RELEASE_BRANCH: ${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}
+        run: |
+          git fetch origin "$RELEASE_BRANCH"
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          pixi install
+          if git diff --quiet pixi.lock; then
+            echo "pixi.lock is already up-to-date"
+          else
+            git add pixi.lock
+            git commit -m "chore: update pixi.lock"
+            git push origin "$RELEASE_BRANCH"
+          fi

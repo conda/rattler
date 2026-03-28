@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.0"
+version = "0.1.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -10,7 +10,6 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 default-run = "rattler"
-publish = false
 
 [[bin]]
 name = "rattler"
@@ -40,7 +39,10 @@ gcs = ["rattler_networking/gcs"]
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+clap_complete = { workspace = true }
+clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
+futures-util = { workspace = true }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
@@ -63,6 +65,7 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
+rattler_shell = { workspace = true, default-features = false }
 rattler_upload = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
@@ -70,7 +73,3 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
-
-[package.metadata.release]
-# Dont publish the binary
-release = false

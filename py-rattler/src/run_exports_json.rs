@@ -112,7 +112,7 @@ impl PyRunExportsJson {
 
         future_into_py(py, async move {
             let run_exports_json =
-                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_url::<
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                     RunExportsJson,
                 >(client.into(), url)
                 .await

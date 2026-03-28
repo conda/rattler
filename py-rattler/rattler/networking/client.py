@@ -32,11 +32,13 @@ class Client:
             | None
         ) = None,
         headers: dict[str, str] | None = None,
+        user_agent: str | None = None,
         timeout: int | None = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None,
             headers,
+            user_agent,
             timeout,
         )
 
@@ -64,13 +66,21 @@ class Client:
         return f"{type(self).__name__}()"
 
     @staticmethod
-    def default_client(max_retries: int = 3) -> Client:
+    def default_client(
+        max_retries: int = 3,
+        headers: dict[str, str] | None = None,
+        user_agent: str | None = None,
+        timeout: int | None = None,
+    ) -> Client:
         """
         Returns a client with the standard middleware stack: retry,
         authentication, OCI, GCS and S3.
 
         Args:
             max_retries: Maximum retry attempts for transient errors (default 3).
+            headers: Default headers to send with requests.
+            user_agent: User-Agent header to send with requests.
+            timeout: Request timeout in seconds.
 
         Examples
         --------
@@ -87,7 +97,10 @@ class Client:
                 OciMiddleware(),
                 GCSMiddleware(),
                 S3Middleware(),
-            ]
+            ],
+            headers=headers,
+            user_agent=user_agent,
+            timeout=timeout,
         )
 
     @staticmethod
