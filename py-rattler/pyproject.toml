@@ -1,11 +1,11 @@
 [build-system]
-requires = ["maturin~=1.9.0"]
+requires = ["maturin >=1.9.0,<2"]
 build-backend = "maturin"
 
 [project]
 name = "py-rattler"
-dynamic = ["version"]
-requires-python = ">=3.8"
+version = "0.23.2"
+requires-python = ">=3.9"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
 authors = [
