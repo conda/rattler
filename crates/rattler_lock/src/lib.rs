@@ -102,7 +102,7 @@ pub use conda::{
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
-pub use options::{PypiPrereleaseMode, SolveOptions};
+pub use options::{ExcludeNewer, PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
