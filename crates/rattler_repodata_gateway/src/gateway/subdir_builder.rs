@@ -22,6 +22,11 @@ pub struct SubdirBuilder<'g> {
     platform: Platform,
     reporter: Option<Arc<dyn Reporter>>,
     gateway: &'g GatewayInner,
+    /// When true, skip sharded repodata and always use full repodata.json.
+    /// This is used when the query contains broad pattern specs where
+    /// fetching full repodata is more efficient than thousands of individual
+    /// shard requests.
+    skip_sharded: bool,
 }
 
 impl<'g> SubdirBuilder<'g> {
@@ -36,7 +41,18 @@ impl<'g> SubdirBuilder<'g> {
             platform,
             reporter,
             gateway,
+            skip_sharded: false,
         }
+    }
+
+    /// When set to true, sharded repodata will be skipped and full
+    /// repodata.json will always be used. This is useful when the query is
+    /// expected to match a large number of packages (e.g. pattern/glob
+    /// queries), where fetching one full repodata file is far more efficient
+    /// than thousands of individual shard HTTP requests.
+    pub fn skip_sharded(mut self, skip: bool) -> Self {
+        self.skip_sharded = skip;
+        self
     }
 
     pub async fn build(self) -> Result<Subdir, GatewayError> {
@@ -58,9 +74,9 @@ impl<'g> SubdirBuilder<'g> {
         {
             let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
-            // Use sharded repodata if enabled
-            let subdir_data = if source_config.sharded_enabled
-                || gateway::force_sharded_repodata(&url)
+            // Use sharded repodata if enabled and not explicitly skipped
+            let subdir_data = if !self.skip_sharded
+                && (source_config.sharded_enabled || gateway::force_sharded_repodata(&url))
             {
                 match self.build_sharded(source_config).await {
                     Ok(client) => Some(client),

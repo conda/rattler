@@ -240,6 +240,9 @@ impl Gateway {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+        self.inner.full_repodata_subdirs.retain(|key, _| {
+            key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
+        });
 
         #[cfg(not(target_arch = "wasm32"))]
         if mode == CacheClearMode::InMemoryAndDisk {
@@ -283,6 +286,11 @@ impl Gateway {
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
     subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
+
+    /// A separate cache for non-sharded (full repodata) subdirectories.
+    /// Used when queries contain pattern specs where fetching full repodata
+    /// is more efficient than thousands of individual shard requests.
+    full_repodata_subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: LazyClient,
@@ -348,6 +356,49 @@ impl GatewayInner {
         SubdirBuilder::new(self, channel.clone(), platform, reporter)
             .build()
             .await
+    }
+
+    /// Returns a [`Subdir`] that always uses full repodata (never sharded).
+    ///
+    /// This is used when queries contain pattern/glob specs that would
+    /// match a large number of packages. In such cases, fetching a single
+    /// full repodata file is far more efficient than making thousands of
+    /// individual shard HTTP requests.
+    ///
+    /// These subdirs are cached separately from normal (potentially sharded)
+    /// subdirs to avoid interfering with exact-name queries that benefit
+    /// from sharded repodata.
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
+    async fn get_or_create_non_sharded_subdir(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+        reporter: Option<Arc<dyn Reporter>>,
+    ) -> Result<Arc<Subdir>, GatewayError> {
+        let key = (channel.clone(), platform);
+        let channel = channel.clone();
+
+        self.full_repodata_subdirs
+            .get_or_try_init(key, || async move {
+                tracing::info!(
+                    "using full repodata for {}/{} (query contains pattern specs)",
+                    channel.canonical_name(),
+                    platform
+                );
+                let subdir = SubdirBuilder::new(self, channel.clone(), platform, reporter)
+                    .skip_sharded(true)
+                    .build()
+                    .await?;
+                Ok(Arc::new(subdir))
+            })
+            .await
+            .map_err(|e| match e {
+                CoalescedGetError::Init(gateway_err) => gateway_err,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
     }
 }
 
@@ -1715,5 +1766,58 @@ mod test {
                 .collect::<std::collections::BTreeSet<_>>(),
             "glob should find all lib-* packages across both sources and both subdirs"
         );
+    }
+
+    /// Verify that pattern/glob queries against a remote channel succeed by
+    /// using full repodata instead of sharded. This exercises the heuristic
+    /// that avoids thousands of individual shard HTTP requests when the
+    /// query contains pattern specs.
+    #[tokio::test]
+    async fn test_pattern_query_uses_full_repodata() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+        let index = remote_conda_forge().await;
+
+        // Use a glob pattern that would match multiple packages.
+        let matchspec = MatchSpec::from_str(
+            "pytho*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Lenient,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.channel()],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert!(
+            total_records > 0,
+            "pattern query should return matching records"
+        );
+
+        // Verify that the matched records actually match the pattern.
+        for repo_data in &records {
+            for record in repo_data.iter() {
+                assert!(
+                    record
+                        .package_record
+                        .name
+                        .as_normalized()
+                        .starts_with("pytho"),
+                    "record name '{}' should match the pattern 'pytho*'",
+                    record.package_record.name.as_normalized()
+                );
+            }
+        }
     }
 }

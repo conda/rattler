@@ -164,6 +164,7 @@ impl GatewayBuilder {
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: CoalescedMap::new(),
+                full_repodata_subdirs: CoalescedMap::new(),
                 client,
                 channel_config: self.channel_config,
                 #[cfg(not(target_arch = "wasm32"))]

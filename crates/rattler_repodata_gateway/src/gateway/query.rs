@@ -224,6 +224,14 @@ impl QueryExecutor {
         let mut subdir_handles = Vec::with_capacity(sources_and_platforms.len());
         let pending_subdirs = FuturesUnordered::new();
 
+        // When the query contains pattern specs (glob/regex), prefer full
+        // repodata over sharded. With sharded repodata, each matching package
+        // triggers a separate HTTP request for its shard. Broad patterns like
+        // `*` can match >10k packages, resulting in thousands of individual
+        // shard fetches. Fetching a single full repodata file is far more
+        // efficient in these cases.
+        let has_pattern_specs = !pending_pattern_specs.is_empty();
+
         for (subdir_idx, (source, platform)) in sources_and_platforms.into_iter().enumerate() {
             let barrier = Arc::new(BarrierCell::new());
             subdir_handles.push(SubdirHandle {
@@ -236,9 +244,15 @@ impl QueryExecutor {
                     let inner = gateway.clone();
                     let reporter = reporter.clone();
                     box_future(async move {
-                        let subdir = inner
-                            .get_or_create_subdir(&channel, platform, reporter)
-                            .await?;
+                        let subdir = if has_pattern_specs {
+                            inner
+                                .get_or_create_non_sharded_subdir(&channel, platform, reporter)
+                                .await?
+                        } else {
+                            inner
+                                .get_or_create_subdir(&channel, platform, reporter)
+                                .await?
+                        };
                         barrier.set(subdir.clone()).expect("subdir was set twice");
                         Ok(subdir)
                     })
