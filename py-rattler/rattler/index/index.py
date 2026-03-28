@@ -5,7 +5,8 @@ import os
 from typing import Optional, Literal
 
 from rattler.platform import Platform
-from rattler.rattler import py_index_fs, py_index_s3
+from rattler.rattler import py_index_fs, py_index_s3, py_write_repodata
+from rattler.repo_data.package_record import PackageRecord
 
 
 @dataclass
@@ -109,4 +110,32 @@ async def index_s3(
         force,
         max_parallel,
         precondition_checks,
+    )
+
+
+async def write_repodata(
+    channel_directory: os.PathLike[str],
+    records: list[PackageRecord],
+    write_zst: bool = True,
+    write_shards: bool = True,
+) -> None:
+    """
+    Write repodata from package metadata without requiring package archives on
+    disk.
+
+    Records are grouped by their `subdir` and written to the corresponding
+    channel subdirectories. Supported inputs include `RepoDataRecord`,
+    `PrefixRecord`, and `WhlPackageRecord` instances.
+
+    Arguments:
+        channel_directory: The filesystem path to the root of the channel.
+        records: Package records to serialize into repodata.
+        write_zst: Whether to also write `repodata.json.zst`.
+        write_shards: Whether to also write sharded repodata.
+    """
+    await py_write_repodata(
+        channel_directory,
+        [record._record for record in records],
+        write_zst,
+        write_shards,
     )
