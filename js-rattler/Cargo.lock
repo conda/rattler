@@ -1881,7 +1881,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.15"
+version = "0.6.18"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1912,7 +1912,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.44.0"
+version = "0.44.3"
 dependencies = [
  "ahash",
  "chrono",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "blake2",
  "digest",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.3"
+version = "0.26.6"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.3"
+version = "0.24.6"
 dependencies = [
  "astral-tokio-tar",
  "astral_async_zip",
@@ -2047,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.27.0"
+version = "0.27.3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "5.0.0"
+version = "5.1.0"
 dependencies = [
  "chrono",
  "futures",
