@@ -672,10 +672,7 @@ mod test {
               - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
         packages:
         - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
-          name: python
-          version: 3.12.0
-          build: build
-          subdir: linux-64
+          channel: null
         "###);
 
         let rendered = lock_file.render_to_string().unwrap();

@@ -9,6 +9,7 @@ pub struct Channel {
     /// The URL of the channel. File paths are also supported.
     pub url: String,
     /// A channel-specific exclude-newer override.
+    #[serde(rename = "exclude-newer")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_newer: Option<ExcludeNewer>,
     /// Used env vars for the channel (e.g. hints for passwords or other secrets)
