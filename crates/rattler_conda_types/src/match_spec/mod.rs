@@ -7,16 +7,15 @@ use crate::{
 };
 use itertools::Itertools;
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use rattler_digest::{Md5Hash, Sha256Hash};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
 use url::Url;
 
 use crate::Channel;
-use crate::ChannelConfig;
 
 /// Experimental conditionals for match specs.
 pub mod condition;
@@ -134,9 +133,7 @@ use parse::escape_bracket_value;
 /// In the future, the namespace field might be added to this list.
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: PackageNameMatcher,
@@ -157,10 +154,8 @@ pub struct MatchSpec {
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
     /// The md5 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     /// The sha256 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
@@ -170,6 +165,26 @@ pub struct MatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
+}
+
+impl Serialize for MatchSpec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for MatchSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Cow::<'de, str>::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl Display for MatchSpec {
@@ -298,9 +313,7 @@ impl From<PackageName> for MatchSpec {
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
@@ -313,17 +326,14 @@ pub struct NamelessMatchSpec {
     /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
     /// The channel of the package
-    #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
     /// The md5 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     /// The sha256 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
@@ -333,6 +343,26 @@ pub struct NamelessMatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
+}
+
+impl Serialize for NamelessMatchSpec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for NamelessMatchSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Cow::<'de, str>::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl Display for NamelessMatchSpec {
@@ -410,29 +440,6 @@ impl MatchSpec {
             condition: spec.condition,
             track_features: spec.track_features,
         }
-    }
-}
-
-/// Deserialize channel from string
-/// TODO: This should be refactored so that the front ends are the one setting the channel config,
-/// and rattler only takes care of the url.
-fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: Option<String> = Option::deserialize(deserializer)?;
-
-    match s {
-        Some(str_val) => {
-            let config = ChannelConfig::default_with_root_dir(
-                std::env::current_dir().expect("Could not determine current directory"),
-            );
-
-            Channel::from_str(str_val, &config)
-                .map(|channel| Some(Arc::new(channel)))
-                .map_err(serde::de::Error::custom)
-        }
-        None => Ok(None),
     }
 }
 
