@@ -465,7 +465,7 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_with_exemption() {
-            crate::min_age_tests::solve_min_age_with_exemption::<$T>();
+            crate::min_age_tests::solve_min_age_with_package_override::<$T>();
         }
 
         #[test]
@@ -475,7 +475,7 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_exempt_dependency() {
-            crate::min_age_tests::solve_min_age_exempt_dependency::<$T>();
+            crate::min_age_tests::solve_min_age_package_override_dependency::<$T>();
         }
 
         #[test]
@@ -490,7 +490,7 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_exempt_no_timestamp() {
-            crate::min_age_tests::solve_min_age_exempt_no_timestamp::<$T>();
+            crate::min_age_tests::solve_min_age_package_override_no_timestamp::<$T>();
         }
 
         #[test]
