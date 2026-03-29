@@ -1,6 +1,9 @@
 //! Defines [`SolveOptions`] and reexports from `rattler_solve` that are used.
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
+use rattler_conda_types::PackageName;
 
 // Reexport these fields.
 pub use rattler_solve::{ChannelPriority, SolveStrategy};
@@ -115,6 +118,10 @@ pub struct SolveOptions {
     /// Packages after this date have been excluded from the lock file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_newer: Option<ExcludeNewer>,
+
+    /// Package-specific exclude-newer overrides.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub package_exclude_newer: BTreeMap<PackageName, ExcludeNewer>,
 
     /// The prerelease mode that was used to resolve `PyPI` dependencies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
