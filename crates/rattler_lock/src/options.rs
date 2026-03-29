@@ -48,20 +48,6 @@ pub enum ExcludeNewer {
     Duration(std::time::Duration),
 }
 
-impl ExcludeNewer {
-    /// Returns the effective cutoff for the current time.
-    pub fn cutoff(&self) -> DateTime<Utc> {
-        match self {
-            Self::Timestamp(cutoff) => *cutoff,
-            Self::Duration(duration) => {
-                let duration = chrono::Duration::from_std(*duration)
-                    .expect("exclude-newer duration is too large");
-                Utc::now() - duration
-            }
-        }
-    }
-}
-
 impl From<DateTime<Utc>> for ExcludeNewer {
     fn from(value: DateTime<Utc>) -> Self {
         Self::Timestamp(value)

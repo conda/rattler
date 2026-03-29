@@ -237,11 +237,6 @@ impl ExcludeNewer {
         self.include_unknown_timestamp
     }
 
-    /// Returns the package-specific cutoff for the given package, if present.
-    pub fn package_cutoff(&self, package: &PackageName) -> Option<DateTime<Utc>> {
-        self.package_cutoffs.get(package).copied()
-    }
-
     /// Computes the cutoff time for the given package and channel.
     pub fn cutoff_for_package(
         &self,
@@ -252,13 +247,6 @@ impl ExcludeNewer {
             .get(package)
             .copied()
             .or_else(|| channel.and_then(|channel| self.channel_cutoffs.get(channel).copied()))
-            .unwrap_or(self.cutoff)
-    }
-
-    /// Computes the cutoff time for records from the given channel.
-    pub fn cutoff_for_channel(&self, channel: Option<&str>) -> DateTime<Utc> {
-        channel
-            .and_then(|channel| self.channel_cutoffs.get(channel).copied())
             .unwrap_or(self.cutoff)
     }
 
