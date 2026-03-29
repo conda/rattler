@@ -426,7 +426,9 @@ mod test {
     };
     use url::Url;
 
-    use crate::{Channel, CondaBinaryData, ExcludeNewer, LockFile, PypiPrereleaseMode, SolveOptions};
+    use crate::{
+        Channel, CondaBinaryData, ExcludeNewer, LockFile, PypiPrereleaseMode, SolveOptions,
+    };
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -638,22 +640,22 @@ mod test {
                 },
             );
         builder.add_conda_package(
-                "default",
-                Platform::Linux64,
-                CondaBinaryData {
-                    package_record: record,
-                    location: Url::parse(
-                        "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
-                    )
-                    .unwrap()
-                    .into(),
-                    file_name: "python-3.12.0-build.tar.bz2"
-                        .parse::<DistArchiveIdentifier>()
-                        .unwrap(),
-                    channel: None,
-                }
+            "default",
+            Platform::Linux64,
+            CondaBinaryData {
+                package_record: record,
+                location: Url::parse(
+                    "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                )
+                .unwrap()
                 .into(),
-            );
+                file_name: "python-3.12.0-build.tar.bz2"
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                channel: None,
+            }
+            .into(),
+        );
         let lock_file = builder.finish();
 
         insta::assert_snapshot!(lock_file.render_to_string().unwrap(), @r###"
@@ -679,10 +681,15 @@ mod test {
         let parsed = LockFile::from_str(&rendered).unwrap();
         let environment = parsed.environment("default").unwrap();
 
-        assert_eq!(environment.channels()[0].exclude_newer, Some(ExcludeNewer::Duration(Duration::ZERO)));
+        assert_eq!(
+            environment.channels()[0].exclude_newer,
+            Some(ExcludeNewer::Duration(Duration::ZERO))
+        );
         assert_eq!(
             environment.solve_options().exclude_newer,
-            Some(ExcludeNewer::Duration(Duration::from_secs(7 * 24 * 60 * 60)))
+            Some(ExcludeNewer::Duration(Duration::from_secs(
+                7 * 24 * 60 * 60
+            )))
         );
         assert_eq!(
             environment
