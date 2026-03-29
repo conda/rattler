@@ -9,7 +9,7 @@ use rattler_conda_types::PackageName;
 pub use rattler_solve::{ChannelPriority, SolveStrategy};
 
 /// Specifies how package candidates newer than a cutoff should be excluded.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExcludeNewer {
     /// An absolute cutoff timestamp.
     Timestamp(DateTime<Utc>),
