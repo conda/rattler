@@ -1220,6 +1220,13 @@ mod test {
     }
 
     #[test]
+    fn dev_is_only_special_for_exact_runs() {
+        assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2.devdev").unwrap());
+        assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2devdev").unwrap());
+        assert!(Version::from_str("1.2postpost").unwrap() < Version::from_str("1.2post").unwrap());
+    }
+
+    #[test]
     fn test_pep440() {
         // this list must be in sorted order (slightly modified from the PEP 440 test
         // suite https://github.com/pypa/packaging/blob/master/tests/test_version.py)
