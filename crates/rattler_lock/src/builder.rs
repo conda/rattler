@@ -636,8 +636,8 @@ mod test {
                     .collect(),
                     ..Default::default()
                 },
-            )
-            .with_conda_package(
+            );
+        builder.add_conda_package(
                 "default",
                 Platform::Linux64,
                 CondaBinaryData {
