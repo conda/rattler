@@ -419,14 +419,14 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, time::Duration};
 
     use rattler_conda_types::{
         package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
     };
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
+    use crate::{Channel, CondaBinaryData, ExcludeNewer, LockFile, PypiPrereleaseMode, SolveOptions};
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -599,5 +599,100 @@ mod test {
                 Some(mode)
             );
         }
+    }
+
+    #[test]
+    fn test_exclude_newer_serialization_roundtrip() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("python"),
+                Version::from_str("3.12.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        let mut builder = LockFile::builder();
+        builder
+            .set_channels(
+                "default",
+                [Channel {
+                    url: "https://conda.anaconda.org/conda-forge/".to_string(),
+                    exclude_newer: Some(ExcludeNewer::Duration(Duration::ZERO)),
+                    used_env_vars: Vec::new(),
+                }],
+            )
+            .set_options(
+                "default",
+                SolveOptions {
+                    exclude_newer: Some(ExcludeNewer::Duration(Duration::from_secs(
+                        7 * 24 * 60 * 60,
+                    ))),
+                    package_exclude_newer: [(
+                        PackageName::new_unchecked("openssl"),
+                        ExcludeNewer::Duration(Duration::ZERO),
+                    )]
+                    .into_iter()
+                    .collect(),
+                    ..Default::default()
+                },
+            )
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record,
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "python-3.12.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
+                    channel: None,
+                }
+                .into(),
+            );
+        let lock_file = builder.finish();
+
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap(), @r###"
+        version: 6
+        environments:
+          default:
+            channels:
+            - url: https://conda.anaconda.org/conda-forge/
+              exclude-newer: 0s
+            options:
+              exclude-newer: 7days
+              package-exclude-newer:
+                openssl: 0s
+            packages:
+              linux-64:
+              - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
+        packages:
+        - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
+          name: python
+          version: 3.12.0
+          build: build
+          subdir: linux-64
+        "###);
+
+        let rendered = lock_file.render_to_string().unwrap();
+        let parsed = LockFile::from_str(&rendered).unwrap();
+        let environment = parsed.environment("default").unwrap();
+
+        assert_eq!(environment.channels()[0].exclude_newer, Some(ExcludeNewer::Duration(Duration::ZERO)));
+        assert_eq!(
+            environment.solve_options().exclude_newer,
+            Some(ExcludeNewer::Duration(Duration::from_secs(7 * 24 * 60 * 60)))
+        );
+        assert_eq!(
+            environment
+                .solve_options()
+                .package_exclude_newer
+                .get(&PackageName::new_unchecked("openssl")),
+            Some(&ExcludeNewer::Duration(Duration::ZERO))
+        );
     }
 }
