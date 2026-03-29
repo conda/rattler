@@ -5,40 +5,6 @@ use chrono::{DateTime, Utc};
 // Reexport these fields.
 pub use rattler_solve::{ChannelPriority, SolveStrategy};
 
-fn format_duration(duration: std::time::Duration) -> String {
-    let mut remaining = duration.as_secs();
-    let mut formatted = String::new();
-
-    for (unit, suffix) in [(86_400, "d"), (3_600, "h"), (60, "m"), (1, "s")] {
-        let count = remaining / unit;
-        if count > 0 {
-            formatted.push_str(&format!("{count}{suffix}"));
-            remaining %= unit;
-        }
-    }
-
-    let nanos = duration.subsec_nanos();
-    let millis = nanos / 1_000_000;
-    let micros = (nanos % 1_000_000) / 1_000;
-    let nanos = nanos % 1_000;
-
-    if millis > 0 {
-        formatted.push_str(&format!("{millis}ms"));
-    }
-    if micros > 0 {
-        formatted.push_str(&format!("{micros}us"));
-    }
-    if nanos > 0 {
-        formatted.push_str(&format!("{nanos}ns"));
-    }
-
-    if formatted.is_empty() {
-        formatted.push_str("0s");
-    }
-
-    formatted
-}
-
 /// Specifies how package candidates newer than a cutoff should be excluded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewer {
@@ -82,7 +48,9 @@ impl serde::Serialize for ExcludeNewer {
     {
         match self {
             Self::Timestamp(cutoff) => cutoff.serialize(serializer),
-            Self::Duration(duration) => serializer.serialize_str(&format_duration(*duration)),
+            Self::Duration(duration) => {
+                serializer.serialize_str(&humantime::format_duration(*duration).to_string())
+            }
         }
     }
 }
@@ -164,12 +132,12 @@ mod tests {
         )))
         .unwrap();
 
-        assert_eq!(value.trim(), "3d");
+        assert_eq!(value.trim(), "3days");
     }
 
     #[test]
     fn deserializes_duration_strings() {
-        let value: ExcludeNewer = serde_yaml::from_str("3d").unwrap();
+        let value: ExcludeNewer = serde_yaml::from_str("3days").unwrap();
         assert_eq!(
             value,
             ExcludeNewer::Duration(std::time::Duration::from_secs(3 * 24 * 60 * 60))
