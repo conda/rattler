@@ -14,6 +14,10 @@ use crate::{
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
+
+    #[error("Invalid command: {0:?}")]
+    InvalidCommand(Vec<String>),
+
     #[error("Error while activating the environment: {0}")]
     ActivationError(#[from] ActivationError),
 
@@ -57,15 +61,18 @@ pub async fn run_command_in_environment(
             .expect("Activated environment panicked")?;
 
     // Run the command
-    let mut cmd = tokio::process::Command::new(&command[0]);
-    cmd.args(&command[1..]);
-    cmd.envs(&activated_env);
-    cmd.envs(env_vars);
+    let [cmd, args @ ..] = command else {
+        return Err(RunError::InvalidCommand(command.to_vec()));
+    };
+    let mut child_cmd = tokio::process::Command::new(cmd);
+    child_cmd.args(args);
+    child_cmd.envs(&activated_env);
+    child_cmd.envs(env_vars);
     if let Some(cwd) = cwd {
-        cmd.current_dir(cwd);
+        child_cmd.current_dir(cwd);
     }
 
-    Ok(cmd.status().await?)
+    Ok(child_cmd.status().await?)
 
     // Run the deactivation scripts
 
