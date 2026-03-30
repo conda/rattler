@@ -999,6 +999,46 @@ pub async fn write_repodata(
             .await?;
         }
     }
+
+    // Check for stale files that exist from previous runs but are no longer being written.
+    if metadata.repodata_zst.is_none() {
+        let zst_path = format!("{subdir}/{REPODATA}.zst");
+        if op.exists(&zst_path).await.unwrap_or(false) {
+            tracing::warn!(
+                "Stale file detected: {zst_path} exists but write_zst is disabled. \
+                 Removing to prevent inconsistent repository state."
+            );
+            if let Err(e) = op.delete(&zst_path).await {
+                tracing::warn!("Failed to remove stale file {zst_path}: {e}");
+            }
+        }
+    }
+
+    if metadata.repodata_shards.is_none() {
+        let shards_index_path = format!("{subdir}/{REPODATA_SHARDS}");
+        if op.exists(&shards_index_path).await.unwrap_or(false) {
+            tracing::warn!(
+                "Stale file detected: {shards_index_path} exists but write_shards is disabled. \
+                 Removing to prevent inconsistent repository state."
+            );
+            if let Err(e) = op.delete(&shards_index_path).await {
+                tracing::warn!("Failed to remove stale file {shards_index_path}: {e}");
+            }
+        }
+
+        // Also check for the shards directory
+        let shards_dir = format!("{subdir}/shards/");
+        if op.exists(&shards_dir).await.unwrap_or(false) {
+            tracing::warn!(
+                "Stale directory detected: {shards_dir} exists but write_shards is disabled. \
+                 Removing to prevent inconsistent repository state."
+            );
+            if let Err(e) = op.remove_all(&shards_dir).await {
+                tracing::warn!("Failed to remove stale directory {shards_dir}: {e}");
+            }
+        }
+    }
+
     Ok(())
 }
 
