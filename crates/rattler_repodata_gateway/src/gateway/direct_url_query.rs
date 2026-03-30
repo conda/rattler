@@ -57,9 +57,13 @@ impl DirectUrlQuery {
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Vec<Arc<RepoDataRecord>>, DirectUrlQueryError> {
-        let (index_json, archive_type): (IndexJson, CondaArchiveType) = if let Ok(file_path) =
-            self.url.to_file_path()
-        {
+        let (index_json, archive_type, sha256, md5, size): (
+            IndexJson,
+            CondaArchiveType,
+            Option<Sha256Hash>,
+            Option<Md5Hash>,
+            Option<u64>,
+        ) = if let Ok(file_path) = self.url.to_file_path() {
             // Determine the type of the archive
             let Some(archive_type) = CondaArchiveType::try_from(&file_path) else {
                 return Err(DirectUrlQueryError::InvalidFilename(
@@ -67,8 +71,8 @@ impl DirectUrlQuery {
                 ));
             };
 
-            match rattler_package_streaming::seek::read_package_file(&file_path) {
-                Ok(index_json) => (index_json, archive_type),
+            let index_json = match rattler_package_streaming::seek::read_package_file(&file_path) {
+                Ok(index_json) => index_json,
                 Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
                 Err(ExtractError::UnsupportedArchiveType) => {
                     return Err(DirectUrlQueryError::InvalidFilename(
@@ -80,7 +84,12 @@ impl DirectUrlQuery {
                         e.to_string(),
                     )));
                 }
-            }
+            };
+
+            // For local files, compute size from file metadata.
+            let size = std::fs::metadata(&file_path).ok().map(|m| m.len());
+
+            (index_json, archive_type, self.sha256, self.md5, size)
         } else {
             // Convert the url to an archive identifier.
             let Some(archive_identifier) = CondaArchiveIdentifier::try_from_url(&self.url) else {
@@ -110,10 +119,15 @@ impl DirectUrlQuery {
                 .await?;
 
             // Extract package record from index json
-            (
-                IndexJson::from_package_directory(cache_lock.path())?,
-                archive_type,
-            )
+            let index_json = IndexJson::from_package_directory(cache_lock.path())?;
+
+            // Use the sha256/md5/size from the extract result if available,
+            // falling back to the values provided by the caller.
+            let sha256 = cache_lock.sha256().copied().or(self.sha256);
+            let md5 = cache_lock.md5().copied().or(self.md5);
+            let size = cache_lock.size();
+
+            (index_json, archive_type, sha256, md5, size)
         };
 
         let identifier = DistArchiveIdentifier::try_from_url(&self.url).unwrap_or_else(|| {
@@ -127,12 +141,7 @@ impl DirectUrlQuery {
             }
         });
 
-        let package_record = PackageRecord::from_index_json(
-            index_json,
-            None, // size is unknown for direct urls
-            self.sha256,
-            self.md5,
-        )?;
+        let package_record = PackageRecord::from_index_json(index_json, size, sha256, md5)?;
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
 

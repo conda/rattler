@@ -475,12 +475,20 @@ impl PackageCache {
         let sha256 = cache_key.sha256();
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
+
+        // Shared state to capture extract result metadata from the fetch closure.
+        let extract_metadata: Arc<
+            Mutex<Option<(rattler_digest::Sha256Hash, rattler_digest::Md5Hash, u64)>>,
+        > = Arc::new(Mutex::new(None));
+        let extract_metadata_clone = extract_metadata.clone();
+
         // Get or fetch the package, using the specified fetch function
-        self.get_or_fetch(cache_key, move |destination| {
+        let mut cache_metadata = self.get_or_fetch(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
+            let extract_metadata_clone = extract_metadata_clone.clone();
             async move {
                 let mut current_try = 0;
                 // Retry until the retry policy says to stop
@@ -549,6 +557,9 @@ impl PackageCache {
                                     });
                                 }
                             }
+                            // Capture the extract result metadata for the caller.
+                            *extract_metadata_clone.lock() =
+                                Some((result.sha256, result.md5, result.total_size));
                             return Ok(());
                         }
                         Err(err) => err,
@@ -584,7 +595,18 @@ impl PackageCache {
                 }
             }
         }, reporter)
-            .await
+            .await?;
+
+        // Propagate extract result metadata (sha256, md5, size) into the cache metadata.
+        if let Some((sha256, md5, size)) = extract_metadata.lock().take() {
+            if cache_metadata.sha256.is_none() {
+                cache_metadata.sha256 = Some(sha256);
+            }
+            cache_metadata.md5 = Some(md5);
+            cache_metadata.size = Some(size);
+        }
+
+        Ok(cache_metadata)
     }
 }
 
@@ -646,6 +668,8 @@ where
             return Ok(CacheMetadata {
                 revision: cache_revision,
                 sha256: locked_sha256,
+                md5: None,
+                size: None,
                 path: path_inner,
                 index_json: None,
                 paths_json: None,
@@ -668,6 +692,8 @@ where
                 return Ok(CacheMetadata {
                     revision: cache_revision,
                     sha256: locked_sha256,
+                    md5: None,
+                    size: None,
                     path,
                     index_json: Some(index_json),
                     paths_json: Some(paths_json),
@@ -770,6 +796,8 @@ where
                 Ok(CacheMetadata {
                     revision: new_revision,
                     sha256: given_sha.copied(),
+                    md5: None,
+                    size: None,
                     path,
                     index_json: None,
                     paths_json: None,
