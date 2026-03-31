@@ -53,8 +53,9 @@ fn default_bytes_style() -> Result<indicatif::ProgressStyle, TemplateError> {
                 "smoothed_bytes_per_sec",
                 |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
                     (pos, elapsed_ms) if elapsed_ms > 0 => {
-                        // TODO: log with tracing?
-                        _ = write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64));
+                        let bytes_per_sec = (pos as f64 * 1000_f64 / elapsed_ms as f64) as u64;
+                        tracing::trace!(bytes_per_sec, "upload throughput");
+                        _ = write!(w, "{}/s", HumanBytes(bytes_per_sec));
                     }
                     _ => {
                         _ = write!(w, "-");
