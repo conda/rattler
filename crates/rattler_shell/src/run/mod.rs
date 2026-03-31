@@ -28,10 +28,8 @@ pub enum RunError {
     IoError(#[from] std::io::Error),
 }
 
-/// Runs a command in an activated conda environment.
-///
-/// Activates the environment at `prefix`, applies the resulting environment
-/// variables to the command, and spawns it with inherited stdio.
+/// Run a subprocess in an activated environment (inherited stdio, `command` non-empty).
+/// Uses the full process environment for activation; [`run_in_environment`] seeds from `env_vars` only.
 pub async fn run_command_in_environment(
     prefix: &Path,
     command: &[String],
