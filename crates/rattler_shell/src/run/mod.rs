@@ -50,11 +50,11 @@ pub async fn run_command_in_environment(
         conda_prefix,
         path: current_path,
         path_modification_behavior: PathModificationBehavior::default(),
+        // Full process environment. `run_in_environment` uses only the caller `env_vars` map.
         current_env: std::env::vars().collect(),
     };
 
-    // Run activation scripts
-
+    // `run_activation` is blocking. `spawn_blocking` runs it on Tokio's blocking pool, not async workers.
     let activated_env =
         tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
             .await
