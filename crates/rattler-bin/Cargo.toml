@@ -55,6 +55,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 rattler_repodata_gateway = { workspace = true, default-features = false, features = [
   "gateway",
 ] }
+rattler_shell = { workspace = true }
 rattler_solve = { workspace = true, default-features = false, features = [
   "resolvo",
   "libsolv_c",
@@ -65,7 +66,6 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
-rattler_shell = { workspace = true, default-features = false }
 rattler_upload = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
