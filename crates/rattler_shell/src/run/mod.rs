@@ -14,7 +14,6 @@ use crate::{
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
-
     #[error("Invalid command: {0:?}")]
     InvalidCommand(Vec<String>),
 
@@ -37,6 +36,10 @@ pub async fn run_command_in_environment(
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> Result<ExitStatus, RunError> {
+    if command.is_empty() {
+        return Err(RunError::InvalidCommand(command.to_vec()));
+    }
+
     let activator = Activator::from_path(prefix, shell, Platform::current())?;
 
     let current_path = std::env::var("PATH")
@@ -58,10 +61,8 @@ pub async fn run_command_in_environment(
             .await
             .expect("Activated environment panicked")?;
 
-    // Run the command
-    let [cmd, args @ ..] = command else {
-        return Err(RunError::InvalidCommand(command.to_vec()));
-    };
+    let cmd = &command[0];
+    let args = &command[1..];
     let mut child_cmd = tokio::process::Command::new(cmd);
     child_cmd.args(args);
     child_cmd.envs(&activated_env);
@@ -71,13 +72,6 @@ pub async fn run_command_in_environment(
     }
 
     Ok(child_cmd.status().await?)
-
-    // Run the deactivation scripts
-
-    // deactivation(&self, env_vars, None) -> Result<ActivationResult<T>, ActivationError>;
-
-    // Exit with the return code of the command
-
 }
 
 /// Execute a script in an activated environment.
