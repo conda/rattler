@@ -37,7 +37,7 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         "Channel".to_string(),
     ]];
     // These initial widths match the header columns length
-    let mut widths = [6, 7, 5, 7];
+    let mut widths: [usize; 4] = header[0].clone().map(|x| x.len());
     let mut lines = vec![];
     for record in prefix_data.iter() {
         if let Some(Ok(record)) = record {

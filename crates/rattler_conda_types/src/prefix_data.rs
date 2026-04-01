@@ -54,7 +54,7 @@ impl PrefixData {
         if !prefix_path.is_dir() {
             let io_err = std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Prefix {prefix_path:#?} does not exist"),
+                format!("Prefix {} does not exist", prefix_path.display()),
             );
             return Err(PrefixDataError(Arc::new(io_err)));
         };
