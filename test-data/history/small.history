@@ -1,0 +1,15 @@
+==> 2026-04-01 16:26:51 <==
+# cmd: /home/rattler/miniconda/bin/conda create -n history-test xz ca-certificates --yes
+# conda version: 26.1.1
++conda-forge/noarch::ca-certificates-2026.2.25-hbd8a1cb_0
++conda-forge/osx-arm64::liblzma-5.8.2-h8088a28_0
++conda-forge/osx-arm64::liblzma-devel-5.8.2-h8088a28_0
++conda-forge/osx-arm64::xz-5.8.2-hd0f0c4f_0
++conda-forge/osx-arm64::xz-gpl-tools-5.8.2-hd0f0c4f_0
++conda-forge/osx-arm64::xz-tools-5.8.2-h8088a28_0
+# update specs: ['ca-certificates', 'xz']
+==> 2026-04-01 16:27:37 <==
+# cmd: /home/rattler/miniconda/bin/conda remove -n history-test ca-certificates --yes
+# conda version: 26.1.1
+-conda-forge/noarch::ca-certificates-2026.2.25-hbd8a1cb_0
+# remove specs: ['ca-certificates']

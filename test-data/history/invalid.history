@@ -1,0 +1,6 @@
+this_is_just: "a yaml file"
+it_is_not: "a history file"
+parsing_this:
+  - should
+  - fail
+  - loudly
