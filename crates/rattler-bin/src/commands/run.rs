@@ -5,8 +5,8 @@ use std::{env, path::PathBuf};
 /// Run a command in an activated conda environment.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// Environment prefix to activate (defaults to `.prefix` under the current directory)
-    #[clap(long)]
+    /// Target prefix (environment path) for package installation
+    #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
     target_prefix: Option<PathBuf>,
 
     /// Working directory for the child process
@@ -23,7 +23,10 @@ pub async fn run(opt: Opt) -> miette::Result<()> {
     let target_prefix = opt
         .target_prefix
         .unwrap_or_else(|| current_dir.join(".prefix"));
+
+    // Make the target prefix absolute
     let target_prefix = std::path::absolute(target_prefix).into_diagnostic()?;
+    println!("Target prefix: {}", target_prefix.display());
 
     let shell = rattler_shell::shell::ShellEnum::from_env().unwrap_or_default();
     let cwd = opt.cwd.as_deref();
