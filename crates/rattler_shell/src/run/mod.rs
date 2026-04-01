@@ -55,7 +55,6 @@ pub async fn run_command_in_environment(
         current_env: std::env::vars().collect(),
     };
 
-    // `run_activation` is blocking. `spawn_blocking` runs it on Tokio's blocking pool, not async workers.
     let activated_env =
         tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
             .await
