@@ -21,6 +21,11 @@ build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --featur
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
+[feature.test.target.win-64.tasks]
+test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = [
+  "build",
+], env = { PYTHONUTF8 = "1" } }
+
 [feature.build.target.linux-64.dependencies]
 patchelf = "~=0.17.2"
 

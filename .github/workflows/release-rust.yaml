@@ -104,7 +104,8 @@ jobs:
         env:
           RELEASE_BRANCH: ${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}
         run: |
-          git checkout "$RELEASE_BRANCH"
+          git fetch origin "$RELEASE_BRANCH"
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
           pixi install
           if git diff --quiet pixi.lock; then
             echo "pixi.lock is already up-to-date"

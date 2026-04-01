@@ -252,12 +252,22 @@ pub struct InstallOptions {
     /// from the binary (required for programs that need specific permissions like virtualization).
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 
-    /// Whether to allow symlinks that point outside the target prefix. Some
-    /// packages (e.g. driver packages) legitimately ship symlinks to paths
-    /// outside the environment. When set to `false` (the default), such
-    /// symlinks are rejected. When set to `true`, they are allowed with a
-    /// warning.
-    pub allow_external_symlinks: bool,
+    /// Controls how symlinks that point outside the target prefix are handled.
+    /// Some packages (e.g. driver packages) legitimately ship symlinks to paths
+    /// outside the environment.
+    pub external_symlink_policy: ExternalSymlinkPolicy,
+}
+
+/// Controls the behavior when a symlink target escapes the target prefix.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ExternalSymlinkPolicy {
+    /// Allow external symlinks without any warning.
+    Allow,
+    /// Allow external symlinks but emit a `tracing::warn` log (the default).
+    #[default]
+    Warn,
+    /// Deny external symlinks and return an error.
+    Deny,
 }
 
 #[derive(Debug)]
@@ -450,7 +460,7 @@ pub async fn link_package(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
-                    options.allow_external_symlinks,
+                    options.external_symlink_policy,
                 )
             })
             .await
@@ -695,7 +705,7 @@ pub fn link_package_sync(
     } else {
         LinkType::Copy
     };
-    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
+    let mut allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
         match reflink_copy::check_reflink_support(package_dir, target_dir) {
             Ok(reflink_copy::ReflinkSupport::Supported) => true,
             Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
@@ -806,7 +816,14 @@ pub fn link_package_sync(
                     paths_by_directory = non_matching;
                 }
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+                Err(_) => {
+                    allow_ref_links = false;
+                    match fs::create_dir(&full_path) {
+                        Ok(_) => (),
+                        Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                        Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+                    }
+                }
             }
         } else {
             match fs::create_dir(&full_path) {
@@ -882,7 +899,7 @@ pub fn link_package_sync(
                     platform,
                     options.apple_codesign_behavior,
                     modification_time,
-                    options.allow_external_symlinks,
+                    options.external_symlink_policy,
                 );
 
                 let result = match link_result {

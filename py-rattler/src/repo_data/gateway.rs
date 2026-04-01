@@ -121,7 +121,7 @@ impl PyGateway {
         } else {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
-            gateway.set_client(PyClientWithMiddleware::new(None, None, None)?);
+            gateway.set_client(PyClientWithMiddleware::new(None, None, None, None)?);
         }
 
         Ok(Self {

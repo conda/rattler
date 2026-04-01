@@ -54,7 +54,9 @@ pub use minimal_prefix_record::{
     collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
-pub use package_name::{InvalidPackageNameError, PackageName};
+pub use package_name::{
+    InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
+};
 pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;

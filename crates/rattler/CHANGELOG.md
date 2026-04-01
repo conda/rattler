@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.3](https://github.com/conda/rattler/compare/rattler-v0.40.2...rattler-v0.40.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.40.2](https://github.com/conda/rattler/compare/rattler-v0.40.1...rattler-v0.40.2) - 2026-03-20
+
+### Added
+
+- add allow external symlinks to options builder ([#2258](https://github.com/conda/rattler/pull/2258))
+
+### Fixed
+
+- Fall back to mkdir when clonefile fails on non-APFS filesystems ([#2260](https://github.com/conda/rattler/pull/2260))
+
 ## [0.40.1](https://github.com/conda/rattler/compare/rattler-v0.40.0...rattler-v0.40.1) - 2026-03-18
 
 ### Other

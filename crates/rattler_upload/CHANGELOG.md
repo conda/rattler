@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4](https://github.com/conda/rattler/compare/rattler_upload-v0.5.3...rattler_upload-v0.5.4) - 2026-03-27
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.5.3](https://github.com/conda/rattler/compare/rattler_upload-v0.5.2...rattler_upload-v0.5.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.5.2](https://github.com/conda/rattler/compare/rattler_upload-v0.5.1...rattler_upload-v0.5.2) - 2026-03-20
+
+### Added
+
+- *(rattler_upload)* add Cloudsmith upload target ([#2233](https://github.com/conda/rattler/pull/2233))
+
 ## [0.5.1](https://github.com/conda/rattler/compare/rattler_upload-v0.5.0...rattler_upload-v0.5.1) - 2026-03-18
 
 ### Other

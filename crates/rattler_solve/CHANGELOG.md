@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0](https://github.com/conda/rattler/compare/rattler_solve-v5.0.3...rattler_solve-v5.1.0) - 2026-03-27
+
+### Added
+
+- *(solve)* Move min_age into exclude_newer, add per-channel configuration ([#2279](https://github.com/conda/rattler/pull/2279))
+
+## [5.0.3](https://github.com/conda/rattler/compare/rattler_solve-v5.0.2...rattler_solve-v5.0.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.0.2](https://github.com/conda/rattler/compare/rattler_solve-v5.0.1...rattler_solve-v5.0.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [5.0.1](https://github.com/conda/rattler/compare/rattler_solve-v5.0.0...rattler_solve-v5.0.1) - 2026-03-18
 
 ### Other

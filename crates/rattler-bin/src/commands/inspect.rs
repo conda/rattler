@@ -7,6 +7,7 @@ use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_ur
 use reqwest::Client;
 use url::Url;
 
+/// Inspect package metadata from a remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// URL of the conda package to inspect (must be a .conda archive)

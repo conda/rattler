@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
-use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
@@ -9,7 +8,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
-    ChannelPriority, MinimumAgeConfig, SolveError, SolveStrategy, SolverImpl, SolverTask,
+    ChannelPriority, ExcludeNewer, SolveError, SolveStrategy, SolverImpl, SolverTask,
 };
 use url::Url;
 
@@ -495,6 +494,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_per_channel() {
+            crate::min_age_tests::solve_min_age_per_channel::<$T>();
+        }
+
+        #[test]
         fn resolvo_issue_188() {
             crate::solver_case_tests::resolvo_issue_188::<$T>();
         }
@@ -707,7 +711,6 @@ mod libsolv_c {
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
-                min_age: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
             })
@@ -818,7 +821,7 @@ mod resolvo {
             &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foo>=4"],
-                exclude_newer: Some(date),
+                exclude_newer: Some(date.into()),
                 ..SimpleSolveTask::default()
             },
         );
@@ -1026,8 +1029,7 @@ struct SimpleSolveTask<'a> {
     installed_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    exclude_newer: Option<DateTime<Utc>>,
-    min_age: Option<MinimumAgeConfig>,
+    exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
 }
 
@@ -1070,8 +1072,7 @@ fn solve<T: SolverImpl + Default>(
         specs,
         constraints,
         pinned_packages: task.pinned_packages,
-        exclude_newer: task.exclude_newer,
-        min_age: task.min_age,
+        exclude_newer: task.exclude_newer.clone(),
         strategy: task.strategy,
         ..SolverTask::from_iter(&repo_data)
     };
@@ -1088,7 +1089,7 @@ fn solve<T: SolverImpl + Default>(
 #[derive(Default)]
 struct CompareTask<'a> {
     specs: Vec<&'a str>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 fn compare_solve(task: CompareTask<'_>) {
@@ -1139,7 +1140,7 @@ fn compare_solve(task: CompareTask<'_>) {
                 rattler_solve::libsolv_c::Solver
                     .solve(SolverTask {
                         specs: specs.clone(),
-                        exclude_newer: task.exclude_newer,
+                        exclude_newer: task.exclude_newer.clone(),
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()
@@ -1159,7 +1160,7 @@ fn compare_solve(task: CompareTask<'_>) {
                 rattler_solve::resolvo::Solver
                     .solve(SolverTask {
                         specs: specs.clone(),
-                        exclude_newer: task.exclude_newer,
+                        exclude_newer: task.exclude_newer.clone(),
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()
