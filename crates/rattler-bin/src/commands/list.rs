@@ -1,7 +1,10 @@
+use std::io::Write;
 use std::{env, path::PathBuf};
 
+use itertools::Itertools;
 use miette::IntoDiagnostic;
 use rattler_conda_types::{HasArtifactIdentificationRefs, PackageName, PrefixData};
+use tabwriter::TabWriter;
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
@@ -30,47 +33,38 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
     };
 
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
-    let header = [[
-        "# Name".to_string(),
-        "Version".to_string(),
-        "Build".to_string(),
-        "Channel".to_string(),
-    ]];
+    let mut tw = TabWriter::new(vec![]);
+    let mut n_packages = 0usize;
+    write!(&mut tw, "# Name\tVersion\tBuild\tChannel\n").unwrap();
     // These initial widths match the header columns length
-    let mut widths: [usize; 4] = header[0].clone().map(|x| x.len());
-    let mut lines = vec![];
-    for record in prefix_data.iter() {
+    for name in prefix_data.package_names().sorted() {
+        let record = prefix_data.get(name);
         if let Some(Ok(record)) = record {
-            let name = record.name().as_normalized();
+            let namestr = name.as_normalized();
             if let Some(query) = &opt.name {
                 let normalized_query = query.as_normalized();
                 if opt.full_name {
-                    if normalized_query != name {
+                    if normalized_query != namestr {
                         continue;
                     }
-                } else if !name.contains(normalized_query) {
+                } else if !namestr.contains(normalized_query) {
                     continue;
                 }
             };
 
             let fields = [
-                name.to_string(),
+                namestr.to_string(),
                 record.version().as_str().to_string(),
                 record.build().to_string(),
                 record.repodata_record.channel.clone().unwrap_or_default(),
             ];
-            for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
-                let field_len = field.len();
-                if field_len > width {
-                    widths[i] = field_len;
-                };
-            }
-            lines.push(fields);
+            write!(&mut tw, "{}\n", fields.join("\t")).into_diagnostic()?;
+            n_packages += 1;
         }
     }
 
     if let Some(query) = &opt.name {
-        if lines.is_empty() {
+        if n_packages == 0 {
             // If user queried a package but we didn't get matches, that's an error
             miette::bail!(
                 "No packages matched {}query '{}'",
@@ -80,16 +74,12 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    lines.sort();
-
-    println!("# packages in environment at {}", prefix.to_string_lossy());
-    for line in header.iter().chain(lines.iter()) {
-        for (i, field) in line.iter().enumerate() {
-            // Two spaces ----vv as inter-column padding
-            print!("{:<width$}  ", field, width = widths[i]);
-        }
-        println!();
-    }
+    tw.flush().unwrap();
+    println!(
+        "# packages in environment at {}\n{}",
+        prefix.to_string_lossy(),
+        String::from_utf8(tw.into_inner().into_diagnostic()?).into_diagnostic()?
+    );
 
     Ok(())
 }

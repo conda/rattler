@@ -69,6 +69,7 @@ rattler_shell = { workspace = true, default-features = false }
 rattler_upload = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
+tabwriter = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
