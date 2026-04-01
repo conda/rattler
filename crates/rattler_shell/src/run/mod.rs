@@ -14,9 +14,6 @@ use crate::{
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
-    #[error("Invalid command: {0:?}")]
-    InvalidCommand(Vec<String>),
-
     #[error("Error while activating the environment: {0}")]
     ActivationError(#[from] ActivationError),
 
@@ -36,10 +33,6 @@ pub async fn run_command_in_environment(
     env_vars: &HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> Result<ExitStatus, RunError> {
-    if command.is_empty() {
-        return Err(RunError::InvalidCommand(command.to_vec()));
-    }
-
     let activator = Activator::from_path(prefix, shell, Platform::current())?;
 
     let current_path = std::env::var("PATH")
