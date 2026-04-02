@@ -1,13 +1,18 @@
 use miette::IntoDiagnostic;
 use rattler_shell;
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
 /// Run a command in an activated conda environment.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// Target prefix (environment path) for package installation
-    #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
-    target_prefix: Option<PathBuf>,
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
+    target_prefix: PathBuf,
 
     /// Working directory for the child process
     #[clap(long)]
@@ -19,14 +24,8 @@ pub struct Opt {
 }
 
 pub async fn run(opt: Opt) -> miette::Result<()> {
-    let current_dir = env::current_dir().into_diagnostic()?;
-    let target_prefix = opt
-        .target_prefix
-        .unwrap_or_else(|| current_dir.join(".prefix"));
-
     // Make the target prefix absolute
-    let target_prefix = std::path::absolute(target_prefix).into_diagnostic()?;
-    println!("Target prefix: {}", target_prefix.display());
+    let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
     let shell = rattler_shell::shell::ShellEnum::from_env().unwrap_or_default();
     let cwd = opt.cwd.as_deref();
