@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use miette::IntoDiagnostic;
@@ -7,8 +7,13 @@ use rattler_conda_types::{menuinst::MenuMode, PackageName, Platform, PrefixRecor
 /// Install menu items for an installed package.
 #[derive(Debug, Parser)]
 pub struct InstallOpt {
-    /// Target prefix to look for the package (defaults to `.prefix`)
-    #[clap(long, short, default_value = ".prefix")]
+    /// Target prefix (environment path) to look for the package
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
     target_prefix: PathBuf,
 
     /// Name of the package for which to install menu items
@@ -18,8 +23,13 @@ pub struct InstallOpt {
 /// Remove installed menu items for a package.
 #[derive(Debug, Parser)]
 pub struct RemoveOpt {
-    /// Target prefix to look for the package (defaults to `.prefix`)
-    #[clap(long, short, default_value = ".prefix")]
+    /// Target prefix (environment path) to look for the package
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
     target_prefix: PathBuf,
 
     /// Name of the package for which to remove menu items
@@ -41,7 +51,7 @@ pub async fn install_menu(opts: InstallOpt) -> miette::Result<()> {
                 opts.target_prefix
             )
         })?;
-    let prefix = fs::canonicalize(&opts.target_prefix).into_diagnostic()?;
+    let prefix = std::path::absolute(&opts.target_prefix).into_diagnostic()?;
     rattler_menuinst::install_menuitems_for_record(
         &prefix,
         record,
