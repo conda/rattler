@@ -328,7 +328,7 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// timestamp should be used when solving the build/host environments of
     /// the packages. This ensures the package remains reproducible in the
     /// future.
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     /// The short hash that was originally parsed from the [`crate::SourceIdentifier`]
     /// in the lock file (e.g. the `9f3c2a7b` part of `numba-cuda[9f3c2a7b] @ .`).
@@ -419,7 +419,7 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: chrono::DateTime<chrono::Utc>,
+        timestamp: Option<chrono::DateTime<chrono::Utc>>,
         identifier_hash: Option<String>,
         package_record: PackageRecord,
         sources: BTreeMap<String, SourceLocation>,
@@ -443,7 +443,7 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: chrono::DateTime<chrono::Utc>,
+        timestamp: Option<chrono::DateTime<chrono::Utc>>,
         identifier_hash: Option<String>,
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
