@@ -70,7 +70,12 @@ pub struct Opt {
     timeout: Option<u64>,
 
     /// Target prefix (environment path) for package installation
-    #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix", default_value = ".prefix")]
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
     target_prefix: PathBuf,
 
     #[clap(long)]
@@ -126,7 +131,6 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
-    println!("Target prefix: {}", target_prefix.display());
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
     // Determine the platform we're going to install for
