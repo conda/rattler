@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["RunError"],"fn":["run_in_environment"]};
+window.SIDEBAR_ITEMS = {"enum":["RunError"],"fn":["run_command_in_environment","run_in_environment"]};
