@@ -351,13 +351,19 @@ impl Serialize for LockFile {
         // for more information.
         let packages = itertools::chain!(conda_packages, pypi_packages).sorted();
 
-        let raw = SerializableLockFile {
-            version: FileFormatVersion::LATEST,
-            platforms: inner
+        let platforms = {
+            let mut tmp: Vec<_> = inner
                 .platforms
                 .iter()
                 .map(SerializablePlatform::from_platform)
-                .collect(),
+                .collect();
+            tmp.sort_by_key(|p| p.name);
+            tmp
+        };
+
+        let raw = SerializableLockFile {
+            version: FileFormatVersion::LATEST,
+            platforms,
             environments,
             packages: packages.collect(),
             _version: PhantomData::<V7>,
