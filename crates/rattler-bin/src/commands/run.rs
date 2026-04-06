@@ -6,7 +6,7 @@ use std::{env, path::PathBuf};
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// Target prefix (environment path) to run the command in.
-    /// Defaults to the active conda environment ($CONDA_PREFIX), then `.prefix` in the current directory.
+    /// Defaults to the active conda environment ($`CONDA_PREFIX`), then `.prefix` in the current directory.
     #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
     target_prefix: Option<PathBuf>,
 
