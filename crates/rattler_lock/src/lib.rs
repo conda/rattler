@@ -1599,4 +1599,76 @@ packages:
             .expect("file:// pypi package (local path) must be the Source variant");
         assert_eq!(source.name.as_ref(), "my-pkg");
     }
+
+    /// Adding the same conda source package to two environments via the builder
+    /// must produce exactly one entry in the serialized packages list. This
+    /// is a regression test for a bug where the builder unconditionally
+    /// appended source packages, creating duplicates that were only collapsed
+    /// on a subsequent parse→serialize cycle (making `pixi update`
+    /// non-idempotent).
+    #[test]
+    fn builder_deduplicates_conda_source_packages() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageName, PackageRecord};
+
+        use crate::{
+            CondaPackageData, CondaSourceData, FullSourceMetadata, PlatformData, SourceMetadata,
+            UrlOrPath,
+        };
+
+        let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
+            location: UrlOrPath::Path("my-source-pkg".into()),
+            package_build_source: None,
+            variants: BTreeMap::from([(
+                "target_platform".to_string(),
+                crate::VariantValue::String("noarch".to_string()),
+            )]),
+            timestamp: None,
+            identifier_hash: None,
+            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
+                package_record: {
+                    let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
+                    let mut r = PackageRecord::new(
+                        PackageName::new_unchecked("my-source-pkg"),
+                        version,
+                        "py_0".to_string(),
+                    );
+                    r.subdir = "noarch".to_string();
+                    r
+                },
+                sources: BTreeMap::new(),
+            })),
+        }));
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
+            .with_conda_package("default", "linux-64", source_pkg.clone())
+            .unwrap()
+            .with_conda_package("dev", "linux-64", source_pkg)
+            .unwrap()
+            .finish();
+
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // The source package must appear exactly once in the top-level packages
+        // list. It also appears once per environment as a selector, so with two
+        // environments we expect 3 total occurrences (2 selectors + 1 package).
+        let count = rendered.matches("conda_source:").count();
+        assert_eq!(
+            count, 3,
+            "expected 3 conda_source occurrences (2 selectors + 1 package) \
+             but found {count}:\n{rendered}"
+        );
+
+        // Roundtrip must be stable (no duplicates introduced or removed).
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
 }

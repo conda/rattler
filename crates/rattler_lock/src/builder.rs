@@ -8,7 +8,8 @@ use rattler_conda_types::Version;
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData, SolveOptions, UrlOrPath,
+    LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData, SolveOptions,
+    SourceIdentifier, UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -121,6 +122,10 @@ pub struct LockFileBuilder {
     /// Maps unique binary package identifiers to their index in `conda_packages`.
     /// Used for deduplication of binary packages.
     binary_package_indices: HashMap<UniqueBinaryIdentifier, usize>,
+
+    /// Maps source identifiers to their index in `conda_packages`.
+    /// Used for deduplication of source packages.
+    source_package_indices: HashMap<SourceIdentifier, usize>,
 
     pypi_packages: IndexSet<PypiPackageData>,
 }
@@ -345,11 +350,16 @@ impl LockFileBuilder {
                     idx
                 }
             }
-            CondaPackageData::Source(_) => {
-                // Source packages are never merged, just appended
-                let idx = self.conda_packages.len();
-                self.conda_packages.push(locked_package);
-                idx
+            CondaPackageData::Source(ref source_data) => {
+                let identifier = SourceIdentifier::from_source_data(source_data);
+                if let Some(&existing_idx) = self.source_package_indices.get(&identifier) {
+                    existing_idx
+                } else {
+                    let idx = self.conda_packages.len();
+                    self.source_package_indices.insert(identifier, idx);
+                    self.conda_packages.push(locked_package);
+                    idx
+                }
             }
         };
 
