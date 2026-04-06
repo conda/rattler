@@ -2,14 +2,14 @@
 
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData, SolveOptions,
-    SourceIdentifier, UrlOrPath,
+    SourceIdentifier, UrlOrPath, Verbatim,
 };
 
 /// Information about a single locked package in an environment.
@@ -127,7 +127,11 @@ pub struct LockFileBuilder {
     /// Used for deduplication of source packages.
     source_package_indices: HashMap<SourceIdentifier, usize>,
 
-    pypi_packages: IndexSet<PypiPackageData>,
+    pypi_packages: Vec<PypiPackageData>,
+
+    /// Maps pypi package locations to their index in `pypi_packages`.
+    /// Used for deduplication of pypi packages.
+    pypi_package_indices: HashMap<Verbatim<UrlOrPath>, usize>,
 }
 
 /// A unique identifier for a binary conda package. This is used to deduplicate
@@ -149,6 +153,22 @@ impl<'a> From<&'a CondaBinaryData> for UniqueBinaryIdentifier {
             version: data.package_record.version.version().clone(),
             build: data.package_record.build.clone(),
             subdir: data.package_record.subdir.clone(),
+        }
+    }
+}
+
+/// Merges `requires_dist` from `other` into `existing`, adding any entries
+/// not already present. This handles the case where different environments
+/// produce different marker-evaluated dependency lists for the same package.
+fn merge_pypi_requires_dist(existing: &mut PypiPackageData, other: &PypiPackageData) {
+    let (PypiPackageData::Distribution(existing), PypiPackageData::Distribution(other)) =
+        (existing, other)
+    else {
+        return;
+    };
+    for req in &other.requires_dist {
+        if !existing.requires_dist.contains(req) {
+            existing.requires_dist.push(req.clone());
         }
     }
 }
@@ -407,8 +427,17 @@ impl LockFileBuilder {
             }
         })?;
 
-        // Add the package to the list of packages.
-        let package_idx = self.pypi_packages.insert_full(locked_package).0;
+        // Add the package to the list of packages, deduplicating by location.
+        let location = locked_package.location().clone();
+        let package_idx = if let Some(&existing_idx) = self.pypi_package_indices.get(&location) {
+            merge_pypi_requires_dist(&mut self.pypi_packages[existing_idx], &locked_package);
+            existing_idx
+        } else {
+            let idx = self.pypi_packages.len();
+            self.pypi_package_indices.insert(location, idx);
+            self.pypi_packages.push(locked_package);
+            idx
+        };
 
         // Add the package to the environment that it is intended for.
         self.environment_data(environment)
@@ -475,7 +504,7 @@ impl LockFileBuilder {
                 version: FileFormatVersion::LATEST,
                 platforms: self.platforms,
                 conda_packages: self.conda_packages,
-                pypi_packages: self.pypi_packages.into_iter().collect(),
+                pypi_packages: self.pypi_packages,
                 environments,
                 environment_lookup,
             }),
