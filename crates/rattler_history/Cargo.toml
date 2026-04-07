@@ -1,0 +1,19 @@
+[package]
+name = "rattler_history"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Travis Hathaway <travis.j.hathaway@gmail.com>"]
+description = "Reading and writing of the conda history file"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+lazy-regex = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true, features = ["yaml", "glob"] }

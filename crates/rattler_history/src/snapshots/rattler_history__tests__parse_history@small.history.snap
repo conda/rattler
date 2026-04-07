@@ -1,0 +1,13 @@
+---
+source: crates/rattler_history/src/lib.rs
+expression: "entries.iter().map(|e|\n{\n    let mut map = std::collections::BTreeMap::new();\n    map.insert(\"date\", e.date.format(\"%Y-%m-%d %H:%M:%S\").to_string());\n    map.insert(\"is_diff\", e.is_diff().to_string());\n    map.insert(\"package_count\", e.packages.len().to_string());\n    map.insert(\"comment_count\", e.comments.len().to_string()); map\n}).collect::<Vec<_>>()"
+input_file: test-data/history/small.history
+---
+- comment_count: "3"
+  date: "2026-04-01 16:26:51"
+  is_diff: "true"
+  package_count: "6"
+- comment_count: "3"
+  date: "2026-04-01 16:27:37"
+  is_diff: "true"
+  package_count: "1"

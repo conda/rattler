@@ -5161,6 +5161,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_history"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "insta",
+ "lazy-regex",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "rattler_index"
 version = "0.27.20"
 dependencies = [
