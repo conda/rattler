@@ -8,7 +8,7 @@ use rattler_prefix_guard::AsyncPrefixGuard;
 use tracing::debug;
 
 use crate::{
-    git::GitReference,
+    git::{CheckoutOptions, GitReference},
     sha::GitSha,
     source::{cache_digest, Fetch, GitSource},
     url::RepositoryUrl,
@@ -53,6 +53,7 @@ impl GitResolver {
         client: ClientWithMiddleware,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
+        checkout_options: CheckoutOptions,
     ) -> Result<Fetch, GitError> {
         debug!("Fetching source distribution from Git: {url}");
 
@@ -80,7 +81,8 @@ impl GitResolver {
         write_guard.begin().await?;
 
         // Fetch the Git repository.
-        let source = GitSource::new(url.clone(), client, cache);
+        let source =
+            GitSource::new(url.clone(), client, cache).with_checkout_options(checkout_options);
         let source = if let Some(reporter) = reporter {
             source.with_reporter(reporter)
         } else {

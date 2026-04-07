@@ -270,6 +270,21 @@ impl GitRemote {
     }
 }
 
+/// Options controlling checkout behavior (submodules, etc.).
+#[derive(Debug, Clone)]
+pub struct CheckoutOptions {
+    /// Whether to recursively initialize and update submodules.
+    pub update_submodules: bool,
+}
+
+impl Default for CheckoutOptions {
+    fn default() -> Self {
+        Self {
+            update_submodules: true,
+        }
+    }
+}
+
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
 /// can be cloned from a single [`GitDatabase`].
 pub(crate) struct GitDatabase {
@@ -279,7 +294,13 @@ pub(crate) struct GitDatabase {
 
 impl GitDatabase {
     /// Checkouts to a revision at `destination` from this database.
-    pub(crate) fn copy_to(&self, rev: GitOid, destination: &Path) -> Result<GitCheckout, GitError> {
+    pub(crate) fn copy_to(
+        &self,
+        rev: GitOid,
+        destination: &Path,
+        source_url: &Url,
+        options: &CheckoutOptions,
+    ) -> Result<GitCheckout, GitError> {
         // If the existing checkout exists, and it is fresh, use it.
         // A non-fresh checkout can happen if the checkout operation was
         // interrupted. In that case, the checkout gets deleted and a new
@@ -290,7 +311,7 @@ impl GitDatabase {
             .filter(GitCheckout::is_fresh)
         {
             Some(co) => co,
-            None => GitCheckout::clone_into(destination, self, rev)?,
+            None => GitCheckout::clone_into(destination, self, rev, source_url, options)?,
         };
         Ok(checkout)
     }
@@ -392,7 +413,13 @@ impl GitCheckout {
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self, GitError> {
+    fn clone_into(
+        into: &Path,
+        database: &GitDatabase,
+        revision: GitOid,
+        source_url: &Url,
+        options: &CheckoutOptions,
+    ) -> Result<Self, GitError> {
         tracing::debug!("cloning into {:?} from {:?}", database.repo.path, into);
         let dirname = into.parent().expect("into path must have a parent");
         fs_err::create_dir_all(dirname)?;
@@ -422,7 +449,7 @@ impl GitCheckout {
 
         let repo = GitRepository::open(into)?;
         let checkout = GitCheckout::new(revision, repo);
-        checkout.reset()?;
+        checkout.reset(source_url, options)?;
         Ok(checkout)
     }
 
@@ -450,7 +477,7 @@ impl GitCheckout {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
-    fn reset(&self) -> Result<(), GitError> {
+    fn reset(&self, source_url: &Url, options: &CheckoutOptions) -> Result<(), GitError> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = fs_err::remove_file(&ok_file);
 
@@ -468,17 +495,28 @@ impl GitCheckout {
             .env("GIT_LFS_SKIP_SMUDGE", "1")
             .output()?;
 
-        // Update submodules (`git submodule update --recursive`).
-        // Also skip LFS smudge here — submodules may contain LFS files.
-        Command::new(GIT.as_ref().map_err(Clone::clone)?)
-            .arg("submodule")
-            .arg("update")
-            .arg("--recursive")
-            .arg("--init")
-            .current_dir(&self.repo.path)
-            .env("GIT_LFS_SKIP_SMUDGE", "1")
-            .output()
-            .map(drop)?;
+        if options.update_submodules {
+            // The checkout's origin points to the local bare cache database
+            // (set by `git clone --local`). Submodules with relative URLs
+            // would resolve against that local path and fail. Resolve them
+            // against the real source URL first.
+            resolve_submodule_urls(&self.repo.path, source_url)?;
+
+            // Update submodules (`git submodule update --recursive`).
+            // Also skip LFS smudge here — submodules may contain LFS files.
+            // Allow file:// protocol so local clones and file-based
+            // submodule URLs work on modern Git (>= 2.38.1).
+            Command::new(GIT.as_ref().map_err(Clone::clone)?)
+                .args(["-c", "protocol.file.allow=always"])
+                .arg("submodule")
+                .arg("update")
+                .arg("--recursive")
+                .arg("--init")
+                .current_dir(&self.repo.path)
+                .env("GIT_LFS_SKIP_SMUDGE", "1")
+                .output()
+                .map(drop)?;
+        }
 
         fs_err::File::create(ok_file)?;
         Ok(())
@@ -808,5 +846,181 @@ fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
     match long_hash.get(..rev.len()) {
         Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
         None => false,
+    }
+}
+
+/// Resolve a relative submodule URL against a base URL.
+///
+/// This mirrors Cargo's `absolute_submodule_url`: if the base URL is
+/// parseable (http, https, file, ssh, etc.) we use `Url::join` which
+/// handles `../` normalization. The base URL gets a trailing `/`
+/// appended to its path so that `join` resolves relative to the
+/// directory rather than replacing the last path segment.
+pub fn resolve_relative_url(base: &Url, relative: &str) -> Result<String, GitError> {
+    let mut base = base.clone();
+
+    // Ensure the base path ends with `/` so `join` treats it as a directory.
+    if !base.path().ends_with('/') {
+        base.set_path(&format!("{}/", base.path()));
+    }
+
+    let resolved = base.join(relative)?;
+    Ok(resolved.to_string())
+}
+
+/// Resolve relative submodule URLs against the source URL.
+///
+/// Reads `.gitmodules`, finds entries with relative URLs (`./` or `../`),
+/// resolves them against `source_url`, and writes the absolute URL into
+/// the repo-level git config so that `git submodule update` uses it.
+fn resolve_submodule_urls(repo_path: &Path, source_url: &Url) -> Result<(), GitError> {
+    let gitmodules_path = repo_path.join(".gitmodules");
+    if !gitmodules_path.exists() {
+        return Ok(());
+    }
+
+    // List all submodule URLs from .gitmodules
+    let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
+        .current_dir(repo_path)
+        .args([
+            "config",
+            "--file",
+            ".gitmodules",
+            "--get-regexp",
+            r"submodule\..*\.url",
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        // No submodule entries — nothing to resolve
+        return Ok(());
+    }
+
+    let stdout = String::from_utf8(output.stdout)?;
+    for line in stdout.lines() {
+        // Each line is: submodule.<name>.url <url>
+        let Some((key, submodule_url)) = line.split_once(' ') else {
+            continue;
+        };
+
+        if !submodule_url.starts_with("./") && !submodule_url.starts_with("../") {
+            continue;
+        }
+
+        let resolved = resolve_relative_url(source_url, submodule_url)?;
+
+        // Write the resolved URL into the repo config (not .gitmodules).
+        // `git submodule update --init` reads from the repo config,
+        // falling back to .gitmodules only for `submodule init`.
+        let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
+            .current_dir(repo_path)
+            .args(["config", key, &resolved])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8(output.stderr)?;
+            return Err(GitError::SubmoduleUrl(key.to_string(), stderr));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_relative_url() {
+        let base = Url::parse("https://github.com/owner/repo.git").unwrap();
+
+        assert_eq!(
+            resolve_relative_url(&base, "../sibling.git").unwrap(),
+            "https://github.com/owner/sibling.git"
+        );
+
+        assert_eq!(
+            resolve_relative_url(&base, "./child.git").unwrap(),
+            "https://github.com/owner/repo.git/child.git"
+        );
+
+        let file_base = Url::parse("file:///tmp/repos/main.git").unwrap();
+        assert_eq!(
+            resolve_relative_url(&file_base, "../sub.git").unwrap(),
+            "file:///tmp/repos/sub.git"
+        );
+    }
+
+    #[test]
+    fn test_resolve_submodule_urls_no_gitmodules() {
+        let tmp = tempfile::tempdir().unwrap();
+        // No .gitmodules file — should succeed as a no-op
+        let url = Url::parse("https://github.com/owner/repo.git").unwrap();
+        resolve_submodule_urls(tmp.path(), &url).unwrap();
+    }
+
+    /// Integration test: create a git repo with a `.gitmodules` containing
+    /// relative URLs, then verify that `resolve_submodule_urls` rewrites
+    /// them to absolute URLs in the repo config.
+    #[test]
+    fn test_resolve_submodule_urls_rewrites_relative() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo_path = tmp.path().join("repo");
+
+        // Initialize a git repo
+        Command::new("git")
+            .args(["init"])
+            .arg(&repo_path)
+            .output()
+            .unwrap();
+
+        // Write a .gitmodules file with relative URLs
+        let gitmodules = r#"
+[submodule "sub-relative"]
+	path = sub-relative
+	url = ../sibling.git
+[submodule "sub-absolute"]
+	path = sub-absolute
+	url = https://github.com/other/absolute.git
+[submodule "sub-child"]
+	path = sub-child
+	url = ./child.git
+"#;
+        std::fs::write(repo_path.join(".gitmodules"), gitmodules.trim_ascii_start()).unwrap();
+
+        let source_url = Url::from_file_path(&repo_path).unwrap();
+        resolve_submodule_urls(&repo_path, &source_url).unwrap();
+
+        // Verify relative URLs were resolved
+        let output = Command::new("git")
+            .current_dir(&repo_path)
+            .args(["config", "submodule.sub-relative.url"])
+            .output()
+            .unwrap();
+        let expected_sibling = Url::from_file_path(tmp.path().join("sibling.git")).unwrap();
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            expected_sibling.as_str()
+        );
+
+        let output = Command::new("git")
+            .current_dir(&repo_path)
+            .args(["config", "submodule.sub-child.url"])
+            .output()
+            .unwrap();
+        let expected_child = Url::from_file_path(repo_path.join("child.git")).unwrap();
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            expected_child.as_str()
+        );
+
+        // Verify absolute URL was NOT written to repo config
+        let output = Command::new("git")
+            .current_dir(&repo_path)
+            .args(["config", "submodule.sub-absolute.url"])
+            .output()
+            .unwrap();
+        // Should fail (exit code 1) because absolute URLs are not rewritten
+        assert!(!output.status.success());
     }
 }
