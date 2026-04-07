@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/conda/rattler/compare/rattler-bin-v0.1.2...rattler-bin-v0.1.3) - 2026-04-07
+
+### Added
+
+- Add CLI run command ([#2263](https://github.com/conda/rattler/pull/2263))
+- Implement `rattler list` subcommand (and smaller `PrefixData` improvements) ([#2266](https://github.com/conda/rattler/pull/2266))
+- *(bin)* Add `rattler completion` command ([#2293](https://github.com/conda/rattler/pull/2293))
+
 ## [0.1.2](https://github.com/conda/rattler/compare/rattler-bin-v0.1.1...rattler-bin-v0.1.2) - 2026-03-27
 
 ### Added

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_shell-v0.26.6...rattler_shell-v0.26.7) - 2026-04-07
+
+### Added
+
+- Add CLI run command ([#2263](https://github.com/conda/rattler/pull/2263))
+
 ## [0.26.6](https://github.com/conda/rattler/compare/rattler_shell-v0.26.5...rattler_shell-v0.26.6) - 2026-03-25
 
 ### Other

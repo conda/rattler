@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.3...rattler_conda_types-v0.44.4) - 2026-04-07
+
+### Added
+
+- Implement `rattler list` subcommand (and smaller `PrefixData` improvements) ([#2266](https://github.com/conda/rattler/pull/2266))
+
 ## [0.44.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.2...rattler_conda_types-v0.44.3) - 2026-03-25
 
 ### Added

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.2.0](https://github.com/conda/rattler/compare/rattler_solve-v5.1.0...rattler_solve-v5.2.0) - 2026-04-07
+
+### Added
+
+- Remove `exclude_newer` from rattler_lock, add `package_cutoffs` ([#2296](https://github.com/conda/rattler/pull/2296))
+
 ## [5.1.0](https://github.com/conda/rattler/compare/rattler_solve-v5.0.3...rattler_solve-v5.1.0) - 2026-03-27
 
 ### Added
