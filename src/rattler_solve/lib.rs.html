@@ -11,7 +11,7 @@
 <a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[cfg(feature = <span class="string">"resolvo"</span>)]
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub mod </span>resolvo;
 <a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::collections::{HashMap, HashSet};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::collections::HashMap;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>std::fmt;
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>chrono::{DateTime, Utc};
@@ -103,8 +103,8 @@
 <a href=#101 id=101 data-nosnippet>101</a>///
 <a href=#102 id=102 data-nosnippet>102</a>/// // Only allow packages that have been published for at least 1 hour
 <a href=#103 id=103 data-nosnippet>103</a>/// let config = ExcludeNewer::from_duration(Duration::from_secs(60 * 60))
-<a href=#104 id=104 data-nosnippet>104</a>///     // But allow "my-internal-package" to bypass this check
-<a href=#105 id=105 data-nosnippet>105</a>///     .with_exempt_package("my-internal-package".parse().unwrap())
+<a href=#104 id=104 data-nosnippet>104</a>///     // But allow "my-internal-package" to use a package-specific cutoff
+<a href=#105 id=105 data-nosnippet>105</a>///     .with_package_duration("my-internal-package".parse().unwrap(), Duration::ZERO)
 <a href=#106 id=106 data-nosnippet>106</a>///     // And allow a trusted internal channel to skip the delay entirely
 <a href=#107 id=107 data-nosnippet>107</a>///     .with_channel_duration("my-internal-channel", Duration::ZERO);
 <a href=#108 id=108 data-nosnippet>108</a>/// ```
@@ -119,319 +119,334 @@
 <a href=#117 id=117 data-nosnippet>117</a>    /// The key is matched against [`RepoDataRecord::channel`] exactly.
 <a href=#118 id=118 data-nosnippet>118</a>    </span>channel_cutoffs: HashMap&lt;String, DateTime&lt;Utc&gt;&gt;,
 <a href=#119 id=119 data-nosnippet>119</a>
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Packages that are exempt from the cutoff requirement.
-<a href=#121 id=121 data-nosnippet>121</a>    </span>exempt_packages: HashSet&lt;PackageName&gt;,
-<a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Whether to include packages that don't have a timestamp.
-<a href=#124 id=124 data-nosnippet>124</a>    </span>include_unknown_timestamp: bool,
-<a href=#125 id=125 data-nosnippet>125</a>}
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a><span class="kw">impl </span>ExcludeNewer {
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">fn </span>cutoff_from_duration(duration: std::time::Duration, now: DateTime&lt;Utc&gt;) -&gt; DateTime&lt;Utc&gt; {
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>duration =
-<a href=#130 id=130 data-nosnippet>130</a>            chrono::Duration::from_std(duration).expect(<span class="string">"exclude_newer duration is too large"</span>);
-<a href=#131 id=131 data-nosnippet>131</a>        now - duration
-<a href=#132 id=132 data-nosnippet>132</a>    }
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>    <span class="doccomment">/// Creates a new configuration from an absolute cutoff date.
-<a href=#135 id=135 data-nosnippet>135</a>    </span><span class="kw">pub fn </span>from_datetime(cutoff: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">Self </span>{
-<a href=#137 id=137 data-nosnippet>137</a>            cutoff,
-<a href=#138 id=138 data-nosnippet>138</a>            channel_cutoffs: HashMap::new(),
-<a href=#139 id=139 data-nosnippet>139</a>            exempt_packages: HashSet::new(),
-<a href=#140 id=140 data-nosnippet>140</a>            include_unknown_timestamp: <span class="bool-val">false</span>,
-<a href=#141 id=141 data-nosnippet>141</a>        }
-<a href=#142 id=142 data-nosnippet>142</a>    }
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Creates a new configuration from a relative duration.
-<a href=#145 id=145 data-nosnippet>145</a>    </span><span class="kw">pub fn </span>from_duration(duration: std::time::Duration) -&gt; <span class="self">Self </span>{
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="self">Self</span>::from_duration_with_now(duration, Utc::now())
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Creates a new configuration from a relative duration and explicit
-<a href=#150 id=150 data-nosnippet>150</a>    /// reference time.
-<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub fn </span>from_duration_with_now(duration: std::time::Duration, now: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="self">Self </span>{
-<a href=#153 id=153 data-nosnippet>153</a>            cutoff: <span class="self">Self</span>::cutoff_from_duration(duration, now),
-<a href=#154 id=154 data-nosnippet>154</a>            channel_cutoffs: HashMap::new(),
-<a href=#155 id=155 data-nosnippet>155</a>            exempt_packages: HashSet::new(),
-<a href=#156 id=156 data-nosnippet>156</a>            include_unknown_timestamp: <span class="bool-val">false</span>,
-<a href=#157 id=157 data-nosnippet>157</a>        }
-<a href=#158 id=158 data-nosnippet>158</a>    }
-<a href=#159 id=159 data-nosnippet>159</a>
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Adds a package to the set of exempt packages.
-<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">pub fn </span>with_exempt_package(<span class="kw-2">mut </span><span class="self">self</span>, package: PackageName) -&gt; <span class="self">Self </span>{
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="self">self</span>.exempt_packages.insert(package);
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self
-<a href=#164 id=164 data-nosnippet>164</a>    </span>}
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="doccomment">/// Sets the set of exempt packages.
-<a href=#167 id=167 data-nosnippet>167</a>    </span><span class="kw">pub fn </span>with_exempt_packages(<span class="kw-2">mut </span><span class="self">self</span>, packages: <span class="kw">impl </span>IntoIterator&lt;Item = PackageName&gt;) -&gt; <span class="self">Self </span>{
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="self">self</span>.exempt_packages = packages.into_iter().collect();
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="self">self
-<a href=#170 id=170 data-nosnippet>170</a>    </span>}
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Sets the duration override for a specific channel.
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">pub fn </span>with_channel_duration(
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#175 id=175 data-nosnippet>175</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#176 id=176 data-nosnippet>176</a>        duration: std::time::Duration,
-<a href=#177 id=177 data-nosnippet>177</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="self">self</span>.channel_cutoffs.insert(
-<a href=#179 id=179 data-nosnippet>179</a>            channel.into(),
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="self">Self</span>::cutoff_from_duration(duration, Utc::now()),
-<a href=#181 id=181 data-nosnippet>181</a>        );
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="self">self
-<a href=#183 id=183 data-nosnippet>183</a>    </span>}
-<a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// Sets the duration override for a specific channel using an explicit
-<a href=#186 id=186 data-nosnippet>186</a>    /// reference time.
-<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">pub fn </span>with_channel_duration_with_now(
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#189 id=189 data-nosnippet>189</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#190 id=190 data-nosnippet>190</a>        duration: std::time::Duration,
-<a href=#191 id=191 data-nosnippet>191</a>        now: DateTime&lt;Utc&gt;,
-<a href=#192 id=192 data-nosnippet>192</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="self">self</span>.channel_cutoffs
-<a href=#194 id=194 data-nosnippet>194</a>            .insert(channel.into(), <span class="self">Self</span>::cutoff_from_duration(duration, now));
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self
-<a href=#196 id=196 data-nosnippet>196</a>    </span>}
-<a href=#197 id=197 data-nosnippet>197</a>
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="doccomment">/// Sets the absolute cutoff override for a specific channel.
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub fn </span>with_channel_cutoff(
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#201 id=201 data-nosnippet>201</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#202 id=202 data-nosnippet>202</a>        cutoff: DateTime&lt;Utc&gt;,
-<a href=#203 id=203 data-nosnippet>203</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="self">self</span>.channel_cutoffs.insert(channel.into(), cutoff);
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="self">self
-<a href=#206 id=206 data-nosnippet>206</a>    </span>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="doccomment">/// Sets whether packages without a timestamp should be included.
-<a href=#209 id=209 data-nosnippet>209</a>    ///
-<a href=#210 id=210 data-nosnippet>210</a>    /// Call this to override the constructor default.
-<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub fn </span>with_include_unknown_timestamp(<span class="kw-2">mut </span><span class="self">self</span>, include: bool) -&gt; <span class="self">Self </span>{
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.include_unknown_timestamp = include;
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="self">self
-<a href=#214 id=214 data-nosnippet>214</a>    </span>}
-<a href=#215 id=215 data-nosnippet>215</a>
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="doccomment">/// Returns `true` if the given package is exempt from the minimum release
-<a href=#217 id=217 data-nosnippet>217</a>    /// age check.
-<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">pub fn </span>is_exempt(<span class="kw-2">&amp;</span><span class="self">self</span>, package: <span class="kw-2">&amp;</span>PackageName) -&gt; bool {
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="self">self</span>.exempt_packages.contains(package)
-<a href=#220 id=220 data-nosnippet>220</a>    }
-<a href=#221 id=221 data-nosnippet>221</a>
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="doccomment">/// Returns whether packages without a timestamp are included.
-<a href=#223 id=223 data-nosnippet>223</a>    </span><span class="kw">pub fn </span>include_unknown_timestamp(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="self">self</span>.include_unknown_timestamp
-<a href=#225 id=225 data-nosnippet>225</a>    }
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Package-specific cutoff dates that override both [`Self::cutoff`] and
+<a href=#121 id=121 data-nosnippet>121</a>    /// [`Self::channel_cutoffs`] for matching package names.
+<a href=#122 id=122 data-nosnippet>122</a>    </span>package_cutoffs: HashMap&lt;PackageName, DateTime&lt;Utc&gt;&gt;,
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// Whether to include packages that don't have a timestamp.
+<a href=#125 id=125 data-nosnippet>125</a>    </span>include_unknown_timestamp: bool,
+<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a><span class="kw">impl </span>ExcludeNewer {
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">fn </span>cutoff_from_duration(duration: std::time::Duration, now: DateTime&lt;Utc&gt;) -&gt; DateTime&lt;Utc&gt; {
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>duration =
+<a href=#131 id=131 data-nosnippet>131</a>            chrono::Duration::from_std(duration).expect(<span class="string">"exclude_newer duration is too large"</span>);
+<a href=#132 id=132 data-nosnippet>132</a>        now - duration
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Creates a new configuration from an absolute cutoff date.
+<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub fn </span>from_datetime(cutoff: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">Self </span>{
+<a href=#138 id=138 data-nosnippet>138</a>            cutoff,
+<a href=#139 id=139 data-nosnippet>139</a>            channel_cutoffs: HashMap::new(),
+<a href=#140 id=140 data-nosnippet>140</a>            package_cutoffs: HashMap::new(),
+<a href=#141 id=141 data-nosnippet>141</a>            include_unknown_timestamp: <span class="bool-val">false</span>,
+<a href=#142 id=142 data-nosnippet>142</a>        }
+<a href=#143 id=143 data-nosnippet>143</a>    }
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// Creates a new configuration from a relative duration.
+<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">pub fn </span>from_duration(duration: std::time::Duration) -&gt; <span class="self">Self </span>{
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="self">Self</span>::from_duration_with_now(duration, Utc::now())
+<a href=#148 id=148 data-nosnippet>148</a>    }
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Creates a new configuration from a relative duration and explicit
+<a href=#151 id=151 data-nosnippet>151</a>    /// reference time.
+<a href=#152 id=152 data-nosnippet>152</a>    </span><span class="kw">pub fn </span>from_duration_with_now(duration: std::time::Duration, now: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="self">Self </span>{
+<a href=#154 id=154 data-nosnippet>154</a>            cutoff: <span class="self">Self</span>::cutoff_from_duration(duration, now),
+<a href=#155 id=155 data-nosnippet>155</a>            channel_cutoffs: HashMap::new(),
+<a href=#156 id=156 data-nosnippet>156</a>            package_cutoffs: HashMap::new(),
+<a href=#157 id=157 data-nosnippet>157</a>            include_unknown_timestamp: <span class="bool-val">false</span>,
+<a href=#158 id=158 data-nosnippet>158</a>        }
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Sets the absolute cutoff override for a specific package.
+<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">pub fn </span>with_package_cutoff(<span class="kw-2">mut </span><span class="self">self</span>, package: PackageName, cutoff: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>.package_cutoffs.insert(package, cutoff);
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="self">self
+<a href=#165 id=165 data-nosnippet>165</a>    </span>}
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Sets the duration override for a specific package.
+<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">pub fn </span>with_package_duration(
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#170 id=170 data-nosnippet>170</a>        package: PackageName,
+<a href=#171 id=171 data-nosnippet>171</a>        duration: std::time::Duration,
+<a href=#172 id=172 data-nosnippet>172</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="self">self</span>.package_cutoffs
+<a href=#174 id=174 data-nosnippet>174</a>            .insert(package, <span class="self">Self</span>::cutoff_from_duration(duration, Utc::now()));
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">self
+<a href=#176 id=176 data-nosnippet>176</a>    </span>}
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Sets the duration override for a specific package using an explicit
+<a href=#179 id=179 data-nosnippet>179</a>    /// reference time.
+<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">pub fn </span>with_package_duration_with_now(
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#182 id=182 data-nosnippet>182</a>        package: PackageName,
+<a href=#183 id=183 data-nosnippet>183</a>        duration: std::time::Duration,
+<a href=#184 id=184 data-nosnippet>184</a>        now: DateTime&lt;Utc&gt;,
+<a href=#185 id=185 data-nosnippet>185</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="self">self</span>.package_cutoffs
+<a href=#187 id=187 data-nosnippet>187</a>            .insert(package, <span class="self">Self</span>::cutoff_from_duration(duration, now));
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="self">self
+<a href=#189 id=189 data-nosnippet>189</a>    </span>}
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// Sets the duration override for a specific channel.
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">pub fn </span>with_channel_duration(
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#194 id=194 data-nosnippet>194</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#195 id=195 data-nosnippet>195</a>        duration: std::time::Duration,
+<a href=#196 id=196 data-nosnippet>196</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="self">self</span>.channel_cutoffs.insert(
+<a href=#198 id=198 data-nosnippet>198</a>            channel.into(),
+<a href=#199 id=199 data-nosnippet>199</a>            <span class="self">Self</span>::cutoff_from_duration(duration, Utc::now()),
+<a href=#200 id=200 data-nosnippet>200</a>        );
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="self">self
+<a href=#202 id=202 data-nosnippet>202</a>    </span>}
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// Sets the duration override for a specific channel using an explicit
+<a href=#205 id=205 data-nosnippet>205</a>    /// reference time.
+<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">pub fn </span>with_channel_duration_with_now(
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#208 id=208 data-nosnippet>208</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#209 id=209 data-nosnippet>209</a>        duration: std::time::Duration,
+<a href=#210 id=210 data-nosnippet>210</a>        now: DateTime&lt;Utc&gt;,
+<a href=#211 id=211 data-nosnippet>211</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.channel_cutoffs
+<a href=#213 id=213 data-nosnippet>213</a>            .insert(channel.into(), <span class="self">Self</span>::cutoff_from_duration(duration, now));
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="self">self
+<a href=#215 id=215 data-nosnippet>215</a>    </span>}
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="doccomment">/// Sets the absolute cutoff override for a specific channel.
+<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">pub fn </span>with_channel_cutoff(
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#220 id=220 data-nosnippet>220</a>        channel: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#221 id=221 data-nosnippet>221</a>        cutoff: DateTime&lt;Utc&gt;,
+<a href=#222 id=222 data-nosnippet>222</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="self">self</span>.channel_cutoffs.insert(channel.into(), cutoff);
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="self">self
+<a href=#225 id=225 data-nosnippet>225</a>    </span>}
 <a href=#226 id=226 data-nosnippet>226</a>
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// Computes the cutoff time for records from the given channel.
-<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub fn </span>cutoff_for_channel(<span class="kw-2">&amp;</span><span class="self">self</span>, channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; DateTime&lt;Utc&gt; {
-<a href=#229 id=229 data-nosnippet>229</a>        channel
-<a href=#230 id=230 data-nosnippet>230</a>            .and_then(|channel| <span class="self">self</span>.channel_cutoffs.get(channel).copied())
-<a href=#231 id=231 data-nosnippet>231</a>            .unwrap_or(<span class="self">self</span>.cutoff)
-<a href=#232 id=232 data-nosnippet>232</a>    }
-<a href=#233 id=233 data-nosnippet>233</a>
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="doccomment">/// Returns whether a package should be excluded.
-<a href=#235 id=235 data-nosnippet>235</a>    </span><span class="kw">pub fn </span>is_excluded(
-<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#237 id=237 data-nosnippet>237</a>        package: <span class="kw-2">&amp;</span>PackageName,
-<a href=#238 id=238 data-nosnippet>238</a>        channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
-<a href=#239 id=239 data-nosnippet>239</a>        timestamp: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>TimestampMs&gt;,
-<a href=#240 id=240 data-nosnippet>240</a>    ) -&gt; bool {
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">if </span><span class="self">self</span>.is_exempt(package) {
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#243 id=243 data-nosnippet>243</a>        }
-<a href=#244 id=244 data-nosnippet>244</a>
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">match </span>timestamp {
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="prelude-val">Some</span>(timestamp) =&gt; <span class="kw-2">*</span>timestamp &gt; <span class="self">self</span>.cutoff_for_channel(channel),
-<a href=#247 id=247 data-nosnippet>247</a>            <span class="prelude-val">None </span>=&gt; !<span class="self">self</span>.include_unknown_timestamp(),
-<a href=#248 id=248 data-nosnippet>248</a>        }
-<a href=#249 id=249 data-nosnippet>249</a>    }
-<a href=#250 id=250 data-nosnippet>250</a>}
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a><span class="kw">impl </span>From&lt;DateTime&lt;Utc&gt;&gt; <span class="kw">for </span>ExcludeNewer {
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">fn </span>from(value: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="self">Self</span>::from_datetime(value)
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>}
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a><span class="kw">impl </span>From&lt;std::time::Duration&gt; <span class="kw">for </span>ExcludeNewer {
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">fn </span>from(value: std::time::Duration) -&gt; <span class="self">Self </span>{
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="self">Self</span>::from_duration(value)
-<a href=#261 id=261 data-nosnippet>261</a>    }
-<a href=#262 id=262 data-nosnippet>262</a>}
-<a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a><span class="doccomment">/// Represents the channel priority option to use during solves.
-<a href=#265 id=265 data-nosnippet>265</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-<a href=#266 id=266 data-nosnippet>266</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
-<a href=#267 id=267 data-nosnippet>267</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
-<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">pub enum </span>ChannelPriority {
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// The channel that the package is first found in will be used as the only
-<a href=#270 id=270 data-nosnippet>270</a>    /// channel for that package.
-<a href=#271 id=271 data-nosnippet>271</a>    </span><span class="attr">#[default]
-<a href=#272 id=272 data-nosnippet>272</a>    </span>Strict,
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// Conda also has "Flexible" as an option, where packages present in multiple channels
-<a href=#275 id=275 data-nosnippet>275</a>    // are only taken from lower-priority channels when this prevents unsatisfiable environment
-<a href=#276 id=276 data-nosnippet>276</a>    // errors, but this would need implementation in the solvers.
-<a href=#277 id=277 data-nosnippet>277</a>    // Flexible,
-<a href=#278 id=278 data-nosnippet>278</a>    </span><span class="doccomment">/// Packages can be retrieved from any channel as package version takes
-<a href=#279 id=279 data-nosnippet>279</a>    /// precedence.
-<a href=#280 id=280 data-nosnippet>280</a>    </span>Disabled,
-<a href=#281 id=281 data-nosnippet>281</a>}
-<a href=#282 id=282 data-nosnippet>282</a><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
-<a href=#283 id=283 data-nosnippet>283</a></span><span class="doccomment">/// Represents a dependency resolution task, to be solved by one of the backends
-<a href=#284 id=284 data-nosnippet>284</a></span><span class="kw">pub struct </span>SolverTask&lt;TAvailablePackagesIterator&gt; {
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="doccomment">/// An iterator over all available packages
-<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">pub </span>available_packages: TAvailablePackagesIterator,
-<a href=#287 id=287 data-nosnippet>287</a>
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="doccomment">/// Records of packages that are previously selected.
-<a href=#289 id=289 data-nosnippet>289</a>    ///
-<a href=#290 id=290 data-nosnippet>290</a>    /// If the solver encounters multiple variants of a single package
-<a href=#291 id=291 data-nosnippet>291</a>    /// (identified by its name), it will sort the records and select the
-<a href=#292 id=292 data-nosnippet>292</a>    /// best possible version. However, if there exists a locked version it
-<a href=#293 id=293 data-nosnippet>293</a>    /// will prefer that variant instead. This is useful to reduce the number of
-<a href=#294 id=294 data-nosnippet>294</a>    /// packages that are updated when installing new packages.
-<a href=#295 id=295 data-nosnippet>295</a>    ///
-<a href=#296 id=296 data-nosnippet>296</a>    /// Usually you add the currently installed packages or packages from a
-<a href=#297 id=297 data-nosnippet>297</a>    /// lock-file here.
-<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">pub </span>locked_packages: Vec&lt;RepoDataRecord&gt;,
-<a href=#299 id=299 data-nosnippet>299</a>
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Records of packages that are previously selected and CANNOT be changed.
-<a href=#301 id=301 data-nosnippet>301</a>    ///
-<a href=#302 id=302 data-nosnippet>302</a>    /// If the solver encounters multiple variants of a single package
-<a href=#303 id=303 data-nosnippet>303</a>    /// (identified by its name), it will sort the records and select the
-<a href=#304 id=304 data-nosnippet>304</a>    /// best possible version. However, if there is a variant available in
-<a href=#305 id=305 data-nosnippet>305</a>    /// the `pinned_packages` field it will always select that version no matter
-<a href=#306 id=306 data-nosnippet>306</a>    /// what even if that means other packages have to be downgraded.
-<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="kw">pub </span>pinned_packages: Vec&lt;RepoDataRecord&gt;,
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="doccomment">/// Virtual packages considered active
-<a href=#310 id=310 data-nosnippet>310</a>    </span><span class="kw">pub </span>virtual_packages: Vec&lt;GenericVirtualPackage&gt;,
-<a href=#311 id=311 data-nosnippet>311</a>
-<a href=#312 id=312 data-nosnippet>312</a>    <span class="doccomment">/// The specs we want to solve
-<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub </span>specs: Vec&lt;MatchSpec&gt;,
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// Sets whether packages without a timestamp should be included.
+<a href=#228 id=228 data-nosnippet>228</a>    ///
+<a href=#229 id=229 data-nosnippet>229</a>    /// Call this to override the constructor default.
+<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">pub fn </span>with_include_unknown_timestamp(<span class="kw-2">mut </span><span class="self">self</span>, include: bool) -&gt; <span class="self">Self </span>{
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="self">self</span>.include_unknown_timestamp = include;
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="self">self
+<a href=#233 id=233 data-nosnippet>233</a>    </span>}
+<a href=#234 id=234 data-nosnippet>234</a>
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="doccomment">/// Returns whether packages without a timestamp are included.
+<a href=#236 id=236 data-nosnippet>236</a>    </span><span class="kw">pub fn </span>include_unknown_timestamp(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="self">self</span>.include_unknown_timestamp
+<a href=#238 id=238 data-nosnippet>238</a>    }
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="doccomment">/// Computes the cutoff time for the given package and channel.
+<a href=#241 id=241 data-nosnippet>241</a>    </span><span class="kw">pub fn </span>cutoff_for_package(
+<a href=#242 id=242 data-nosnippet>242</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#243 id=243 data-nosnippet>243</a>        package: <span class="kw-2">&amp;</span>PackageName,
+<a href=#244 id=244 data-nosnippet>244</a>        channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#245 id=245 data-nosnippet>245</a>    ) -&gt; DateTime&lt;Utc&gt; {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="self">self</span>.package_cutoffs
+<a href=#247 id=247 data-nosnippet>247</a>            .get(package)
+<a href=#248 id=248 data-nosnippet>248</a>            .copied()
+<a href=#249 id=249 data-nosnippet>249</a>            .or_else(|| channel.and_then(|channel| <span class="self">self</span>.channel_cutoffs.get(channel).copied()))
+<a href=#250 id=250 data-nosnippet>250</a>            .unwrap_or(<span class="self">self</span>.cutoff)
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// Returns whether a package should be excluded.
+<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub fn </span>is_excluded(
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#256 id=256 data-nosnippet>256</a>        package: <span class="kw-2">&amp;</span>PackageName,
+<a href=#257 id=257 data-nosnippet>257</a>        channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#258 id=258 data-nosnippet>258</a>        timestamp: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>TimestampMs&gt;,
+<a href=#259 id=259 data-nosnippet>259</a>    ) -&gt; bool {
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">match </span>timestamp {
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="prelude-val">Some</span>(timestamp) =&gt; <span class="kw-2">*</span>timestamp &gt; <span class="self">self</span>.cutoff_for_package(package, channel),
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="prelude-val">None </span>=&gt; !<span class="self">self</span>.include_unknown_timestamp(),
+<a href=#263 id=263 data-nosnippet>263</a>        }
+<a href=#264 id=264 data-nosnippet>264</a>    }
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="kw">impl </span>From&lt;DateTime&lt;Utc&gt;&gt; <span class="kw">for </span>ExcludeNewer {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>from(value: DateTime&lt;Utc&gt;) -&gt; <span class="self">Self </span>{
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="self">Self</span>::from_datetime(value)
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a><span class="kw">impl </span>From&lt;std::time::Duration&gt; <span class="kw">for </span>ExcludeNewer {
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">fn </span>from(value: std::time::Duration) -&gt; <span class="self">Self </span>{
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="self">Self</span>::from_duration(value)
+<a href=#276 id=276 data-nosnippet>276</a>    }
+<a href=#277 id=277 data-nosnippet>277</a>}
+<a href=#278 id=278 data-nosnippet>278</a>
+<a href=#279 id=279 data-nosnippet>279</a><span class="doccomment">/// Represents the channel priority option to use during solves.
+<a href=#280 id=280 data-nosnippet>280</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+<a href=#281 id=281 data-nosnippet>281</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
+<a href=#282 id=282 data-nosnippet>282</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
+<a href=#283 id=283 data-nosnippet>283</a></span><span class="kw">pub enum </span>ChannelPriority {
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="doccomment">/// The channel that the package is first found in will be used as the only
+<a href=#285 id=285 data-nosnippet>285</a>    /// channel for that package.
+<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="attr">#[default]
+<a href=#287 id=287 data-nosnippet>287</a>    </span>Strict,
+<a href=#288 id=288 data-nosnippet>288</a>
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="comment">// Conda also has "Flexible" as an option, where packages present in multiple channels
+<a href=#290 id=290 data-nosnippet>290</a>    // are only taken from lower-priority channels when this prevents unsatisfiable environment
+<a href=#291 id=291 data-nosnippet>291</a>    // errors, but this would need implementation in the solvers.
+<a href=#292 id=292 data-nosnippet>292</a>    // Flexible,
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="doccomment">/// Packages can be retrieved from any channel as package version takes
+<a href=#294 id=294 data-nosnippet>294</a>    /// precedence.
+<a href=#295 id=295 data-nosnippet>295</a>    </span>Disabled,
+<a href=#296 id=296 data-nosnippet>296</a>}
+<a href=#297 id=297 data-nosnippet>297</a><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
+<a href=#298 id=298 data-nosnippet>298</a></span><span class="doccomment">/// Represents a dependency resolution task, to be solved by one of the backends
+<a href=#299 id=299 data-nosnippet>299</a></span><span class="kw">pub struct </span>SolverTask&lt;TAvailablePackagesIterator&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// An iterator over all available packages
+<a href=#301 id=301 data-nosnippet>301</a>    </span><span class="kw">pub </span>available_packages: TAvailablePackagesIterator,
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="doccomment">/// Records of packages that are previously selected.
+<a href=#304 id=304 data-nosnippet>304</a>    ///
+<a href=#305 id=305 data-nosnippet>305</a>    /// If the solver encounters multiple variants of a single package
+<a href=#306 id=306 data-nosnippet>306</a>    /// (identified by its name), it will sort the records and select the
+<a href=#307 id=307 data-nosnippet>307</a>    /// best possible version. However, if there exists a locked version it
+<a href=#308 id=308 data-nosnippet>308</a>    /// will prefer that variant instead. This is useful to reduce the number of
+<a href=#309 id=309 data-nosnippet>309</a>    /// packages that are updated when installing new packages.
+<a href=#310 id=310 data-nosnippet>310</a>    ///
+<a href=#311 id=311 data-nosnippet>311</a>    /// Usually you add the currently installed packages or packages from a
+<a href=#312 id=312 data-nosnippet>312</a>    /// lock-file here.
+<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub </span>locked_packages: Vec&lt;RepoDataRecord&gt;,
 <a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="doccomment">/// Additional constraints that should be satisfied by the solver.
-<a href=#316 id=316 data-nosnippet>316</a>    /// Packages included in the `constraints` are not necessarily
-<a href=#317 id=317 data-nosnippet>317</a>    /// installed, but they must be satisfied by the solution.
-<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">pub </span>constraints: Vec&lt;MatchSpec&gt;,
-<a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="doccomment">/// The timeout after which the solver should stop
-<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="kw">pub </span>timeout: <span class="prelude-ty">Option</span>&lt;std::time::Duration&gt;,
-<a href=#322 id=322 data-nosnippet>322</a>
-<a href=#323 id=323 data-nosnippet>323</a>    <span class="doccomment">/// The channel priority to solve with, either [`ChannelPriority::Strict`]
-<a href=#324 id=324 data-nosnippet>324</a>    /// or [`ChannelPriority::Disabled`]
-<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="kw">pub </span>channel_priority: ChannelPriority,
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="doccomment">/// Records of packages that are previously selected and CANNOT be changed.
+<a href=#316 id=316 data-nosnippet>316</a>    ///
+<a href=#317 id=317 data-nosnippet>317</a>    /// If the solver encounters multiple variants of a single package
+<a href=#318 id=318 data-nosnippet>318</a>    /// (identified by its name), it will sort the records and select the
+<a href=#319 id=319 data-nosnippet>319</a>    /// best possible version. However, if there is a variant available in
+<a href=#320 id=320 data-nosnippet>320</a>    /// the `pinned_packages` field it will always select that version no matter
+<a href=#321 id=321 data-nosnippet>321</a>    /// what even if that means other packages have to be downgraded.
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">pub </span>pinned_packages: Vec&lt;RepoDataRecord&gt;,
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="doccomment">/// Virtual packages considered active
+<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="kw">pub </span>virtual_packages: Vec&lt;GenericVirtualPackage&gt;,
 <a href=#326 id=326 data-nosnippet>326</a>
-<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// Exclude packages newer than the configured cutoff.
-<a href=#328 id=328 data-nosnippet>328</a>    ///
-<a href=#329 id=329 data-nosnippet>329</a>    /// This can be either:
-<a href=#330 id=330 data-nosnippet>330</a>    ///
-<a href=#331 id=331 data-nosnippet>331</a>    /// - a fixed cutoff date, equivalent to the historical `exclude_newer`
-<a href=#332 id=332 data-nosnippet>332</a>    ///   behavior; or
-<a href=#333 id=333 data-nosnippet>333</a>    /// - a relative duration, equivalent to the historical `min_age`
-<a href=#334 id=334 data-nosnippet>334</a>    ///   behavior.
-<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">pub </span>exclude_newer: <span class="prelude-ty">Option</span>&lt;ExcludeNewer&gt;,
-<a href=#336 id=336 data-nosnippet>336</a>
-<a href=#337 id=337 data-nosnippet>337</a>    <span class="doccomment">/// The solve strategy.
-<a href=#338 id=338 data-nosnippet>338</a>    </span><span class="kw">pub </span>strategy: SolveStrategy,
-<a href=#339 id=339 data-nosnippet>339</a>
-<a href=#340 id=340 data-nosnippet>340</a>    <span class="doccomment">/// Dependency overrides that replace dependencies of matching packages.
-<a href=#341 id=341 data-nosnippet>341</a>    </span><span class="kw">pub </span>dependency_overrides: Vec&lt;(MatchSpec, MatchSpec)&gt;,
-<a href=#342 id=342 data-nosnippet>342</a>}
-<a href=#343 id=343 data-nosnippet>343</a>
-<a href=#344 id=344 data-nosnippet>344</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;I&gt;
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">for </span>SolverTask&lt;Vec&lt;RepoDataIter&lt;I&gt;&gt;&gt;
-<a href=#346 id=346 data-nosnippet>346</a>{
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = I&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="self">Self </span>{
-<a href=#349 id=349 data-nosnippet>349</a>            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
-<a href=#350 id=350 data-nosnippet>350</a>            locked_packages: Vec::new(),
-<a href=#351 id=351 data-nosnippet>351</a>            pinned_packages: Vec::new(),
-<a href=#352 id=352 data-nosnippet>352</a>            virtual_packages: Vec::new(),
-<a href=#353 id=353 data-nosnippet>353</a>            specs: Vec::new(),
-<a href=#354 id=354 data-nosnippet>354</a>            constraints: Vec::new(),
-<a href=#355 id=355 data-nosnippet>355</a>            timeout: <span class="prelude-val">None</span>,
-<a href=#356 id=356 data-nosnippet>356</a>            channel_priority: ChannelPriority::default(),
-<a href=#357 id=357 data-nosnippet>357</a>            exclude_newer: <span class="prelude-val">None</span>,
-<a href=#358 id=358 data-nosnippet>358</a>            strategy: SolveStrategy::default(),
-<a href=#359 id=359 data-nosnippet>359</a>            dependency_overrides: Vec::new(),
-<a href=#360 id=360 data-nosnippet>360</a>        }
-<a href=#361 id=361 data-nosnippet>361</a>    }
-<a href=#362 id=362 data-nosnippet>362</a>}
-<a href=#363 id=363 data-nosnippet>363</a>
-<a href=#364 id=364 data-nosnippet>364</a><span class="doccomment">/// Represents the strategy to use when solving dependencies
-<a href=#365 id=365 data-nosnippet>365</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
-<a href=#366 id=366 data-nosnippet>366</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
-<a href=#367 id=367 data-nosnippet>367</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
-<a href=#368 id=368 data-nosnippet>368</a></span><span class="kw">pub enum </span>SolveStrategy {
-<a href=#369 id=369 data-nosnippet>369</a>    <span class="doccomment">/// Resolve the highest version of each package.
-<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="attr">#[default]
-<a href=#371 id=371 data-nosnippet>371</a>    </span>Highest,
-<a href=#372 id=372 data-nosnippet>372</a>
-<a href=#373 id=373 data-nosnippet>373</a>    <span class="doccomment">/// Resolve the lowest compatible version for each package.
-<a href=#374 id=374 data-nosnippet>374</a>    ///
-<a href=#375 id=375 data-nosnippet>375</a>    /// All candidates with the same version are still ordered the same as
-<a href=#376 id=376 data-nosnippet>376</a>    /// with `Default`. This ensures that the candidate with the highest build
-<a href=#377 id=377 data-nosnippet>377</a>    /// number is used and down-prioritization still works.
-<a href=#378 id=378 data-nosnippet>378</a>    </span>LowestVersion,
-<a href=#379 id=379 data-nosnippet>379</a>
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="doccomment">/// Resolve the lowest compatible version for direct dependencies but the
-<a href=#381 id=381 data-nosnippet>381</a>    /// highest for transitive dependencies. This is similar to `LowestVersion`
-<a href=#382 id=382 data-nosnippet>382</a>    /// but only for direct dependencies.
-<a href=#383 id=383 data-nosnippet>383</a>    </span>LowestVersionDirect,
-<a href=#384 id=384 data-nosnippet>384</a>}
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a><span class="doccomment">/// A representation of a collection of [`RepoDataRecord`] usable by a
-<a href=#387 id=387 data-nosnippet>387</a>/// [`SolverImpl`] implementation.
-<a href=#388 id=388 data-nosnippet>388</a>///
-<a href=#389 id=389 data-nosnippet>389</a>/// Some solvers might be able to cache the collection between different runs of
-<a href=#390 id=390 data-nosnippet>390</a>/// the solver which could potentially eliminate some overhead. This trait
-<a href=#391 id=391 data-nosnippet>391</a>/// enables creating a representation of the repodata that is most suitable for
-<a href=#392 id=392 data-nosnippet>392</a>/// a specific backend.
-<a href=#393 id=393 data-nosnippet>393</a>///
-<a href=#394 id=394 data-nosnippet>394</a>/// Some solvers may add additional functionality to their specific
-<a href=#395 id=395 data-nosnippet>395</a>/// implementation that enables caching the repodata to disk in an efficient way
-<a href=#396 id=396 data-nosnippet>396</a>/// (see [`crate::libsolv_c::RepoData`] for an example).
-<a href=#397 id=397 data-nosnippet>397</a></span><span class="kw">pub trait </span>SolverRepoData&lt;<span class="lifetime">'a</span>&gt;: FromIterator&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt; {}
-<a href=#398 id=398 data-nosnippet>398</a>
-<a href=#399 id=399 data-nosnippet>399</a><span class="doccomment">/// Defines the ability to convert a type into [`SolverRepoData`].
-<a href=#400 id=400 data-nosnippet>400</a></span><span class="kw">pub trait </span>IntoRepoData&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; {
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="doccomment">/// Converts this instance into an instance of [`SolverRepoData`] which is
-<a href=#402 id=402 data-nosnippet>402</a>    /// consumable by a specific [`SolverImpl`] implementation.
-<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S;
-<a href=#404 id=404 data-nosnippet>404</a>}
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>Vec&lt;RepoDataRecord&gt; {
-<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="self">self</span>.iter().collect()
-<a href=#409 id=409 data-nosnippet>409</a>    }
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord] {
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="self">self</span>.iter().collect()
-<a href=#415 id=415 data-nosnippet>415</a>    }
-<a href=#416 id=416 data-nosnippet>416</a>}
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span>S {
-<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="self">self
-<a href=#421 id=421 data-nosnippet>421</a>    </span>}
-<a href=#422 id=422 data-nosnippet>422</a>}
-<a href=#423 id=423 data-nosnippet>423</a>
-<a href=#424 id=424 data-nosnippet>424</a><span class="doccomment">/// A helper struct that implements `IntoRepoData` for anything that can
-<a href=#425 id=425 data-nosnippet>425</a>/// iterate over `RepoDataRecord`s.
-<a href=#426 id=426 data-nosnippet>426</a></span><span class="kw">pub struct </span>RepoDataIter&lt;T&gt;(<span class="kw">pub </span>T);
-<a href=#427 id=427 data-nosnippet>427</a>
-<a href=#428 id=428 data-nosnippet>428</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
-<a href=#429 id=429 data-nosnippet>429</a>    <span class="kw">for </span>RepoDataIter&lt;T&gt;
-<a href=#430 id=430 data-nosnippet>430</a>{
-<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="self">self</span>.<span class="number">0</span>.into_iter().collect()
-<a href=#433 id=433 data-nosnippet>433</a>    }
-<a href=#434 id=434 data-nosnippet>434</a>}
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// The specs we want to solve
+<a href=#328 id=328 data-nosnippet>328</a>    </span><span class="kw">pub </span>specs: Vec&lt;MatchSpec&gt;,
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="doccomment">/// Additional constraints that should be satisfied by the solver.
+<a href=#331 id=331 data-nosnippet>331</a>    /// Packages included in the `constraints` are not necessarily
+<a href=#332 id=332 data-nosnippet>332</a>    /// installed, but they must be satisfied by the solution.
+<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">pub </span>constraints: Vec&lt;MatchSpec&gt;,
+<a href=#334 id=334 data-nosnippet>334</a>
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="doccomment">/// The timeout after which the solver should stop
+<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="kw">pub </span>timeout: <span class="prelude-ty">Option</span>&lt;std::time::Duration&gt;,
+<a href=#337 id=337 data-nosnippet>337</a>
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="doccomment">/// The channel priority to solve with, either [`ChannelPriority::Strict`]
+<a href=#339 id=339 data-nosnippet>339</a>    /// or [`ChannelPriority::Disabled`]
+<a href=#340 id=340 data-nosnippet>340</a>    </span><span class="kw">pub </span>channel_priority: ChannelPriority,
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="doccomment">/// Exclude packages newer than the configured cutoff.
+<a href=#343 id=343 data-nosnippet>343</a>    ///
+<a href=#344 id=344 data-nosnippet>344</a>    /// This can be either:
+<a href=#345 id=345 data-nosnippet>345</a>    ///
+<a href=#346 id=346 data-nosnippet>346</a>    /// - a fixed cutoff date, equivalent to the historical `exclude_newer`
+<a href=#347 id=347 data-nosnippet>347</a>    ///   behavior; or
+<a href=#348 id=348 data-nosnippet>348</a>    /// - a relative duration, equivalent to the historical `min_age`
+<a href=#349 id=349 data-nosnippet>349</a>    ///   behavior.
+<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">pub </span>exclude_newer: <span class="prelude-ty">Option</span>&lt;ExcludeNewer&gt;,
+<a href=#351 id=351 data-nosnippet>351</a>
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="doccomment">/// The solve strategy.
+<a href=#353 id=353 data-nosnippet>353</a>    </span><span class="kw">pub </span>strategy: SolveStrategy,
+<a href=#354 id=354 data-nosnippet>354</a>
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="doccomment">/// Dependency overrides that replace dependencies of matching packages.
+<a href=#356 id=356 data-nosnippet>356</a>    </span><span class="kw">pub </span>dependency_overrides: Vec&lt;(MatchSpec, MatchSpec)&gt;,
+<a href=#357 id=357 data-nosnippet>357</a>}
+<a href=#358 id=358 data-nosnippet>358</a>
+<a href=#359 id=359 data-nosnippet>359</a><span class="kw">impl</span>&lt;<span class="lifetime">'r</span>, I: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'r </span>RepoDataRecord&gt;&gt; FromIterator&lt;I&gt;
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="kw">for </span>SolverTask&lt;Vec&lt;RepoDataIter&lt;I&gt;&gt;&gt;
+<a href=#361 id=361 data-nosnippet>361</a>{
+<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = I&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="self">Self </span>{
+<a href=#364 id=364 data-nosnippet>364</a>            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
+<a href=#365 id=365 data-nosnippet>365</a>            locked_packages: Vec::new(),
+<a href=#366 id=366 data-nosnippet>366</a>            pinned_packages: Vec::new(),
+<a href=#367 id=367 data-nosnippet>367</a>            virtual_packages: Vec::new(),
+<a href=#368 id=368 data-nosnippet>368</a>            specs: Vec::new(),
+<a href=#369 id=369 data-nosnippet>369</a>            constraints: Vec::new(),
+<a href=#370 id=370 data-nosnippet>370</a>            timeout: <span class="prelude-val">None</span>,
+<a href=#371 id=371 data-nosnippet>371</a>            channel_priority: ChannelPriority::default(),
+<a href=#372 id=372 data-nosnippet>372</a>            exclude_newer: <span class="prelude-val">None</span>,
+<a href=#373 id=373 data-nosnippet>373</a>            strategy: SolveStrategy::default(),
+<a href=#374 id=374 data-nosnippet>374</a>            dependency_overrides: Vec::new(),
+<a href=#375 id=375 data-nosnippet>375</a>        }
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>}
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a><span class="doccomment">/// Represents the strategy to use when solving dependencies
+<a href=#380 id=380 data-nosnippet>380</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+<a href=#381 id=381 data-nosnippet>381</a>#[cfg_attr(feature = <span class="string">"serde"</span>, derive(serde::Serialize, serde::Deserialize))]
+<a href=#382 id=382 data-nosnippet>382</a>#[cfg_attr(feature = <span class="string">"serde"</span>, serde(rename_all = <span class="string">"kebab-case"</span>))]
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">pub enum </span>SolveStrategy {
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="doccomment">/// Resolve the highest version of each package.
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="attr">#[default]
+<a href=#386 id=386 data-nosnippet>386</a>    </span>Highest,
+<a href=#387 id=387 data-nosnippet>387</a>
+<a href=#388 id=388 data-nosnippet>388</a>    <span class="doccomment">/// Resolve the lowest compatible version for each package.
+<a href=#389 id=389 data-nosnippet>389</a>    ///
+<a href=#390 id=390 data-nosnippet>390</a>    /// All candidates with the same version are still ordered the same as
+<a href=#391 id=391 data-nosnippet>391</a>    /// with `Default`. This ensures that the candidate with the highest build
+<a href=#392 id=392 data-nosnippet>392</a>    /// number is used and down-prioritization still works.
+<a href=#393 id=393 data-nosnippet>393</a>    </span>LowestVersion,
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// Resolve the lowest compatible version for direct dependencies but the
+<a href=#396 id=396 data-nosnippet>396</a>    /// highest for transitive dependencies. This is similar to `LowestVersion`
+<a href=#397 id=397 data-nosnippet>397</a>    /// but only for direct dependencies.
+<a href=#398 id=398 data-nosnippet>398</a>    </span>LowestVersionDirect,
+<a href=#399 id=399 data-nosnippet>399</a>}
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a><span class="doccomment">/// A representation of a collection of [`RepoDataRecord`] usable by a
+<a href=#402 id=402 data-nosnippet>402</a>/// [`SolverImpl`] implementation.
+<a href=#403 id=403 data-nosnippet>403</a>///
+<a href=#404 id=404 data-nosnippet>404</a>/// Some solvers might be able to cache the collection between different runs of
+<a href=#405 id=405 data-nosnippet>405</a>/// the solver which could potentially eliminate some overhead. This trait
+<a href=#406 id=406 data-nosnippet>406</a>/// enables creating a representation of the repodata that is most suitable for
+<a href=#407 id=407 data-nosnippet>407</a>/// a specific backend.
+<a href=#408 id=408 data-nosnippet>408</a>///
+<a href=#409 id=409 data-nosnippet>409</a>/// Some solvers may add additional functionality to their specific
+<a href=#410 id=410 data-nosnippet>410</a>/// implementation that enables caching the repodata to disk in an efficient way
+<a href=#411 id=411 data-nosnippet>411</a>/// (see [`crate::libsolv_c::RepoData`] for an example).
+<a href=#412 id=412 data-nosnippet>412</a></span><span class="kw">pub trait </span>SolverRepoData&lt;<span class="lifetime">'a</span>&gt;: FromIterator&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt; {}
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a><span class="doccomment">/// Defines the ability to convert a type into [`SolverRepoData`].
+<a href=#415 id=415 data-nosnippet>415</a></span><span class="kw">pub trait </span>IntoRepoData&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; {
+<a href=#416 id=416 data-nosnippet>416</a>    <span class="doccomment">/// Converts this instance into an instance of [`SolverRepoData`] which is
+<a href=#417 id=417 data-nosnippet>417</a>    /// consumable by a specific [`SolverImpl`] implementation.
+<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S;
+<a href=#419 id=419 data-nosnippet>419</a>}
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>Vec&lt;RepoDataRecord&gt; {
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="self">self</span>.iter().collect()
+<a href=#424 id=424 data-nosnippet>424</a>    }
+<a href=#425 id=425 data-nosnippet>425</a>}
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord] {
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="self">self</span>.iter().collect()
+<a href=#430 id=430 data-nosnippet>430</a>    }
+<a href=#431 id=431 data-nosnippet>431</a>}
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt; <span class="kw">for </span>S {
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="self">self
+<a href=#436 id=436 data-nosnippet>436</a>    </span>}
+<a href=#437 id=437 data-nosnippet>437</a>}
+<a href=#438 id=438 data-nosnippet>438</a>
+<a href=#439 id=439 data-nosnippet>439</a><span class="doccomment">/// A helper struct that implements `IntoRepoData` for anything that can
+<a href=#440 id=440 data-nosnippet>440</a>/// iterate over `RepoDataRecord`s.
+<a href=#441 id=441 data-nosnippet>441</a></span><span class="kw">pub struct </span>RepoDataIter&lt;T&gt;(<span class="kw">pub </span>T);
+<a href=#442 id=442 data-nosnippet>442</a>
+<a href=#443 id=443 data-nosnippet>443</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T: IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord&gt;, S: SolverRepoData&lt;<span class="lifetime">'a</span>&gt;&gt; IntoRepoData&lt;<span class="lifetime">'a</span>, S&gt;
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">for </span>RepoDataIter&lt;T&gt;
+<a href=#445 id=445 data-nosnippet>445</a>{
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; S {
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="self">self</span>.<span class="number">0</span>.into_iter().collect()
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>}
 </code></pre></div></section></main></body></html>
