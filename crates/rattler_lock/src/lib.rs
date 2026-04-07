@@ -1599,4 +1599,215 @@ packages:
             .expect("file:// pypi package (local path) must be the Source variant");
         assert_eq!(source.name.as_ref(), "my-pkg");
     }
+
+    /// Adding the same conda source package to two environments via the builder
+    /// must produce exactly one entry in the serialized packages list. This
+    /// is a regression test for a bug where the builder unconditionally
+    /// appended source packages, creating duplicates that were only collapsed
+    /// on a subsequent parse→serialize cycle (making `pixi update`
+    /// non-idempotent).
+    #[test]
+    fn builder_deduplicates_conda_source_packages() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageName, PackageRecord};
+
+        use crate::{
+            CondaPackageData, CondaSourceData, FullSourceMetadata, PlatformData, SourceMetadata,
+            UrlOrPath,
+        };
+
+        let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
+            location: UrlOrPath::Path("my-source-pkg".into()),
+            package_build_source: None,
+            variants: BTreeMap::from([(
+                "target_platform".to_string(),
+                crate::VariantValue::String("noarch".to_string()),
+            )]),
+            timestamp: None,
+            identifier_hash: None,
+            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
+                package_record: {
+                    let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
+                    let mut r = PackageRecord::new(
+                        PackageName::new_unchecked("my-source-pkg"),
+                        version,
+                        "py_0".to_string(),
+                    );
+                    r.subdir = "noarch".to_string();
+                    r
+                },
+                sources: BTreeMap::new(),
+            })),
+        }));
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
+            .with_conda_package("default", "linux-64", source_pkg.clone())
+            .unwrap()
+            .with_conda_package("dev", "linux-64", source_pkg)
+            .unwrap()
+            .finish();
+
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // The source package must appear exactly once in the top-level packages
+        // list. It also appears once per environment as a selector, so with two
+        // environments we expect 3 total occurrences (2 selectors + 1 package).
+        let count = rendered.matches("conda_source:").count();
+        assert_eq!(
+            count, 3,
+            "expected 3 conda_source occurrences (2 selectors + 1 package) \
+             but found {count}:\n{rendered}"
+        );
+
+        // Roundtrip must be stable (no duplicates introduced or removed).
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// A v7 lockfile with duplicate pypi git-source entries that differ only
+    /// in `requires_dist` must collapse to a single entry with the merged
+    /// (superset) dependency list on parse→serialize. This is a regression
+    /// test for a bug where `pixi update` produced duplicate pypi entries for
+    /// git dependencies used across multiple environments (each environment
+    /// contributing a slightly different `requires_dist` from marker evaluation),
+    /// and a second `pixi update` removed the duplicates — making the
+    /// lockfile non-idempotent.
+    #[test]
+    fn duplicate_pypi_git_entries_collapsed_on_roundtrip() {
+        // Lockfile with the same git+https pypi package listed twice in the
+        // packages section with different requires_dist (as observed in the
+        // wild after `pixi update` — different environments produce different
+        // marker-evaluated dependency lists for the same package).
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
+  dev:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
+packages:
+  - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
+    name: minimalloc
+    version: 0.1.0
+    requires_dist:
+      - numpy>=1.0
+    requires_python: '>=3.7'
+  - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
+    name: minimalloc
+    version: 0.1.0
+    requires_dist:
+      - numpy>=1.0
+      - scipy>=1.0 ; extra == 'test'
+    requires_python: '>=3.7'
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // After roundtrip, the two entries should be collapsed to a single entry.
+        // 2 selectors (one per env) + 1 package entry = 3 occurrences of the URL.
+        let url = "git+https://github.com/example/minimalloc.git";
+        let count = rendered.matches(url).count();
+        assert_eq!(
+            count, 3,
+            "expected 3 occurrences of git URL (2 selectors + 1 package) \
+             but found {count}:\n{rendered}"
+        );
+
+        // A second roundtrip must be stable.
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// Adding the same pypi git package to two environments via the builder
+    /// with different `requires_dist` (as happens when pixi evaluates markers
+    /// per-environment) must produce exactly one entry in the serialized
+    /// packages list. This is a regression test for a bug where the builder's
+    /// `IndexSet` treated entries with different `requires_dist` as distinct,
+    /// creating duplicates that were only collapsed on a subsequent
+    /// parse→serialize cycle.
+    #[test]
+    fn builder_deduplicates_pypi_git_packages() {
+        use crate::{PlatformData, PypiPackageData, UrlOrPath, Verbatim};
+
+        let url: url::Url = "git+https://github.com/example/minimalloc.git?rev=abc123#abc123"
+            .parse()
+            .unwrap();
+
+        let pkg_a = PypiPackageData::Distribution(Box::new(crate::PypiDistributionData {
+            name: "minimalloc".parse().unwrap(),
+            version: "0.1.0".parse().unwrap(),
+            location: Verbatim::new(UrlOrPath::Url(url.clone())),
+            index_url: None,
+            hash: None,
+            requires_dist: vec!["numpy>=1.0".parse().unwrap()],
+            requires_python: Some(">=3.7".parse().unwrap()),
+        }));
+
+        // Same package but with an extra marker-guarded dependency, as would
+        // happen when pixi evaluates markers for a different environment.
+        let pkg_b = PypiPackageData::Distribution(Box::new(crate::PypiDistributionData {
+            name: "minimalloc".parse().unwrap(),
+            version: "0.1.0".parse().unwrap(),
+            location: Verbatim::new(UrlOrPath::Url(url)),
+            index_url: None,
+            hash: None,
+            requires_dist: vec![
+                "numpy>=1.0".parse().unwrap(),
+                "scipy>=1.0 ; extra == 'test'".parse().unwrap(),
+            ],
+            requires_python: Some(">=3.7".parse().unwrap()),
+        }));
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
+            .with_pypi_package("default", "linux-64", pkg_a)
+            .unwrap()
+            .with_pypi_package("dev", "linux-64", pkg_b)
+            .unwrap()
+            .finish();
+
+        let rendered = lock_file.render_to_string().unwrap();
+
+        // The git URL should appear exactly 3 times: 2 selectors + 1 package entry.
+        let url_str = "git+https://github.com/example/minimalloc.git";
+        let count = rendered.matches(url_str).count();
+        assert_eq!(
+            count, 3,
+            "expected 3 occurrences of git URL (2 selectors + 1 package) \
+             but found {count}:\n{rendered}"
+        );
+
+        // Roundtrip must be stable.
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
 }
