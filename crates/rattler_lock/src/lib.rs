@@ -795,8 +795,8 @@ mod test {
             Some("https://my-custom-index.example.com/simple")
         );
 
-        // Package from pypi.org without explicit index_url
-        // defaults to https://pypi.org/simple
+        // Package without explicit index_url defaults to the
+        // environment's first index
         let numpy = pypi_packages
             .iter()
             .find(|p| p.name().as_ref() == "numpy")
@@ -808,7 +808,7 @@ mod test {
                 .index_url
                 .as_ref()
                 .map(url::Url::as_str),
-            Some("https://pypi.org/simple")
+            Some("https://my-custom-index.example.com/simple")
         );
 
         // Path-based package has no index_url
@@ -817,6 +817,200 @@ mod test {
             .find(|p| p.name().as_ref() == "local-pkg")
             .expect("local-pkg package");
         assert!(local_pkg.as_source().is_some());
+    }
+
+    /// In v7 lockfiles, a package without an explicit `index:` field
+    /// should use the first index from the environment's `indexes:` list.
+    #[test]
+    fn v7_pypi_default_index_from_environment() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://first-index.example.com/simple
+      - https://second-index.example.com/simple
+    packages:
+      linux-64:
+        - pypi: https://first-index.example.com/packages/requests-2.31.0-py3-none-any.whl
+        - pypi: https://second-index.example.com/packages/numpy-1.26.0-cp311-linux_x86_64.whl
+packages:
+  - pypi: https://first-index.example.com/packages/requests-2.31.0-py3-none-any.whl
+    name: requests
+    version: 2.31.0
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - pypi: https://second-index.example.com/packages/numpy-1.26.0-cp311-linux_x86_64.whl
+    name: numpy
+    version: 1.26.0
+    index: https://second-index.example.com/simple
+    sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+        let pypi_packages: Vec<_> = env
+            .packages(linux)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_pypi)
+            .collect();
+
+        // Package without explicit index: should use the first environment index
+        let requests = pypi_packages
+            .iter()
+            .find(|p| p.name().as_ref() == "requests")
+            .expect("requests package");
+        assert_eq!(
+            requests
+                .as_wheel()
+                .unwrap()
+                .index_url
+                .as_ref()
+                .map(url::Url::as_str),
+            Some("https://first-index.example.com/simple"),
+        );
+
+        // Package with explicit index: should keep that index
+        let numpy = pypi_packages
+            .iter()
+            .find(|p| p.name().as_ref() == "numpy")
+            .expect("numpy package");
+        assert_eq!(
+            numpy
+                .as_wheel()
+                .unwrap()
+                .index_url
+                .as_ref()
+                .map(url::Url::as_str),
+            Some("https://second-index.example.com/simple"),
+        );
+    }
+
+    /// Lockfiles before v7 didn't store per-package index URLs, so
+    /// `index_url` must be `None` after parsing.
+    #[test]
+    fn v5_pypi_index_url_is_none() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/v5/flat-index-lock.yml");
+        let lock_file = LockFile::from_path(&path).unwrap();
+        let platform = lock_file.platform("osx-arm64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+
+        for pkg in env
+            .packages(platform)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_pypi)
+        {
+            if let Some(wheel) = pkg.as_wheel() {
+                assert!(
+                    wheel.index_url.is_none(),
+                    "v5 package {:?} should have no index_url",
+                    wheel.name
+                );
+            }
+        }
+    }
+
+    /// Lockfiles before v7 didn't store per-package index URLs, so
+    /// `index_url` must be `None` after parsing.
+    #[test]
+    fn v6_pypi_index_url_is_none() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/v6/numpy-as-pypi-lock.yml");
+        let lock_file = LockFile::from_path(&path).unwrap();
+        let platform = lock_file.platform("osx-arm64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+
+        let numpy = env
+            .packages(platform)
+            .unwrap()
+            .filter_map(super::LockedPackageRef::as_pypi)
+            .find(|p| p.name().as_ref() == "numpy")
+            .expect("numpy package");
+        assert!(numpy.as_wheel().unwrap().index_url.is_none());
+    }
+
+    /// Lockfiles before v7 didn't store per-package index URLs, so
+    /// `index_url` must be `None` after parsing.
+    #[test]
+    fn v3_pypi_index_url_is_none() {
+        let lock_file_str = "\
+version: 3
+metadata:
+  content_hash:
+    linux-64: abc123
+  channels:
+    - url: https://conda.anaconda.org/conda-forge/
+      used_env_vars: []
+  platforms:
+    - linux-64
+  sources: []
+package:
+  - platform: linux-64
+    name: requests
+    version: '2.31.0'
+    category: main
+    manager: pip
+    dependencies: []
+    url: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
+    hash:
+      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert!(pkg.as_wheel().unwrap().index_url.is_none());
+    }
+
+    /// When a v7 environment has no `indexes:` list, wheels without an
+    /// explicit `index:` should fall back to `https://pypi.org/simple`.
+    #[test]
+    fn v7_pypi_no_indexes_falls_back_to_pypi() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - pypi: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
+packages:
+  - pypi: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
+    name: requests
+    version: 2.31.0
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+";
+        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
+        let linux = lock_file.platform("linux-64").unwrap();
+        let pkg = lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .packages(linux)
+            .unwrap()
+            .find_map(super::LockedPackageRef::as_pypi)
+            .expect("expected a pypi package");
+
+        assert_eq!(
+            pkg.as_wheel()
+                .unwrap()
+                .index_url
+                .as_ref()
+                .map(url::Url::as_str),
+            Some("https://pypi.org/simple"),
+        );
     }
 
     #[test]

@@ -753,10 +753,10 @@ fn parse_from_lock<P>(
         }
     }
 
-    let pypi_url_lookup: ahash::HashMap<_, _> = pypi_packages
+    let pypi_url_lookup: ahash::HashMap<Verbatim<UrlOrPath>, _> = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (p.location(), idx))
+        .map(|(idx, p)| (p.location().clone(), idx))
         .collect();
 
     // Parse environments
@@ -795,6 +795,30 @@ fn parse_from_lock<P>(
                 resolved.insert(package_data);
             }
 
+            // For v7+ lockfiles, fill in the default index URL for pypi
+            // distribution packages that don't have an explicit one. The
+            // default is the first entry in the environment's `indexes`
+            // list, falling back to https://pypi.org/simple.
+            if file_version >= FileFormatVersion::V7 {
+                let default_index = env
+                    .indexes
+                    .as_ref()
+                    .and_then(|i| i.indexes.first())
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        url::Url::parse("https://pypi.org/simple").expect("valid hard-coded URL")
+                    });
+                for pkg in &resolved {
+                    if let EnvironmentPackageData::Pypi(idx) = pkg {
+                        if let Some(w) = pypi_packages[*idx].as_wheel_mut() {
+                            if w.index_url.is_none() {
+                                w.index_url = Some(default_index.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
             env_packages.insert(platform_index, resolved);
         }
 
@@ -826,7 +850,7 @@ fn resolve_package_selector(
     platform: rattler_conda_types::Platform,
     binary_url_lookup: &ahash::HashMap<UrlOrPath, usize>,
     source_identifier_lookup: &ahash::HashMap<SourceIdentifier, usize>,
-    pypi_url_lookup: &ahash::HashMap<&Verbatim<UrlOrPath>, usize>,
+    pypi_url_lookup: &ahash::HashMap<Verbatim<UrlOrPath>, usize>,
 ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
     match selector {
         DeserializablePackageSelector::Conda { conda } => {
