@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GIT_DIR"],"enum":["GitBinaryError","GitReference"],"static":["GIT"]};
+window.SIDEBAR_ITEMS = {"constant":["GIT_DIR"],"enum":["GitBinaryError","GitReference"],"fn":["resolve_relative_url"],"static":["GIT"],"struct":["CheckoutOptions"]};
