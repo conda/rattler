@@ -4460,7 +4460,7 @@ packages:
   timestamp: 1752805904792
 - conda: crates/rattler-bin
   name: rattler
-  version: 0.1.3
+  version: 0.1.4
   build: h63dd304_0
   subdir: win-64
   variants:
@@ -4474,7 +4474,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler-bin
   name: rattler
-  version: 0.1.3
+  version: 0.1.4
   build: h81443ed_0
   subdir: linux-64
   variants:
@@ -4487,7 +4487,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler-bin
   name: rattler
-  version: 0.1.3
+  version: 0.1.4
   build: had755fd_0
   subdir: osx-arm64
   variants:
@@ -4498,7 +4498,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler-bin
   name: rattler
-  version: 0.1.3
+  version: 0.1.4
   build: hd97dafd_0
   subdir: osx-64
   variants:
@@ -4509,7 +4509,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.21
+  version: 0.27.22
   build: h63dd304_0
   subdir: win-64
   variants:
@@ -4523,7 +4523,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.21
+  version: 0.27.22
   build: h81443ed_0
   subdir: linux-64
   variants:
@@ -4536,7 +4536,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.21
+  version: 0.27.22
   build: had755fd_0
   subdir: osx-arm64
   variants:
@@ -4547,7 +4547,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.21
+  version: 0.27.22
   build: hd97dafd_0
   subdir: osx-64
   variants:
