@@ -24,6 +24,7 @@ packages:
     name: numpy
     version: 1.26.0
     sha256: f93fc78fe8bf15afe2b8d6b6499f1c73953571c004b3135db0c83b9a5fd4e5e1
+    index: "https://my-custom-index.example.com/simple"
     requires_python: ">=3.9"
   - pypi: "https://my-custom-index.example.com/packages/requests-2.31.0-py3-none-any.whl"
     name: requests

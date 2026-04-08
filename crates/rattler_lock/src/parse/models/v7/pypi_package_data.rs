@@ -47,10 +47,7 @@ pub(crate) struct PypiPackageDataModel<'a> {
 impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         let index_url = match value.location.inner() {
-            UrlOrPath::Url(_) => value
-                .index
-                .map(std::borrow::Cow::into_owned)
-                .or_else(|| Some((*PYPI_URL).clone())),
+            UrlOrPath::Url(_) => value.index.map(std::borrow::Cow::into_owned),
             UrlOrPath::Path(_) => None,
         };
 
@@ -198,13 +195,16 @@ mod tests {
     }
 
     #[test]
-    fn url_location_without_index_url_defaults_to_pypi() {
+    fn url_location_without_index_url_is_none() {
         let model = make_model(
             url_location("https://files.pythonhosted.org/pkg-1.0.whl"),
             None,
         );
         let raw: PypiPackageDataRaw = model.into();
-        assert_eq!(raw.index_url.as_ref(), Some(&*PYPI_URL));
+        assert!(
+            raw.index_url.is_none(),
+            "default index is applied per-environment, not at model level"
+        );
     }
 
     #[test]
