@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.4...rattler_conda_types-v0.44.5) - 2026-04-08
+
+### Added
+
+- parse and evaluate license_family in MatchSpec ([#2175](https://github.com/conda/rattler/pull/2175))
+
+### Fixed
+
+- StrictVersion Ord contract violation ([#2225](https://github.com/conda/rattler/pull/2225))
+
 ## [0.44.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.3...rattler_conda_types-v0.44.4) - 2026-04-07
 
 ### Added

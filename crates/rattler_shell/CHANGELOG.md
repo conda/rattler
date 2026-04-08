@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.8](https://github.com/conda/rattler/compare/rattler_shell-v0.26.7...rattler_shell-v0.26.8) - 2026-04-08
+
+### Fixed
+
+- handle all shells in run_in_environment ([#2315](https://github.com/conda/rattler/pull/2315))
+
 ## [0.26.7](https://github.com/conda/rattler/compare/rattler_shell-v0.26.6...rattler_shell-v0.26.7) - 2026-04-07
 
 ### Added

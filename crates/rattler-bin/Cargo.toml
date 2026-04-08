@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
