@@ -30,6 +30,8 @@ pub struct PypiDistributionData {
     pub location: Verbatim<UrlOrPath>,
 
     /// The index this came from. Is `None` for local wheel files.
+    // TODO: Remove the Option once we can be reasonably certain we won't need to
+    //       upgrade to lockfile-v7 anymore.
     pub index_url: Option<url::Url>,
 
     /// Hashes of the file pointed to by the location.
