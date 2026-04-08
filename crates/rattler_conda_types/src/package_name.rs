@@ -21,8 +21,8 @@ use crate::utils::serde::DeserializeFromStrUnchecked;
 /// to make the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
-    normalized: Option<String>,
-    source: String,
+    normalized: Option<Box<str>>,
+    source: Box<str>,
 }
 
 impl PackageName {
@@ -32,7 +32,7 @@ impl PackageName {
     pub fn new_unchecked<S: Into<String>>(normalized: S) -> Self {
         Self {
             normalized: None,
-            source: normalized.into(),
+            source: normalized.into().into_boxed_str(),
         }
     }
 
@@ -45,7 +45,7 @@ impl PackageName {
     /// Returns the normalized version of the package name. The normalized string is guaranteed to
     /// be a valid conda package name.
     pub fn as_normalized(&self) -> &str {
-        self.normalized.as_ref().unwrap_or(&self.source)
+        self.normalized.as_deref().unwrap_or(&self.source)
     }
 
     /// Parses the package name part from a matchspec string without parsing
@@ -96,13 +96,13 @@ impl PackageName {
     pub fn from_matchspec_str_unchecked(spec: &str) -> Self {
         let (name, has_upper) = scan_matchspec_name(spec);
         let normalized = if has_upper {
-            Some(name.to_ascii_lowercase())
+            Some(name.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
         Self {
             normalized,
-            source: name.to_string(),
+            source: name.to_string().into_boxed_str(),
         }
     }
 
@@ -182,7 +182,7 @@ impl TryFrom<&String> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
-        value.clone().try_into()
+        value.as_str().try_into()
     }
 }
 
@@ -209,12 +209,15 @@ impl TryFrom<String> for PackageName {
         // Convert all characters to lowercase but only if it actually contains uppercase. This way
         // we dont allocate the memory of the string if it is already lowercase.
         let normalized = if source.bytes().any(|b| b.is_ascii_uppercase()) {
-            Some(source.to_ascii_lowercase())
+            Some(source.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
 
-        Ok(Self { normalized, source })
+        Ok(Self {
+            normalized,
+            source: source.into_boxed_str(),
+        })
     }
 }
 
@@ -285,14 +288,14 @@ impl Borrow<str> for PackageName {
 
 /// A package name in its original source form (not normalized).
 ///
-/// This is a newtype around [`String`] that preserves the exact casing and
+/// This is a newtype around [`Box<str>`] that preserves the exact casing and
 /// formatting as written by the user (e.g. `MyPackage` instead of `mypackage`).
 ///
 /// Use this type when you only care about the source name. If you need to
 /// retain both the source and normalized forms, use [`PackageName`] instead.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct SourcePackageName(String);
+pub struct SourcePackageName(Box<str>);
 
 impl SourcePackageName {
     /// Returns the source package name as a string slice.
@@ -309,13 +312,14 @@ impl std::fmt::Display for SourcePackageName {
 
 impl From<PackageName> for SourcePackageName {
     fn from(name: PackageName) -> Self {
-        Self(name.as_source().to_string())
+        Self(name.source)
     }
 }
 
 impl From<SourcePackageName> for PackageName {
     fn from(name: SourcePackageName) -> Self {
-        PackageName::try_from(name.0).expect("SourcePackageName is always a valid PackageName")
+        PackageName::try_from(name.0.into_string())
+            .expect("SourcePackageName is always a valid PackageName")
     }
 }
 
@@ -327,14 +331,14 @@ impl AsRef<str> for SourcePackageName {
 
 /// A normalized package name (always lowercase).
 ///
-/// This is a newtype around [`String`] that guarantees the package name is in
+/// This is a newtype around [`Box<str>`] that guarantees the package name is in
 /// its normalized (lowercase) form.
 ///
 /// Use this type when you only care about the normalized name. If you need to
 /// retain both the source and normalized forms, use [`PackageName`] instead.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct NormalizedPackageName(String);
+pub struct NormalizedPackageName(Box<str>);
 
 impl NormalizedPackageName {
     /// Returns the normalized package name as a string slice.
@@ -351,7 +355,7 @@ impl std::fmt::Display for NormalizedPackageName {
 
 impl From<PackageName> for NormalizedPackageName {
     fn from(name: PackageName) -> Self {
-        Self(name.as_normalized().to_string())
+        Self(name.as_normalized().to_string().into_boxed_str())
     }
 }
 
