@@ -255,7 +255,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
                         version: elems
                             .get(1)
                             .map_or(Version::from_str("0"), |s| Version::from_str(s))
-                            .expect("Could not parse virtual package version"),
+                            .into_diagnostic()?,
                         build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
                     })
                 })
