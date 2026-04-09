@@ -99,7 +99,7 @@ impl Serialize for SourceTimestamps {
         }
 
         let mut map = serializer.serialize_map(Some(count))?;
-        map.serialize_entry("default", &datetime_to_millis(&self.latest))?;
+        map.serialize_entry("latest", &datetime_to_millis(&self.latest))?;
 
         if !self.channels.is_empty() {
             map.serialize_entry("channels", &OptionTimestampMap::Channels(&self.channels))?;
@@ -176,15 +176,15 @@ impl<'de> Visitor<'de> for SourceTimestampsVisitor {
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut default: Option<DateTime<Utc>> = None;
+        let mut latest: Option<DateTime<Utc>> = None;
         let mut channels: BTreeMap<ChannelUrl, Option<DateTime<Utc>>> = BTreeMap::new();
         let mut packages: BTreeMap<PackageName, Option<DateTime<Utc>>> = BTreeMap::new();
 
         while let Some(key) = map.next_key::<&str>()? {
             match key {
-                "default" => {
+                "latest" => {
                     let millis: i64 = map.next_value()?;
-                    default = Some(
+                    latest = Some(
                         millis_to_datetime(millis)
                             .ok_or_else(|| de::Error::custom("default timestamp out of range"))?,
                     );
@@ -232,7 +232,7 @@ impl<'de> Visitor<'de> for SourceTimestampsVisitor {
             }
         }
 
-        let default = default.ok_or_else(|| de::Error::missing_field("default"))?;
+        let default = latest.ok_or_else(|| de::Error::missing_field("latest"))?;
 
         Ok(SourceTimestamps {
             latest: default,
@@ -280,7 +280,7 @@ mod tests {
             packages: BTreeMap::from([(PackageName::new_unchecked("numpy".to_string()), None)]),
         };
         let yaml = serde_yaml::to_string(&ts).unwrap();
-        assert!(yaml.contains("default:"));
+        assert!(yaml.contains("latest:"));
         assert!(yaml.contains("channels:"));
         assert!(yaml.contains("packages:"));
         assert!(yaml.contains("null"));
