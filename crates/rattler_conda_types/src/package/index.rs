@@ -10,6 +10,38 @@ use serde_with::{serde_as, skip_serializing_none};
 use super::PackageFile;
 use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 
+/// This struct represents extra metadata for the Anaconda Navigator app discovery. 
+/// It's flattened into the `index.json` file when the package recipe has an `app` section.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct AppSection {
+    /// The application type, usually `app`
+    #[serde(rename = "type")]
+    pub type_: Option<String>,
+
+    pub icon: Option<String>,
+
+    #[serde(rename = "app_entry")]
+    pub entry: Option<String>,
+
+    #[serde(rename = "app_cli_opts")]
+    pub cli_opts: Option<String>,
+
+    #[serde(rename = "app_type")]
+    pub app_type: Option<String>,
+
+    pub summary: Option<String>,
+
+    #[serde(rename = "app_own_environment")]
+    pub own_environment: Option<bool>,
+}
+
+impl AppSection {
+    /// Returns true if the app section is empty, meaning that it has no fields set.
+    pub fn is_default(&self) -> bool {
+        self == &AppSection::default()
+    }
+}
+
 /// A representation of the `index.json` file found in package archives.
 ///
 /// The `index.json` file contains information about the package build and
@@ -49,6 +81,11 @@ pub struct IndexJson {
     /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     pub features: Option<String>,
+
+    /// The icon filename for the application (for Anaconda Navigator app discovery).
+    /// Set when the package has an `app` section.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 
     /// Optionally, the license
     pub license: Option<String>,
@@ -93,6 +130,11 @@ pub struct IndexJson {
 
     /// The version of the package
     pub version: VersionWithSource,
+
+    /// The app section is used for Anaconda Navigator app discovery. It is only
+    /// present if the package recipe has an `app` section.
+    #[serde(flatten, skip_serializing_if = "AppSection::is_default")]
+    pub app: AppSection,
 }
 
 impl PackageFile for IndexJson {
