@@ -20,7 +20,7 @@
 </div></details><details class="toggle method-toggle" open><summary><section id="method.add_conda_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#204-231">Source</a><h4 class="code-header">pub fn <a href="#method.add_conda_package" class="fn">add_conda_package</a>(
     &amp;mut self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="enum" href="enum.CondaPackageData.html" title="enum rattler_lock::CondaPackageData">CondaPackageData</a>,
 ) -&gt; &amp;mut Self</h4></section></summary><div class="docblock"><p>Adds a conda locked package to a specific environment and platform.</p>
 <p>This function is similar to <a href="struct.LockFileBuilder.html#method.with_conda_package" title="method rattler_lock::LockFileBuilder::with_conda_package"><code>Self::with_conda_package</code></a> but differs in
@@ -29,7 +29,7 @@ This allows for a more fluent with chaining calls.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.add_pypi_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#238-260">Source</a><h4 class="code-header">pub fn <a href="#method.add_pypi_package" class="fn">add_pypi_package</a>(
     &amp;mut self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="struct" href="struct.PypiPackageData.html" title="struct rattler_lock::PypiPackageData">PypiPackageData</a>,
     environment_data: <a class="struct" href="struct.PypiPackageEnvironmentData.html" title="struct rattler_lock::PypiPackageEnvironmentData">PypiPackageEnvironmentData</a>,
 ) -&gt; &amp;mut Self</h4></section></summary><div class="docblock"><p>Adds a pypi locked package to a specific environment and platform.</p>
@@ -39,7 +39,7 @@ This allows for a more fluent with chaining calls.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.with_conda_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#267-275">Source</a><h4 class="code-header">pub fn <a href="#method.with_conda_package" class="fn">with_conda_package</a>(
     self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="enum" href="enum.CondaPackageData.html" title="enum rattler_lock::CondaPackageData">CondaPackageData</a>,
 ) -&gt; Self</h4></section></summary><div class="docblock"><p>Adds a conda locked package to a specific environment and platform.</p>
 <p>This function is similar to <a href="struct.LockFileBuilder.html#method.add_conda_package" title="method rattler_lock::LockFileBuilder::add_conda_package"><code>Self::add_conda_package</code></a> but differs in
@@ -48,21 +48,21 @@ allows for a better interface when modifying an existing instance.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.with_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#279-287">Source</a><h4 class="code-header">pub fn <a href="#method.with_package" class="fn">with_package</a>(
     self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="enum" href="enum.LockedPackage.html" title="enum rattler_lock::LockedPackage">LockedPackage</a>,
 ) -&gt; Self</h4></section></summary><div class="docblock"><p>Adds a package from another environment to a specific environment and
 platform.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.add_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#291-303">Source</a><h4 class="code-header">pub fn <a href="#method.add_package" class="fn">add_package</a>(
     &amp;mut self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="enum" href="enum.LockedPackage.html" title="enum rattler_lock::LockedPackage">LockedPackage</a>,
 ) -&gt; &amp;mut Self</h4></section></summary><div class="docblock"><p>Adds a package from another environment to a specific environment and
 platform.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.with_pypi_package" class="method"><a class="src rightside" href="../src/rattler_lock/builder.rs.html#310-319">Source</a><h4 class="code-header">pub fn <a href="#method.with_pypi_package" class="fn">with_pypi_package</a>(
     self,
     environment: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
-    platform: <a class="enum" href="../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    platform: Platform,
     locked_package: <a class="struct" href="struct.PypiPackageData.html" title="struct rattler_lock::PypiPackageData">PypiPackageData</a>,
     environment_data: <a class="struct" href="struct.PypiPackageEnvironmentData.html" title="struct rattler_lock::PypiPackageEnvironmentData">PypiPackageEnvironmentData</a>,
 ) -&gt; Self</h4></section></summary><div class="docblock"><p>Adds a pypi locked package to a specific environment and platform.</p>
