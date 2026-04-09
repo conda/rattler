@@ -19,8 +19,6 @@ environments:
     packages: {}
   with-exclude-newer:
     channels: []
-    options:
-      exclude-newer: "2025-04-15T12:15:00Z"
     packages: {}
   with-strategy:
     channels: []

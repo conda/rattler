@@ -92,6 +92,7 @@ mod pypi;
 mod pypi_indexes;
 pub mod source;
 mod source_identifier;
+mod source_timestamps;
 mod url_or_path;
 mod utils;
 mod verbatim;
@@ -112,6 +113,7 @@ pub use pypi::{PypiDistributionData, PypiPackageData, PypiSourceData, PypiSource
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::{Matches, RepoDataRecord};
 pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
+pub use source_timestamps::SourceTimestamps;
 pub use url_or_path::UrlOrPath;
 pub use verbatim::Verbatim;
 
