@@ -7,6 +7,20 @@ use crate::{
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
 
+/// Returns the default path for the netrc file — `~/_netrc` on Windows and
+/// `~/.netrc` elsewhere. Falls back to `.netrc` in the current directory if
+/// the home directory cannot be determined.
+fn default_netrc_path() -> PathBuf {
+    let Some(mut path) = dirs::home_dir() else {
+        return PathBuf::from(".netrc");
+    };
+    #[cfg(windows)]
+    path.push("_netrc");
+    #[cfg(not(windows))]
+    path.push(".netrc");
+    path
+}
+
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
 #[derive(Debug, Clone, Default)]
@@ -41,24 +55,25 @@ impl NetRcStorage {
     ///
     /// When an error is returned the path to the file that the was read from is returned as well.
     pub fn from_env() -> Result<Self, (PathBuf, NetRcStorageError)> {
-        // Get the path to the netrc file
-        let path = match env::var("NETRC") {
-            Ok(val) => PathBuf::from(val),
-            Err(_) => match dirs::home_dir() {
-                Some(mut path) => {
-                    #[cfg(windows)]
-                    path.push("_netrc");
-                    #[cfg(not(windows))]
-                    path.push(".netrc");
-                    path
-                }
-                None => PathBuf::from(".netrc"),
-            },
+        // Get the path to the netrc file. If the user explicitly set `NETRC`
+        // we remember that so that a missing file surfaces as an error — they
+        // asked for a specific file, so silently ignoring it would be
+        // surprising.
+        let (path, explicit) = if let Ok(val) = env::var("NETRC") {
+            tracing::debug!(
+                "\"NETRC\" environment variable set, using netrc file at {}",
+                val
+            );
+            (PathBuf::from(val), true)
+        } else {
+            (default_netrc_path(), false)
         };
 
         match Self::from_path(&path) {
             Ok(storage) => Ok(storage),
-            Err(NetRcStorageError::IOError(err)) if err.kind() == ErrorKind::NotFound => {
+            Err(NetRcStorageError::IOError(err))
+                if err.kind() == ErrorKind::NotFound && !explicit =>
+            {
                 Ok(Self::default())
             }
             Err(err) => Err((path, err)),
@@ -120,6 +135,7 @@ impl StorageBackend for NetRcStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AuthenticationStorage;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -177,5 +193,95 @@ mod tests {
         } else {
             env::remove_var("NETRC");
         }
+    }
+
+    /// When `NETRC` points to a malformed file we expect `from_env` to return
+    /// `Err` so that the caller (`AuthenticationStorage::from_env_and_defaults`)
+    /// can emit a `tracing::warn!`. This is the sanity-check case.
+    #[test]
+    fn test_from_env_malformed_netrc_returns_err() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".netrc-malformed");
+        std::fs::write(&path, b"this is not a valid netrc file !!!!").unwrap();
+
+        temp_env::with_var("NETRC", Some(path.as_os_str()), || {
+            let result = NetRcStorage::from_env();
+            assert!(
+                result.is_err(),
+                "expected malformed netrc file to surface an error so the \
+                 caller can log a warning",
+            );
+        });
+    }
+
+    /// If `NETRC` is explicitly set, a missing file must surface as `Err` so
+    /// the caller can log a warning. The leniency for missing files only
+    /// applies to the default `~/.netrc` fallback path.
+    #[test]
+    fn test_from_env_missing_explicit_netrc_returns_err() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.netrc");
+        assert!(!missing.exists());
+
+        temp_env::with_var("NETRC", Some(missing.as_os_str()), || {
+            let result = NetRcStorage::from_env();
+            assert!(
+                result.is_err(),
+                "explicit NETRC pointing at a missing file must return Err",
+            );
+        });
+    }
+
+    /// Full-stack check using `tracing_test`: set `NETRC` to a malformed file
+    /// and verify that `AuthenticationStorage::from_env_and_defaults` actually
+    /// emits the warning. This locks the wiring between the two modules.
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_from_env_and_defaults_warns_on_malformed_netrc() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".netrc-malformed");
+        std::fs::write(&path, b"this is not a valid netrc file !!!!").unwrap();
+
+        temp_env::with_vars(
+            [
+                ("NETRC", Some(path.as_os_str())),
+                ("RATTLER_AUTH_FILE", None),
+            ],
+            || {
+                let _ = AuthenticationStorage::from_env_and_defaults();
+            },
+        );
+
+        assert!(
+            logs_contain("error reading netrc file"),
+            "expected a tracing::warn! about the malformed netrc file",
+        );
+    }
+
+    /// Counterpart to the test above: if the warning is missing when `NETRC`
+    /// points at a non-existent file, this test will fail — pinning down the
+    /// exact scenario the user reported.
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_from_env_and_defaults_warns_on_missing_explicit_netrc() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.netrc");
+
+        temp_env::with_vars(
+            [
+                ("NETRC", Some(missing.as_os_str())),
+                ("RATTLER_AUTH_FILE", None),
+            ],
+            || {
+                let _ = AuthenticationStorage::from_env_and_defaults();
+            },
+        );
+
+        assert!(
+            logs_contain("error reading netrc file"),
+            "no tracing::warn! was emitted for an explicitly-set NETRC that \
+             points to a missing file — this is the bug: `from_env` swallows \
+             ErrorKind::NotFound even when the path comes from the env var",
+        );
     }
 }
