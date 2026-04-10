@@ -105,6 +105,15 @@ pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
             // this can happen with JFrog Artifactory when you query more than the object length
             debug!("server returned range not satisfiable, falling back to full download");
         }
+        Err(ExtractError::AsyncZipError(err)) => {
+            // The seek-based sparse reader parses the ZIP central directory, which
+            // can fail on archives created by tools (e.g. conda-build / Python's
+            // zipfile) that include zip64 extended information fields even when file
+            // sizes fit in 32 bits.  The streaming full-download path only reads
+            // local file headers and is not affected.
+            // See: https://github.com/conda/rattler/issues/2305
+            debug!("sparse zip parsing failed ({err}), falling back to full download");
+        }
         Err(e) => return Err(e),
     }
 
@@ -138,6 +147,10 @@ pub async fn fetch_file_from_remote_url(
         {
             // this can happen with JFrog Artifactory when you query more than the object length
             debug!("server returned range not satisfiable, falling back to full download");
+        }
+        Err(ExtractError::AsyncZipError(err)) => {
+            // See the matching arm in `fetch_package_file_from_remote_url` above.
+            debug!("sparse zip parsing failed ({err}), falling back to full download");
         }
         Err(e) => return Err(e),
     }
@@ -242,5 +255,46 @@ mod tests {
             .expect("file should exist in archive");
 
         assert!(!raw.is_empty());
+    }
+
+    /// Regression test for <https://github.com/conda/rattler/issues/2305>.
+    ///
+    /// Archives created by conda-build (Python's `zipfile`) include zip64
+    /// extended information extra fields in the central directory even when
+    /// file sizes fit in 32 bits.  The seek-based sparse reader rejects
+    /// these, so `fetch_package_file_from_remote_url` must fall back to the
+    /// streaming full-download path.
+    #[tokio::test]
+    async fn test_fetch_zip64_extra_field_fallback() {
+        use rattler_conda_types::package::IndexJson;
+
+        let zip64_pkg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/zip64-extra-field-test.conda");
+        let url = test_server::serve_file(zip64_pkg).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let index_json: IndexJson = fetch_package_file_from_remote_url(client, url)
+            .await
+            .unwrap();
+
+        assert_eq!(index_json.name.as_normalized(), "zip64-test-pkg");
+        assert_eq!(index_json.version.to_string(), "1.0");
+    }
+
+    /// Same as above but for the raw-bytes API.
+    #[tokio::test]
+    async fn test_fetch_file_zip64_extra_field_fallback() {
+        let zip64_pkg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/zip64-extra-field-test.conda");
+        let url = test_server::serve_file(zip64_pkg).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let raw = fetch_file_from_remote_url(client, url, std::path::Path::new("info/index.json"))
+            .await
+            .unwrap()
+            .expect("file should exist in archive");
+
+        let parsed: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(parsed["name"], "zip64-test-pkg");
     }
 }
