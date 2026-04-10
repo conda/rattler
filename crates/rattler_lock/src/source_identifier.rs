@@ -201,6 +201,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         fields.insert("package_build_source", package_build_sources);
     }
     fields.insert("variants", variants);
+    fields.insert("timestamp", timestamp);
 
     match metadata {
         SourceMetadata::Full(full) => {
@@ -238,7 +239,6 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
             fields.insert("build_number", build_number);
             fields.insert("noarch", noarch);
             fields.insert("subdir", subdir);
-            fields.insert("timestamp", timestamp);
             fields.insert("version", version);
 
             if !depends.is_empty() {
