@@ -5230,6 +5230,7 @@ dependencies = [
  "rattler_solve",
  "rstest",
  "serde",
+ "serde-untagged",
  "serde-value",
  "serde_json",
  "serde_repr",

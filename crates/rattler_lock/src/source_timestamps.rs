@@ -1,13 +1,14 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{ChannelUrl, PackageName};
-use serde::de::{self, MapAccess, Visitor};
-use serde::ser::SerializeMap;
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use url::Url;
+use serde_untagged::UntaggedEnumVisitor;
+use serde_with::serde_as;
 
-use crate::utils::serde::{datetime_to_millis, millis_to_datetime};
+use crate::utils::serde::{datetime_to_millis, millis_to_datetime, Timestamp};
 
 /// Timestamps associated with a source package.
 ///
@@ -19,7 +20,7 @@ use crate::utils::serde::{datetime_to_millis, millis_to_datetime};
 ///
 /// ```yaml
 /// timestamp:
-///   default: 1699280294368
+///   latest: 1699280294368
 ///   channels:
 ///     https://conda.anaconda.org/conda-forge: 1699280294000
 ///   packages:
@@ -76,169 +77,149 @@ impl SourceTimestamps {
 }
 
 // ---------------------------------------------------------------------------
-// Serialization
+// Serialization / Deserialization
 // ---------------------------------------------------------------------------
+
+/// Helper struct mirroring the map form of [`SourceTimestamps`].
+///
+/// Acts as the single source of truth for the map-shaped wire format used by
+/// both serialization and deserialization. The `Cow` fields allow
+/// serialization to borrow from a live `SourceTimestamps` without cloning,
+/// while deserialization produces owned data.
+#[serde_as]
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceTimestampsMap<'a> {
+    #[serde_as(as = "Timestamp")]
+    latest: DateTime<Utc>,
+
+    #[serde(
+        default,
+        skip_serializing_if = "cow_btree_is_empty",
+        with = "optional_millis_map"
+    )]
+    channels: Cow<'a, BTreeMap<ChannelUrl, Option<DateTime<Utc>>>>,
+
+    #[serde(
+        default,
+        skip_serializing_if = "cow_btree_is_empty",
+        with = "optional_millis_map"
+    )]
+    packages: Cow<'a, BTreeMap<PackageName, Option<DateTime<Utc>>>>,
+}
+
+#[allow(clippy::ptr_arg)] // signature is required by `#[serde(skip_serializing_if = ...)]`
+fn cow_btree_is_empty<K: Clone, V: Clone>(map: &Cow<'_, BTreeMap<K, V>>) -> bool {
+    map.is_empty()
+}
+
+impl From<SourceTimestampsMap<'_>> for SourceTimestamps {
+    fn from(value: SourceTimestampsMap<'_>) -> Self {
+        Self {
+            latest: value.latest,
+            channels: value.channels.into_owned(),
+            packages: value.packages.into_owned(),
+        }
+    }
+}
 
 impl Serialize for SourceTimestamps {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        // Simple case: only default timestamp, serialize as plain i64.
+        // Simple case: only the `latest` timestamp is set; serialize as a
+        // plain integer (milliseconds) for backwards compatibility.
         if self.is_simple() {
             return datetime_to_millis(&self.latest).serialize(serializer);
         }
 
-        // Complex case: serialize as map.
-        let mut count = 1; // always have default
-        if !self.channels.is_empty() {
-            count += 1;
+        // Complex case: delegate to the helper struct, borrowing the
+        // channel/package maps to avoid cloning.
+        SourceTimestampsMap {
+            latest: self.latest,
+            channels: Cow::Borrowed(&self.channels),
+            packages: Cow::Borrowed(&self.packages),
         }
-        if !self.packages.is_empty() {
-            count += 1;
-        }
-
-        let mut map = serializer.serialize_map(Some(count))?;
-        map.serialize_entry("latest", &datetime_to_millis(&self.latest))?;
-
-        if !self.channels.is_empty() {
-            map.serialize_entry("channels", &OptionTimestampMap::Channels(&self.channels))?;
-        }
-
-        if !self.packages.is_empty() {
-            map.serialize_entry("packages", &OptionTimestampMap::Packages(&self.packages))?;
-        }
-
-        map.end()
+        .serialize(serializer)
     }
 }
-
-/// Helper to serialize `BTreeMap<K, Option<DateTime<Utc>>>` where each value
-/// is either milliseconds or `null`.
-enum OptionTimestampMap<'a> {
-    Channels(&'a BTreeMap<ChannelUrl, Option<DateTime<Utc>>>),
-    Packages(&'a BTreeMap<PackageName, Option<DateTime<Utc>>>),
-}
-
-impl Serialize for OptionTimestampMap<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            OptionTimestampMap::Channels(map) => {
-                let mut m = serializer.serialize_map(Some(map.len()))?;
-                for (k, v) in *map {
-                    m.serialize_entry(k.as_str(), &v.as_ref().map(datetime_to_millis))?;
-                }
-                m.end()
-            }
-            OptionTimestampMap::Packages(map) => {
-                let mut m = serializer.serialize_map(Some(map.len()))?;
-                for (k, v) in *map {
-                    m.serialize_entry(k.as_normalized(), &v.as_ref().map(datetime_to_millis))?;
-                }
-                m.end()
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Deserialization
-// ---------------------------------------------------------------------------
 
 impl<'de> Deserialize<'de> for SourceTimestamps {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(SourceTimestampsVisitor)
+        UntaggedEnumVisitor::new()
+            .expecting("an integer (milliseconds) or a map with latest/channels/packages")
+            .i64(|v| {
+                millis_to_datetime(v)
+                    .map(SourceTimestamps::from_default)
+                    .ok_or_else(|| serde_untagged::de::Error::custom("timestamp out of range"))
+            })
+            .u64(|v| {
+                let v = i64::try_from(v).map_err(serde_untagged::de::Error::custom)?;
+                millis_to_datetime(v)
+                    .map(SourceTimestamps::from_default)
+                    .ok_or_else(|| serde_untagged::de::Error::custom("timestamp out of range"))
+            })
+            .map(|map| map.deserialize::<SourceTimestampsMap<'_>>().map(Into::into))
+            .deserialize(deserializer)
     }
 }
 
-struct SourceTimestampsVisitor;
+/// Serialization helpers for `Cow<'_, BTreeMap<K, Option<DateTime<Utc>>>>`
+/// where the timestamp values are stored on the wire as milliseconds since
+/// the Unix epoch (or `null`).
+mod optional_millis_map {
+    use std::borrow::Cow;
+    use std::collections::BTreeMap;
 
-impl<'de> Visitor<'de> for SourceTimestampsVisitor {
-    type Value = SourceTimestamps;
+    use chrono::{DateTime, Utc};
+    use serde::de::Error as _;
+    use serde::ser::SerializeMap;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("an integer (milliseconds) or a map with default/channels/packages")
-    }
+    use crate::utils::serde::{datetime_to_millis, millis_to_datetime};
 
-    fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-        let dt = millis_to_datetime(v).ok_or_else(|| E::custom("timestamp out of range"))?;
-        Ok(SourceTimestamps::from_default(dt))
-    }
+    type TimestampMap<K> = BTreeMap<K, Option<DateTime<Utc>>>;
 
-    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        self.visit_i64(v as i64)
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut latest: Option<DateTime<Utc>> = None;
-        let mut channels: BTreeMap<ChannelUrl, Option<DateTime<Utc>>> = BTreeMap::new();
-        let mut packages: BTreeMap<PackageName, Option<DateTime<Utc>>> = BTreeMap::new();
-
-        while let Some(key) = map.next_key::<&str>()? {
-            match key {
-                "latest" => {
-                    let millis: i64 = map.next_value()?;
-                    latest = Some(
-                        millis_to_datetime(millis)
-                            .ok_or_else(|| de::Error::custom("default timestamp out of range"))?,
-                    );
-                }
-                "channels" => {
-                    let raw: BTreeMap<String, Option<i64>> = map.next_value()?;
-                    for (url_str, ms) in raw {
-                        let url: ChannelUrl =
-                            Url::parse(&url_str).map_err(de::Error::custom)?.into();
-                        let dt = ms
-                            .map(|m| {
-                                millis_to_datetime(m).ok_or_else(|| {
-                                    de::Error::custom(format!(
-                                        "channel timestamp out of range for {url_str}"
-                                    ))
-                                })
-                            })
-                            .transpose()?;
-                        channels.insert(url, dt);
-                    }
-                }
-                "packages" => {
-                    let raw: BTreeMap<String, Option<i64>> = map.next_value()?;
-                    for (name_str, ms) in raw {
-                        let name = PackageName::new_unchecked(name_str);
-                        let dt = ms
-                            .map(|m| {
-                                millis_to_datetime(m).ok_or_else(|| {
-                                    de::Error::custom(format!(
-                                        "package timestamp out of range for {}",
-                                        name.as_normalized()
-                                    ))
-                                })
-                            })
-                            .transpose()?;
-                        packages.insert(name, dt);
-                    }
-                }
-                other => {
-                    return Err(de::Error::unknown_field(
-                        other,
-                        &["default", "channels", "packages"],
-                    ));
-                }
-            }
+    #[allow(clippy::ptr_arg)] // signature is required by `#[serde(with = ...)]`
+    pub(super) fn serialize<S, K>(
+        map: &Cow<'_, TimestampMap<K>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        K: Serialize + Ord + Clone,
+    {
+        let mut m = serializer.serialize_map(Some(map.len()))?;
+        for (key, value) in map.iter() {
+            m.serialize_entry(key, &value.as_ref().map(datetime_to_millis))?;
         }
+        m.end()
+    }
 
-        let default = latest.ok_or_else(|| de::Error::missing_field("latest"))?;
-
-        Ok(SourceTimestamps {
-            latest: default,
-            channels,
-            packages,
-        })
+    pub(super) fn deserialize<'de, 'a, D, K>(
+        deserializer: D,
+    ) -> Result<Cow<'a, TimestampMap<K>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        K: Deserialize<'de> + Ord + Clone,
+    {
+        let raw = BTreeMap::<K, Option<i64>>::deserialize(deserializer)?;
+        let mut out = BTreeMap::new();
+        for (key, value) in raw {
+            let dt = match value {
+                Some(millis) => Some(
+                    millis_to_datetime(millis)
+                        .ok_or_else(|| D::Error::custom("timestamp out of range"))?,
+                ),
+                None => None,
+            };
+            out.insert(key, dt);
+        }
+        Ok(Cow::Owned(out))
     }
 }
 
@@ -254,10 +235,20 @@ impl From<DateTime<Utc>> for SourceTimestamps {
 
 #[cfg(test)]
 mod tests {
+    use url::Url;
+
     use super::*;
 
     fn dt(millis: i64) -> DateTime<Utc> {
         millis_to_datetime(millis).unwrap()
+    }
+
+    fn channel(url: &str) -> ChannelUrl {
+        ChannelUrl::from(Url::parse(url).unwrap())
+    }
+
+    fn pkg(name: &str) -> PackageName {
+        PackageName::new_unchecked(name.to_string())
     }
 
     #[test]
@@ -274,10 +265,10 @@ mod tests {
         let ts = SourceTimestamps {
             latest: dt(1699280294368),
             channels: BTreeMap::from([(
-                ChannelUrl::from(Url::parse("https://conda.anaconda.org/conda-forge/").unwrap()),
+                channel("https://conda.anaconda.org/conda-forge/"),
                 Some(dt(1699280294000)),
             )]),
-            packages: BTreeMap::from([(PackageName::new_unchecked("numpy".to_string()), None)]),
+            packages: BTreeMap::from([(pkg("numpy"), None)]),
         };
         let yaml = serde_yaml::to_string(&ts).unwrap();
         assert!(yaml.contains("latest:"));
@@ -300,10 +291,69 @@ mod tests {
         let simple = SourceTimestamps::from_default(dt(1000));
         assert!(simple.is_simple());
 
-        let complex = simple.with_package(
-            PackageName::new_unchecked("foo".to_string()),
-            Some(dt(2000)),
-        );
+        let complex = simple.with_package(pkg("foo"), Some(dt(2000)));
         assert!(!complex.is_simple());
+    }
+
+    #[test]
+    fn deserialize_map_form() {
+        let yaml = r#"
+latest: 1699280294368
+channels:
+  https://conda.anaconda.org/conda-forge: 1699280294000
+  https://conda.anaconda.org/bioconda: null
+packages:
+  numpy: 1699280200000
+  scipy: null
+"#;
+        let ts: SourceTimestamps = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(ts.latest, dt(1699280294368));
+        assert_eq!(
+            ts.channels[&channel("https://conda.anaconda.org/conda-forge/")],
+            Some(dt(1699280294000))
+        );
+        assert_eq!(
+            ts.channels[&channel("https://conda.anaconda.org/bioconda/")],
+            None
+        );
+        assert_eq!(ts.packages[&pkg("numpy")], Some(dt(1699280200000)));
+        assert_eq!(ts.packages[&pkg("scipy")], None);
+    }
+
+    #[test]
+    fn deserialize_map_form_missing_channels_packages_uses_defaults() {
+        let yaml = "latest: 1699280294368\n";
+        let ts: SourceTimestamps = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(ts.latest, dt(1699280294368));
+        assert!(ts.is_simple());
+    }
+
+    #[test]
+    fn deserialize_map_form_unknown_field_is_rejected() {
+        let yaml = "latest: 1\nunknown: 2\n";
+        let err = serde_yaml::from_str::<SourceTimestamps>(yaml).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("unknown"), "error was: {msg}");
+    }
+
+    #[test]
+    fn map_roundtrip_multiple_channels_and_packages() {
+        let ts = SourceTimestamps {
+            latest: dt(1699280294368),
+            channels: BTreeMap::from([
+                (
+                    channel("https://conda.anaconda.org/conda-forge/"),
+                    Some(dt(1699280294000)),
+                ),
+                (channel("https://conda.anaconda.org/bioconda/"), None),
+            ]),
+            packages: BTreeMap::from([
+                (pkg("numpy"), Some(dt(1699280200000))),
+                (pkg("scipy"), None),
+            ]),
+        };
+        let yaml = serde_yaml::to_string(&ts).unwrap();
+        let back: SourceTimestamps = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(ts, back);
     }
 }
