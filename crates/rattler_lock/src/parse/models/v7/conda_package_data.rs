@@ -266,7 +266,6 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             file_name: (Some(value.file_name.to_file_name())
                 != derived.identifier.map(|i| i.to_file_name()))
             .then_some(Cow::Owned(value.file_name.clone())),
-            // >>>>>>> conflict 7 of 7 ends
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
