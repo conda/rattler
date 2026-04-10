@@ -581,7 +581,13 @@ impl Ord for CondaPackageData {
                 (Some(src_a), Some(src_b)) => src_a
                     .variants
                     .cmp(&src_b.variants)
-                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
+                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source))
+                    .then_with(|| match (&src_a.timestamp, &src_b.timestamp) {
+                        (Some(a), Some(b)) => (a.latest).cmp(&b.latest),
+                        (Some(_), None) => Ordering::Less,
+                        (None, Some(_)) => Ordering::Greater,
+                        (None, None) => Ordering::Equal,
+                    }),
                 _ => Ordering::Equal,
             })
     }
