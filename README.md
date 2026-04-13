@@ -47,13 +47,8 @@ Clone the Rattler repository, and in your terminal, navigate to the root folder 
 
 ```bash
 git submodule update --init
-<<<<<<< HEAD
-cargo run --release create cowpy
+argo run --release create cowpy
 cargo run --release run -p .prefix/ cowpy --random
-=======
-cargo run --bin rattler --release create cowpy
-cargo run --bin rattler --release run -p .prefix/ cowpy --random
->>>>>>> main
 ```
 
 ## Python and Javascript bindings
