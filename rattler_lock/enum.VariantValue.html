@@ -6,8 +6,8 @@
     Bool(<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.bool.html">bool</a>),
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Represents a conda-build variant value.</p>
 <p>Variants are used in conda-build to specify different build configurations.
-They can be strings (e.g., “3.11” for python version), integers (e.g., 1 for feature flags),
-or booleans (e.g., true/false for optional features).</p>
+They can be strings (e.g., “3.11” for python version), integers (e.g., 1 for
+feature flags), or booleans (e.g., true/false for optional features).</p>
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.String" class="variant"><a href="#variant.String" class="anchor">§</a><h3 class="code-header">String(<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>)</h3></section><div class="docblock"><p>String variant value (most common, e.g., python version “3.11”)</p>
 </div><section id="variant.Int" class="variant"><a href="#variant.Int" class="anchor">§</a><h3 class="code-header">Int(<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.i64.html">i64</a>)</h3></section><div class="docblock"><p>Integer variant value (e.g., for numeric feature flags)</p>
 </div><section id="variant.Bool" class="variant"><a href="#variant.Bool" class="anchor">§</a><h3 class="code-header">Bool(<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.bool.html">bool</a>)</h3></section><div class="docblock"><p>Boolean variant value (e.g., for on/off features)</p>

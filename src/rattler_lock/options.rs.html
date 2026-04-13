@@ -42,7 +42,7 @@
 <a href=#40 id=40 data-nosnippet>40</a>    </span><span class="kw">pub </span>channel_priority: ChannelPriority,
 <a href=#41 id=41 data-nosnippet>41</a>
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// The prerelease mode that was used to resolve `PyPI` dependencies.
-<a href=#43 id=43 data-nosnippet>43</a>    </span><span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">pub </span>pypi_prerelease_mode: <span class="prelude-ty">Option</span>&lt;PypiPrereleaseMode&gt;,
+<a href=#43 id=43 data-nosnippet>43</a>    </span><span class="attr">#[serde(default, skip_serializing_if = <span class="string">"crate::utils::serde::is_default"</span>)]
+<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">pub </span>pypi_prerelease_mode: PypiPrereleaseMode,
 <a href=#45 id=45 data-nosnippet>45</a>}
 </code></pre></div></section></main></body></html>
