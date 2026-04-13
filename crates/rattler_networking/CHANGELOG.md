@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.9](https://github.com/conda/rattler/compare/rattler_networking-v0.26.8...rattler_networking-v0.26.9) - 2026-04-13
+
+### Fixed
+
+- warn when $NETRC points to a missing or invalid file ([#2330](https://github.com/conda/rattler/pull/2330))
+
 ## [0.26.8](https://github.com/conda/rattler/compare/rattler_networking-v0.26.7...rattler_networking-v0.26.8) - 2026-04-08
 
 ### Other

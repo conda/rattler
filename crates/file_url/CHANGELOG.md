@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/file_url-v0.2.7...file_url-v0.2.8) - 2026-04-13
+
+### Other
+
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/file_url-v0.2.6...file_url-v0.2.7) - 2025-12-08
 
 ### Other

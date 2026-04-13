@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/conda/rattler/compare/rattler-bin-v0.1.4...rattler-bin-v0.1.5) - 2026-04-13
+
+### Fixed
+
+- CLI crash on malformed virtual package version ([#2327](https://github.com/conda/rattler/pull/2327))
+
 ## [0.1.4](https://github.com/conda/rattler/compare/rattler-bin-v0.1.3...rattler-bin-v0.1.4) - 2026-04-08
 
 ### Other
