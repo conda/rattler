@@ -1,6 +1,7 @@
 [workspace]
 members = ["crates/*", "tools/*"]
 resolver = "2"
+default-members = ["rattler"]
 
 # See: https://docs.rs/insta/latest/insta/#optional-faster-runs
 [profile.dev.package.insta]
