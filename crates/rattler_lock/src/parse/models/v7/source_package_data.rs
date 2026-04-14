@@ -15,7 +15,7 @@ use crate::{
     },
     source::SourceLocation,
     utils::derived_fields,
-    CondaPackageData, ConversionError, SourceIdentifier, SourceTimestamps,
+    CondaPackageData, ConversionError, SourceIdentifier,
 };
 
 /// A model struct for source packages in V7 lock files.
@@ -84,9 +84,6 @@ pub(crate) struct SourcePackageDataModel<'a> {
     pub size: Cow<'a, Option<u64>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<SourceTimestamps>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
     pub source: Option<PackageBuildSource>,
 
@@ -113,9 +110,6 @@ impl<'a> SourcePackageDataModel<'a> {
     pub fn into_parts(self) -> Result<(SourceIdentifier, CondaSourceData), ConversionError> {
         // Extract name and location from the identifier, preserving the identifier itself
         let (name, hash, location) = self.conda_source.clone().into_parts();
-
-        let timestamp = self.timestamp;
-        let default_timestamp = timestamp.as_ref().map(|ts| ts.latest);
 
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
@@ -144,7 +138,7 @@ impl<'a> SourcePackageDataModel<'a> {
                     purls: self.purls.into_owned(),
                     sha256: None,
                     size: self.size.into_owned(),
-                    timestamp: default_timestamp.map(Into::into),
+                    timestamp: None,
                     track_features: self.track_features.into_owned(),
                     run_exports: None,
                     python_site_packages_path: self.python_site_packages_path.into_owned(),
@@ -160,7 +154,6 @@ impl<'a> SourcePackageDataModel<'a> {
         let source_data = CondaSourceData {
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
-            timestamp,
             package_build_source: self.source,
             identifier_hash: Some(hash),
             sources: self.source_depends,
@@ -201,7 +194,6 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     constrains: Cow::Borrowed(&r.constrains),
                     experimental_extra_depends: Cow::Borrowed(&r.experimental_extra_depends),
                     size: Cow::Borrowed(&r.size),
-                    timestamp: value.timestamp.clone(),
                     features: Cow::Borrowed(&r.features),
                     track_features: Cow::Borrowed(&r.track_features),
                     license: Cow::Borrowed(&r.license),
@@ -224,7 +216,6 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 constrains: Cow::Borrowed(&[]),
                 experimental_extra_depends: Cow::Owned(BTreeMap::new()),
                 size: Cow::Owned(None),
-                timestamp: value.timestamp.clone(),
                 features: Cow::Owned(None),
                 track_features: Cow::Borrowed(&[]),
                 license: Cow::Owned(None),

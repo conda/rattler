@@ -166,7 +166,6 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                     location: data.location,
                     package_build_source: data.package_build_source,
                     variants: data.variants,
-                    timestamp: None,
                     identifier_hash: None,
                     sources: data.sources,
                     metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {

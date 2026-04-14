@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{source::SourceLocation, SourceTimestamps, UrlOrPath};
+use crate::{source::SourceLocation, UrlOrPath};
 
 /// Represents a conda-build variant value.
 ///
@@ -314,12 +314,6 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// required in V7).
     pub variants: BTreeMap<String, VariantValue>,
 
-    /// Timestamps that should be used when solving the build/host environments
-    /// of this source package. Contains a default (global) timestamp and
-    /// optional per-channel and per-package overrides. This ensures the
-    /// package remains reproducible in the future.
-    pub timestamp: Option<SourceTimestamps>,
-
     /// The short hash that was originally parsed from the [`crate::SourceIdentifier`]
     /// in the lock file (e.g. the `9f3c2a7b` part of `numba-cuda[9f3c2a7b] @ .`).
     ///
@@ -398,7 +392,6 @@ impl CondaSourceData<SourceMetadata> {
                 location: self.location,
                 package_build_source: self.package_build_source,
                 variants: self.variants,
-                timestamp: self.timestamp,
                 identifier_hash: self.identifier_hash,
                 sources: self.sources,
                 metadata: *full,
@@ -412,7 +405,6 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: Option<SourceTimestamps>,
         identifier_hash: Option<String>,
         package_record: PackageRecord,
         sources: BTreeMap<String, SourceLocation>,
@@ -421,7 +413,6 @@ impl CondaSourceData<SourceMetadata> {
             location,
             package_build_source,
             variants,
-            timestamp,
             identifier_hash,
             sources,
             metadata: SourceMetadata::Full(Box::new(FullSourceMetadata { package_record })),
@@ -434,7 +425,6 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: Option<SourceTimestamps>,
         identifier_hash: Option<String>,
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
@@ -444,7 +434,6 @@ impl CondaSourceData<SourceMetadata> {
             location,
             package_build_source,
             variants,
-            timestamp,
             identifier_hash,
             sources,
             metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
@@ -493,7 +482,6 @@ impl From<CondaSourceData<FullSourceMetadata>> for CondaSourceData<SourceMetadat
             location: value.location,
             package_build_source: value.package_build_source,
             variants: value.variants,
-            timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
             metadata: SourceMetadata::Full(Box::new(value.metadata)),
@@ -507,7 +495,6 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             location: value.location,
             package_build_source: value.package_build_source,
             variants: value.variants,
-            timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
             metadata: SourceMetadata::Partial(value.metadata),
@@ -561,13 +548,7 @@ impl Ord for CondaPackageData {
                 (Some(src_a), Some(src_b)) => src_a
                     .variants
                     .cmp(&src_b.variants)
-                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source))
-                    .then_with(|| match (&src_a.timestamp, &src_b.timestamp) {
-                        (Some(a), Some(b)) => (a.latest).cmp(&b.latest),
-                        (Some(_), None) => Ordering::Less,
-                        (None, Some(_)) => Ordering::Greater,
-                        (None, None) => Ordering::Equal,
-                    }),
+                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
                 _ => Ordering::Equal,
             })
     }
