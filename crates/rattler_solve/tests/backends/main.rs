@@ -713,6 +713,7 @@ mod libsolv_c {
                 exclude_newer: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             })
             .unwrap()
             .records;
@@ -905,6 +906,27 @@ mod resolvo {
         let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
 
         assert!(matches!(solve_error, SolveError::Unsolvable(_)));
+    }
+
+    /// Verifies that a [`CancellationToken`] that is already cancelled causes
+    /// the solver to return [`SolveError::Cancelled`] immediately.
+    #[test]
+    fn test_cancellation_token_pre_cancelled() {
+        use rattler_solve::CancellationToken;
+
+        let cancellation_token = CancellationToken::new();
+        cancellation_token.cancel();
+
+        let specs: Vec<MatchSpec> = vec!["foo".parse().unwrap()];
+
+        let task = SolverTask {
+            specs,
+            cancellation_token: Some(cancellation_token),
+            ..SolverTask::from_iter([&[] as &[RepoDataRecord]])
+        };
+
+        let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        assert!(matches!(solve_error, SolveError::Cancelled));
     }
 
     #[test]

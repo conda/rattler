@@ -26,8 +26,8 @@ use resolvo::{
 };
 
 use crate::{
-    resolvo::conda_sorting::CompareStrategy, ChannelPriority, ExcludeNewer, IntoRepoData,
-    SolveError, SolveStrategy, SolverRepoData, SolverTask,
+    resolvo::conda_sorting::CompareStrategy, CancellationToken, ChannelPriority, ExcludeNewer,
+    IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask,
 };
 
 mod conda_sorting;
@@ -295,6 +295,8 @@ pub struct CondaDependencyProvider<'a> {
 
     stop_time: Option<std::time::SystemTime>,
 
+    cancellation_token: Option<CancellationToken>,
+
     strategy: SolveStrategy,
 
     direct_dependencies: HashSet<NameId>,
@@ -312,6 +314,7 @@ impl<'a> CondaDependencyProvider<'a> {
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
+        cancellation_token: Option<CancellationToken>,
         channel_priority: ChannelPriority,
         exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
@@ -555,6 +558,7 @@ impl<'a> CondaDependencyProvider<'a> {
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,
+            cancellation_token,
             strategy,
             direct_dependencies,
             dependency_overrides: override_map,
@@ -599,6 +603,10 @@ impl<'a> CondaDependencyProvider<'a> {
 pub enum CancelReason {
     /// The solver was cancelled because the timeout was reached
     Timeout,
+
+    /// The solver was cancelled because a [`CancellationToken`] was triggered
+    /// by the caller.
+    Cancelled,
 }
 
 impl Interner for CondaDependencyProvider<'_> {
@@ -903,6 +911,11 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
     }
 
     fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
+        if let Some(token) = &self.cancellation_token {
+            if token.is_cancelled() {
+                return Some(Box::new(CancelReason::Cancelled));
+            }
+        }
         if let Some(stop_time) = self.stop_time {
             if std::time::SystemTime::now() > stop_time {
                 return Some(Box::new(CancelReason::Timeout));
@@ -949,6 +962,7 @@ impl super::SolverImpl for Solver {
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,
+            task.cancellation_token.clone(),
             task.channel_priority,
             task.exclude_newer.as_ref(),
             task.strategy,

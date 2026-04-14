@@ -121,6 +121,7 @@ pub fn py_solve<'a>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             };
 
             Ok::<_, PyErr>(
@@ -223,6 +224,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             };
 
             Ok::<_, PyErr>(
