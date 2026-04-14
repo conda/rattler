@@ -781,28 +781,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.add_conda_package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_conda_package
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.add_pypi_package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_pypi_package
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#rattler.lock.LockFile.default_environment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -840,28 +818,6 @@
     <span class="md-ellipsis">
       
         from_path
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.platforms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        platforms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.set_channels" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        set_channels
       
     </span>
   </a>
@@ -3130,28 +3086,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.add_conda_package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_conda_package
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.add_pypi_package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        add_pypi_package
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#rattler.lock.LockFile.default_environment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3189,28 +3123,6 @@
     <span class="md-ellipsis">
       
         from_path
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.platforms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        platforms
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.LockFile.set_channels" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        set_channels
       
     </span>
   </a>
@@ -3297,45 +3209,13 @@ Lock-files can store information for multiple platforms and for multiple environ
 
 
 <a href="#rattler.lock.LockFile.__init__" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__init__</span><span class="p">(</span><span class="n">platforms</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__init__</span><span class="p">(</span><span class="n">envs</span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Create a new rattler-lock file with the given platforms.</p>
-<p>Packages can be added using the <code>add_conda_package</code> and <code>add_pypi_package</code> methods.
-Channels can be set using the <code>set_channels</code> method.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>platforms</code>
-            </td>
-            <td>
-                  <code><span title="typing.List">List</span>[<span title="rattler.lock.platform.LockPlatform">LockPlatform</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The list of platforms this lock file supports.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Create a new rattler-lock file.</p>
+<p><code>envs</code> maps each environment to its name.</p>
 
 
     </div>
@@ -3356,266 +3236,6 @@ Channels can be set using the <code>set_channels</code> method.</p>
     <div class="doc doc-contents ">
 
         <p>Returns a representation of the LockFile.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="rattler.lock.LockFile.add_conda_package" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">add_conda_package</span>
-
-
-<a href="#rattler.lock.LockFile.add_conda_package" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">add_conda_package</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">platform</span><span class="p">,</span> <span class="n">record</span><span class="p">)</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Adds a conda package to the lock file for the given environment and platform.</p>
-<p>The platform must be one of the platforms specified when creating the lock file.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>environment</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The name of the environment.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>platform</code>
-            </td>
-            <td>
-                  <code><span title="rattler.lock.platform.LockPlatform">LockPlatform</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The platform to add the package for.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>record</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The repo data record of the package to add.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="Exception">Exception</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the platform is not one of the platforms in this lock file.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-        <h4 id="rattler.lock.LockFile.add_conda_package--examples">Examples<a class="headerlink" href="#rattler.lock.LockFile.add_conda_package--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">LockPlatform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="p">([</span><span class="n">LockPlatform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)])</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="c1"># lock_file.add_conda_package(&quot;default&quot;, LockPlatform(&quot;linux-64&quot;), some_record)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="rattler.lock.LockFile.add_pypi_package" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">add_pypi_package</span>
-
-
-<a href="#rattler.lock.LockFile.add_pypi_package" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">add_pypi_package</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">environment</span><span class="p">,</span> <span class="n">platform</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="p">,</span> <span class="n">location</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Adds a pypi package to the lock file for the given environment and platform.</p>
-<p>The platform must be one of the platforms specified when creating the lock file.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>environment</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The name of the environment.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>platform</code>
-            </td>
-            <td>
-                  <code><span title="rattler.lock.platform.LockPlatform">LockPlatform</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The platform to add the package for.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The name of the package.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>version</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The version of the package.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>location</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The URL or path where the package can be found.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="Exception">Exception</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If the platform is not one of the platforms in this lock file.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-        <h4 id="rattler.lock.LockFile.add_pypi_package--examples">Examples<a class="headerlink" href="#rattler.lock.LockFile.add_pypi_package--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">LockPlatform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="p">([</span><span class="n">LockPlatform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)])</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="c1"># lock_file.add_pypi_package(&quot;default&quot;, LockPlatform(&quot;linux-64&quot;), &quot;requests&quot;, &quot;2.28.0&quot;, &quot;https://...&quot;)</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
 
 
     </div>
@@ -3723,106 +3343,6 @@ Channels can be set using the <code>set_channels</code> method.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;./pixi.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">LockFile</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="rattler.lock.LockFile.platforms" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">platforms</span>
-
-
-<a href="#rattler.lock.LockFile.platforms" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">platforms</span><span class="p">()</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Returns all platforms defined in the lock-file.</p>
-<h4 id="rattler.lock.LockFile.platforms--examples">Examples<a class="headerlink" href="#rattler.lock.LockFile.platforms--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">LockPlatform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="p">([</span><span class="n">LockPlatform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">),</span> <span class="n">LockPlatform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)])</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">platforms</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">[</span><span class="n">LockPlatform</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;linux-64&#39;</span><span class="p">),</span> <span class="n">LockPlatform</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;osx-arm64&#39;</span><span class="p">)]</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="rattler.lock.LockFile.set_channels" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">set_channels</span>
-
-
-<a href="#rattler.lock.LockFile.set_channels" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">set_channels</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Sets the channels for the given environment.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>environment</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The name of the environment.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>channels</code>
-            </td>
-            <td>
-                  <code><span title="typing.List">List</span>[<span title="rattler.lock.channel.LockChannel">LockChannel</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The list of channels to set.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-        <h4 id="rattler.lock.LockFile.set_channels--examples">Examples<a class="headerlink" href="#rattler.lock.LockFile.set_channels--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">LockPlatform</span><span class="p">,</span> <span class="n">LockChannel</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="p">([</span><span class="n">LockPlatform</span><span class="p">(</span><span class="s2">&quot;linux-64&quot;</span><span class="p">)])</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">set_channels</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">LockChannel</span><span class="p">(</span><span class="s2">&quot;https://conda.anaconda.org/conda-forge/&quot;</span><span class="p">)])</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
