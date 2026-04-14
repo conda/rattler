@@ -256,11 +256,6 @@ pub struct PartialSourceMetadata {
 
     /// Dependencies on other packages (run-time requirements).
     pub depends: Vec<String>,
-
-    /// Information about packages that should be built from source instead of
-    /// binary. This maps from a normalized package name to the location of the
-    /// source.
-    pub sources: BTreeMap<String, SourceLocation>,
 }
 
 /// Full metadata for a source package that has been evaluated.
@@ -268,11 +263,6 @@ pub struct PartialSourceMetadata {
 pub struct FullSourceMetadata {
     /// The evaluated package record.
     pub package_record: PackageRecord,
-
-    /// Information about packages that should be built from source instead of
-    /// binary. This maps from a normalized package name to the location of the
-    /// source.
-    pub sources: BTreeMap<String, SourceLocation>,
 }
 
 /// Metadata for a source package, either partial (name-only) or full
@@ -342,6 +332,11 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// [`Hash`] because it carries no semantic meaning about the package itself.
     pub identifier_hash: Option<String>,
 
+    /// Information about packages that should be built from source instead of
+    /// binary. This maps from a normalized package name to the location of the
+    /// source.
+    pub sources: BTreeMap<String, SourceLocation>,
+
     /// The metadata for this source package.
     pub metadata: D,
 }
@@ -384,10 +379,7 @@ impl CondaSourceData<SourceMetadata> {
 
     /// Returns the source locations.
     pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        match &self.metadata {
-            SourceMetadata::Full(f) => &f.sources,
-            SourceMetadata::Partial(p) => &p.sources,
-        }
+        &self.sources
     }
 
     /// Returns the dependencies. Empty for partial metadata without depends.
@@ -408,6 +400,7 @@ impl CondaSourceData<SourceMetadata> {
                 variants: self.variants,
                 timestamp: self.timestamp,
                 identifier_hash: self.identifier_hash,
+                sources: self.sources,
                 metadata: *full,
             }),
             SourceMetadata::Partial(_) => None,
@@ -430,10 +423,8 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             timestamp,
             identifier_hash,
-            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                package_record,
-                sources,
-            })),
+            sources,
+            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata { package_record })),
         }
     }
 
@@ -455,11 +446,8 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             timestamp,
             identifier_hash,
-            metadata: SourceMetadata::Partial(PartialSourceMetadata {
-                name,
-                depends,
-                sources,
-            }),
+            sources,
+            metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
         }
     }
 }
@@ -481,11 +469,6 @@ impl CondaSourceData<FullSourceMetadata> {
     pub fn depends(&self) -> &[String] {
         &self.metadata.package_record.depends
     }
-
-    /// Returns the source locations.
-    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        &self.metadata.sources
-    }
 }
 
 // --- Methods for CondaSourceData<PartialSourceMetadata> ---
@@ -500,11 +483,6 @@ impl CondaSourceData<PartialSourceMetadata> {
     pub fn depends(&self) -> &[String] {
         &self.metadata.depends
     }
-
-    /// Returns the source locations.
-    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        &self.metadata.sources
-    }
 }
 
 // --- Conversions ---
@@ -517,6 +495,7 @@ impl From<CondaSourceData<FullSourceMetadata>> for CondaSourceData<SourceMetadat
             variants: value.variants,
             timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
+            sources: value.sources,
             metadata: SourceMetadata::Full(Box::new(value.metadata)),
         }
     }
@@ -530,6 +509,7 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             variants: value.variants,
             timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
+            sources: value.sources,
             metadata: SourceMetadata::Partial(value.metadata),
         }
     }

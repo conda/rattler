@@ -1823,6 +1823,7 @@ packages:
             )]),
             timestamp: None,
             identifier_hash: None,
+            sources: BTreeMap::new(),
             metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
                 package_record: {
                     let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
@@ -1834,7 +1835,6 @@ packages:
                     r.subdir = "noarch".to_string();
                     r
                 },
-                sources: BTreeMap::new(),
             })),
         }));
 

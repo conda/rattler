@@ -149,13 +149,11 @@ impl<'a> SourcePackageDataModel<'a> {
                     run_exports: None,
                     python_site_packages_path: self.python_site_packages_path.into_owned(),
                 },
-                sources: self.source_depends,
             }))
         } else {
             SourceMetadata::Partial(PartialSourceMetadata {
                 name,
                 depends: self.depends.into_owned(),
-                sources: self.source_depends,
             })
         };
 
@@ -165,6 +163,7 @@ impl<'a> SourcePackageDataModel<'a> {
             timestamp,
             package_build_source: self.source,
             identifier_hash: Some(hash),
+            sources: self.source_depends,
             metadata,
         };
 
@@ -209,7 +208,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     license_family: Cow::Borrowed(&r.license_family),
                     python_site_packages_path: Cow::Borrowed(&r.python_site_packages_path),
                     source: value.package_build_source.clone(),
-                    source_depends: full.sources.clone(),
+                    source_depends: value.sources.clone(),
                 }
             }
             SourceMetadata::Partial(partial) => Self {
@@ -232,7 +231,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 license_family: Cow::Owned(None),
                 python_site_packages_path: Cow::Owned(None),
                 source: value.package_build_source.clone(),
-                source_depends: partial.sources.clone(),
+                source_depends: value.sources.clone(),
             },
         }
     }
