@@ -1297,128 +1297,127 @@
 <a href=#1295 id=1295 data-nosnippet>1295</a>            .default_environment()
 <a href=#1296 id=1296 data-nosnippet>1296</a>            .expect(<span class="string">"no default environment in lock file"</span>);
 <a href=#1297 id=1297 data-nosnippet>1297</a>
-<a href=#1298 id=1298 data-nosnippet>1298</a>        <span class="kw">let </span>packages_platform = lock.platform(current_platform.as_str()).unwrap();
-<a href=#1299 id=1299 data-nosnippet>1299</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(packages) = lock_env.packages(packages_platform) <span class="kw">else </span>{
-<a href=#1300 id=1300 data-nosnippet>1300</a>            <span class="macro">panic!</span>(
-<a href=#1301 id=1301 data-nosnippet>1301</a>                <span class="string">"the platform for which the explicit lock file was created does not match the current platform"
-<a href=#1302 id=1302 data-nosnippet>1302</a>            </span>)
-<a href=#1303 id=1303 data-nosnippet>1303</a>        };
-<a href=#1304 id=1304 data-nosnippet>1304</a>
-<a href=#1305 id=1305 data-nosnippet>1305</a>        test_install_python(
-<a href=#1306 id=1306 data-nosnippet>1306</a>            packages.filter_map(|p| p.as_conda()<span class="question-mark">?</span>.location().as_url().cloned()),
-<a href=#1307 id=1307 data-nosnippet>1307</a>            <span class="string">"conda-lock"</span>,
-<a href=#1308 id=1308 data-nosnippet>1308</a>            current_platform,
-<a href=#1309 id=1309 data-nosnippet>1309</a>        )
-<a href=#1310 id=1310 data-nosnippet>1310</a>        .<span class="kw">await</span>;
-<a href=#1311 id=1311 data-nosnippet>1311</a>    }
-<a href=#1312 id=1312 data-nosnippet>1312</a>
-<a href=#1313 id=1313 data-nosnippet>1313</a>    <span class="kw">pub async fn </span>test_install_python(
-<a href=#1314 id=1314 data-nosnippet>1314</a>        urls: <span class="kw">impl </span>Iterator&lt;Item = Url&gt;,
-<a href=#1315 id=1315 data-nosnippet>1315</a>        cache_name: <span class="kw-2">&amp;</span>str,
-<a href=#1316 id=1316 data-nosnippet>1316</a>        platform: Platform,
-<a href=#1317 id=1317 data-nosnippet>1317</a>    ) {
-<a href=#1318 id=1318 data-nosnippet>1318</a>        <span class="comment">// Open a package cache in the systems temporary directory with a specific name.
-<a href=#1319 id=1319 data-nosnippet>1319</a>        // This allows us to reuse a package cache across multiple invocations
-<a href=#1320 id=1320 data-nosnippet>1320</a>        // of this test. Useful if you're debugging.
-<a href=#1321 id=1321 data-nosnippet>1321</a>        </span><span class="kw">let </span>package_cache = PackageCache::new(temp_dir().join(<span class="string">"rattler"</span>).join(cache_name));
-<a href=#1322 id=1322 data-nosnippet>1322</a>
-<a href=#1323 id=1323 data-nosnippet>1323</a>        <span class="comment">// Create an HTTP client we can use to download packages
-<a href=#1324 id=1324 data-nosnippet>1324</a>        </span><span class="kw">let </span>client = LazyClient::default();
-<a href=#1325 id=1325 data-nosnippet>1325</a>
-<a href=#1326 id=1326 data-nosnippet>1326</a>        <span class="comment">// Specify python version
-<a href=#1327 id=1327 data-nosnippet>1327</a>        </span><span class="kw">let </span>python_version =
-<a href=#1328 id=1328 data-nosnippet>1328</a>            PythonInfo::from_version(<span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(), <span class="prelude-val">None</span>, platform)
-<a href=#1329 id=1329 data-nosnippet>1329</a>                .unwrap();
-<a href=#1330 id=1330 data-nosnippet>1330</a>
-<a href=#1331 id=1331 data-nosnippet>1331</a>        <span class="comment">// Download and install each layer into an environment.
-<a href=#1332 id=1332 data-nosnippet>1332</a>        </span><span class="kw">let </span>install_driver = InstallDriver::default();
-<a href=#1333 id=1333 data-nosnippet>1333</a>        <span class="kw">let </span>target_dir = tempdir().unwrap();
-<a href=#1334 id=1334 data-nosnippet>1334</a>        <span class="kw">let </span>prefix_path = Prefix::create(target_dir.path()).unwrap();
-<a href=#1335 id=1335 data-nosnippet>1335</a>        stream::iter(urls)
-<a href=#1336 id=1336 data-nosnippet>1336</a>            .for_each_concurrent(<span class="prelude-val">Some</span>(<span class="number">50</span>), |package_url| {
-<a href=#1337 id=1337 data-nosnippet>1337</a>                <span class="kw">let </span>client = client.clone();
-<a href=#1338 id=1338 data-nosnippet>1338</a>                <span class="kw">let </span>package_cache = <span class="kw-2">&amp;</span>package_cache;
-<a href=#1339 id=1339 data-nosnippet>1339</a>                <span class="kw">let </span>install_driver = <span class="kw-2">&amp;</span>install_driver;
-<a href=#1340 id=1340 data-nosnippet>1340</a>                <span class="kw">let </span>python_version = <span class="kw-2">&amp;</span>python_version;
-<a href=#1341 id=1341 data-nosnippet>1341</a>                <span class="kw">let </span>prefix_path = prefix_path.clone();
-<a href=#1342 id=1342 data-nosnippet>1342</a>                <span class="kw">async move </span>{
-<a href=#1343 id=1343 data-nosnippet>1343</a>                    <span class="comment">// Populate the cache
-<a href=#1344 id=1344 data-nosnippet>1344</a>                    </span><span class="kw">let </span>package_info = CondaArchiveIdentifier::try_from_url(<span class="kw-2">&amp;</span>package_url).unwrap();
-<a href=#1345 id=1345 data-nosnippet>1345</a>                    <span class="kw">let </span>package_cache_lock = package_cache
-<a href=#1346 id=1346 data-nosnippet>1346</a>                        .get_or_fetch_from_url(
-<a href=#1347 id=1347 data-nosnippet>1347</a>                            package_info,
-<a href=#1348 id=1348 data-nosnippet>1348</a>                            package_url.clone(),
-<a href=#1349 id=1349 data-nosnippet>1349</a>                            client.clone(),
-<a href=#1350 id=1350 data-nosnippet>1350</a>                            <span class="prelude-val">None</span>,
-<a href=#1351 id=1351 data-nosnippet>1351</a>                        )
-<a href=#1352 id=1352 data-nosnippet>1352</a>                        .<span class="kw">await
-<a href=#1353 id=1353 data-nosnippet>1353</a>                        </span>.unwrap();
-<a href=#1354 id=1354 data-nosnippet>1354</a>
-<a href=#1355 id=1355 data-nosnippet>1355</a>                    <span class="comment">// Install the package to the prefix
-<a href=#1356 id=1356 data-nosnippet>1356</a>                    </span>link_package(
-<a href=#1357 id=1357 data-nosnippet>1357</a>                        package_cache_lock.path(),
-<a href=#1358 id=1358 data-nosnippet>1358</a>                        <span class="kw-2">&amp;</span>prefix_path,
-<a href=#1359 id=1359 data-nosnippet>1359</a>                        install_driver,
-<a href=#1360 id=1360 data-nosnippet>1360</a>                        InstallOptions {
-<a href=#1361 id=1361 data-nosnippet>1361</a>                            python_info: <span class="prelude-val">Some</span>(python_version.clone()),
-<a href=#1362 id=1362 data-nosnippet>1362</a>                            ..InstallOptions::default()
-<a href=#1363 id=1363 data-nosnippet>1363</a>                        },
-<a href=#1364 id=1364 data-nosnippet>1364</a>                    )
-<a href=#1365 id=1365 data-nosnippet>1365</a>                    .<span class="kw">await
-<a href=#1366 id=1366 data-nosnippet>1366</a>                    </span>.unwrap();
-<a href=#1367 id=1367 data-nosnippet>1367</a>                }
-<a href=#1368 id=1368 data-nosnippet>1368</a>            })
-<a href=#1369 id=1369 data-nosnippet>1369</a>            .<span class="kw">await</span>;
-<a href=#1370 id=1370 data-nosnippet>1370</a>
-<a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="comment">// Run the python command and validate the version it outputs
-<a href=#1372 id=1372 data-nosnippet>1372</a>        </span><span class="kw">let </span>python_path = <span class="kw">if </span>Platform::current().is_windows() {
-<a href=#1373 id=1373 data-nosnippet>1373</a>            <span class="string">"python.exe"
-<a href=#1374 id=1374 data-nosnippet>1374</a>        </span>} <span class="kw">else </span>{
-<a href=#1375 id=1375 data-nosnippet>1375</a>            <span class="string">"bin/python"
-<a href=#1376 id=1376 data-nosnippet>1376</a>        </span>};
-<a href=#1377 id=1377 data-nosnippet>1377</a>        <span class="kw">let </span>python_version = Command::new(target_dir.path().join(python_path))
-<a href=#1378 id=1378 data-nosnippet>1378</a>            .arg(<span class="string">"--version"</span>)
-<a href=#1379 id=1379 data-nosnippet>1379</a>            .output()
-<a href=#1380 id=1380 data-nosnippet>1380</a>            .unwrap();
-<a href=#1381 id=1381 data-nosnippet>1381</a>
-<a href=#1382 id=1382 data-nosnippet>1382</a>        <span class="macro">assert!</span>(python_version.status.success());
-<a href=#1383 id=1383 data-nosnippet>1383</a>        <span class="macro">assert_eq!</span>(
-<a href=#1384 id=1384 data-nosnippet>1384</a>            String::from_utf8_lossy(<span class="kw-2">&amp;</span>python_version.stdout).trim(),
-<a href=#1385 id=1385 data-nosnippet>1385</a>            <span class="string">"Python 3.11.0"
-<a href=#1386 id=1386 data-nosnippet>1386</a>        </span>);
-<a href=#1387 id=1387 data-nosnippet>1387</a>    }
-<a href=#1388 id=1388 data-nosnippet>1388</a>
-<a href=#1389 id=1389 data-nosnippet>1389</a>    <span class="attr">#[tracing_test::traced_test]
-<a href=#1390 id=1390 data-nosnippet>1390</a>    #[tokio::test]
-<a href=#1391 id=1391 data-nosnippet>1391</a>    </span><span class="kw">async fn </span>test_prefix_paths() {
-<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">let </span>environment_dir = tempfile::TempDir::new().unwrap();
-<a href=#1393 id=1393 data-nosnippet>1393</a>        <span class="kw">let </span>package_dir = tempfile::TempDir::new().unwrap();
-<a href=#1394 id=1394 data-nosnippet>1394</a>
-<a href=#1395 id=1395 data-nosnippet>1395</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file_async(
-<a href=#1396 id=1396 data-nosnippet>1396</a>            <span class="string">"https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
-<a href=#1397 id=1397 data-nosnippet>1397</a>                </span>.parse()
-<a href=#1398 id=1398 data-nosnippet>1398</a>                .unwrap(),
-<a href=#1399 id=1399 data-nosnippet>1399</a>            <span class="string">"25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"</span>,
-<a href=#1400 id=1400 data-nosnippet>1400</a>        )
-<a href=#1401 id=1401 data-nosnippet>1401</a>        .<span class="kw">await
-<a href=#1402 id=1402 data-nosnippet>1402</a>        </span>.unwrap();
-<a href=#1403 id=1403 data-nosnippet>1403</a>
-<a href=#1404 id=1404 data-nosnippet>1404</a>        <span class="comment">// Create package cache
-<a href=#1405 id=1405 data-nosnippet>1405</a>        </span>rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
-<a href=#1406 id=1406 data-nosnippet>1406</a>
-<a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="kw">let </span>install_driver = InstallDriver::default();
-<a href=#1408 id=1408 data-nosnippet>1408</a>
-<a href=#1409 id=1409 data-nosnippet>1409</a>        <span class="comment">// Link the package
-<a href=#1410 id=1410 data-nosnippet>1410</a>        </span><span class="kw">let </span>paths = link_package(
-<a href=#1411 id=1411 data-nosnippet>1411</a>            package_dir.path(),
-<a href=#1412 id=1412 data-nosnippet>1412</a>            <span class="kw-2">&amp;</span>Prefix::create(environment_dir.path()).unwrap(),
-<a href=#1413 id=1413 data-nosnippet>1413</a>            <span class="kw-2">&amp;</span>install_driver,
-<a href=#1414 id=1414 data-nosnippet>1414</a>            InstallOptions::default(),
-<a href=#1415 id=1415 data-nosnippet>1415</a>        )
-<a href=#1416 id=1416 data-nosnippet>1416</a>        .<span class="kw">await
-<a href=#1417 id=1417 data-nosnippet>1417</a>        </span>.unwrap();
-<a href=#1418 id=1418 data-nosnippet>1418</a>
-<a href=#1419 id=1419 data-nosnippet>1419</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(paths);
-<a href=#1420 id=1420 data-nosnippet>1420</a>    }
-<a href=#1421 id=1421 data-nosnippet>1421</a>}
+<a href=#1298 id=1298 data-nosnippet>1298</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(packages) = lock_env.packages(current_platform) <span class="kw">else </span>{
+<a href=#1299 id=1299 data-nosnippet>1299</a>            <span class="macro">panic!</span>(
+<a href=#1300 id=1300 data-nosnippet>1300</a>                <span class="string">"the platform for which the explicit lock file was created does not match the current platform"
+<a href=#1301 id=1301 data-nosnippet>1301</a>            </span>)
+<a href=#1302 id=1302 data-nosnippet>1302</a>        };
+<a href=#1303 id=1303 data-nosnippet>1303</a>
+<a href=#1304 id=1304 data-nosnippet>1304</a>        test_install_python(
+<a href=#1305 id=1305 data-nosnippet>1305</a>            packages.filter_map(|p| p.as_conda()<span class="question-mark">?</span>.location().as_url().cloned()),
+<a href=#1306 id=1306 data-nosnippet>1306</a>            <span class="string">"conda-lock"</span>,
+<a href=#1307 id=1307 data-nosnippet>1307</a>            current_platform,
+<a href=#1308 id=1308 data-nosnippet>1308</a>        )
+<a href=#1309 id=1309 data-nosnippet>1309</a>        .<span class="kw">await</span>;
+<a href=#1310 id=1310 data-nosnippet>1310</a>    }
+<a href=#1311 id=1311 data-nosnippet>1311</a>
+<a href=#1312 id=1312 data-nosnippet>1312</a>    <span class="kw">pub async fn </span>test_install_python(
+<a href=#1313 id=1313 data-nosnippet>1313</a>        urls: <span class="kw">impl </span>Iterator&lt;Item = Url&gt;,
+<a href=#1314 id=1314 data-nosnippet>1314</a>        cache_name: <span class="kw-2">&amp;</span>str,
+<a href=#1315 id=1315 data-nosnippet>1315</a>        platform: Platform,
+<a href=#1316 id=1316 data-nosnippet>1316</a>    ) {
+<a href=#1317 id=1317 data-nosnippet>1317</a>        <span class="comment">// Open a package cache in the systems temporary directory with a specific name.
+<a href=#1318 id=1318 data-nosnippet>1318</a>        // This allows us to reuse a package cache across multiple invocations
+<a href=#1319 id=1319 data-nosnippet>1319</a>        // of this test. Useful if you're debugging.
+<a href=#1320 id=1320 data-nosnippet>1320</a>        </span><span class="kw">let </span>package_cache = PackageCache::new(temp_dir().join(<span class="string">"rattler"</span>).join(cache_name));
+<a href=#1321 id=1321 data-nosnippet>1321</a>
+<a href=#1322 id=1322 data-nosnippet>1322</a>        <span class="comment">// Create an HTTP client we can use to download packages
+<a href=#1323 id=1323 data-nosnippet>1323</a>        </span><span class="kw">let </span>client = LazyClient::default();
+<a href=#1324 id=1324 data-nosnippet>1324</a>
+<a href=#1325 id=1325 data-nosnippet>1325</a>        <span class="comment">// Specify python version
+<a href=#1326 id=1326 data-nosnippet>1326</a>        </span><span class="kw">let </span>python_version =
+<a href=#1327 id=1327 data-nosnippet>1327</a>            PythonInfo::from_version(<span class="kw-2">&amp;</span>Version::from_str(<span class="string">"3.11.0"</span>).unwrap(), <span class="prelude-val">None</span>, platform)
+<a href=#1328 id=1328 data-nosnippet>1328</a>                .unwrap();
+<a href=#1329 id=1329 data-nosnippet>1329</a>
+<a href=#1330 id=1330 data-nosnippet>1330</a>        <span class="comment">// Download and install each layer into an environment.
+<a href=#1331 id=1331 data-nosnippet>1331</a>        </span><span class="kw">let </span>install_driver = InstallDriver::default();
+<a href=#1332 id=1332 data-nosnippet>1332</a>        <span class="kw">let </span>target_dir = tempdir().unwrap();
+<a href=#1333 id=1333 data-nosnippet>1333</a>        <span class="kw">let </span>prefix_path = Prefix::create(target_dir.path()).unwrap();
+<a href=#1334 id=1334 data-nosnippet>1334</a>        stream::iter(urls)
+<a href=#1335 id=1335 data-nosnippet>1335</a>            .for_each_concurrent(<span class="prelude-val">Some</span>(<span class="number">50</span>), |package_url| {
+<a href=#1336 id=1336 data-nosnippet>1336</a>                <span class="kw">let </span>client = client.clone();
+<a href=#1337 id=1337 data-nosnippet>1337</a>                <span class="kw">let </span>package_cache = <span class="kw-2">&amp;</span>package_cache;
+<a href=#1338 id=1338 data-nosnippet>1338</a>                <span class="kw">let </span>install_driver = <span class="kw-2">&amp;</span>install_driver;
+<a href=#1339 id=1339 data-nosnippet>1339</a>                <span class="kw">let </span>python_version = <span class="kw-2">&amp;</span>python_version;
+<a href=#1340 id=1340 data-nosnippet>1340</a>                <span class="kw">let </span>prefix_path = prefix_path.clone();
+<a href=#1341 id=1341 data-nosnippet>1341</a>                <span class="kw">async move </span>{
+<a href=#1342 id=1342 data-nosnippet>1342</a>                    <span class="comment">// Populate the cache
+<a href=#1343 id=1343 data-nosnippet>1343</a>                    </span><span class="kw">let </span>package_info = CondaArchiveIdentifier::try_from_url(<span class="kw-2">&amp;</span>package_url).unwrap();
+<a href=#1344 id=1344 data-nosnippet>1344</a>                    <span class="kw">let </span>package_cache_lock = package_cache
+<a href=#1345 id=1345 data-nosnippet>1345</a>                        .get_or_fetch_from_url(
+<a href=#1346 id=1346 data-nosnippet>1346</a>                            package_info,
+<a href=#1347 id=1347 data-nosnippet>1347</a>                            package_url.clone(),
+<a href=#1348 id=1348 data-nosnippet>1348</a>                            client.clone(),
+<a href=#1349 id=1349 data-nosnippet>1349</a>                            <span class="prelude-val">None</span>,
+<a href=#1350 id=1350 data-nosnippet>1350</a>                        )
+<a href=#1351 id=1351 data-nosnippet>1351</a>                        .<span class="kw">await
+<a href=#1352 id=1352 data-nosnippet>1352</a>                        </span>.unwrap();
+<a href=#1353 id=1353 data-nosnippet>1353</a>
+<a href=#1354 id=1354 data-nosnippet>1354</a>                    <span class="comment">// Install the package to the prefix
+<a href=#1355 id=1355 data-nosnippet>1355</a>                    </span>link_package(
+<a href=#1356 id=1356 data-nosnippet>1356</a>                        package_cache_lock.path(),
+<a href=#1357 id=1357 data-nosnippet>1357</a>                        <span class="kw-2">&amp;</span>prefix_path,
+<a href=#1358 id=1358 data-nosnippet>1358</a>                        install_driver,
+<a href=#1359 id=1359 data-nosnippet>1359</a>                        InstallOptions {
+<a href=#1360 id=1360 data-nosnippet>1360</a>                            python_info: <span class="prelude-val">Some</span>(python_version.clone()),
+<a href=#1361 id=1361 data-nosnippet>1361</a>                            ..InstallOptions::default()
+<a href=#1362 id=1362 data-nosnippet>1362</a>                        },
+<a href=#1363 id=1363 data-nosnippet>1363</a>                    )
+<a href=#1364 id=1364 data-nosnippet>1364</a>                    .<span class="kw">await
+<a href=#1365 id=1365 data-nosnippet>1365</a>                    </span>.unwrap();
+<a href=#1366 id=1366 data-nosnippet>1366</a>                }
+<a href=#1367 id=1367 data-nosnippet>1367</a>            })
+<a href=#1368 id=1368 data-nosnippet>1368</a>            .<span class="kw">await</span>;
+<a href=#1369 id=1369 data-nosnippet>1369</a>
+<a href=#1370 id=1370 data-nosnippet>1370</a>        <span class="comment">// Run the python command and validate the version it outputs
+<a href=#1371 id=1371 data-nosnippet>1371</a>        </span><span class="kw">let </span>python_path = <span class="kw">if </span>Platform::current().is_windows() {
+<a href=#1372 id=1372 data-nosnippet>1372</a>            <span class="string">"python.exe"
+<a href=#1373 id=1373 data-nosnippet>1373</a>        </span>} <span class="kw">else </span>{
+<a href=#1374 id=1374 data-nosnippet>1374</a>            <span class="string">"bin/python"
+<a href=#1375 id=1375 data-nosnippet>1375</a>        </span>};
+<a href=#1376 id=1376 data-nosnippet>1376</a>        <span class="kw">let </span>python_version = Command::new(target_dir.path().join(python_path))
+<a href=#1377 id=1377 data-nosnippet>1377</a>            .arg(<span class="string">"--version"</span>)
+<a href=#1378 id=1378 data-nosnippet>1378</a>            .output()
+<a href=#1379 id=1379 data-nosnippet>1379</a>            .unwrap();
+<a href=#1380 id=1380 data-nosnippet>1380</a>
+<a href=#1381 id=1381 data-nosnippet>1381</a>        <span class="macro">assert!</span>(python_version.status.success());
+<a href=#1382 id=1382 data-nosnippet>1382</a>        <span class="macro">assert_eq!</span>(
+<a href=#1383 id=1383 data-nosnippet>1383</a>            String::from_utf8_lossy(<span class="kw-2">&amp;</span>python_version.stdout).trim(),
+<a href=#1384 id=1384 data-nosnippet>1384</a>            <span class="string">"Python 3.11.0"
+<a href=#1385 id=1385 data-nosnippet>1385</a>        </span>);
+<a href=#1386 id=1386 data-nosnippet>1386</a>    }
+<a href=#1387 id=1387 data-nosnippet>1387</a>
+<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="attr">#[tracing_test::traced_test]
+<a href=#1389 id=1389 data-nosnippet>1389</a>    #[tokio::test]
+<a href=#1390 id=1390 data-nosnippet>1390</a>    </span><span class="kw">async fn </span>test_prefix_paths() {
+<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="kw">let </span>environment_dir = tempfile::TempDir::new().unwrap();
+<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">let </span>package_dir = tempfile::TempDir::new().unwrap();
+<a href=#1393 id=1393 data-nosnippet>1393</a>
+<a href=#1394 id=1394 data-nosnippet>1394</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file_async(
+<a href=#1395 id=1395 data-nosnippet>1395</a>            <span class="string">"https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+<a href=#1396 id=1396 data-nosnippet>1396</a>                </span>.parse()
+<a href=#1397 id=1397 data-nosnippet>1397</a>                .unwrap(),
+<a href=#1398 id=1398 data-nosnippet>1398</a>            <span class="string">"25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"</span>,
+<a href=#1399 id=1399 data-nosnippet>1399</a>        )
+<a href=#1400 id=1400 data-nosnippet>1400</a>        .<span class="kw">await
+<a href=#1401 id=1401 data-nosnippet>1401</a>        </span>.unwrap();
+<a href=#1402 id=1402 data-nosnippet>1402</a>
+<a href=#1403 id=1403 data-nosnippet>1403</a>        <span class="comment">// Create package cache
+<a href=#1404 id=1404 data-nosnippet>1404</a>        </span>rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
+<a href=#1405 id=1405 data-nosnippet>1405</a>
+<a href=#1406 id=1406 data-nosnippet>1406</a>        <span class="kw">let </span>install_driver = InstallDriver::default();
+<a href=#1407 id=1407 data-nosnippet>1407</a>
+<a href=#1408 id=1408 data-nosnippet>1408</a>        <span class="comment">// Link the package
+<a href=#1409 id=1409 data-nosnippet>1409</a>        </span><span class="kw">let </span>paths = link_package(
+<a href=#1410 id=1410 data-nosnippet>1410</a>            package_dir.path(),
+<a href=#1411 id=1411 data-nosnippet>1411</a>            <span class="kw-2">&amp;</span>Prefix::create(environment_dir.path()).unwrap(),
+<a href=#1412 id=1412 data-nosnippet>1412</a>            <span class="kw-2">&amp;</span>install_driver,
+<a href=#1413 id=1413 data-nosnippet>1413</a>            InstallOptions::default(),
+<a href=#1414 id=1414 data-nosnippet>1414</a>        )
+<a href=#1415 id=1415 data-nosnippet>1415</a>        .<span class="kw">await
+<a href=#1416 id=1416 data-nosnippet>1416</a>        </span>.unwrap();
+<a href=#1417 id=1417 data-nosnippet>1417</a>
+<a href=#1418 id=1418 data-nosnippet>1418</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(paths);
+<a href=#1419 id=1419 data-nosnippet>1419</a>    }
+<a href=#1420 id=1420 data-nosnippet>1420</a>}
 </code></pre></div></section></main></body></html>
