@@ -11,7 +11,7 @@ use crate::{utils::url_with_trailing_slash::UrlWithTrailingSlash, Platform};
 /// * The URL always contains a trailing `/`.
 ///
 /// This is useful to be able to compare different channels.
-#[derive(Clone, Hash, Eq, PartialEq, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, Hash, Eq, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct ChannelUrl(UrlWithTrailingSlash);
 

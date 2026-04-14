@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::PackageName;
+use pep508_rs::{PackageName, Requirement};
 use serde::{Deserialize, Serialize};
 
-use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
+use crate::{PackageHashes, PypiPackageData, UrlOrPath};
 
 /// This struct is similar to [`crate::parse::models::v6::PypiPackageDataModel`] but used for
 /// the V5 version of the lock file format.
@@ -16,24 +16,24 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub location: UrlOrPath,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
-    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
-    pub requires_dist: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[Requirement]>::is_empty")]
+    pub requires_dist: Cow<'a, [Requirement]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
     #[serde(default)]
     pub editable: bool,
 }
 
-impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
+impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageData {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         Self {
             name: value.name.into_owned(),
-            version: Some(value.version.into_owned()),
-            location: Verbatim::new(value.location),
+            version: value.version.into_owned(),
+            location: value.location,
             hash: value.hash.into_owned(),
-            index_url: None,
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
+            editable: value.editable,
         }
     }
 }

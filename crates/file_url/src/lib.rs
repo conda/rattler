@@ -55,18 +55,9 @@ fn url_to_path_inner<T: From<String>>(url: &Url) -> Option<T> {
             return None;
         }
 
-        if let Some(drive_letter) = is_windows_drive_letter_segment(first) {
-            (drive_letter, "\\")
-        } else {
-            // A Windows path like C:\foo\bar in a file:// URL gets
-            // its backslashes percent-encoded, collapsing the entire
-            // path into one URL segment (e.g. "C%3A%5Cfoo%5Cbar").
-            // Percent-decode and re-check for a drive letter.
-            let decoded = String::from_utf8(percent_decode(first.as_bytes()).collect()).ok()?;
-            if starts_with_windows_drive_letter(&decoded) && decoded.contains('\\') {
-                return Some(T::from(decoded));
-            }
-            (format!("/{first}/"), "/")
+        match is_windows_drive_letter_segment(first) {
+            Some(drive_letter) => (drive_letter, "\\"),
+            None => (format!("/{first}/"), "/"),
         }
     };
 
@@ -224,9 +215,6 @@ mod tests {
     // Percent encoding
     #[case("file:///foo/ba%20r", Some("/foo/ba r"))]
     #[case("file:///C%3A/Test/Foo.txt", Some("C:\\Test\\Foo.txt"))]
-    // Percent-encoded Windows backslashes collapsed into one segment
-    #[case("file:///C%3A%5Cfoo%5Cbar", Some("C:\\foo\\bar"))]
-    #[case("file:///c%3A%5Ctemp%5Ctest-file.txt", Some("c:\\temp\\test-file.txt"))]
     // Non file URLs
     #[case("http://example.com", None)]
     fn test_url_to_path(#[case] url: &str, #[case] expected: Option<&str>) {

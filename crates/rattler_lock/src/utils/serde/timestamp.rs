@@ -3,23 +3,6 @@ use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
 
-/// Converts a raw integer timestamp (seconds or milliseconds) to a
-/// `DateTime<Utc>`. Values larger than the year-9999 boundary in seconds
-/// are treated as milliseconds; smaller values are treated as seconds.
-pub(crate) fn millis_to_datetime(timestamp: i64) -> Option<DateTime<Utc>> {
-    let microseconds = if timestamp > 253_402_300_799 {
-        timestamp * 1_000
-    } else {
-        timestamp * 1_000_000
-    };
-    DateTime::from_timestamp_micros(microseconds)
-}
-
-/// Converts a `DateTime<Utc>` to milliseconds since the Unix epoch.
-pub(crate) fn datetime_to_millis(dt: &DateTime<Utc>) -> i64 {
-    dt.timestamp_millis()
-}
-
 pub(crate) struct Timestamp;
 
 impl<'de> DeserializeAs<'de, chrono::DateTime<chrono::Utc>> for Timestamp {
@@ -28,7 +11,16 @@ impl<'de> DeserializeAs<'de, chrono::DateTime<chrono::Utc>> for Timestamp {
         D: Deserializer<'de>,
     {
         let timestamp = i64::deserialize(deserializer)?;
-        millis_to_datetime(timestamp)
+
+        // Convert from milliseconds to seconds
+        let microseconds = if timestamp > 253_402_300_799 {
+            timestamp * 1_000
+        } else {
+            timestamp * 1_000_000
+        };
+
+        // Convert the timestamp to a UTC timestamp
+        chrono::DateTime::from_timestamp_micros(microseconds)
             .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))
     }
 }
@@ -38,6 +30,17 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
     where
         S: Serializer,
     {
-        datetime_to_millis(source).serialize(serializer)
+        // Convert the date to a timestamp
+        let timestamp: i64 = source.timestamp_millis();
+
+        // Determine the precision of the timestamp.
+        let timestamp = if timestamp % 1000 == 0 {
+            timestamp / 1000
+        } else {
+            timestamp
+        };
+
+        // Serialize the timestamp
+        timestamp.serialize(serializer)
     }
 }

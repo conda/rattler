@@ -40,6 +40,6 @@ pub struct SolveOptions {
     pub channel_priority: ChannelPriority,
 
     /// The prerelease mode that was used to resolve `PyPI` dependencies.
-    #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
-    pub pypi_prerelease_mode: PypiPrereleaseMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pypi_prerelease_mode: Option<PypiPrereleaseMode>,
 }

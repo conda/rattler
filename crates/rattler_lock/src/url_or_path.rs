@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     cmp::Ordering,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Display, Formatter},
     hash::Hash,
     str::FromStr,
 };

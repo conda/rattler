@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from rattler.channel import Channel, ChannelConfig
 from rattler.install import install
-from rattler.lock import LockFile, LockChannel, LockPlatform
+from rattler.lock import Environment, LockFile, LockChannel
 from rattler.match_spec import MatchSpec
 from rattler.platform import Platform, PlatformLiteral
 from rattler.solver import solve
@@ -40,14 +40,12 @@ async def create_environment(
         )
 
         if lockfile:
-            lock_platform = LockPlatform(str(selected_platform))
-            lock = LockFile([lock_platform])
-            lock.set_channels(
+            environment = Environment(
                 prefix.name,
+                {selected_platform: records},
                 [LockChannel(chan.base_url) for chan in channels],
             )
-            for record in records:
-                lock.add_conda_package(prefix.name, lock_platform, record)
+            lock = LockFile({prefix.name: environment})
             lock.to_path(lockfile)
             print(f"Lockfile saved to {lockfile}")
 

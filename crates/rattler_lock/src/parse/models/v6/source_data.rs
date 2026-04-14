@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_with::{serde_as, DeserializeAs, SerializeAs};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
@@ -11,7 +11,7 @@ use crate::source::{
 };
 
 #[serde_as]
-#[derive(Deserialize, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 struct SourceLocationData<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<Cow<'a, Url>>,
@@ -145,12 +145,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
 
         if let Some(url) = url {
             let url = url.into_owned();
-            Ok(SourceLocation::Url(UrlSourceLocation {
-                url,
-                md5,
-                sha256,
-                subdirectory: subdirectory.as_deref().map(str::to_owned),
-            }))
+            Ok(SourceLocation::Url(UrlSourceLocation { url, md5, sha256 }))
         } else if let Some(path) = path {
             if subdirectory.is_some() {
                 return Err(SourceLocationError::PathSubdir);
@@ -179,7 +174,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
 }
 
 #[serde_as]
-#[derive(Deserialize, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 struct PackageBuildSourceData<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<Cow<'a, Url>>,
@@ -355,6 +350,16 @@ pub struct SourceLocationSerializer;
 
 pub struct PackageBuildSourceSerializer;
 
+impl SerializeAs<PackageBuildSource> for PackageBuildSourceSerializer {
+    fn serialize_as<S>(source: &PackageBuildSource, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let data = PackageBuildSourceData::from(source);
+        data.serialize(serializer)
+    }
+}
+
 impl<'de> DeserializeAs<'de, PackageBuildSource> for PackageBuildSourceSerializer {
     fn deserialize_as<D>(deserializer: D) -> Result<PackageBuildSource, D::Error>
     where
@@ -363,6 +368,16 @@ impl<'de> DeserializeAs<'de, PackageBuildSource> for PackageBuildSourceSerialize
         PackageBuildSourceData::deserialize(deserializer)?
             .try_into()
             .map_err(serde::de::Error::custom)
+    }
+}
+
+impl SerializeAs<SourceLocation> for SourceLocationSerializer {
+    fn serialize_as<S>(source: &SourceLocation, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let data = SourceLocationData::from(source);
+        data.serialize(serializer)
     }
 }
 

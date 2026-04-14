@@ -76,9 +76,10 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
 use indexmap::IndexSet;
+use rattler_conda_types::{Platform, RepoDataRecord};
 
 mod builder;
 mod channel;
@@ -87,35 +88,26 @@ mod file_format_version;
 mod hash;
 pub mod options;
 mod parse;
-mod platform;
 mod pypi;
 mod pypi_indexes;
 pub mod source;
-mod source_identifier;
-mod source_timestamps;
 mod url_or_path;
 mod utils;
-mod verbatim;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
-    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, FullSourceMetadata,
-    GitShallowSpec, InputHash, PackageBuildSource, PartialSourceMetadata, SourceMetadata,
-    VariantValue,
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
+    PackageBuildSource, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
-pub use platform::{OwnedPlatform, ParsePlatformError, Platform, PlatformData, PlatformName};
-pub use pypi::{PypiDistributionData, PypiPackageData, PypiSourceData, PypiSourceTreeHashable};
+pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
-pub use rattler_conda_types::{Matches, RepoDataRecord};
-pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
-pub use source_timestamps::SourceTimestamps;
+pub use rattler_conda_types::Matches;
 pub use url_or_path::UrlOrPath;
-pub use verbatim::Verbatim;
 
 /// The name of the default environment in a [`LockFile`]. This is the
 /// environment name that is used when no explicit environment name is
@@ -138,10 +130,10 @@ pub struct LockFile {
 #[derive(Default, Debug)]
 struct LockFileInner {
     version: FileFormatVersion,
-    platforms: Vec<PlatformData>,
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
+    pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
     environment_lookup: ahash::HashMap<String, usize>,
 }
@@ -153,7 +145,7 @@ struct LockFileInner {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 enum EnvironmentPackageData {
     Conda(usize),
-    Pypi(usize),
+    Pypi(usize, usize),
 }
 
 /// Information about a specific environment in the lock file.
@@ -175,7 +167,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -186,28 +178,16 @@ impl LockFile {
     }
 
     /// Parses an conda-lock file from a reader.
-    pub fn from_reader(
-        mut reader: impl Read,
-        base_dir: Option<&Path>,
-    ) -> Result<Self, ParseCondaLockError> {
+    pub fn from_reader(mut reader: impl Read) -> Result<Self, ParseCondaLockError> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        parse::from_str_with_base_directory(&str, base_dir)
+        Self::from_str(&str)
     }
 
     /// Parses an conda-lock file from a file.
     pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
-        let base_dir = path.parent();
         let source = std::fs::read_to_string(path)?;
-        parse::from_str_with_base_directory(&source, base_dir)
-    }
-
-    /// Parses an conda-lock file from a file.
-    pub fn from_str_with_base_directory(
-        source: &str,
-        base_dir: Option<&Path>,
-    ) -> Result<Self, ParseCondaLockError> {
-        parse::from_str_with_base_directory(source, base_dir)
+        Self::from_str(&source)
     }
 
     /// Writes the conda lock to a file
@@ -219,21 +199,6 @@ impl LockFile {
     /// Writes the conda lock to a string
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
         serde_yaml::to_string(self).map_err(std::io::Error::other)
-    }
-
-    /// Returns the platform with the given name.
-    pub fn platform(&self, name: &str) -> Option<Platform<'_>> {
-        crate::platform::find_index_by_name(&self.inner.platforms, name)
-            .map(|index| Platform::new(&self.inner, index))
-    }
-
-    /// Returns `PlatformRefs` for all the platforms.
-    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform<'_>> {
-        self.inner
-            .platforms
-            .iter()
-            .enumerate()
-            .map(|(index, _)| Platform::new(&self.inner, index))
     }
 
     /// Returns the environment with the given name.
@@ -297,14 +262,8 @@ impl<'lock> Environment<'lock> {
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
-    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform<'lock>> + '_ {
-        let indices = self
-            .data()
-            .packages
-            .keys()
-            .map(|index| Platform::new(&self.lock_file.inner, *index))
-            .collect::<Vec<_>>();
-        crate::platform::PlatformIterator::new(indices)
+    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform> + '_ {
+        self.data().packages.keys().copied()
     }
 
     /// Returns the channels that are used by this environment.
@@ -327,7 +286,7 @@ impl<'lock> Environment<'lock> {
     /// Returns the `PyPI` prerelease mode that was used to solve this environment.
     ///
     /// Returns `None` if no prerelease mode was explicitly set.
-    pub fn pypi_prerelease_mode(&self) -> PypiPrereleaseMode {
+    pub fn pypi_prerelease_mode(&self) -> Option<PypiPrereleaseMode> {
         self.data().options.pypi_prerelease_mode
     }
 
@@ -339,59 +298,51 @@ impl<'lock> Environment<'lock> {
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
-        platform: Platform<'lock>,
+        platform: Platform,
     ) -> Option<impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_>
     {
-        if std::ptr::from_ref(self.lock_file.inner.as_ref())
-            != std::ptr::from_ref(platform.lock_file_inner)
-        {
-            return None;
-        }
         Some(
             self.data()
                 .packages
-                .get(&platform.index)?
+                .get(&platform)?
                 .iter()
                 .map(move |package| match package {
                     EnvironmentPackageData::Conda(data) => {
                         LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                     }
-                    EnvironmentPackageData::Pypi(data) => {
-                        LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
-                    }
+                    EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
+                    ),
                 }),
         )
     }
 
     /// Returns an iterator over all packages and platforms defined for this
-    /// environment.
+    /// environment
     pub fn packages_by_platform(
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform<'lock>,
+            Platform,
             impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_,
         ),
     > + '_ {
-        self.data()
-            .packages
-            .iter()
-            .map(|(platform_index, data)| {
-                (Platform::new(&self.lock_file.inner, *platform_index), data)
-            })
-            .map(move |(platform, data)| {
-                (
-                    platform,
-                    data.iter().map(move |package| match package {
-                        EnvironmentPackageData::Conda(data) => {
-                            LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
-                        }
-                        EnvironmentPackageData::Pypi(data) => {
-                            LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
-                        }
-                    }),
-                )
-            })
+        let env_data = self.data();
+        env_data.packages.iter().map(move |(platform, packages)| {
+            (
+                *platform,
+                packages.iter().map(move |package| match package {
+                    EnvironmentPackageData::Conda(data) => {
+                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
+                    }
+                    EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
+                    ),
+                }),
+            )
+        })
     }
 
     /// Returns all pypi packages for all platforms
@@ -399,14 +350,21 @@ impl<'lock> Environment<'lock> {
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform<'_>,
-            impl DoubleEndedIterator<Item = &'_ PypiPackageData>,
+            Platform,
+            impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>,
         ),
     > + '_ {
-        self.packages_by_platform()
-            .map(move |(platform, packages)| {
-                (platform, packages.filter_map(LockedPackageRef::as_pypi))
-            })
+        let env_data = self.data();
+        env_data.packages.iter().map(|(platform, packages)| {
+            let records = packages.iter().filter_map(|package| match package {
+                EnvironmentPackageData::Conda(_) => None,
+                EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
+                    &self.lock_file.inner.pypi_packages[*pkg_data_idx],
+                    &self.lock_file.inner.pypi_environment_package_data[*env_data_idx],
+                )),
+            });
+            (*platform, records)
+        })
     }
 
     /// Returns all conda packages for all platforms.
@@ -414,21 +372,19 @@ impl<'lock> Environment<'lock> {
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform<'lock>,
+            Platform,
             impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_,
         ),
     > + '_ {
         self.packages_by_platform()
-            .map(move |(platform, packages)| {
-                (platform, packages.filter_map(LockedPackageRef::as_conda))
-            })
+            .map(|(platform, packages)| (platform, packages.filter_map(LockedPackageRef::as_conda)))
     }
 
     /// Returns all binary conda packages for all platforms and converts them to
     /// [`RepoDataRecord`].
     pub fn conda_repodata_records_by_platform(
         &self,
-    ) -> Result<HashMap<Platform<'lock>, Vec<RepoDataRecord>>, ConversionError> {
+    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages_by_platform()
             .map(|(platform, packages)| {
                 Ok((
@@ -445,7 +401,7 @@ impl<'lock> Environment<'lock> {
     /// Returns all conda packages for a specific platform.
     pub fn conda_packages(
         &self,
-        platform: Platform<'lock>,
+        platform: Platform,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_> {
         self.packages(platform)
             .map(|packages| packages.filter_map(LockedPackageRef::as_conda))
@@ -460,7 +416,7 @@ impl<'lock> Environment<'lock> {
     /// records.
     pub fn conda_repodata_records(
         &self,
-        platform: Platform<'lock>,
+        platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages(platform)
             .map(|packages| {
@@ -477,14 +433,17 @@ impl<'lock> Environment<'lock> {
     /// defined for this environment.
     pub fn pypi_packages(
         &self,
-        platform: Platform<'lock>,
-    ) -> Option<impl DoubleEndedIterator<Item = &'lock PypiPackageData> + '_> {
+        platform: Platform,
+    ) -> Option<
+        impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>
+            + '_,
+    > {
         self.packages(platform)
             .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
     }
 
     /// Returns whether this environment has any pypi packages for the specified platform.
-    pub fn has_pypi_packages(&self, platform: Platform<'lock>) -> bool {
+    pub fn has_pypi_packages(&self, platform: Platform) -> bool {
         self.pypi_packages(platform)
             .is_some_and(|mut packages| packages.next().is_some())
     }
@@ -529,7 +488,7 @@ pub enum LockedPackageRef<'lock> {
     Conda(&'lock CondaPackageData),
 
     /// A pypi package
-    Pypi(&'lock PypiPackageData),
+    Pypi(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData),
 }
 
 impl<'lock> LockedPackageRef<'lock> {
@@ -537,8 +496,8 @@ impl<'lock> LockedPackageRef<'lock> {
     /// might not be the normalized name.
     pub fn name(self) -> &'lock str {
         match self {
-            LockedPackageRef::Conda(data) => data.name().as_source(),
-            LockedPackageRef::Pypi(data) => data.name().as_ref(),
+            LockedPackageRef::Conda(data) => data.record().name.as_source(),
+            LockedPackageRef::Pypi(data, _) => data.name.as_ref(),
         }
     }
 
@@ -546,15 +505,15 @@ impl<'lock> LockedPackageRef<'lock> {
     pub fn location(self) -> &'lock UrlOrPath {
         match self {
             LockedPackageRef::Conda(data) => data.location(),
-            LockedPackageRef::Pypi(data) => data.location().inner(),
+            LockedPackageRef::Pypi(data, _) => &data.location,
         }
     }
 
     /// Returns the pypi package if this is a pypi package.
-    pub fn as_pypi(self) -> Option<&'lock PypiPackageData> {
+    pub fn as_pypi(self) -> Option<(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)> {
         match self {
             LockedPackageRef::Conda(_) => None,
-            LockedPackageRef::Pypi(data) => Some(data),
+            LockedPackageRef::Pypi(data, env) => Some((data, env)),
         }
     }
 
@@ -581,22 +540,15 @@ impl<'lock> LockedPackageRef<'lock> {
 
 #[cfg(test)]
 mod test {
-    use std::path::{Path, PathBuf};
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+    };
 
-    use rattler_conda_types::RepoDataRecord;
+    use rattler_conda_types::{Platform, RepoDataRecord};
     use rstest::*;
 
-    use crate::platform::PlatformName;
-
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
-
-    fn test_path() -> PathBuf {
-        if cfg!(windows) {
-            PathBuf::from("C:\\tmp\\some\\test\\path")
-        } else {
-            PathBuf::from("/tmp/some/test/path")
-        }
-    }
 
     #[rstest]
     #[case::v0_numpy("v0/numpy-conda-lock.yml")]
@@ -623,47 +575,12 @@ mod test {
     #[case::v6_multiple_source_packages_with_variants(
         "v6/multiple-source-packages-with-variants-lock.yml"
     )]
-    #[case::v7_conda_source_path("v7/conda-path-lock.yml")]
-    #[case::v7_derived_channel("v7/derived-channel-lock.yml")]
-    #[case::v7_sources("v7/sources-lock.yml")]
-    #[case::v7_source_timestamps_map("v7/source-timestamps-map-lock.yml")]
-    #[case::v7_options("v7/options-lock.yml")]
-    #[case::v7_pixi_build_pinned_source("v7/pixi-build-pinned-source-lock.yml")]
-    #[case::v7_pixi_build_url_source("v7/pixi-build-url-source-lock.yml")]
-    #[case::v7_pixi_build_git_tag_source("v7/pixi-build-git-tag-source-lock.yml")]
-    #[case::v7_pixi_build_git_rev_only_source("v7/pixi-build-git-rev-only-source-lock.yml")]
-    #[case::v7_source_package_with_variants("v7/source-package-with-variants-lock.yml")]
-    #[case::v7_multiple_source_packages_with_variants(
-        "v7/multiple-source-packages-with-variants-lock.yml"
-    )]
-    #[case::v7_pypi_absolute_url("v7/pypi_absolute_url.yml")]
-    #[case::v7_pypi_relative_url("v7/pypi_relative_url.yml")]
-    #[case::v7_pypi_relative_outside_url("v7/pypi_relative_outside_url.yml")]
-    #[case::v7_pypi_custom_index("v7/pypi_custom_index.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join(file_name);
         let conda_lock = LockFile::from_path(&path).unwrap();
         insta::assert_yaml_snapshot!(file_name, conda_lock);
-    }
-
-    #[rstest]
-    #[case::v7_invalid_platform("v7/invalid_platform_name.yml")]
-    #[case::v7_invalid_platform("v7/invalid_platform_subdir.yml")]
-    #[case::v7_missing_platform("v7/missing_platform.yml")]
-    #[case::v7_missing_platform("v7/duplicate_platform_definition.yml")]
-    #[case::v7_missing_platform("v7/duplicate_platform_use.yml")]
-    fn test_parse_fail(#[case] file_name: &str) {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/lock_parse_fails")
-            .join(file_name);
-        let error_message = if let Err(error) = LockFile::from_path(&path) {
-            format!("{error}")
-        } else {
-            "Lockfile was read fine, this is unexpected in a test for error cases".to_string()
-        };
-        insta::assert_yaml_snapshot!(file_name, error_message);
     }
 
     #[rstest]
@@ -679,10 +596,7 @@ mod test {
         let rendered_lock_file = conda_lock.render_to_string().unwrap();
 
         // Parse the rendered lock-file again
-        let source_path = test_path();
-        let parsed_lock_file =
-            LockFile::from_str_with_base_directory(&rendered_lock_file, Some(&source_path))
-                .unwrap();
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
 
         // And re-render again
         let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
@@ -709,13 +623,10 @@ mod test {
         // Try to read conda_lock
         let conda_lock = LockFile::from_path(&path).unwrap();
 
-        let linux = conda_lock.platform("linux-64").unwrap();
-        let osx = conda_lock.platform("osx-64").unwrap();
-
         insta::assert_yaml_snapshot!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .packages(linux)
+            .packages(Platform::Linux64)
             .unwrap()
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
@@ -723,7 +634,7 @@ mod test {
         insta::assert_yaml_snapshot!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .packages(osx)
+            .packages(Platform::Osx64)
             .unwrap()
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
@@ -737,12 +648,10 @@ mod test {
             .join("v4/pypi-matplotlib-lock.yml");
         let conda_lock = LockFile::from_path(&path).unwrap();
 
-        let linux = conda_lock.platform("linux-64").unwrap();
-
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(linux));
+            .has_pypi_packages(Platform::Linux64));
 
         // v6
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -750,270 +659,20 @@ mod test {
             .join("v6/numpy-as-pypi-lock.yml");
         let conda_lock = LockFile::from_path(&path).unwrap();
 
-        let osx_arm64 = conda_lock.platform("osx-arm64").unwrap();
-
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(osx_arm64));
+            .has_pypi_packages(Platform::OsxArm64));
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v6/python-from-conda-only-lock.yml");
         let conda_lock = LockFile::from_path(&path).unwrap();
 
-        let osx_arm64 = conda_lock.platform("osx-arm64").unwrap();
-
         assert!(!conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(osx_arm64));
-    }
-
-    #[test]
-    fn test_pypi_index_url() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/v7/pypi_custom_index.yml");
-        let lock_file = LockFile::from_path(&path).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
-        let pypi_packages: Vec<_> = env
-            .packages(linux)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
-            .collect();
-
-        // Package from a custom index should have that index_url
-        let requests = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "requests")
-            .expect("requests package");
-        assert_eq!(
-            requests
-                .as_wheel()
-                .unwrap()
-                .index_url
-                .as_ref()
-                .map(url::Url::as_str),
-            Some("https://my-custom-index.example.com/simple")
-        );
-
-        // Package without explicit index_url defaults to the
-        // environment's first index
-        let numpy = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "numpy")
-            .expect("numpy package");
-        assert_eq!(
-            numpy
-                .as_wheel()
-                .unwrap()
-                .index_url
-                .as_ref()
-                .map(url::Url::as_str),
-            Some("https://my-custom-index.example.com/simple")
-        );
-
-        // Path-based package has no index_url
-        let local_pkg = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "local-pkg")
-            .expect("local-pkg package");
-        assert!(local_pkg.as_source().is_some());
-    }
-
-    /// In v7 lockfiles, a package without an explicit `index:` field
-    /// should use the first index from the environment's `indexes:` list.
-    #[test]
-    fn v7_pypi_default_index_from_environment() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://first-index.example.com/simple
-      - https://second-index.example.com/simple
-    packages:
-      linux-64:
-        - pypi: https://first-index.example.com/packages/requests-2.31.0-py3-none-any.whl
-        - pypi: https://second-index.example.com/packages/numpy-1.26.0-cp311-linux_x86_64.whl
-packages:
-  - pypi: https://first-index.example.com/packages/requests-2.31.0-py3-none-any.whl
-    name: requests
-    version: 2.31.0
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  - pypi: https://second-index.example.com/packages/numpy-1.26.0-cp311-linux_x86_64.whl
-    name: numpy
-    version: 1.26.0
-    index: https://second-index.example.com/simple
-    sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
-        let pypi_packages: Vec<_> = env
-            .packages(linux)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
-            .collect();
-
-        // Package without explicit index: should use the first environment index
-        let requests = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "requests")
-            .expect("requests package");
-        assert_eq!(
-            requests
-                .as_wheel()
-                .unwrap()
-                .index_url
-                .as_ref()
-                .map(url::Url::as_str),
-            Some("https://first-index.example.com/simple"),
-        );
-
-        // Package with explicit index: should keep that index
-        let numpy = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "numpy")
-            .expect("numpy package");
-        assert_eq!(
-            numpy
-                .as_wheel()
-                .unwrap()
-                .index_url
-                .as_ref()
-                .map(url::Url::as_str),
-            Some("https://second-index.example.com/simple"),
-        );
-    }
-
-    /// Lockfiles before v7 didn't store per-package index URLs, so
-    /// `index_url` must be `None` after parsing.
-    #[test]
-    fn v5_pypi_index_url_is_none() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/v5/flat-index-lock.yml");
-        let lock_file = LockFile::from_path(&path).unwrap();
-        let platform = lock_file.platform("osx-arm64").unwrap();
-        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
-
-        for pkg in env
-            .packages(platform)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
-        {
-            if let Some(wheel) = pkg.as_wheel() {
-                assert!(
-                    wheel.index_url.is_none(),
-                    "v5 package {:?} should have no index_url",
-                    wheel.name
-                );
-            }
-        }
-    }
-
-    /// Lockfiles before v7 didn't store per-package index URLs, so
-    /// `index_url` must be `None` after parsing.
-    #[test]
-    fn v6_pypi_index_url_is_none() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/v6/numpy-as-pypi-lock.yml");
-        let lock_file = LockFile::from_path(&path).unwrap();
-        let platform = lock_file.platform("osx-arm64").unwrap();
-        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
-
-        let numpy = env
-            .packages(platform)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
-            .find(|p| p.name().as_ref() == "numpy")
-            .expect("numpy package");
-        assert!(numpy.as_wheel().unwrap().index_url.is_none());
-    }
-
-    /// Lockfiles before v7 didn't store per-package index URLs, so
-    /// `index_url` must be `None` after parsing.
-    #[test]
-    fn v3_pypi_index_url_is_none() {
-        let lock_file_str = "\
-version: 3
-metadata:
-  content_hash:
-    linux-64: abc123
-  channels:
-    - url: https://conda.anaconda.org/conda-forge/
-      used_env_vars: []
-  platforms:
-    - linux-64
-  sources: []
-package:
-  - platform: linux-64
-    name: requests
-    version: '2.31.0'
-    category: main
-    manager: pip
-    dependencies: []
-    url: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
-    hash:
-      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        assert!(pkg.as_wheel().unwrap().index_url.is_none());
-    }
-
-    /// When a v7 environment has no `indexes:` list, wheels without an
-    /// explicit `index:` should fall back to `https://pypi.org/simple`.
-    #[test]
-    fn v7_pypi_no_indexes_falls_back_to_pypi() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    packages:
-      linux-64:
-        - pypi: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
-packages:
-  - pypi: https://files.pythonhosted.org/packages/requests-2.31.0-py3-none-any.whl
-    name: requests
-    version: 2.31.0
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        assert_eq!(
-            pkg.as_wheel()
-                .unwrap()
-                .index_url
-                .as_ref()
-                .map(url::Url::as_str),
-            Some("https://pypi.org/simple"),
-        );
+            .has_pypi_packages(Platform::OsxArm64));
     }
 
     #[test]
@@ -1045,33 +704,23 @@ packages:
 
         // create a lockfile with the repodata record
         let lock_file = LockFile::builder()
-            .with_platforms(vec![crate::PlatformData {
-                name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
-                virtual_packages: Vec::new(),
-            }])
-            .unwrap()
             .with_conda_package(
                 DEFAULT_ENVIRONMENT_NAME,
-                "linux-64",
+                Platform::Linux64,
                 repodata_record.clone().into(),
             )
-            .unwrap()
             .finish();
 
         // serialize the lockfile
         let rendered_lock_file = lock_file.render_to_string().unwrap();
 
         // parse the lockfile
-        let parsed_lock_file =
-            LockFile::from_str_with_base_directory(&rendered_lock_file, None).unwrap();
-
-        let linux = parsed_lock_file.platform("linux-64").unwrap();
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
         // get repodata record from parsed lockfile
         let repodata_records = parsed_lock_file
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .conda_repodata_records(linux)
+            .conda_repodata_records(Platform::Linux64)
             .unwrap()
             .unwrap();
 
@@ -1089,922 +738,5 @@ packages:
         // But if we render it again, the lockfile should look the same at least
         let rerendered_lock_file_two = parsed_lock_file.render_to_string().unwrap();
         assert_eq!(rendered_lock_file, rerendered_lock_file_two);
-    }
-
-    /// Verify that a source package with partial metadata (no version/subdir)
-    /// round-trips correctly: `record()` returns `None`, the name is preserved,
-    /// and re-serializing + re-parsing produces identical output.
-    #[test]
-    fn test_partial_metadata_roundtrip() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    packages:
-      linux-64:
-        - conda_source: \"my-partial-pkg[abcd1234] @ my-partial-pkg\"
-packages:
-  - conda_source: \"my-partial-pkg[abcd1234] @ my-partial-pkg\"
-    depends:
-      - python >=3.10
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-
-        let platform = lock_file.platform("linux-64").unwrap();
-        let source_data = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(platform)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_source_conda)
-            .expect("expected a source package");
-
-        // Partial metadata: record() should return None, name() should work.
-        assert!(source_data.record().is_none());
-        assert_eq!(source_data.name().as_source(), "my-partial-pkg");
-        assert_eq!(source_data.depends(), &["python >=3.10".to_string()]);
-
-        // Roundtrip: serialize → re-parse → re-serialize should be identical.
-        let rendered = lock_file.render_to_string().unwrap();
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
-    }
-
-    /// Verify that a source identifier hash read from a lock file is stored
-    /// verbatim in the resulting [`crate::CondaSourceData`] and reproduced
-    /// unchanged when the lock file is re-serialized, even if the stored hash
-    /// differs from what the current hash algorithm would compute.
-    #[test]
-    fn test_source_identifier_hash_is_preserved() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    packages:
-      linux-64:
-        - conda_source: \"my-package[deadbeef] @ my-package\"
-packages:
-  - conda_source: \"my-package[deadbeef] @ my-package\"
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-
-        let platform = lock_file.platform("linux-64").unwrap();
-        let source_data = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(platform)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_source_conda)
-            .expect("expected a source package");
-
-        // The hash read from the lock file must be stored verbatim, not recomputed.
-        assert_eq!(source_data.identifier_hash.as_deref(), Some("deadbeef"));
-
-        // Re-serializing must reproduce the same hash unchanged.
-        let rendered = lock_file.render_to_string().unwrap();
-        assert!(rendered.contains("my-package[deadbeef]"));
-    }
-
-    /// Verify that two source packages with identical data but different stored
-    /// hashes both survive a parse→serialize cycle with their hashes intact.
-    #[test]
-    fn test_identical_source_packages_different_hashes_roundtrip() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    packages:
-      linux-64:
-        - conda_source: \"my-package[aaaaaaaa] @ my-package\"
-        - conda_source: \"my-package[bbbbbbbb] @ my-package\"
-packages:
-  - conda_source: \"my-package[aaaaaaaa] @ my-package\"
-  - conda_source: \"my-package[bbbbbbbb] @ my-package\"
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-
-        let platform = lock_file.platform("linux-64").unwrap();
-        let source_packages: Vec<_> = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(platform)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_source_conda)
-            .collect();
-
-        assert_eq!(source_packages.len(), 2);
-        let hashes: Vec<_> = source_packages
-            .iter()
-            .map(|s| s.identifier_hash.as_deref())
-            .collect();
-        assert!(hashes.contains(&Some("aaaaaaaa")));
-        assert!(hashes.contains(&Some("bbbbbbbb")));
-
-        // Re-serializing must preserve both hashes unchanged.
-        let rendered = lock_file.render_to_string().unwrap();
-        assert!(rendered.contains("my-package[aaaaaaaa]"));
-        assert!(rendered.contains("my-package[bbbbbbbb]"));
-
-        // Parsing the rendered output must be stable (parse→render idempotent).
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
-    }
-
-    /// Verify that pypi source packages with relative paths (both `./` and
-    /// `../`) roundtrip correctly and that the `SerializablePackageSelector`
-    /// values in the environment section always match the `pypi:` keys in
-    /// the top-level `packages` section.
-    #[test]
-    fn test_pypi_relative_source_packages_roundtrip() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./
-        - pypi: ./my_subdir
-        - pypi: ../external_pkg
-packages:
-  - pypi: ../external_pkg
-    name: external-pkg
-  - pypi: ./my_subdir
-    name: my-subdir
-  - pypi: ./
-    name: my-project
-    requires_dist:
-      - my-subdir @ file:my_subdir
-      - external-pkg @ file:../external_pkg
-";
-        let base_dir = test_path();
-        let lock_file =
-            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
-
-        let platform = lock_file.platform("linux-64").unwrap();
-        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
-        let pypi_packages: Vec<_> = env
-            .packages(platform)
-            .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
-            .collect();
-
-        assert_eq!(pypi_packages.len(), 3);
-
-        // Check the root package (location = "./")
-        let root_pkg = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "my-project")
-            .expect("my-project package");
-        let root_source = root_pkg.as_source().unwrap();
-        assert_eq!(
-            root_source.location.given(),
-            Some("./"),
-            "verbatim relative path for root should be preserved"
-        );
-        assert!(
-            root_pkg.as_source().is_some(),
-            "local-path pypi packages must be the Source variant"
-        );
-        assert_eq!(root_source.requires_dist.len(), 2);
-
-        // Check the subdirectory package (location = "./my_subdir")
-        let subdir_pkg = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "my-subdir")
-            .expect("my-subdir package");
-        let subdir_source = subdir_pkg.as_source().unwrap();
-        assert_eq!(subdir_source.location.given(), Some("./my_subdir"));
-        assert!(
-            subdir_pkg.as_source().is_some(),
-            "local-path pypi packages must be the Source variant"
-        );
-
-        // Check the parent-relative package (location = "../external_pkg")
-        let external_pkg = pypi_packages
-            .iter()
-            .find(|p| p.name().as_ref() == "external-pkg")
-            .expect("external-pkg package");
-        let external_source = external_pkg.as_source().unwrap();
-        assert_eq!(external_source.location.given(), Some("../external_pkg"));
-        assert!(
-            external_pkg.as_source().is_some(),
-            "local-path pypi packages must be the Source variant"
-        );
-
-        // Roundtrip: serialize → re-parse → re-serialize must be identical.
-        let rendered = lock_file.render_to_string().unwrap();
-
-        // Parse the rendered YAML and verify that every pypi selector in the
-        // environment section has a matching pypi key in the packages section.
-        // This catches mismatches between SerializablePackageSelector (which
-        // serializes the inner UrlOrPath via Display) and the package data
-        // (which serializes via Verbatim, preferring the `given` string).
-        let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
-
-        let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
-            .as_sequence()
-            .unwrap()
-            .iter()
-            .filter_map(|pkg| pkg["pypi"].as_str())
-            .collect();
-
-        let selector_pypi_keys: Vec<&str> = yaml["environments"]["default"]["packages"]["linux-64"]
-            .as_sequence()
-            .unwrap()
-            .iter()
-            .filter_map(|sel| sel["pypi"].as_str())
-            .collect();
-
-        assert_eq!(
-            selector_pypi_keys.len(),
-            3,
-            "expected 3 pypi selectors in environment"
-        );
-        for selector_key in &selector_pypi_keys {
-            assert!(
-                package_pypi_keys.contains(selector_key),
-                "environment selector `pypi: {selector_key}` has no matching \
-                 entry in the packages section (available: {package_pypi_keys:?})"
-            );
-        }
-
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, Some(&base_dir)).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
-    }
-
-    /// Verify that `file:///` URLs in pypi package locations produce matching
-    /// selectors. `UrlOrPath::from_str("file:///...")` normalizes to a bare
-    /// path internally, but `Verbatim` preserves the original `file:///`
-    /// string. `SerializablePackageSelector` serializes the inner `UrlOrPath`
-    /// (bare path) while the package data serializes the `Verbatim` wrapper
-    /// (`file:///`), causing a mismatch.
-    #[test]
-    fn test_pypi_file_url_selector_matches_package() {
-        let base_dir = test_path();
-        let lock_file_str = format!(
-            r#"version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: file://{0}/my_pkg
-packages:
-  - pypi: file://{0}/my_pkg
-    name: my-pkg
-    version: 1.0.0
-    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
-"#,
-            base_dir.display()
-        );
-        eprintln!("Lockfile:\n{lock_file_str}");
-        let lock_file =
-            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
-
-        let rendered = lock_file.render_to_string().unwrap();
-
-        // Parse the rendered YAML and verify that the selector path matches
-        // the package path. This fails because the selector serializes the
-        // inner UrlOrPath (producing "/tmp/project/my_pkg") while the package
-        // serializes via Verbatim (producing "file:///tmp/project/my_pkg").
-        let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
-
-        let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
-            .as_sequence()
-            .unwrap()
-            .iter()
-            .filter_map(|pkg| pkg["pypi"].as_str())
-            .collect();
-
-        let selector_pypi_keys: Vec<&str> = yaml["environments"]["default"]["packages"]["linux-64"]
-            .as_sequence()
-            .unwrap()
-            .iter()
-            .filter_map(|sel| sel["pypi"].as_str())
-            .collect();
-
-        assert_eq!(selector_pypi_keys.len(), 1);
-        for selector_key in &selector_pypi_keys {
-            assert!(
-                package_pypi_keys.contains(selector_key),
-                "environment selector `pypi: {selector_key}` has no matching \
-                 entry in the packages section (available: {package_pypi_keys:?})"
-            );
-        }
-    }
-
-    /// Verify that pypi source packages from local paths never expose hash
-    /// data, even when the lockfile YAML contains one.  Version 5 (v4/v5)
-    /// uses `kind: pypi` + `path:` for the location.
-    #[test]
-    fn v5_local_path_pypi_package_hash_is_stripped() {
-        let lock_file_str = "\
-version: 5
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./local-pkg
-packages:
-  - kind: pypi
-    name: local-pkg
-    version: '0.1.0'
-    path: ./local-pkg
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let base_dir = test_path();
-        let lock_file =
-            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let source = pkg
-            .as_source()
-            .expect("local-path pypi package must be the Source variant");
-        assert_eq!(source.name.as_ref(), "local-pkg");
-    }
-
-    /// Same as above but for lockfile format version 6.
-    #[test]
-    fn v6_local_path_pypi_package_hash_is_stripped() {
-        let lock_file_str = "\
-version: 6
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./local-pkg
-packages:
-  - pypi: ./local-pkg
-    name: local-pkg
-    version: '0.1.0'
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let source = pkg
-            .as_source()
-            .expect("local-path pypi package must be the Source variant");
-        assert_eq!(source.name.as_ref(), "local-pkg");
-    }
-
-    /// Same as above but for v7 where the YAML *does* include a version field.
-    /// Even when present in the YAML, the version must be stripped for local
-    /// paths.
-    #[test]
-    fn v7_local_path_pypi_package_version_stripped_even_when_present() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./local-pkg
-packages:
-  - pypi: ./local-pkg
-    name: local-pkg
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let source = pkg
-            .as_source()
-            .expect("local-path pypi package must be the Source variant");
-        assert_eq!(source.name.as_ref(), "local-pkg");
-    }
-
-    /// Verify that URL-based pypi packages still retain their version and
-    /// hash (only local paths should have them stripped).
-    #[test]
-    fn v7_url_pypi_package_hash_is_preserved() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
-packages:
-  - pypi: https://files.pythonhosted.org/packages/numpy-1.26.0-cp311-cp311-linux_x86_64.whl
-    name: numpy
-    version: 1.26.0
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let wheel = pkg
-            .as_wheel()
-            .expect("URL-based pypi package must be the Wheel variant");
-        assert_eq!(wheel.name.as_ref(), "numpy");
-        assert!(
-            wheel.hash.is_some(),
-            "hash must be preserved for URL-based pypi packages"
-        );
-    }
-
-    /// Verify that a local-path wheel file preserves version and hash in v5.
-    /// Wheel files are immutable artifacts, unlike source directories.
-    #[test]
-    fn v5_local_path_wheel_preserves_version_and_hash() {
-        let lock_file_str = "\
-version: 5
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
-packages:
-  - kind: pypi
-    name: my-pkg
-    version: '1.0.0'
-    path: ./dist/my_pkg-1.0.0-py3-none-any.whl
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let base_dir = test_path();
-        let lock_file =
-            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let wheel = pkg
-            .as_wheel()
-            .expect("local wheel file must be the Wheel variant");
-        assert_eq!(wheel.name.as_ref(), "my-pkg");
-        assert_eq!(wheel.version.to_string(), "1.0.0");
-        assert!(
-            wheel.hash.is_some(),
-            "hash must be preserved for local wheel files, got None"
-        );
-    }
-
-    /// Verify that a local-path wheel file preserves version and hash in v6.
-    #[test]
-    fn v6_local_path_wheel_preserves_version_and_hash() {
-        let lock_file_str = "\
-version: 6
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
-packages:
-  - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
-    name: my-pkg
-    version: '1.0.0'
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let wheel = pkg
-            .as_wheel()
-            .expect("local wheel file must be the Wheel variant");
-        assert_eq!(wheel.name.as_ref(), "my-pkg");
-        assert_eq!(wheel.version.to_string(), "1.0.0");
-        assert!(
-            wheel.hash.is_some(),
-            "hash must be preserved for local wheel files, got None"
-        );
-    }
-
-    /// Verify that a local-path wheel file preserves version and hash in v7.
-    #[test]
-    fn v7_local_path_wheel_preserves_version_and_hash() {
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
-packages:
-  - pypi: ./dist/my_pkg-1.0.0-py3-none-any.whl
-    name: my-pkg
-    version: '1.0.0'
-    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let wheel = pkg
-            .as_wheel()
-            .expect("local wheel file must be the Wheel variant");
-        assert_eq!(wheel.name.as_ref(), "my-pkg");
-        assert_eq!(wheel.version.to_string(), "1.0.0");
-        assert!(
-            wheel.hash.is_some(),
-            "hash must be preserved for local wheel files, got None"
-        );
-    }
-
-    /// Verify that a file:// URL pointing to a wheel preserves version and
-    /// hash — the file:// scheme doesn't change the fact that it's an
-    /// immutable artifact.
-    #[test]
-    fn v7_file_url_wheel_preserves_version_and_hash() {
-        let base_dir = test_path();
-        let lock_file_str = format!(
-            "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: file://{0}/dist/my_pkg-1.0.0-py3-none-any.whl
-packages:
-  - pypi: file://{0}/dist/my_pkg-1.0.0-py3-none-any.whl
-    name: my-pkg
-    version: 1.0.0
-    sha256: abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
-",
-            base_dir.display()
-        );
-        let lock_file =
-            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let wheel = pkg
-            .as_wheel()
-            .expect("file:// wheel URL must be the Wheel variant");
-        assert_eq!(wheel.name.as_ref(), "my-pkg");
-        assert!(
-            wheel.hash.is_some(),
-            "hash must be preserved for file:// wheel URLs, got None"
-        );
-    }
-
-    /// Verify that `file://` URL pypi packages also have version and hash
-    /// stripped, since they resolve to local paths.
-    #[test]
-    fn v7_file_url_pypi_package_version_is_stripped() {
-        let base_dir = test_path();
-        let lock_file_str = format!(
-            "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: file://{0}/my_pkg
-packages:
-  - pypi: file://{0}/my_pkg
-    name: my-pkg
-",
-            base_dir.display()
-        );
-        let lock_file =
-            LockFile::from_str_with_base_directory(&lock_file_str, Some(&base_dir)).unwrap();
-        let linux = lock_file.platform("linux-64").unwrap();
-        let pkg = lock_file
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
-            .expect("expected a pypi package");
-
-        let source = pkg
-            .as_source()
-            .expect("file:// pypi package (local path) must be the Source variant");
-        assert_eq!(source.name.as_ref(), "my-pkg");
-    }
-
-    /// Adding the same conda source package to two environments via the builder
-    /// must produce exactly one entry in the serialized packages list. This
-    /// is a regression test for a bug where the builder unconditionally
-    /// appended source packages, creating duplicates that were only collapsed
-    /// on a subsequent parse→serialize cycle (making `pixi update`
-    /// non-idempotent).
-    #[test]
-    fn builder_deduplicates_conda_source_packages() {
-        use std::collections::BTreeMap;
-
-        use rattler_conda_types::{PackageName, PackageRecord};
-
-        use crate::{
-            CondaPackageData, CondaSourceData, FullSourceMetadata, PlatformData, SourceMetadata,
-            UrlOrPath,
-        };
-
-        let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
-            location: UrlOrPath::Path("my-source-pkg".into()),
-            package_build_source: None,
-            variants: BTreeMap::from([(
-                "target_platform".to_string(),
-                crate::VariantValue::String("noarch".to_string()),
-            )]),
-            timestamp: None,
-            identifier_hash: None,
-            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                package_record: {
-                    let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
-                    let mut r = PackageRecord::new(
-                        PackageName::new_unchecked("my-source-pkg"),
-                        version,
-                        "py_0".to_string(),
-                    );
-                    r.subdir = "noarch".to_string();
-                    r
-                },
-                sources: BTreeMap::new(),
-            })),
-        }));
-
-        let lock_file = LockFile::builder()
-            .with_platforms(vec![PlatformData {
-                name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
-                virtual_packages: Vec::new(),
-            }])
-            .unwrap()
-            .with_conda_package("default", "linux-64", source_pkg.clone())
-            .unwrap()
-            .with_conda_package("dev", "linux-64", source_pkg)
-            .unwrap()
-            .finish();
-
-        let rendered = lock_file.render_to_string().unwrap();
-
-        // The source package must appear exactly once in the top-level packages
-        // list. It also appears once per environment as a selector, so with two
-        // environments we expect 3 total occurrences (2 selectors + 1 package).
-        let count = rendered.matches("conda_source:").count();
-        assert_eq!(
-            count, 3,
-            "expected 3 conda_source occurrences (2 selectors + 1 package) \
-             but found {count}:\n{rendered}"
-        );
-
-        // Roundtrip must be stable (no duplicates introduced or removed).
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
-    }
-
-    /// A v7 lockfile with duplicate pypi git-source entries that differ only
-    /// in `requires_dist` must collapse to a single entry with the merged
-    /// (superset) dependency list on parse→serialize. This is a regression
-    /// test for a bug where `pixi update` produced duplicate pypi entries for
-    /// git dependencies used across multiple environments (each environment
-    /// contributing a slightly different `requires_dist` from marker evaluation),
-    /// and a second `pixi update` removed the duplicates — making the
-    /// lockfile non-idempotent.
-    #[test]
-    fn duplicate_pypi_git_entries_collapsed_on_roundtrip() {
-        // Lockfile with the same git+https pypi package listed twice in the
-        // packages section with different requires_dist (as observed in the
-        // wild after `pixi update` — different environments produce different
-        // marker-evaluated dependency lists for the same package).
-        let lock_file_str = "\
-version: 7
-platforms:
-  - name: linux-64
-environments:
-  default:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
-  dev:
-    channels:
-      - url: https://conda.anaconda.org/conda-forge/
-    indexes:
-      - https://pypi.org/simple
-    packages:
-      linux-64:
-        - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
-packages:
-  - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
-    name: minimalloc
-    version: 0.1.0
-    requires_dist:
-      - numpy>=1.0
-    requires_python: '>=3.7'
-  - pypi: git+https://github.com/example/minimalloc.git?rev=abc123#abc123
-    name: minimalloc
-    version: 0.1.0
-    requires_dist:
-      - numpy>=1.0
-      - scipy>=1.0 ; extra == 'test'
-    requires_python: '>=3.7'
-";
-        let lock_file = LockFile::from_str_with_base_directory(lock_file_str, None).unwrap();
-        let rendered = lock_file.render_to_string().unwrap();
-
-        // After roundtrip, the two entries should be collapsed to a single entry.
-        // 2 selectors (one per env) + 1 package entry = 3 occurrences of the URL.
-        let url = "git+https://github.com/example/minimalloc.git";
-        let count = rendered.matches(url).count();
-        assert_eq!(
-            count, 3,
-            "expected 3 occurrences of git URL (2 selectors + 1 package) \
-             but found {count}:\n{rendered}"
-        );
-
-        // A second roundtrip must be stable.
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
-    }
-
-    /// Adding the same pypi git package to two environments via the builder
-    /// with different `requires_dist` (as happens when pixi evaluates markers
-    /// per-environment) must produce exactly one entry in the serialized
-    /// packages list. This is a regression test for a bug where the builder's
-    /// `IndexSet` treated entries with different `requires_dist` as distinct,
-    /// creating duplicates that were only collapsed on a subsequent
-    /// parse→serialize cycle.
-    #[test]
-    fn builder_deduplicates_pypi_git_packages() {
-        use crate::{PlatformData, PypiPackageData, UrlOrPath, Verbatim};
-
-        let url: url::Url = "git+https://github.com/example/minimalloc.git?rev=abc123#abc123"
-            .parse()
-            .unwrap();
-
-        let pkg_a = PypiPackageData::Distribution(Box::new(crate::PypiDistributionData {
-            name: "minimalloc".parse().unwrap(),
-            version: "0.1.0".parse().unwrap(),
-            location: Verbatim::new(UrlOrPath::Url(url.clone())),
-            index_url: None,
-            hash: None,
-            requires_dist: vec!["numpy>=1.0".parse().unwrap()],
-            requires_python: Some(">=3.7".parse().unwrap()),
-        }));
-
-        // Same package but with an extra marker-guarded dependency, as would
-        // happen when pixi evaluates markers for a different environment.
-        let pkg_b = PypiPackageData::Distribution(Box::new(crate::PypiDistributionData {
-            name: "minimalloc".parse().unwrap(),
-            version: "0.1.0".parse().unwrap(),
-            location: Verbatim::new(UrlOrPath::Url(url)),
-            index_url: None,
-            hash: None,
-            requires_dist: vec![
-                "numpy>=1.0".parse().unwrap(),
-                "scipy>=1.0 ; extra == 'test'".parse().unwrap(),
-            ],
-            requires_python: Some(">=3.7".parse().unwrap()),
-        }));
-
-        let lock_file = LockFile::builder()
-            .with_platforms(vec![PlatformData {
-                name: PlatformName::try_from("linux-64").unwrap(),
-                subdir: rattler_conda_types::Platform::Linux64,
-                virtual_packages: Vec::new(),
-            }])
-            .unwrap()
-            .with_pypi_package("default", "linux-64", pkg_a)
-            .unwrap()
-            .with_pypi_package("dev", "linux-64", pkg_b)
-            .unwrap()
-            .finish();
-
-        let rendered = lock_file.render_to_string().unwrap();
-
-        // The git URL should appear exactly 3 times: 2 selectors + 1 package entry.
-        let url_str = "git+https://github.com/example/minimalloc.git";
-        let count = rendered.matches(url_str).count();
-        assert_eq!(
-            count, 3,
-            "expected 3 occurrences of git URL (2 selectors + 1 package) \
-             but found {count}:\n{rendered}"
-        );
-
-        // Roundtrip must be stable.
-        let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
-        let rerendered = reparsed.render_to_string().unwrap();
-        similar_asserts::assert_eq!(rendered, rerendered);
     }
 }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC
-from typing import Optional, List
+from typing import Optional, Set, List
 
 from rattler import PackageRecord, Version, RepoDataRecord
 
@@ -26,11 +26,10 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import Platform, LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> platforms = env.platforms()
-        >>> lock_package = env.packages(platforms[0])[0]
+        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
         >>> lock_package.name
         'tzdata'
         >>>
@@ -46,11 +45,10 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import Platform, LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> platforms = env.platforms()
-        >>> lock_package = env.packages(platforms[0])[0]
+        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
         >>> lock_package.location
         'https://conda.anaconda.org/...'
         >>>
@@ -66,11 +64,11 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0]
         >>> data.hashes
         PackageHashes()
         >>>
@@ -111,42 +109,30 @@ class CondaLockedPackage(LockedPackage, ABC):
     """
 
     @property
-    def package_record(self) -> Optional[PackageRecord]:
+    def package_record(self) -> PackageRecord:
         """
         Returns the metadata of the package as recorded in the lock-file.
-
-        For binary packages, this always returns a value. For source packages,
-        the record may not be present if the metadata hasn't been evaluated yet.
         """
-        py_record = self._package.package_record
-        if py_record is None:
-            return None
-        return PackageRecord._from_py_record(py_record)
+        return PackageRecord._from_py_record(self._package.package_record)
 
     @property
-    def version(self) -> Optional[Version]:
+    def version(self) -> Version:
         """
         Returns the version of the package as recorded in the lock-file.
-
-        For source packages without evaluated metadata, this may return None.
 
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import Platform, LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> platforms = env.platforms()
-        >>> lock_package = env.packages(platforms[0])[0]
+        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
         >>> lock_package.version
         Version("2024a")
         >>>
         ```
         """
-        py_version = self._package.conda_version
-        if py_version is None:
-            return None
-        return Version._from_py_version(py_version)
+        return Version._from_py_version(self._package.conda_version)
 
     def satisfies(self, spec: MatchSpec | str) -> bool:
         """
@@ -155,11 +141,10 @@ class CondaLockedPackage(LockedPackage, ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> platforms = env.platforms()
-        >>> packages = env.packages(platforms[0])
+        >>> packages = env.packages(Platform("osx-arm64"))
         >>> packages[0].satisfies("tzdata >=2024a")
         True
         >>>
@@ -191,11 +176,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0]
         >>> data.requires_dist
         []
         >>>
@@ -211,17 +196,58 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0]
         >>> data.requires_python
         '>=3.7.0'
         >>>
         ```
         """
         return self._package.pypi_requires_python
+
+    @property
+    def is_editable(self) -> bool:
+        """
+        Whether the package should be installed in editable mode or not.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile, Platform
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages[Platform("osx-arm64")][0]
+        >>> data.is_editable
+        False
+        >>>
+        ```
+        """
+        return self._package.pypi_is_editable
+
+    @property
+    def extras(self) -> Set[str]:
+        """
+        The extras enabled for the package.
+        Note that the order doesn't matter.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile, Platform
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> env_data = pypi_packages[Platform("osx-arm64")][0]
+        >>> env_data.extras
+        set()
+        >>>
+        ```
+        """
+        return self._package.pypi_extras
 
     def satisfies(self, spec: str) -> bool:
         """
@@ -230,11 +256,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0]
         >>> data.satisfies("charset-normalizer")
         True
         >>>

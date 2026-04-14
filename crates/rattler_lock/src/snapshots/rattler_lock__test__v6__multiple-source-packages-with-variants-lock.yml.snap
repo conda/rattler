@@ -1,34 +1,31 @@
 ---
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
-snapshot_kind: text
 ---
-version: 7
-platforms:
-  - name: linux-64
+version: 6
 environments:
   default:
     channels:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       linux-64:
-        - conda_source: "my-package[4b90aff4] @ my-package-linux"
-        - conda_source: "my-package[9578c8f3] @ my-package-win"
+        - conda: my-package-linux
+        - conda: my-package-win
 packages:
-  - conda_source: "my-package[4b90aff4] @ my-package-linux"
+  - conda: my-package-linux
+    name: my-package
     version: 1.0.0
     subdir: noarch
-    noarch: generic
     variants:
       python: "3.11"
       target_platform: linux-64
     depends:
       - python >=3.8
     license: MIT
-  - conda_source: "my-package[9578c8f3] @ my-package-win"
+  - conda: my-package-win
+    name: my-package
     version: 1.0.0
     subdir: noarch
-    noarch: generic
     variants:
       python: "3.11"
       target_platform: win-64

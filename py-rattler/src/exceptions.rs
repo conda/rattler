@@ -25,7 +25,6 @@ create_exception!(exceptions, ParseCondaLockError, PyException);
 create_exception!(exceptions, ConversionError, PyException);
 create_exception!(exceptions, RequirementError, PyException);
 create_exception!(exceptions, EnvironmentCreationError, PyException);
-create_exception!(exceptions, LockFileError, PyException);
 create_exception!(exceptions, ExtractError, PyException);
 create_exception!(exceptions, ActivationScriptFormatError, PyException);
 create_exception!(exceptions, GatewayError, PyException);

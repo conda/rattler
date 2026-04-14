@@ -126,7 +126,7 @@ openidconnect = { version = "4", default-features = false, features = [
 parking_lot = "0.12.4"
 pathdiff = "0.2.3"
 pep440_rs = { version = "0.7.3" }
-pep508_rs = { version = "0.9.2", features = ["non-pep508-extensions"] }
+pep508_rs = { version = "0.9.2" }
 percent-encoding = "2.3.1"
 pin-project-lite = "0.2.16"
 plist = "1"
@@ -198,7 +198,6 @@ which = "8.0.0"
 windows-sys = { version = "0.61.2", default-features = false }
 winver = { version = "1.0.0" }
 zip = { version = "8.5.1", default-features = false }
-xxhash-rust = "0.8.15"
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.
