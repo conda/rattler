@@ -99,9 +99,8 @@ mod verbatim;
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
-    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, FullSourceMetadata,
-    GitShallowSpec, InputHash, PackageBuildSource, PartialSourceMetadata, SourceMetadata,
-    VariantValue,
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
+    PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -1807,10 +1806,7 @@ packages:
 
         use rattler_conda_types::{PackageName, PackageRecord};
 
-        use crate::{
-            CondaPackageData, CondaSourceData, FullSourceMetadata, PlatformData, SourceMetadata,
-            UrlOrPath,
-        };
+        use crate::{CondaPackageData, CondaSourceData, PlatformData, SourceMetadata, UrlOrPath};
 
         let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
             location: UrlOrPath::Path("my-source-pkg".into()),
@@ -1821,17 +1817,15 @@ packages:
             )]),
             identifier_hash: None,
             sources: BTreeMap::new(),
-            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                package_record: {
-                    let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
-                    let mut r = PackageRecord::new(
-                        PackageName::new_unchecked("my-source-pkg"),
-                        version,
-                        "py_0".to_string(),
-                    );
-                    r.subdir = "noarch".to_string();
-                    r
-                },
+            metadata: SourceMetadata::Full(Box::new({
+                let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
+                let mut r = PackageRecord::new(
+                    PackageName::new_unchecked("my-source-pkg"),
+                    version,
+                    "py_0".to_string(),
+                );
+                r.subdir = "noarch".to_string();
+                r
             })),
         }));
 

@@ -22,10 +22,7 @@
 //! logic is retained here for parsing older format versions.
 
 use crate::{
-    conda::{
-        CondaBinaryData, CondaSourceData, FullSourceMetadata, PackageBuildSource, SourceMetadata,
-        VariantValue,
-    },
+    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, SourceMetadata, VariantValue},
     source::SourceLocation,
     CondaPackageData, UrlOrPath,
 };
@@ -168,9 +165,7 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                     variants: data.variants,
                     identifier_hash: None,
                     sources: data.sources,
-                    metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                        package_record: data.package_record,
-                    })),
+                    metadata: SourceMetadata::Full(Box::new(data.package_record)),
                 }))
             }
         }

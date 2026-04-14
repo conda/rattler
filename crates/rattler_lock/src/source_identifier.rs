@@ -235,7 +235,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
                 size: _,
                 timestamp: _,
                 track_features: _,
-            } = &full.package_record;
+            } = &**full;
 
             fields.insert("build", build);
             fields.insert("build_number", build_number);
