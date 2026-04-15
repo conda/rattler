@@ -115,7 +115,7 @@ impl PtyProcess {
         unlockpt(&master_fd)?;
 
         // on Linux this is the libc function, on OSX this is our implementation of ptsname_r
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(not(target_os = "netbsd"))]
         let slave_name = ptsname_r(&master_fd)?;
 
         // But NetBSD uses the POSIX ptsname instead
