@@ -98,40 +98,36 @@ impl LegacyCondaPackageData {
     /// are matched exactly using name/version/build/subdir fields.
     pub fn merge(&self, other: &Self) -> Cow<'_, Self> {
         match (self, other) {
-            (Self::Binary(left), Self::Binary(right)) => {
-                if left.location == right.location {
-                    if let Cow::Owned(merged) =
-                        merge_package_record(&left.package_record, &right.package_record)
-                    {
-                        return Cow::Owned(Self::Binary(LegacyCondaBinaryData {
-                            package_record: merged,
-                            location: left.location.clone(),
-                            file_name: left.file_name.clone(),
-                            channel: left.channel.clone(),
-                        }));
-                    }
+            (Self::Binary(left), Self::Binary(right)) if left.location == right.location => {
+                if let Cow::Owned(merged) =
+                    merge_package_record(&left.package_record, &right.package_record)
+                {
+                    return Cow::Owned(Self::Binary(LegacyCondaBinaryData {
+                        package_record: merged,
+                        location: left.location.clone(),
+                        file_name: left.file_name.clone(),
+                        channel: left.channel.clone(),
+                    }));
                 }
             }
-            (Self::Source(left), Self::Source(right)) => {
-                if left.location == right.location {
-                    let record_merge =
-                        merge_package_record(&left.package_record, &right.package_record);
-                    let build_source_merge = merge_package_build_source(
-                        &left.package_build_source,
-                        &right.package_build_source,
-                    );
+            (Self::Source(left), Self::Source(right)) if left.location == right.location => {
+                let record_merge =
+                    merge_package_record(&left.package_record, &right.package_record);
+                let build_source_merge = merge_package_build_source(
+                    &left.package_build_source,
+                    &right.package_build_source,
+                );
 
-                    if matches!(record_merge, Cow::Owned(_))
-                        || matches!(build_source_merge, Cow::Owned(_))
-                    {
-                        return Cow::Owned(Self::Source(LegacyCondaSourceData {
-                            package_record: record_merge.into_owned(),
-                            location: left.location.clone(),
-                            variants: left.variants.clone(),
-                            package_build_source: build_source_merge.into_owned(),
-                            sources: left.sources.clone(),
-                        }));
-                    }
+                if matches!(record_merge, Cow::Owned(_))
+                    || matches!(build_source_merge, Cow::Owned(_))
+                {
+                    return Cow::Owned(Self::Source(LegacyCondaSourceData {
+                        package_record: record_merge.into_owned(),
+                        location: left.location.clone(),
+                        variants: left.variants.clone(),
+                        package_build_source: build_source_merge.into_owned(),
+                        sources: left.sources.clone(),
+                    }));
                 }
             }
             _ => {}

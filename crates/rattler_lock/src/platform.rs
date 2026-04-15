@@ -157,7 +157,7 @@ pub(crate) fn find_index_by_name(platforms: &[PlatformData], name: &str) -> Opti
     platforms
         .iter()
         .position(|p| p.name.as_str() == name)
-        .map(|pos| PlatformIndex(pos))
+        .map(PlatformIndex)
 }
 
 /// Represents a package with platform-specific information.
