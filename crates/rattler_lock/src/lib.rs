@@ -148,10 +148,17 @@ struct LockFileInner {
 /// For instance different environments might select the same Pypi package but
 /// with different extras.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
-enum EnvironmentPackageData {
+enum PackageIndex {
     Conda(usize),
     Pypi(usize),
 }
+
+/// An package used in an environment. Selects a type of package based on the
+/// enum and might contain additional data that is specific to the environment.
+/// For instance different environments might select the same Pypi package but
+/// with different extras.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+struct PlatformIndex(usize);
 
 /// Information about a specific environment in the lock file.
 ///
@@ -172,7 +179,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>>,
 }
 
 impl LockFile {
@@ -230,7 +237,7 @@ impl LockFile {
             .platforms
             .iter()
             .enumerate()
-            .map(|(index, _)| Platform::new(&self.inner, index))
+            .map(|(index, _)| Platform::new(&self.inner, PlatformIndex(index)))
     }
 
     /// Returns the environment with the given name.
@@ -350,10 +357,10 @@ impl<'lock> Environment<'lock> {
                 .get(&platform.index)?
                 .iter()
                 .map(move |package| match package {
-                    EnvironmentPackageData::Conda(data) => {
+                    PackageIndex::Conda(data) => {
                         LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                     }
-                    EnvironmentPackageData::Pypi(data) => {
+                    PackageIndex::Pypi(data) => {
                         LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
                     }
                 }),
@@ -380,10 +387,10 @@ impl<'lock> Environment<'lock> {
                 (
                     platform,
                     data.iter().map(move |package| match package {
-                        EnvironmentPackageData::Conda(data) => {
+                        PackageIndex::Conda(data) => {
                             LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                         }
-                        EnvironmentPackageData::Pypi(data) => {
+                        PackageIndex::Pypi(data) => {
                             LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
                         }
                     }),

@@ -13,9 +13,9 @@ use crate::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PlatformData, PypiDistributionData, PypiPackageData, SolveOptions, UrlOrPath,
-    Verbatim, DEFAULT_ENVIRONMENT_NAME,
+    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, PackageHashes,
+    PackageIndex, PlatformData, PlatformIndex, PypiDistributionData, PypiPackageData, SolveOptions,
+    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
@@ -109,13 +109,10 @@ pub struct CondaLockedPackageV3 {
 }
 
 fn create_platforms_and_packages(
-    mut per_package: ahash::HashMap<
-        rattler_conda_types::Platform,
-        IndexSet<EnvironmentPackageData>,
-    >,
+    mut per_package: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>>,
 ) -> (
     Vec<PlatformData>,
-    ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+    ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>>,
 ) {
     let mut unique_platforms = ahash::HashSet::default();
 
@@ -136,10 +133,12 @@ fn create_platforms_and_packages(
         .drain()
         .map(|(k, v)| {
             (
-                platforms
-                    .iter()
-                    .position(|p| p.name.as_str() == k.as_str())
-                    .expect("All Platforms in this hashmap were added before"),
+                PlatformIndex(
+                    platforms
+                        .iter()
+                        .position(|p| p.name.as_str() == k.as_str())
+                        .expect("All Platforms in this hashmap were added before"),
+                ),
                 v,
             )
         })
@@ -159,14 +158,12 @@ pub fn parse_v3_or_lower(
     // per platform. There might be duplicates for noarch packages.
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: ahash::HashMap<
-        rattler_conda_types::Platform,
-        IndexSet<EnvironmentPackageData>,
-    > = ahash::HashMap::default();
+    let mut per_platform: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>> =
+        ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
-        let pkg: EnvironmentPackageData = match kind {
+        let pkg: PackageIndex = match kind {
             LockedPackageKindV3::Conda(value) => {
                 let md5 = match value.hash {
                     PackageHashes::Md5(md5) | PackageHashes::Md5Sha256(md5, _) => Some(md5),
@@ -247,7 +244,7 @@ pub fn parse_v3_or_lower(
                     }))
                     .0;
 
-                EnvironmentPackageData::Conda(deduplicated_idx)
+                PackageIndex::Conda(deduplicated_idx)
             }
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
@@ -261,7 +258,7 @@ pub fn parse_v3_or_lower(
                         index_url: None,
                     }))
                     .0;
-                EnvironmentPackageData::Pypi(deduplicated_index)
+                PackageIndex::Pypi(deduplicated_index)
             }
         };
 

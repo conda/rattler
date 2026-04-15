@@ -7,8 +7,8 @@ use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData, SolveOptions,
+    CondaSourceData, EnvironmentData, LockFile, LockFileInner, LockedPackageRef, PackageIndex,
+    ParseCondaLockError, PlatformIndex, PypiIndexes, PypiPackageData, SolveOptions,
     SourceIdentifier, UrlOrPath, Verbatim,
 };
 
@@ -218,13 +218,13 @@ impl LockFileBuilder {
         Ok(self)
     }
 
-    fn find_platform_index(&self, platform_name: &str) -> Result<usize, ()> {
+    fn find_platform_index(&self, platform_name: &str) -> Result<PlatformIndex, ()> {
         if let Some(platform_index) = self
             .platforms
             .iter()
             .position(|p| p.name.as_str() == platform_name)
         {
-            Ok(platform_index)
+            Ok(PlatformIndex(platform_index))
         } else {
             Err(())
         }
@@ -388,7 +388,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform_index)
             .or_default()
-            .insert(EnvironmentPackageData::Conda(package_idx));
+            .insert(PackageIndex::Conda(package_idx));
 
         Ok(self)
     }
@@ -444,7 +444,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform_index)
             .or_default()
-            .insert(EnvironmentPackageData::Pypi(package_idx));
+            .insert(PackageIndex::Pypi(package_idx));
 
         Ok(self)
     }

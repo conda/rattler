@@ -17,8 +17,8 @@ use crate::{
         models::{self, legacy::LegacyCondaPackageData, v6, v7},
         V5, V6, V7,
     },
-    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData,
-    EnvironmentPackageData, LockFile, LockFileInner, PackageHashes, ParseCondaLockError,
+    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, LockFile,
+    LockFileInner, PackageHashes, PackageIndex, ParseCondaLockError, PlatformIndex,
     PypiDistributionData, PypiIndexes, PypiPackageData, PypiSourceData, SolveOptions,
     SourceIdentifier, UrlOrPath, Verbatim,
 };
@@ -584,6 +584,8 @@ fn parse_from_lock_legacy<P>(
                                 });
                             };
 
+                            let platform_index = PlatformIndex(platform_index);
+
                             let packages = packages
                                 .into_iter()
                                 .map(|p| {
@@ -610,27 +612,23 @@ fn parse_from_lock_legacy<P>(
                                                 &mut legacy_conda_packages,
                                             );
 
-                                            EnvironmentPackageData::Conda(
-                                                package_index.ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage {
-                                                        environment: env_name.clone(),
-                                                        platform: platform_name.clone(),
-                                                        location: conda.to_string(),
-                                                    }
-                                                })?,
-                                            )
+                                            PackageIndex::Conda(package_index.ok_or_else(|| {
+                                                ParseCondaLockError::MissingPackage {
+                                                    environment: env_name.clone(),
+                                                    platform: platform_name.clone(),
+                                                    location: conda.to_string(),
+                                                }
+                                            })?)
                                         }
-                                        LegacyPackageSelector::Pypi { pypi } => {
-                                            EnvironmentPackageData::Pypi(
-                                                *pypi_url_lookup.get(&pypi).ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage {
-                                                        environment: env_name.clone(),
-                                                        platform: platform_name.clone(),
-                                                        location: pypi.inner().to_string(),
-                                                    }
-                                                })?,
-                                            )
-                                        }
+                                        LegacyPackageSelector::Pypi { pypi } => PackageIndex::Pypi(
+                                            *pypi_url_lookup.get(&pypi).ok_or_else(|| {
+                                                ParseCondaLockError::MissingPackage {
+                                                    environment: env_name.clone(),
+                                                    platform: platform_name.clone(),
+                                                    location: pypi.inner().to_string(),
+                                                }
+                                            })?,
+                                        ),
                                     })
                                 })
                                 .collect::<Result<_, ParseCondaLockError>>()?;
@@ -766,7 +764,7 @@ fn parse_from_lock<P>(
         ahash::HashMap::with_capacity(num_environments);
 
     for (env_name, env) in raw.environments {
-        let mut env_packages: ahash::HashMap<usize, IndexSet<EnvironmentPackageData>> =
+        let mut env_packages: ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>> =
             ahash::HashMap::with_capacity(env.packages.len());
 
         for (platform_name, selectors) in env.packages {
@@ -780,6 +778,8 @@ fn parse_from_lock<P>(
                     platform: platform_name,
                 });
             };
+
+            let platform_index = PlatformIndex(platform_index);
 
             let mut resolved = IndexSet::with_capacity(selectors.len());
 
@@ -809,7 +809,7 @@ fn parse_from_lock<P>(
                         url::Url::parse("https://pypi.org/simple").expect("valid hard-coded URL")
                     });
                 for pkg in &resolved {
-                    if let EnvironmentPackageData::Pypi(idx) = pkg {
+                    if let PackageIndex::Pypi(idx) = pkg {
                         if let Some(w) = pypi_packages[*idx].as_wheel_mut() {
                             if w.index_url.is_none() {
                                 w.index_url = Some(default_index.clone());
@@ -851,7 +851,7 @@ fn resolve_package_selector(
     binary_url_lookup: &ahash::HashMap<UrlOrPath, usize>,
     source_identifier_lookup: &ahash::HashMap<SourceIdentifier, usize>,
     pypi_url_lookup: &ahash::HashMap<Verbatim<UrlOrPath>, usize>,
-) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+) -> Result<PackageIndex, ParseCondaLockError> {
     match selector {
         DeserializablePackageSelector::Conda { conda } => {
             let idx = binary_url_lookup.get(&conda).ok_or_else(|| {
@@ -861,7 +861,7 @@ fn resolve_package_selector(
                     location: conda.to_string(),
                 }
             })?;
-            Ok(EnvironmentPackageData::Conda(*idx))
+            Ok(PackageIndex::Conda(*idx))
         }
         DeserializablePackageSelector::CondaSource {
             conda_source: source,
@@ -873,7 +873,7 @@ fn resolve_package_selector(
                     location: source.to_string(),
                 }
             })?;
-            Ok(EnvironmentPackageData::Conda(*idx))
+            Ok(PackageIndex::Conda(*idx))
         }
         DeserializablePackageSelector::Pypi { pypi } => {
             let idx =
@@ -884,7 +884,7 @@ fn resolve_package_selector(
                         platform: platform.to_string(),
                         location: pypi.inner().to_string(),
                     })?;
-            Ok(EnvironmentPackageData::Pypi(*idx))
+            Ok(PackageIndex::Pypi(*idx))
         }
     }
 }

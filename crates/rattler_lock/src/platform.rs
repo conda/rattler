@@ -1,3 +1,5 @@
+use crate::PlatformIndex;
+
 /// An error that can occur when parsing a platform from a string.
 #[derive(Debug, Clone, thiserror::Error, Eq, PartialEq)]
 #[allow(missing_docs)]
@@ -71,7 +73,7 @@ impl std::ops::Deref for PlatformName {
 /// any virtual packages associated with the platform.
 #[derive(Clone, Copy)]
 pub struct Platform<'lock> {
-    pub(crate) index: usize,
+    pub(crate) index: PlatformIndex,
     pub(crate) lock_file_inner: &'lock crate::LockFileInner,
 }
 
@@ -92,7 +94,7 @@ impl<'lock> PartialEq for Platform<'lock> {
 impl<'lock> Eq for Platform<'lock> {}
 
 impl<'lock> Platform<'lock> {
-    pub(crate) fn new(lock_file: &'lock crate::LockFileInner, index: usize) -> Self {
+    pub(crate) fn new(lock_file: &'lock crate::LockFileInner, index: PlatformIndex) -> Self {
         Self {
             index,
             lock_file_inner: lock_file,
@@ -102,7 +104,7 @@ impl<'lock> Platform<'lock> {
     fn data(&self) -> &PlatformData {
         self.lock_file_inner
             .platforms
-            .get(self.index)
+            .get(self.index.0)
             .expect("Platform is always valid")
     }
 
@@ -136,7 +138,7 @@ impl<'lock> Platform<'lock> {
 #[derive(Clone)]
 pub struct OwnedPlatform {
     lock_file: crate::LockFile,
-    index: usize,
+    index: PlatformIndex,
 }
 
 impl OwnedPlatform {
@@ -151,8 +153,11 @@ impl OwnedPlatform {
     }
 }
 
-pub(crate) fn find_index_by_name(platforms: &[PlatformData], name: &str) -> Option<usize> {
-    platforms.iter().position(|p| p.name.as_str() == name)
+pub(crate) fn find_index_by_name(platforms: &[PlatformData], name: &str) -> Option<PlatformIndex> {
+    platforms
+        .iter()
+        .position(|p| p.name.as_str() == name)
+        .map(|pos| PlatformIndex(pos))
 }
 
 /// Represents a package with platform-specific information.

@@ -12,7 +12,7 @@ use url::Url;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, PackageIndex,
     PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath,
     Verbatim,
 };
@@ -78,7 +78,7 @@ impl<'a> SerializableEnvironment<'a> {
                 .map(|(platform, packages)| {
                     let platform_name = inner
                         .platforms
-                        .get(*platform)
+                        .get(platform.0)
                         .expect("Platform indices are valid")
                         .name
                         .to_string();
@@ -149,12 +149,12 @@ enum SerializablePackageSelector<'a> {
 impl<'a> SerializablePackageSelector<'a> {
     fn from_lock_file(
         inner: &'a LockFileInner,
-        package: EnvironmentPackageData,
+        package: PackageIndex,
         used_pypi_packages: &HashSet<usize>,
     ) -> Self {
         match package {
-            EnvironmentPackageData::Conda(idx) => Self::from_conda(&inner.conda_packages[idx]),
-            EnvironmentPackageData::Pypi(pkg_data_idx) => Self::from_pypi(
+            PackageIndex::Conda(idx) => Self::from_conda(&inner.conda_packages[idx]),
+            PackageIndex::Pypi(pkg_data_idx) => Self::from_pypi(
                 inner,
                 &inner.pypi_packages[pkg_data_idx],
                 used_pypi_packages,
@@ -290,10 +290,10 @@ impl Serialize for LockFile {
             for packages in env.packages.values() {
                 for package in packages {
                     match package {
-                        EnvironmentPackageData::Conda(idx) => {
+                        PackageIndex::Conda(idx) => {
                             used_conda_packages.insert(*idx);
                         }
-                        EnvironmentPackageData::Pypi(pkg_idx) => {
+                        PackageIndex::Pypi(pkg_idx) => {
                             used_pypi_packages.insert(*pkg_idx);
                         }
                     }
