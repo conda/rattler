@@ -1,14 +1,14 @@
 pub use nix::sys::{signal, wait};
 use nix::{
     self,
-    fcntl::{OFlag, open},
+    fcntl::{open, OFlag},
     libc::STDERR_FILENO,
-    pty::{PtyMaster, Winsize, grantpt, posix_openpt, unlockpt},
+    pty::{grantpt, posix_openpt, unlockpt, PtyMaster, Winsize},
     sys::{
         stat,
         termios::{self, InputFlags, Termios},
     },
-    unistd::{ForkResult, Pid, close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid},
+    unistd::{close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid, ForkResult, Pid},
 };
 use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::{
@@ -21,7 +21,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::{Duration, Instant, sleep},
+    time::{sleep, Duration, Instant},
 };
 
 #[cfg(target_os = "linux")]
@@ -45,7 +45,7 @@ pub struct PtyProcess {
 /// instead of using a static mutex this calls `ioctl` with `TIOCPTYGNAME` directly
 /// <https://blog.tarq.io/ptsname-on-osx-with-rust>/
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
-    use nix::libc::{TIOCPTYGNAME, ioctl};
+    use nix::libc::{ioctl, TIOCPTYGNAME};
     use std::ffi::CStr;
 
     // the buffer size on OSX is 128, defined by sys/ttycom.h
