@@ -92,7 +92,6 @@ mod pypi;
 mod pypi_indexes;
 pub mod source;
 mod source_identifier;
-mod source_timestamps;
 mod url_or_path;
 mod utils;
 mod verbatim;
@@ -100,9 +99,8 @@ mod verbatim;
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
-    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, FullSourceMetadata,
-    GitShallowSpec, InputHash, PackageBuildSource, PartialSourceMetadata, SourceMetadata,
-    VariantValue,
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
+    PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -113,7 +111,6 @@ pub use pypi::{PypiDistributionData, PypiPackageData, PypiSourceData, PypiSource
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::{Matches, RepoDataRecord};
 pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
-pub use source_timestamps::SourceTimestamps;
 pub use url_or_path::UrlOrPath;
 pub use verbatim::Verbatim;
 
@@ -1809,10 +1806,7 @@ packages:
 
         use rattler_conda_types::{PackageName, PackageRecord};
 
-        use crate::{
-            CondaPackageData, CondaSourceData, FullSourceMetadata, PlatformData, SourceMetadata,
-            UrlOrPath,
-        };
+        use crate::{CondaPackageData, CondaSourceData, PlatformData, SourceMetadata, UrlOrPath};
 
         let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
             location: UrlOrPath::Path("my-source-pkg".into()),
@@ -1821,20 +1815,17 @@ packages:
                 "target_platform".to_string(),
                 crate::VariantValue::String("noarch".to_string()),
             )]),
-            timestamp: None,
             identifier_hash: None,
-            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                package_record: {
-                    let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
-                    let mut r = PackageRecord::new(
-                        PackageName::new_unchecked("my-source-pkg"),
-                        version,
-                        "py_0".to_string(),
-                    );
-                    r.subdir = "noarch".to_string();
-                    r
-                },
-                sources: BTreeMap::new(),
+            sources: BTreeMap::new(),
+            metadata: SourceMetadata::Full(Box::new({
+                let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
+                let mut r = PackageRecord::new(
+                    PackageName::new_unchecked("my-source-pkg"),
+                    version,
+                    "py_0".to_string(),
+                );
+                r.subdir = "noarch".to_string();
+                r
             })),
         }));
 

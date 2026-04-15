@@ -1,15 +1,14 @@
 ---
 source: crates/rattler_lock/src/source_identifier.rs
 expression: hashes
-snapshot_kind: text
 ---
-- "child-package[45836764] @ child-package"
-- "minimal-project[cd724081] @ ../minimal-project"
-- "minimal-project[ac5657ed] @ ../minimal-project"
-- "minimal-project[64e61569] @ ../minimal-project"
-- "a-python-project[492a575f] @ ../a-python-project"
-- "b-python-project[15988eb0] @ ../a-python-project"
-- "pixi-build-package[ae61d1f2] @ pixi-build-package"
-- "pixi-url-package[31511bbe] @ pixi-url-package"
-- "pixi-tag-package[f361d8ae] @ pixi-tag-package"
-- "pixi-rev-package[11c1f22a] @ pixi-rev-package"
+- "child-package[77d14e3b] @ child-package"
+- "minimal-project[d41f9521] @ ../minimal-project"
+- "minimal-project[60317ac5] @ ../minimal-project"
+- "minimal-project[76908835] @ ../minimal-project"
+- "a-python-project[51d85c1c] @ ../a-python-project"
+- "b-python-project[3eadc3fc] @ ../a-python-project"
+- "pixi-build-package[f8ba716d] @ pixi-build-package"
+- "pixi-url-package[3b583d10] @ pixi-url-package"
+- "pixi-tag-package[d2fa1c1a] @ pixi-tag-package"
+- "pixi-rev-package[2f4858a8] @ pixi-rev-package"

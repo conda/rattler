@@ -20,14 +20,6 @@ packages:
     subdir: noarch
     depends:
       - path
-    timestamp:
-      latest: 1699280294368
-      channels:
-        "https://conda.anaconda.org/bioconda": ~
-        "https://conda.anaconda.org/conda-forge": 1699280294000
-      packages:
-        numpy: 1699280200000
-        scipy: ~
     source_depends:
       path:
         path: foobar

@@ -186,12 +186,12 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         package_build_source,
         variants,
         metadata,
-        timestamp,
 
         // These fields are already recorded in the source identifier, and
         // so they are not used for the hash here.
         location: _,
         identifier_hash: _,
+        sources,
     } = source_data;
 
     let mut fields: BTreeMap<&str, &dyn DynHash> = BTreeMap::new();
@@ -201,7 +201,9 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         fields.insert("package_build_source", package_build_sources);
     }
     fields.insert("variants", variants);
-    fields.insert("timestamp", timestamp);
+    if !sources.is_empty() {
+        fields.insert("sources", &sources);
+    }
 
     match metadata {
         SourceMetadata::Full(full) => {
@@ -234,7 +236,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
                 size: _,
                 timestamp: _,
                 track_features: _,
-            } = &full.package_record;
+            } = &**full;
 
             fields.insert("build", build);
             fields.insert("build_number", build_number);
@@ -248,10 +250,6 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
 
             if !constrains.is_empty() {
                 fields.insert("constrains", constrains);
-            }
-
-            if !full.sources.is_empty() {
-                fields.insert("sources", &full.sources);
             }
 
             if !experimental_extra_depends.is_empty() {
@@ -269,9 +267,6 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         SourceMetadata::Partial(partial) => {
             if !partial.depends.is_empty() {
                 fields.insert("depends", &partial.depends);
-            }
-            if !partial.sources.is_empty() {
-                fields.insert("sources", &partial.sources);
             }
         }
     }
@@ -464,7 +459,6 @@ mod tests {
             None,
             BTreeMap::new(),
             None,
-            None,
             package_record,
             BTreeMap::new(),
         );
@@ -511,7 +505,6 @@ mod tests {
             None,
             variants,
             None,
-            None,
             package_record,
             BTreeMap::new(),
         );
@@ -555,7 +548,6 @@ mod tests {
                 UrlOrPath::from_str(location).unwrap(),
                 None,
                 BTreeMap::new(),
-                None,
                 None,
                 package_record,
                 BTreeMap::new(),
@@ -652,7 +644,6 @@ mod tests {
             None,
             BTreeMap::new(),
             None,
-            None,
             name,
             vec![],
             BTreeMap::new(),
@@ -681,7 +672,6 @@ mod tests {
             None,
             BTreeMap::new(),
             None,
-            None,
             package_record,
             BTreeMap::new(),
         );
@@ -701,7 +691,6 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             BTreeMap::new(),
-            None,
             None,
             name,
             vec!["dep-a".to_string()],
@@ -745,7 +734,6 @@ mod tests {
             None,
             variants1,
             None,
-            None,
             package_record.clone(),
             BTreeMap::new(),
         );
@@ -761,7 +749,6 @@ mod tests {
             UrlOrPath::from_str(".").unwrap(),
             None,
             variants2,
-            None,
             None,
             package_record,
             BTreeMap::new(),
