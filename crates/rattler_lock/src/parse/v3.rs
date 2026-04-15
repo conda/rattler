@@ -13,7 +13,7 @@ use crate::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
-    Channel, CondaPackageData, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner,
+    Channel, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner, LockedPackage,
     PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
     PypiPackageData, SolveOptions, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
@@ -156,8 +156,10 @@ pub fn parse_v3_or_lower(
 
     // Iterate over all packages, deduplicate them and store the list of packages
     // per platform. There might be duplicates for noarch packages.
-    let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
-    let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
+    // let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
+    // let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
+    let mut packages = IndexSet::with_capacity(lock_file.package.len());
+
     let mut per_platform: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>> =
         ahash::HashMap::default();
     for package in lock_file.package {
@@ -207,59 +209,63 @@ pub fn parse_v3_or_lower(
                 let (derived_arch, derived_platform) =
                     derive_arch_and_platform(derived.subdir.as_deref().unwrap_or(subdir.as_str()));
 
-                let deduplicated_idx = conda_packages
-                    .insert_full(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
-                        channel: derived.channel,
-                        file_name: derived.identifier.map_or_else(
-                            || format!("{}-{}-{}.conda", value.name, value.version, build),
-                            |id| id.to_file_name(),
-                        ),
-                        package_record: PackageRecord {
-                            arch: value.arch.or(derived_arch),
-                            build,
-                            build_number,
-                            constrains: value.constrains,
-                            depends: value.dependencies,
-                            experimental_extra_depends: std::collections::BTreeMap::new(),
-                            features: value.features,
-                            legacy_bz2_md5: None,
-                            legacy_bz2_size: None,
-                            license: value.license,
-                            license_family: value.license_family,
-                            md5,
-                            name: PackageName::new_unchecked(value.name),
-                            noarch: value.noarch.unwrap_or(derived_noarch),
-                            platform: derived_platform,
-                            sha256,
-                            size: value.size,
-                            subdir: subdir.to_string(),
-                            timestamp: value.timestamp.map(Into::into),
-                            track_features: value.track_features,
-                            version: value.version,
-                            purls: value.purls.is_empty().not().then_some(value.purls),
-                            python_site_packages_path: value.python_site_packages_path,
-                            run_exports: None,
+                PackageIndex(
+                    packages
+                        .insert_full(LockedPackage::Conda(
+                            LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
+                                channel: derived.channel,
+                                file_name: derived.identifier.map_or_else(
+                                    || format!("{}-{}-{}.conda", value.name, value.version, build),
+                                    |id| id.to_file_name(),
+                                ),
+                                package_record: PackageRecord {
+                                    arch: value.arch.or(derived_arch),
+                                    build,
+                                    build_number,
+                                    constrains: value.constrains,
+                                    depends: value.dependencies,
+                                    experimental_extra_depends: std::collections::BTreeMap::new(),
+                                    features: value.features,
+                                    legacy_bz2_md5: None,
+                                    legacy_bz2_size: None,
+                                    license: value.license,
+                                    license_family: value.license_family,
+                                    md5,
+                                    name: PackageName::new_unchecked(value.name),
+                                    noarch: value.noarch.unwrap_or(derived_noarch),
+                                    platform: derived_platform,
+                                    sha256,
+                                    size: value.size,
+                                    subdir: subdir.to_string(),
+                                    timestamp: value.timestamp.map(Into::into),
+                                    track_features: value.track_features,
+                                    version: value.version,
+                                    purls: value.purls.is_empty().not().then_some(value.purls),
+                                    python_site_packages_path: value.python_site_packages_path,
+                                    run_exports: None,
+                                },
+                                location,
+                            })
+                            .into(),
+                        ))
+                        .0,
+                )
+            }
+            LockedPackageKindV3::Pypi(pkg) => PackageIndex(
+                packages
+                    .insert_full(LockedPackage::Pypi(PypiPackageData::from(
+                        PypiDistributionData {
+                            name: pep508_rs::PackageName::new(pkg.name)?,
+                            version: pkg.version,
+                            requires_dist: pkg.requires_dist,
+                            requires_python: pkg.requires_python,
+                            location: Verbatim::new(UrlOrPath::Url(pkg.url)),
+                            hash: pkg.hash,
+                            index_url: None,
                         },
-                        location,
-                    }))
-                    .0;
-
-                PackageIndex::Conda(deduplicated_idx)
-            }
-            LockedPackageKindV3::Pypi(pkg) => {
-                let deduplicated_index = pypi_packages
-                    .insert_full(PypiPackageData::from(PypiDistributionData {
-                        name: pep508_rs::PackageName::new(pkg.name)?,
-                        version: pkg.version,
-                        requires_dist: pkg.requires_dist,
-                        requires_python: pkg.requires_python,
-                        location: Verbatim::new(UrlOrPath::Url(pkg.url)),
-                        hash: pkg.hash,
-                        index_url: None,
-                    }))
-                    .0;
-                PackageIndex::Pypi(deduplicated_index)
-            }
+                    )))
+                    .0,
+            ),
         };
 
         per_platform
@@ -268,12 +274,12 @@ pub fn parse_v3_or_lower(
             .insert(pkg);
     }
 
-    let (platforms, packages) = create_platforms_and_packages(per_platform);
+    let (platforms, environment_packages) = create_platforms_and_packages(per_platform);
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
         indexes: None,
-        packages,
+        packages: environment_packages,
         options: SolveOptions::default(),
     };
 
@@ -281,11 +287,7 @@ pub fn parse_v3_or_lower(
         inner: Arc::new(LockFileInner {
             version,
             platforms,
-            conda_packages: conda_packages
-                .into_iter()
-                .map(CondaPackageData::from)
-                .collect(),
-            pypi_packages: pypi_packages.into_iter().collect(),
+            packages: packages.into_iter().collect(),
             environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), EnvironmentIndex(0))]
                 .into_iter()
                 .collect(),

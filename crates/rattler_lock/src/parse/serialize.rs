@@ -12,9 +12,9 @@ use url::Url;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
-    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, PackageIndex,
-    PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath,
-    Verbatim,
+    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
+    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier,
+    UrlOrPath, Verbatim,
 };
 
 #[serde_as]
@@ -63,11 +63,7 @@ struct SerializableEnvironment<'a> {
 }
 
 impl<'a> SerializableEnvironment<'a> {
-    fn from_environment(
-        inner: &'a LockFileInner,
-        env_data: &'a EnvironmentData,
-        used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    fn from_environment(inner: &'a LockFileInner, env_data: &'a EnvironmentData) -> Self {
         SerializableEnvironment {
             channels: &env_data.channels,
             indexes: env_data.indexes.as_ref(),
@@ -87,11 +83,7 @@ impl<'a> SerializableEnvironment<'a> {
                         packages
                             .iter()
                             .map(|&package_data| {
-                                SerializablePackageSelector::from_lock_file(
-                                    inner,
-                                    package_data,
-                                    used_pypi_packages,
-                                )
+                                SerializablePackageSelector::from_lock_file(inner, package_data)
                             })
                             .sorted()
                             .collect(),
@@ -147,18 +139,10 @@ enum SerializablePackageSelector<'a> {
 }
 
 impl<'a> SerializablePackageSelector<'a> {
-    fn from_lock_file(
-        inner: &'a LockFileInner,
-        package: PackageIndex,
-        used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
-        match package {
-            PackageIndex::Conda(idx) => Self::from_conda(&inner.conda_packages[idx]),
-            PackageIndex::Pypi(pkg_data_idx) => Self::from_pypi(
-                inner,
-                &inner.pypi_packages[pkg_data_idx],
-                used_pypi_packages,
-            ),
+    fn from_lock_file(inner: &'a LockFileInner, package: PackageIndex) -> Self {
+        match &inner.packages[package.0] {
+            crate::LockedPackage::Conda(p) => Self::from_conda(p),
+            crate::LockedPackage::Pypi(p) => Self::from_pypi(p),
         }
     }
 
@@ -175,11 +159,7 @@ impl<'a> SerializablePackageSelector<'a> {
         }
     }
 
-    fn from_pypi(
-        _inner: &'a LockFileInner,
-        package: &'a PypiPackageData,
-        _used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    fn from_pypi(package: &'a PypiPackageData) -> Self {
         Self::Pypi {
             pypi: package.location(),
         }
@@ -284,19 +264,11 @@ impl Serialize for LockFile {
         let inner = self.inner.as_ref();
 
         // Determine the package indexes that are used in the lock-file.
-        let mut used_conda_packages = HashSet::new();
-        let mut used_pypi_packages = HashSet::new();
+        let mut used_packages = HashSet::new();
         for env in inner.environments.iter() {
             for packages in env.packages.values() {
                 for package in packages {
-                    match package {
-                        PackageIndex::Conda(idx) => {
-                            used_conda_packages.insert(*idx);
-                        }
-                        PackageIndex::Pypi(pkg_idx) => {
-                            used_pypi_packages.insert(*pkg_idx);
-                        }
-                    }
+                    used_packages.insert(*package);
                 }
             }
         }
@@ -311,7 +283,6 @@ impl Serialize for LockFile {
                     SerializableEnvironment::from_environment(
                         inner,
                         &inner.environments[env_idx.0],
-                        &used_pypi_packages,
                     ),
                 )
             })
@@ -323,33 +294,26 @@ impl Serialize for LockFile {
         // Source packages are NOT deduplicated because they use SourceIdentifier
         // which includes a hash to distinguish different configurations at the same location.
         let mut seen_binary_locations = HashSet::new();
-        let conda_packages = inner
-            .conda_packages
+        let packages = inner
+            .packages
             .iter()
             .enumerate()
-            .filter(|(idx, _)| used_conda_packages.contains(idx))
-            .filter(|(_, p)| {
+            .filter(|(index, _)| used_packages.contains(&PackageIndex(*index)))
+            .filter_map(|(_, p)| {
                 match p {
                     // Deduplicate binary packages by location
-                    CondaPackageData::Binary(binary) => {
-                        seen_binary_locations.insert(binary.location.clone())
-                    }
-                    // Don't deduplicate source packages
-                    CondaPackageData::Source(_) => true,
+                    LockedPackage::Conda(p) => match p {
+                        CondaPackageData::Binary(binary) => seen_binary_locations
+                            .insert(binary.location.clone())
+                            .then_some(PackageData::Conda(p)),
+
+                        CondaPackageData::Source(_) => Some(PackageData::Conda(p)),
+                    },
+                    LockedPackage::Pypi(p) => Some(PackageData::Pypi(p)),
                 }
             })
-            .map(|(_, p)| PackageData::Conda(p));
-
-        let pypi_packages = inner
-            .pypi_packages
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| used_pypi_packages.contains(idx))
-            .map(|(_, p)| PackageData::Pypi(p));
-
-        // Sort the packages in a deterministic order. See [`SerializablePackageData`]
-        // for more information.
-        let packages = itertools::chain!(conda_packages, pypi_packages).sorted();
+            .sorted()
+            .collect();
 
         let platforms = {
             let mut tmp: Vec<_> = inner
@@ -365,7 +329,7 @@ impl Serialize for LockFile {
             version: FileFormatVersion::LATEST,
             platforms,
             environments,
-            packages: packages.collect(),
+            packages,
             _version: PhantomData::<V7>,
         };
 
