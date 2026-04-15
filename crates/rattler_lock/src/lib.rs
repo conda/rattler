@@ -140,7 +140,7 @@ struct LockFileInner {
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
 
-    environment_lookup: ahash::HashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, EnvironmentIndex>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -153,12 +153,13 @@ enum PackageIndex {
     Pypi(usize),
 }
 
-/// An package used in an environment. Selects a type of package based on the
-/// enum and might contain additional data that is specific to the environment.
-/// For instance different environments might select the same Pypi package but
-/// with different extras.
+/// An index into the `platforms` `Vec` of `LockFileInner`
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 struct PlatformIndex(usize);
+
+/// An index into the `platforms` `Vec` of `LockFileInner`
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+struct EnvironmentIndex(usize);
 
 /// Information about a specific environment in the lock file.
 ///
@@ -286,13 +287,13 @@ impl LockFile {
 #[derive(Clone, Copy)]
 pub struct Environment<'lock> {
     lock_file: &'lock LockFile,
-    index: usize,
+    index: EnvironmentIndex,
 }
 
 impl<'lock> Environment<'lock> {
     /// Returns a reference to the internal data structure.
     fn data(&self) -> &'lock EnvironmentData {
-        &self.lock_file.inner.environments[self.index]
+        &self.lock_file.inner.environments[self.index.0]
     }
 
     /// Returns the lock file to which this environment belongs.
@@ -508,7 +509,7 @@ impl<'lock> Environment<'lock> {
 #[derive(Clone)]
 pub struct OwnedEnvironment {
     lock_file: LockFile,
-    index: usize,
+    index: EnvironmentIndex,
 }
 
 impl OwnedEnvironment {

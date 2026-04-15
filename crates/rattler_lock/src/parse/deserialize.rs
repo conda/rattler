@@ -17,8 +17,8 @@ use crate::{
         models::{self, legacy::LegacyCondaPackageData, v6, v7},
         V5, V6, V7,
     },
-    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, LockFile,
-    LockFileInner, PackageHashes, PackageIndex, ParseCondaLockError, PlatformIndex,
+    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
+    LockFile, LockFileInner, PackageHashes, PackageIndex, ParseCondaLockError, PlatformIndex,
     PypiDistributionData, PypiIndexes, PypiPackageData, PypiSourceData, SolveOptions,
     SourceIdentifier, UrlOrPath, Verbatim,
 };
@@ -644,7 +644,7 @@ fn parse_from_lock_legacy<P>(
     let (environment_lookup, environments) = environments
         .into_iter()
         .enumerate()
-        .map(|(idx, (name, env))| ((name, idx), env))
+        .map(|(idx, (name, env))| ((name, EnvironmentIndex(idx)), env))
         .unzip();
 
     // Convert legacy conda packages to final CondaPackageData
@@ -760,7 +760,7 @@ fn parse_from_lock<P>(
     // Parse environments
     let num_environments = raw.environments.len();
     let mut environments = Vec::with_capacity(num_environments);
-    let mut environment_lookup: ahash::HashMap<String, usize> =
+    let mut environment_lookup: ahash::HashMap<String, EnvironmentIndex> =
         ahash::HashMap::with_capacity(num_environments);
 
     for (env_name, env) in raw.environments {
@@ -822,7 +822,7 @@ fn parse_from_lock<P>(
             env_packages.insert(platform_index, resolved);
         }
 
-        environment_lookup.insert(env_name, environments.len());
+        environment_lookup.insert(env_name, EnvironmentIndex(environments.len()));
         environments.push(EnvironmentData {
             channels: env.channels,
             indexes: env.indexes,

@@ -310,7 +310,7 @@ impl Serialize for LockFile {
                     name,
                     SerializableEnvironment::from_environment(
                         inner,
-                        &inner.environments[*env_idx],
+                        &inner.environments[env_idx.0],
                         &used_pypi_packages,
                     ),
                 )

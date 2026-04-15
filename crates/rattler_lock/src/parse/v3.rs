@@ -13,9 +13,9 @@ use crate::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
-    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, PackageHashes,
-    PackageIndex, PlatformData, PlatformIndex, PypiDistributionData, PypiPackageData, SolveOptions,
-    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
+    Channel, CondaPackageData, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner,
+    PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
+    PypiPackageData, SolveOptions, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
@@ -286,7 +286,7 @@ pub fn parse_v3_or_lower(
                 .map(CondaPackageData::from)
                 .collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
-            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), 0)]
+            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), EnvironmentIndex(0))]
                 .into_iter()
                 .collect(),
             environments: vec![default_environment],

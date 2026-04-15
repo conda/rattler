@@ -7,8 +7,8 @@ use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, LockFile, LockFileInner, LockedPackageRef, PackageIndex,
-    ParseCondaLockError, PlatformIndex, PypiIndexes, PypiPackageData, SolveOptions,
+    CondaSourceData, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner, LockedPackageRef,
+    PackageIndex, ParseCondaLockError, PlatformIndex, PypiIndexes, PypiPackageData, SolveOptions,
     SourceIdentifier, UrlOrPath, Verbatim,
 };
 
@@ -496,7 +496,7 @@ impl LockFileBuilder {
             .environments
             .into_iter()
             .enumerate()
-            .map(|(idx, (name, env))| ((name, idx), env))
+            .map(|(idx, (name, env))| ((name, EnvironmentIndex(idx)), env))
             .unzip();
 
         LockFile {
