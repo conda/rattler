@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{source::SourceLocation, SourceTimestamps, UrlOrPath};
+use crate::{source::SourceLocation, UrlOrPath};
 
 /// Represents a conda-build variant value.
 ///
@@ -256,23 +256,6 @@ pub struct PartialSourceMetadata {
 
     /// Dependencies on other packages (run-time requirements).
     pub depends: Vec<String>,
-
-    /// Information about packages that should be built from source instead of
-    /// binary. This maps from a normalized package name to the location of the
-    /// source.
-    pub sources: BTreeMap<String, SourceLocation>,
-}
-
-/// Full metadata for a source package that has been evaluated.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FullSourceMetadata {
-    /// The evaluated package record.
-    pub package_record: PackageRecord,
-
-    /// Information about packages that should be built from source instead of
-    /// binary. This maps from a normalized package name to the location of the
-    /// source.
-    pub sources: BTreeMap<String, SourceLocation>,
 }
 
 /// Metadata for a source package, either partial (name-only) or full
@@ -282,12 +265,12 @@ pub enum SourceMetadata {
     /// Only the package name is known.
     Partial(PartialSourceMetadata),
     /// The package has been fully evaluated.
-    Full(Box<FullSourceMetadata>),
+    Full(Box<PackageRecord>),
 }
 
 impl SourceMetadata {
     /// Returns a reference to the full metadata if this is the `Full` variant.
-    pub fn as_full(&self) -> Option<&FullSourceMetadata> {
+    pub fn as_full(&self) -> Option<&PackageRecord> {
         match self {
             Self::Full(full) => Some(full),
             Self::Partial(_) => None,
@@ -308,7 +291,7 @@ impl SourceMetadata {
 ///
 /// The type parameter `D` determines the metadata level:
 /// - [`SourceMetadata`] (default): either partial or full metadata
-/// - [`FullSourceMetadata`]: guaranteed to have a full package record
+/// - [`PackageRecord`]: a full package record
 /// - [`PartialSourceMetadata`]: only the name is known
 #[derive(Clone, Debug)]
 pub struct CondaSourceData<D = SourceMetadata> {
@@ -324,12 +307,6 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// required in V7).
     pub variants: BTreeMap<String, VariantValue>,
 
-    /// Timestamps that should be used when solving the build/host environments
-    /// of this source package. Contains a default (global) timestamp and
-    /// optional per-channel and per-package overrides. This ensures the
-    /// package remains reproducible in the future.
-    pub timestamp: Option<SourceTimestamps>,
-
     /// The short hash that was originally parsed from the [`crate::SourceIdentifier`]
     /// in the lock file (e.g. the `9f3c2a7b` part of `numba-cuda[9f3c2a7b] @ .`).
     ///
@@ -341,6 +318,11 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// This field is intentionally excluded from [`PartialEq`], [`Eq`], and
     /// [`Hash`] because it carries no semantic meaning about the package itself.
     pub identifier_hash: Option<String>,
+
+    /// Information about packages that should be built from source instead of
+    /// binary. This maps from a normalized package name to the location of the
+    /// source.
+    pub sources: BTreeMap<String, SourceLocation>,
 
     /// The metadata for this source package.
     pub metadata: D,
@@ -373,41 +355,38 @@ impl CondaSourceData<SourceMetadata> {
     pub fn name(&self) -> &rattler_conda_types::PackageName {
         match &self.metadata {
             SourceMetadata::Partial(p) => &p.name,
-            SourceMetadata::Full(f) => &f.package_record.name,
+            SourceMetadata::Full(f) => &f.name,
         }
     }
 
     /// Returns the package record if the metadata has been fully evaluated.
     pub fn record(&self) -> Option<&PackageRecord> {
-        self.metadata.as_full().map(|f| &f.package_record)
+        self.metadata.as_full()
     }
 
     /// Returns the source locations.
     pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        match &self.metadata {
-            SourceMetadata::Full(f) => &f.sources,
-            SourceMetadata::Partial(p) => &p.sources,
-        }
+        &self.sources
     }
 
     /// Returns the dependencies. Empty for partial metadata without depends.
     pub fn depends(&self) -> &[String] {
         match &self.metadata {
-            SourceMetadata::Full(f) => &f.package_record.depends,
+            SourceMetadata::Full(f) => &f.depends,
             SourceMetadata::Partial(p) => &p.depends,
         }
     }
 
-    /// Attempts to convert into a `CondaSourceData<FullSourceMetadata>`.
+    /// Attempts to convert into a `CondaSourceData<PackageRecord>`.
     /// Returns `None` if the metadata is partial.
-    pub fn into_full(self) -> Option<CondaSourceData<FullSourceMetadata>> {
+    pub fn into_full(self) -> Option<CondaSourceData<PackageRecord>> {
         match self.metadata {
             SourceMetadata::Full(full) => Some(CondaSourceData {
                 location: self.location,
                 package_build_source: self.package_build_source,
                 variants: self.variants,
-                timestamp: self.timestamp,
                 identifier_hash: self.identifier_hash,
+                sources: self.sources,
                 metadata: *full,
             }),
             SourceMetadata::Partial(_) => None,
@@ -419,7 +398,6 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: Option<SourceTimestamps>,
         identifier_hash: Option<String>,
         package_record: PackageRecord,
         sources: BTreeMap<String, SourceLocation>,
@@ -428,12 +406,9 @@ impl CondaSourceData<SourceMetadata> {
             location,
             package_build_source,
             variants,
-            timestamp,
             identifier_hash,
-            metadata: SourceMetadata::Full(Box::new(FullSourceMetadata {
-                package_record,
-                sources,
-            })),
+            sources,
+            metadata: SourceMetadata::Full(Box::new(package_record)),
         }
     }
 
@@ -443,7 +418,6 @@ impl CondaSourceData<SourceMetadata> {
         location: UrlOrPath,
         package_build_source: Option<PackageBuildSource>,
         variants: BTreeMap<String, VariantValue>,
-        timestamp: Option<SourceTimestamps>,
         identifier_hash: Option<String>,
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
@@ -453,38 +427,29 @@ impl CondaSourceData<SourceMetadata> {
             location,
             package_build_source,
             variants,
-            timestamp,
             identifier_hash,
-            metadata: SourceMetadata::Partial(PartialSourceMetadata {
-                name,
-                depends,
-                sources,
-            }),
+            sources,
+            metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
         }
     }
 }
 
-// --- Methods for CondaSourceData<FullSourceMetadata> ---
+// --- Methods for CondaSourceData<PackageRecord> ---
 
-impl CondaSourceData<FullSourceMetadata> {
+impl CondaSourceData<PackageRecord> {
     /// Returns the name of the package.
     pub fn name(&self) -> &rattler_conda_types::PackageName {
-        &self.metadata.package_record.name
+        &self.metadata.name
     }
 
     /// Returns the package record.
     pub fn record(&self) -> &PackageRecord {
-        &self.metadata.package_record
+        &self.metadata
     }
 
     /// Returns the dependencies.
     pub fn depends(&self) -> &[String] {
-        &self.metadata.package_record.depends
-    }
-
-    /// Returns the source locations.
-    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        &self.metadata.sources
+        &self.metadata.depends
     }
 }
 
@@ -500,23 +465,18 @@ impl CondaSourceData<PartialSourceMetadata> {
     pub fn depends(&self) -> &[String] {
         &self.metadata.depends
     }
-
-    /// Returns the source locations.
-    pub fn sources(&self) -> &BTreeMap<String, SourceLocation> {
-        &self.metadata.sources
-    }
 }
 
 // --- Conversions ---
 
-impl From<CondaSourceData<FullSourceMetadata>> for CondaSourceData<SourceMetadata> {
-    fn from(value: CondaSourceData<FullSourceMetadata>) -> Self {
+impl From<CondaSourceData<PackageRecord>> for CondaSourceData<SourceMetadata> {
+    fn from(value: CondaSourceData<PackageRecord>) -> Self {
         Self {
             location: value.location,
             package_build_source: value.package_build_source,
             variants: value.variants,
-            timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
+            sources: value.sources,
             metadata: SourceMetadata::Full(Box::new(value.metadata)),
         }
     }
@@ -528,8 +488,8 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             location: value.location,
             package_build_source: value.package_build_source,
             variants: value.variants,
-            timestamp: value.timestamp,
             identifier_hash: value.identifier_hash,
+            sources: value.sources,
             metadata: SourceMetadata::Partial(value.metadata),
         }
     }
@@ -581,13 +541,7 @@ impl Ord for CondaPackageData {
                 (Some(src_a), Some(src_b)) => src_a
                     .variants
                     .cmp(&src_b.variants)
-                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source))
-                    .then_with(|| match (&src_a.timestamp, &src_b.timestamp) {
-                        (Some(a), Some(b)) => (a.latest).cmp(&b.latest),
-                        (Some(_), None) => Ordering::Less,
-                        (None, Some(_)) => Ordering::Greater,
-                        (None, None) => Ordering::Equal,
-                    }),
+                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
                 _ => Ordering::Equal,
             })
     }
