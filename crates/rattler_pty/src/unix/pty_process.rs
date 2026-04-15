@@ -1,14 +1,14 @@
 pub use nix::sys::{signal, wait};
 use nix::{
     self,
-    fcntl::{open, OFlag},
+    fcntl::{OFlag, open},
     libc::STDERR_FILENO,
-    pty::{grantpt, posix_openpt, unlockpt, PtyMaster, Winsize},
+    pty::{PtyMaster, Winsize, grantpt, posix_openpt, unlockpt},
     sys::{
         stat,
         termios::{self, InputFlags, Termios},
     },
-    unistd::{close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid, ForkResult, Pid},
+    unistd::{ForkResult, Pid, close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid},
 };
 use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::{
@@ -21,11 +21,14 @@ use std::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::{sleep, Duration, Instant},
+    time::{Duration, Instant, sleep},
 };
 
 #[cfg(target_os = "linux")]
 use nix::pty::ptsname_r;
+
+#[cfg(target_os = "netbsd")]
+use nix::pty::ptsname;
 
 /// Start a process in a forked tty so you can interact with it the same as you would
 /// within a terminal
@@ -42,7 +45,7 @@ pub struct PtyProcess {
 /// instead of using a static mutex this calls `ioctl` with `TIOCPTYGNAME` directly
 /// <https://blog.tarq.io/ptsname-on-osx-with-rust>/
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
-    use nix::libc::{ioctl, TIOCPTYGNAME};
+    use nix::libc::{TIOCPTYGNAME, ioctl};
     use std::ffi::CStr;
 
     // the buffer size on OSX is 128, defined by sys/ttycom.h
@@ -112,7 +115,12 @@ impl PtyProcess {
         unlockpt(&master_fd)?;
 
         // on Linux this is the libc function, on OSX this is our implementation of ptsname_r
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         let slave_name = ptsname_r(&master_fd)?;
+
+        // But NetBSD uses the POSIX ptsname instead
+        #[cfg(target_os = "netbsd")]
+        let slave_name = unsafe { ptsname(&master_fd) }?;
 
         // Get the current window size if it was not specified
         let window_size = opts.window_size.unwrap_or_else(|| {
