@@ -1,27 +1,30 @@
 ---
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
+snapshot_kind: text
 ---
-version: 6
+version: 7
+platforms:
+  - name: win-64
 environments:
   default:
     channels:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       win-64:
-        - conda: child-package
+        - conda_source: "child-package[67e0a264] @ child-package"
 packages:
-  - conda: child-package
-    name: child-package
+  - conda_source: "child-package[67e0a264] @ child-package"
     version: 0.1.0
     build: pyhbf21a9e_0
     subdir: noarch
+    noarch: python
     depends:
       - path
       - git_tag
       - git_rev
       - git_branch
-    sources:
+    source_depends:
       git_branch:
         git: "https://github.com/example/baz.git"
         branch: foobar

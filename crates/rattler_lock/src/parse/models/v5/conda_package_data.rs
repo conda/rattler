@@ -1,9 +1,11 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
+use super::super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData};
 use crate::{
-    conda::CondaBinaryData,
-    utils::derived_fields::{derive_arch_and_platform, derive_channel_from_location},
-    CondaPackageData, UrlOrPath,
+    utils::derived_fields::{
+        derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
+    },
+    UrlOrPath,
 };
 use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
@@ -12,95 +14,109 @@ use rattler_conda_types::{
     BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_with::serde_as;
 use url::Url;
-
-fn is_default<T: Default + Eq>(value: &T) -> bool {
-    value == &T::default()
-}
 
 /// This struct is similar to [`crate::parse::models::v6::CondaPackageData`] but
 /// used for the V5 version of the lock file format.
 #[serde_as]
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Deserialize, Eq, PartialEq)]
 pub(crate) struct CondaPackageDataModel<'a> {
     // Unique identifiers go to the top
     pub name: Cow<'a, PackageName>,
     pub version: Cow<'a, VersionWithSource>,
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default)]
     pub build: Cow<'a, str>,
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default)]
     pub build_number: BuildNumber,
     #[serde(default)]
     pub subdir: Cow<'a, str>,
-    #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: Cow<'a, NoArchType>,
 
     // Followed by the URL of the package
     pub url: Cow<'a, Url>,
 
     // Then the hashes
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
-    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    #[serde(default)]
     pub depends: Cow<'a, [String]>,
-    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    #[serde(default)]
     pub constrains: Cow<'a, [String]>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub arch: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub platform: Cow<'a, Option<String>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub channel: Cow<'a, Option<Url>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub features: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    #[serde(default)]
     pub track_features: Cow<'a, [String]>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub file_name: Cow<'a, Option<DistArchiveIdentifier>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub python_site_packages_path: Cow<'a, Option<String>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub license: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub license_family: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub purls: Cow<'a, Option<BTreeSet<PackageUrl>>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub size: Cow<'a, Option<u64>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub legacy_bz2_size: Cow<'a, Option<u64>>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
+fn find_build_and_build_number(
+    read_build: &str,
+    read_build_number: u64,
+    file_id: &DistArchiveIdentifier,
+) -> (String, u64) {
+    let build = if read_build.is_empty() {
+        file_id.identifier.build_string.clone()
+    } else {
+        read_build.to_string()
+    };
+    let build_number = if read_build_number == 0 {
+        derive_build_number_from_build(&build).unwrap_or(read_build_number)
+    } else {
+        read_build_number
+    };
+
+    (build, build_number)
+}
+
+impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
     fn from(value: CondaPackageDataModel<'a>) -> Self {
         let location = UrlOrPath::Url(value.url.into_owned());
         let subdir = value.subdir.into_owned();
         let (derived_arch, derived_platform) = derive_arch_and_platform(&subdir);
 
-        let file_name = value
+        let file_id = value
             .file_name
             .into_owned()
             .or_else(|| location.file_name().and_then(|f| f.parse().ok()))
@@ -112,11 +128,15 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 },
                 archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
             });
+        let file_name = file_id.to_file_name();
 
-        Self::Binary(CondaBinaryData {
+        let (build, build_number) =
+            find_build_and_build_number(&value.build, value.build_number, &file_id);
+
+        Self::Binary(LegacyCondaBinaryData {
             package_record: PackageRecord {
-                build: value.build.into_owned(),
-                build_number: value.build_number,
+                build,
+                build_number,
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
                 experimental_extra_depends: std::collections::BTreeMap::new(),
