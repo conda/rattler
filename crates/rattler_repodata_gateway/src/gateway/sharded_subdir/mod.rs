@@ -103,11 +103,10 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                     (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec)
                 });
 
-            let packages =
-                itertools::chain(shard.packages.into_iter(), shard.conda_packages.into_iter())
-                    .chain(v3_tar_bz2)
-                    .chain(v3_conda)
-                    .filter(|(name, _record)| !shard.removed.contains(name));
+            let packages = itertools::chain(shard.packages, shard.conda_packages)
+                .chain(v3_tar_bz2)
+                .chain(v3_conda)
+                .filter(|(name, _record)| !shard.removed.contains(name));
 
             let channel_str = channel_base_url.url().clone().redact().to_string();
             let base_url_str = base_url.as_str();

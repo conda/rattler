@@ -7,13 +7,13 @@ use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData, SolveOptions,
+    CondaSourceData, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner, PackageIndex,
+    ParseCondaLockError, PlatformIndex, PypiIndexes, PypiPackageData, SolveOptions,
     SourceIdentifier, UrlOrPath, Verbatim,
 };
 
 /// Information about a single locked package in an environment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum LockedPackage {
     /// A conda package
@@ -21,27 +21,6 @@ pub enum LockedPackage {
 
     /// A pypi package in an environment
     Pypi(PypiPackageData),
-}
-
-impl From<LockedPackageRef<'_>> for LockedPackage {
-    fn from(value: LockedPackageRef<'_>) -> Self {
-        match value {
-            LockedPackageRef::Conda(data) => LockedPackage::Conda(data.clone()),
-            LockedPackageRef::Pypi(data) => LockedPackage::Pypi(data.clone()),
-        }
-    }
-}
-
-impl From<CondaPackageData> for LockedPackage {
-    fn from(value: CondaPackageData) -> Self {
-        LockedPackage::Conda(value)
-    }
-}
-
-impl From<PypiPackageData> for LockedPackage {
-    fn from(data: PypiPackageData) -> Self {
-        LockedPackage::Pypi(data)
-    }
 }
 
 impl LockedPackage {
@@ -116,22 +95,20 @@ pub struct LockFileBuilder {
     /// Metadata about the different environments stored in the lock file.
     environments: IndexMap<String, EnvironmentData>,
 
-    /// All conda packages stored in the lock file.
-    conda_packages: Vec<CondaPackageData>,
+    /// All packages stored in the lock file.
+    packages: Vec<LockedPackage>,
 
     /// Maps unique binary package identifiers to their index in `conda_packages`.
     /// Used for deduplication of binary packages.
-    binary_package_indices: HashMap<UniqueBinaryIdentifier, usize>,
+    binary_package_indices: HashMap<UniqueBinaryIdentifier, PackageIndex>,
 
     /// Maps source identifiers to their index in `conda_packages`.
     /// Used for deduplication of source packages.
-    source_package_indices: HashMap<SourceIdentifier, usize>,
-
-    pypi_packages: Vec<PypiPackageData>,
+    source_package_indices: HashMap<SourceIdentifier, PackageIndex>,
 
     /// Maps pypi package locations to their index in `pypi_packages`.
     /// Used for deduplication of pypi packages.
-    pypi_package_indices: HashMap<Verbatim<UrlOrPath>, usize>,
+    pypi_package_indices: HashMap<Verbatim<UrlOrPath>, PackageIndex>,
 }
 
 /// A unique identifier for a binary conda package. This is used to deduplicate
@@ -218,13 +195,13 @@ impl LockFileBuilder {
         Ok(self)
     }
 
-    fn find_platform_index(&self, platform_name: &str) -> Result<usize, ()> {
+    fn find_platform_index(&self, platform_name: &str) -> Result<PlatformIndex, ()> {
         if let Some(platform_index) = self
             .platforms
             .iter()
             .position(|p| p.name.as_str() == platform_name)
         {
-            Ok(platform_index)
+            Ok(PlatformIndex(platform_index))
         } else {
             Err(())
         }
@@ -354,8 +331,8 @@ impl LockFileBuilder {
                 // Check if we already have this binary package
                 if let Some(&existing_idx) = self.binary_package_indices.get(&unique_identifier) {
                     // Merge with existing package
-                    if let CondaPackageData::Binary(existing) =
-                        &mut self.conda_packages[existing_idx]
+                    if let LockedPackage::Conda(CondaPackageData::Binary(existing)) =
+                        &mut self.packages[existing_idx.0]
                     {
                         if let Cow::Owned(merged) = existing.merge(binary_data.as_ref()) {
                             **existing = merged;
@@ -364,8 +341,8 @@ impl LockFileBuilder {
                     existing_idx
                 } else {
                     // Add new binary package
-                    let idx = self.conda_packages.len();
-                    self.conda_packages.push(locked_package);
+                    let idx = PackageIndex(self.packages.len());
+                    self.packages.push(LockedPackage::Conda(locked_package));
                     self.binary_package_indices.insert(unique_identifier, idx);
                     idx
                 }
@@ -375,9 +352,9 @@ impl LockFileBuilder {
                 if let Some(&existing_idx) = self.source_package_indices.get(&identifier) {
                     existing_idx
                 } else {
-                    let idx = self.conda_packages.len();
+                    let idx = PackageIndex(self.packages.len());
                     self.source_package_indices.insert(identifier, idx);
-                    self.conda_packages.push(locked_package);
+                    self.packages.push(LockedPackage::Conda(locked_package));
                     idx
                 }
             }
@@ -388,7 +365,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform_index)
             .or_default()
-            .insert(EnvironmentPackageData::Conda(package_idx));
+            .insert(package_idx);
 
         Ok(self)
     }
@@ -430,12 +407,15 @@ impl LockFileBuilder {
         // Add the package to the list of packages, deduplicating by location.
         let location = locked_package.location().clone();
         let package_idx = if let Some(&existing_idx) = self.pypi_package_indices.get(&location) {
-            merge_pypi_requires_dist(&mut self.pypi_packages[existing_idx], &locked_package);
+            let LockedPackage::Pypi(pypi_package) = &mut self.packages[existing_idx.0] else {
+                panic!("Internal error: Pypi index was pointing to Conda");
+            };
+            merge_pypi_requires_dist(pypi_package, &locked_package);
             existing_idx
         } else {
-            let idx = self.pypi_packages.len();
+            let idx = PackageIndex(self.packages.len());
             self.pypi_package_indices.insert(location, idx);
-            self.pypi_packages.push(locked_package);
+            self.packages.push(LockedPackage::Pypi(locked_package));
             idx
         };
 
@@ -444,7 +424,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform_index)
             .or_default()
-            .insert(EnvironmentPackageData::Pypi(package_idx));
+            .insert(package_idx);
 
         Ok(self)
     }
@@ -496,15 +476,14 @@ impl LockFileBuilder {
             .environments
             .into_iter()
             .enumerate()
-            .map(|(idx, (name, env))| ((name, idx), env))
+            .map(|(idx, (name, env))| ((name, EnvironmentIndex(idx)), env))
             .unzip();
 
         LockFile {
             inner: Arc::new(LockFileInner {
                 version: FileFormatVersion::LATEST,
                 platforms: self.platforms,
-                conda_packages: self.conda_packages,
-                pypi_packages: self.pypi_packages,
+                packages: self.packages,
                 environments,
                 environment_lookup,
             }),

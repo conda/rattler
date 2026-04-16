@@ -231,10 +231,11 @@ impl Cloudsmith {
             "uploading {filename} ({} bytes, {total_chunks} chunks)",
             content.len()
         );
-        let mut chunk_number: usize = 1;
-
-        for chunk in content.chunks(CHUNK_SIZE) {
-            debug!("uploading chunk {chunk_number}/{total_chunks} for {filename}");
+        for (chunk_number, chunk) in content.chunks(CHUNK_SIZE).enumerate() {
+            debug!(
+                "uploading chunk {}/{total_chunks} for {filename}",
+                chunk_number + 1
+            );
 
             let resp = reqwest::Client::new()
                 .put(upload_url)
@@ -250,8 +251,6 @@ impl Cloudsmith {
 
             resp.error_for_status()
                 .map_err(CloudsmithError::UploadFailed)?;
-
-            chunk_number += 1;
         }
 
         // Complete the multi-part upload
