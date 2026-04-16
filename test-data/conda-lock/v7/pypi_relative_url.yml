@@ -1,0 +1,32 @@
+version: 7
+platforms:
+  - name: linux-64
+  - name: osx-64
+  - name: osx-arm64
+  - name: win-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./
+        - pypi: ./my_subdir
+      osx-64:
+        - pypi: ./
+        - pypi: ./my_subdir
+      osx-arm64:
+        - pypi: ./
+        - pypi: ./my_subdir
+      win-64:
+        - pypi: ./
+        - pypi: ./my_subdir
+packages:
+  - pypi: ./my_subdir
+    name: my-subdir
+  - pypi: ./
+    name: pixi-repro
+    requires_dist:
+      - my-subdir @ file:my_subdir

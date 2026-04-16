@@ -1,0 +1,29 @@
+version: 7
+platforms:
+  - name: win-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+      - url: https://conda.anaconda.org/bioconda/
+    packages:
+      win-64:
+        - conda_source: "child-package[87dc0b8a] @ child-package"
+packages:
+  - conda_source: "child-package[87dc0b8a] @ child-package"
+    version: 0.1.0
+    build: pyhbf21a9e_0
+    subdir: noarch
+    depends:
+      - path
+    source_depends:
+      path:
+        path: "foobar"
+    timestamp:
+      latest: 1699280294368
+      channels:
+        https://conda.anaconda.org/bioconda: null
+        https://conda.anaconda.org/conda-forge: 1699280294000
+      packages:
+        numpy: 1699280200000
+        scipy: null

@@ -15,7 +15,7 @@ use url::Url;
 /// A URL that always has a trailing slash. A trailing slash in a URL has
 /// significance but users often forget to add it. This type is used to
 /// normalize the use of the URL.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct UrlWithTrailingSlash(Url);
 

@@ -24,11 +24,13 @@ pep440_rs = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
+serde-untagged = { workspace = true }
 serde_repr = { workspace = true }
 serde-value = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 typed-path = { workspace = true }
+xxhash-rust = { workspace = true, features = ["xxh3"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
