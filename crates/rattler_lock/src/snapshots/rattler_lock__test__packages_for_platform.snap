@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(Platform::Linux64).unwrap().map(|p|\np.location().to_string()).collect::<Vec<_>>()"
+assertion_line: 646
+expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(linux).unwrap().map(|p|\np.location().to_string()).collect::<Vec<_>>()"
 ---
 - "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"
 - "https://conda.anaconda.org/conda-forge/linux-64/ca-certificates-2022.12.7-ha878542_0.conda"

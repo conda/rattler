@@ -84,6 +84,27 @@ impl LockedPackage {
             LockedPackage::Pypi(data) => Some(data),
         }
     }
+
+    /// Returns a string that uniquely identifies this package in a lockfile.
+    ///
+    /// This matches the selector key used in the serialized lockfile format:
+    /// - Binary conda: the location URL/path
+    /// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
+    /// - Pypi: the verbatim location (preserving the original string if present)
+    pub fn selector_id(&self) -> String {
+        match self {
+            LockedPackage::Conda(CondaPackageData::Binary(data)) => data.location.to_string(),
+            LockedPackage::Conda(CondaPackageData::Source(data)) => {
+                SourceIdentifier::from_source_data(data).to_string()
+            }
+            LockedPackage::Pypi(data) => {
+                let location = data.location();
+                location
+                    .given()
+                    .map_or_else(|| location.inner().to_string(), String::from)
+            }
+        }
+    }
 }
 
 /// A struct to incrementally build a lock-file.

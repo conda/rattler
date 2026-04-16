@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(Platform::Osx64).unwrap().map(|p|\np.location().to_string()).collect::<Vec<_>>()"
+expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(osx).unwrap().map(|p|\np.location().to_string()).collect::<Vec<_>>()"
 ---
 - "https://conda.anaconda.org/conda-forge/osx-64/bzip2-1.0.8-h0d85af4_4.tar.bz2"
 - "https://conda.anaconda.org/conda-forge/osx-64/ca-certificates-2022.12.7-h033912b_0.conda"

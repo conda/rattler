@@ -7,14 +7,12 @@ use std::{
 use itertools::Itertools;
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
-use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
-    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier,
-    UrlOrPath, Verbatim,
+    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SolveOptions,
 };
 
 #[serde_as]
@@ -59,7 +57,7 @@ struct SerializableEnvironment<'a> {
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     options: SolveOptions,
-    packages: BTreeMap<String, Vec<SerializablePackageSelector<'a>>>,
+    packages: BTreeMap<String, Vec<SerializablePackageSelector>>,
 }
 
 impl<'a> SerializableEnvironment<'a> {
@@ -119,63 +117,48 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
 
 /// Package selector for V7+ environments.
 ///
-/// For V7+, binary conda packages are uniquely identified by their URL (which includes the
-/// filename), and source packages use `SourceIdentifier` with an embedded hash.
+/// For V7+, each package variant is uniquely identified by its
+/// [`LockedPackage::selector_id`](crate::LockedPackage::selector_id) string,
+/// stored under the appropriate YAML key (`conda`, `conda_source`, or `pypi`).
 #[derive(Serialize, Eq, PartialEq)]
 #[serde(untagged, rename_all = "snake_case")]
-enum SerializablePackageSelector<'a> {
-    /// Binary conda packages are uniquely identified by their URL.
-    Conda {
-        conda: &'a UrlOrPath,
-    },
-    /// Source packages use `SourceIdentifier` which uniquely identifies the package
-    /// via the format `name[hash] @ location`. No additional disambiguation fields needed.
-    CondaSource {
-        conda_source: SourceIdentifier,
-    },
-    Pypi {
-        pypi: &'a Verbatim<UrlOrPath>,
-    },
+enum SerializablePackageSelector {
+    Conda { conda: String },
+    CondaSource { conda_source: String },
+    Pypi { pypi: String },
 }
 
-impl<'a> SerializablePackageSelector<'a> {
-    fn from_lock_file(inner: &'a LockFileInner, package: PackageIndex) -> Self {
-        match &inner.packages[package.0] {
-            crate::LockedPackage::Conda(p) => Self::from_conda(p),
-            crate::LockedPackage::Pypi(p) => Self::from_pypi(p),
+impl SerializablePackageSelector {
+    fn from_lock_file(inner: &LockFileInner, package: PackageIndex) -> Self {
+        let pkg = &inner.packages[package.0];
+        let id = pkg.selector_id();
+        match pkg {
+            crate::LockedPackage::Conda(CondaPackageData::Binary(_)) => Self::Conda { conda: id },
+            crate::LockedPackage::Conda(CondaPackageData::Source(_)) => {
+                Self::CondaSource { conda_source: id }
+            }
+            crate::LockedPackage::Pypi(_) => Self::Pypi { pypi: id },
         }
     }
 
-    fn from_conda(package: &'a CondaPackageData) -> Self {
-        match package {
-            // Source packages use SourceIdentifier with an embedded hash
-            CondaPackageData::Source(source_data) => Self::CondaSource {
-                conda_source: SourceIdentifier::from_source_data(source_data),
-            },
-            // Binary packages are uniquely identified by their URL
-            CondaPackageData::Binary(binary_data) => Self::Conda {
-                conda: &binary_data.location,
-            },
-        }
-    }
-
-    fn from_pypi(package: &'a PypiPackageData) -> Self {
-        Self::Pypi {
-            pypi: package.location(),
+    fn id(&self) -> &str {
+        match self {
+            Self::Conda { conda } => conda,
+            Self::CondaSource { conda_source } => conda_source,
+            Self::Pypi { pypi } => pypi,
         }
     }
 }
 
-impl PartialOrd for SerializablePackageSelector<'_> {
+impl PartialOrd for SerializablePackageSelector {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for SerializablePackageSelector<'_> {
+impl Ord for SerializablePackageSelector {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Helper to get package type ordering: Conda (0) < Source (1) < Pypi (2)
-        fn type_order(selector: &SerializablePackageSelector<'_>) -> u8 {
+        fn type_order(selector: &SerializablePackageSelector) -> u8 {
             match selector {
                 SerializablePackageSelector::Conda { .. } => 0,
                 SerializablePackageSelector::CondaSource { .. } => 1,
@@ -183,67 +166,9 @@ impl Ord for SerializablePackageSelector<'_> {
             }
         }
 
-        // First compare by type
-        let type_cmp = type_order(self).cmp(&type_order(other));
-        if type_cmp != Ordering::Equal {
-            return type_cmp;
-        }
-
-        // Same type, compare by content
-        match (self, other) {
-            (
-                SerializablePackageSelector::CondaSource { conda_source: a },
-                SerializablePackageSelector::CondaSource { conda_source: b },
-            ) => {
-                // Compare by name first, then by hash, then by location
-                a.name()
-                    .cmp(b.name())
-                    .then_with(|| a.hash().cmp(b.hash()))
-                    .then_with(|| compare_url_by_location(a.location(), b.location()))
-            }
-            // Conda and Pypi both compare by location
-            (
-                SerializablePackageSelector::Conda { conda: a },
-                SerializablePackageSelector::Conda { conda: b },
-            ) => compare_url_by_location(a, b),
-            (
-                SerializablePackageSelector::Pypi { pypi: a },
-                SerializablePackageSelector::Pypi { pypi: b },
-            ) => compare_url_by_location(a, b),
-            // Different types are already handled by type_cmp above
-            _ => unreachable!(),
-        }
-    }
-}
-
-/// First sort packages just by their filename. Since most of the time the urls
-/// end in the packages filename this causes the urls to be sorted by package
-/// name.
-fn compare_url_by_filename(a: &Url, b: &Url) -> Ordering {
-    if let (Some(a), Some(b)) = (
-        a.path_segments()
-            .and_then(Iterator::last)
-            .map(str::to_lowercase),
-        b.path_segments()
-            .and_then(Iterator::last)
-            .map(str::to_lowercase),
-    ) {
-        match a.cmp(&b) {
-            Ordering::Equal => {}
-            ordering => return ordering,
-        }
-    }
-
-    // Otherwise just sort by their full URL
-    a.cmp(b)
-}
-
-fn compare_url_by_location(a: &UrlOrPath, b: &UrlOrPath) -> Ordering {
-    match (a, b) {
-        (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
-        (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
-        (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
-        (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.as_str().cmp(b.as_str()),
+        type_order(self)
+            .cmp(&type_order(other))
+            .then_with(|| self.id().cmp(other.id()))
     }
 }
 
