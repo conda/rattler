@@ -68,6 +68,15 @@ pub enum ParseCondaLockError {
     InconsistentEnvironmentPackage(#[from] crate::InconsistentInsertError),
 }
 
+impl From<crate::FromSelectorIdsError<ParseCondaLockError>> for ParseCondaLockError {
+    fn from(value: crate::FromSelectorIdsError<ParseCondaLockError>) -> Self {
+        match value {
+            crate::FromSelectorIdsError::Resolve(error) => error,
+            crate::FromSelectorIdsError::Inconsistent(error) => error.into(),
+        }
+    }
+}
+
 pub(crate) fn from_str_with_base_directory(
     s: &str,
     base_dir: Option<&Path>,

@@ -103,14 +103,22 @@ enum SerializablePackageDataV7<'a> {
 
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
-        match package {
-            PackageData::Conda(CondaPackageData::Binary(binary)) => {
+        match package.package {
+            PackageRef::Conda(CondaPackageData::Binary(binary)) => {
                 Self::Conda(binary.as_ref().into())
             }
-            PackageData::Conda(CondaPackageData::Source(source)) => {
-                Self::Source(source.as_ref().into())
+            PackageRef::Conda(CondaPackageData::Source(source)) => {
+                let mut model = v7::SourcePackageDataModel::from(source.as_ref());
+                model.build_packages = package.build_packages;
+                model.host_packages = package.host_packages;
+                Self::Source(model)
             }
-            PackageData::Pypi(p) => Self::Pypi(p.into()),
+            PackageRef::Pypi(p) => {
+                let mut model = v7::PypiPackageDataModel::from(p);
+                model.build_packages = package.build_packages;
+                model.host_packages = package.host_packages;
+                Self::Pypi(model)
+            }
         }
     }
 }
@@ -177,7 +185,7 @@ impl<'a> SerializeAs<PackageData<'a>> for V7 {
     where
         S: Serializer,
     {
-        SerializablePackageDataV7::from(*source).serialize(serializer)
+        SerializablePackageDataV7::from(source.clone()).serialize(serializer)
     }
 }
 
@@ -223,17 +231,37 @@ impl Serialize for LockFile {
             .enumerate()
             .filter(|(index, _)| used_packages.contains(&PackageIndex(*index)))
             .filter_map(|(_, p)| {
-                match p {
-                    // Deduplicate binary packages by location
-                    LockedPackage::Conda(p) => match p {
-                        CondaPackageData::Binary(binary) => seen_binary_locations
-                            .insert(binary.location.clone())
-                            .then_some(PackageData::Conda(p)),
-
-                        CondaPackageData::Source(_) => Some(PackageData::Conda(p)),
+                let (package, source_data) = match p {
+                    LockedPackage::Conda(conda) => match conda {
+                        CondaPackageData::Binary(binary) => {
+                            if !seen_binary_locations.insert(binary.location.clone()) {
+                                return None;
+                            }
+                            (PackageRef::Conda(conda), None)
+                        }
+                        CondaPackageData::Source(source) => {
+                            (PackageRef::Conda(conda), Some(&source.source_data))
+                        }
                     },
-                    LockedPackage::Pypi(p) => Some(PackageData::Pypi(p)),
-                }
+                    LockedPackage::Pypi(pypi) => {
+                        let source_data = pypi.as_source().map(|s| &s.source_data);
+                        (PackageRef::Pypi(pypi), source_data)
+                    }
+                };
+                let (build_packages, host_packages) = source_data.map_or_else(
+                    || (Vec::new(), Vec::new()),
+                    |sd| {
+                        (
+                            sd.build_packages.to_selector_ids(),
+                            sd.host_packages.to_selector_ids(),
+                        )
+                    },
+                );
+                Some(PackageData {
+                    package,
+                    build_packages,
+                    host_packages,
+                })
             })
             .sorted()
             .collect();
@@ -248,7 +276,7 @@ impl Serialize for LockFile {
             tmp
         };
 
-        let raw = SerializableLockFile {
+        let raw = SerializableLockFile::<V7> {
             version: FileFormatVersion::LATEST,
             platforms,
             environments,
@@ -260,20 +288,38 @@ impl Serialize for LockFile {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PackageData<'a> {
+    pub package: PackageRef<'a>,
+    /// Pre-resolved selector ids for `source_data.build_packages`. Populated
+    /// when building the serializable lockfile; empty for non-source packages.
+    pub build_packages: Vec<String>,
+    /// Pre-resolved selector ids for `source_data.host_packages`.
+    pub host_packages: Vec<String>,
+}
+
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum PackageData<'a> {
+pub enum PackageRef<'a> {
     Conda(&'a CondaPackageData),
     Pypi(&'a PypiPackageData),
 }
 
 impl PackageData<'_> {
     fn source_name(&self) -> &str {
-        match self {
-            PackageData::Conda(p) => p.name().as_source(),
-            PackageData::Pypi(p) => p.name().as_ref(),
+        match self.package {
+            PackageRef::Conda(p) => p.name().as_source(),
+            PackageRef::Pypi(p) => p.name().as_ref(),
         }
     }
 }
+
+impl PartialEq for PackageData<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.package == other.package
+    }
+}
+
+impl Eq for PackageData<'_> {}
 
 impl PartialOrd<Self> for PackageData<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -283,15 +329,15 @@ impl PartialOrd<Self> for PackageData<'_> {
 
 impl Ord for PackageData<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        use PackageData::{Conda, Pypi};
-        self.source_name()
-            .cmp(other.source_name())
-            .then_with(|| match (self, other) {
+        use PackageRef::{Conda, Pypi};
+        self.source_name().cmp(other.source_name()).then_with(|| {
+            match (self.package, other.package) {
                 (Conda(a), Conda(b)) => a.cmp(b),
                 (Pypi(a), Pypi(b)) => a.cmp(b),
                 (Pypi(_), _) => Ordering::Less,
                 (_, Pypi(_)) => Ordering::Greater,
-            })
+            }
+        })
     }
 }
 

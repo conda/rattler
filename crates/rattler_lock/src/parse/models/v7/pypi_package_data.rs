@@ -42,6 +42,16 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub requires_dist: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
+
+    /// Selector ids for packages in the build environment (pypi source
+    /// packages only — empty for wheel distributions).
+    /// Populated at lockfile serialization time; empty for standalone package
+    /// serialization. Resolved to indices after deserialization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_packages: Vec<String>,
+    /// Selector ids for packages in the host environment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_packages: Vec<String>,
 }
 
 impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
@@ -90,6 +100,8 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
                     index: index_url,
                     requires_dist: requires_dist.into(),
                     requires_python: Cow::Borrowed(&w.requires_python),
+                    build_packages: Vec::new(),
+                    host_packages: Vec::new(),
                 }
             }
             PypiPackageData::Source(s) => {
@@ -106,6 +118,8 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
                     index: None,
                     requires_dist: requires_dist.into(),
                     requires_python: Cow::Borrowed(&s.requires_python),
+                    build_packages: Vec::new(),
+                    host_packages: Vec::new(),
                 }
             }
         }
@@ -191,6 +205,8 @@ mod tests {
             index: index_url.map(Cow::Owned),
             requires_dist: Cow::Owned(vec![]),
             requires_python: Cow::Owned(None),
+            build_packages: Vec::new(),
+            host_packages: Vec::new(),
         }
     }
 

@@ -92,6 +92,15 @@ pub(crate) struct SourcePackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    /// Selector ids for packages in the build environment.
+    /// Populated at lockfile serialization time; empty for standalone package
+    /// serialization. Resolved to indices after deserialization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_packages: Vec<String>,
+    /// Selector ids for packages in the host environment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_packages: Vec<String>,
 }
 
 fn is_zero(value: &BuildNumber) -> bool {
@@ -197,6 +206,8 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 python_site_packages_path: Cow::Borrowed(&full.python_site_packages_path),
                 source: value.package_build_source.clone(),
                 source_depends: value.sources.clone(),
+                build_packages: Vec::new(),
+                host_packages: Vec::new(),
             },
             SourceMetadata::Partial(partial) => Self {
                 conda_source: identifier,
@@ -218,6 +229,8 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 python_site_packages_path: Cow::Owned(None),
                 source: value.package_build_source.clone(),
                 source_depends: value.sources.clone(),
+                build_packages: Vec::new(),
+                host_packages: Vec::new(),
             },
         }
     }
