@@ -80,8 +80,8 @@ impl<'a> SerializableEnvironment<'a> {
                         platform_name,
                         packages
                             .iter()
-                            .map(|&package_data| {
-                                SerializablePackageSelector::from_lock_file(inner, package_data)
+                            .map(|handle| {
+                                SerializablePackageSelector::from_lock_file(inner, handle.index)
                             })
                             .sorted()
                             .collect(),
@@ -189,14 +189,12 @@ impl Serialize for LockFile {
         let inner = self.inner.as_ref();
 
         // Determine the package indexes that are used in the lock-file.
-        let mut used_packages = HashSet::new();
-        for env in inner.environments.iter() {
-            for packages in env.packages.values() {
-                for package in packages {
-                    used_packages.insert(*package);
-                }
-            }
-        }
+        let used_packages: HashSet<PackageIndex> = inner
+            .environments
+            .iter()
+            .flat_map(|env| env.packages.values())
+            .flat_map(|packages| packages.iter().map(|handle| handle.index))
+            .collect();
 
         // Collect all environments
         let environments = inner

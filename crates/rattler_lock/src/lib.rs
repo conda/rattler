@@ -78,8 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 
-use indexmap::IndexSet;
-
 mod builder;
 mod channel;
 mod conda;
@@ -146,8 +144,283 @@ struct LockFileInner {
 /// enum and might contain additional data that is specific to the environment.
 /// For instance different environments might select the same Pypi package but
 /// with different extras.
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PackageIndex(usize);
+
+/// An opaque handle to a package stored in a [`LockFile`], bundling its
+/// [`PackageIndex`] with the selector-id string used to refer to it in the
+/// lockfile format.
+///
+/// Handles are produced by the lockfile builder (`register_*_package`) and
+/// consumed by [`EnvironmentPackages::insert`]. Treat the internals as
+/// opaque: the index is only valid within the lockfile that produced the
+/// handle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageHandle {
+    pub(crate) selector_id: String,
+    pub(crate) index: PackageIndex,
+}
+
+impl std::hash::Hash for PackageHandle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.selector_id.len().hash(state);
+        self.selector_id.hash(state);
+    }
+}
+
+impl Ord for PackageHandle {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.selector_id.cmp(&other.selector_id)
+    }
+}
+
+impl PartialOrd for PackageHandle {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PackageHandle {
+    pub(crate) fn new(index: PackageIndex, package: &LockedPackage) -> Self {
+        Self {
+            index,
+            selector_id: package.selector_id(),
+        }
+    }
+
+    /// Looks up the referenced [`LockedPackage`] in the given package list.
+    ///
+    /// Returns [`InvalidPackageHandleError`] when the handle's index is out
+    /// of bounds for `packages`, or when the package at that index has a
+    /// different selector id than the handle stores. Both indicate the
+    /// handle is being used against a lockfile other than the one that
+    /// produced it.
+    pub fn get<'a>(
+        &self,
+        packages: &'a [LockedPackage],
+    ) -> Result<&'a LockedPackage, InvalidPackageHandleError> {
+        let package = packages
+            .get(self.index.0)
+            .ok_or(InvalidPackageHandleError::OutOfBounds {
+                index: self.index.0,
+                len: packages.len(),
+            })?;
+        let actual_selector_id = package.selector_id();
+        if actual_selector_id != self.selector_id {
+            return Err(InvalidPackageHandleError::SelectorMismatch {
+                index: self.index.0,
+                expected: self.selector_id.clone(),
+                actual: actual_selector_id,
+            });
+        }
+        Ok(package)
+    }
+}
+
+/// Error returned by [`PackageHandle::get`] when the handle does not
+/// consistently refer to a package in the provided list.
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidPackageHandleError {
+    /// The handle's index is past the end of the package list.
+    #[error("PackageHandle index {index} is out of bounds for a package list of length {len}")]
+    OutOfBounds {
+        /// The out-of-bounds index stored by the handle.
+        index: usize,
+        /// The length of the package list that was queried.
+        len: usize,
+    },
+
+    /// The handle's stored selector id doesn't match the package at its
+    /// index — the handle was produced against a different lockfile.
+    #[error(
+        "PackageHandle index {index} stores selector id {expected:?} but the \
+         package at that index has selector id {actual:?}"
+    )]
+    SelectorMismatch {
+        /// The index stored by the handle.
+        index: usize,
+        /// The selector id the handle claims belongs to that index.
+        expected: String,
+        /// The selector id of the package actually at that index.
+        actual: String,
+    },
+}
+
+/// Error returned by [`EnvironmentPackages::insert`] when the requested
+/// handle conflicts with an existing entry.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "EnvironmentPackages: inconsistent insert of (PackageIndex({index}), {selector_id:?}) \
+     — either the index or the selector id is already mapped to a different value"
+)]
+pub struct InconsistentInsertError {
+    /// The package index that was being inserted.
+    pub index: usize,
+    /// The selector id that was being inserted.
+    pub selector_id: String,
+}
+
+/// A deduplicated set of package references, each stored as a
+/// [`PackageIndex`] paired with its [`LockedPackage::selector_id`] string.
+///
+/// Entries are always sorted by selector id. Both the selector id string and
+/// the [`PackageIndex`] are kept unique — re-inserting the exact same
+/// `(index, selector_id)` pair is a no-op, and inserting a new pair that
+/// reuses one value but not the other is an [`InconsistentInsertError`].
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
+pub struct EnvironmentPackages {
+    /// Invariant: sorted by selector id; both selector ids and `PackageIndex`
+    /// values are unique across the set.
+    entries: Vec<PackageHandle>,
+}
+
+impl EnvironmentPackages {
+    /// Returns the referenced packages as a list of selector-id strings in
+    /// the set's sorted order.
+    pub fn to_selector_ids(&self) -> Vec<String> {
+        self.entries
+            .iter()
+            .map(|handle| handle.selector_id.clone())
+            .collect()
+    }
+
+    /// Builds an `EnvironmentPackages` by resolving a list of selector-id
+    /// strings to [`PackageIndex`] values via the caller-supplied `resolve`
+    /// closure.
+    ///
+    /// The closure's `Err` path lets callers produce a context-rich error
+    /// when a selector string does not correspond to a known package.
+    /// `FromSelectorIdsError` wraps either that error or a consistency
+    /// violation ([`InconsistentInsertError`]) when two entries reuse an
+    /// index or a selector id with a different counterpart.
+    pub fn from_selector_ids<I, E>(
+        strings: I,
+        mut resolve: impl FnMut(&str) -> Result<PackageHandle, E>,
+    ) -> Result<Self, FromSelectorIdsError<E>>
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut environment_packages = Self::default();
+        for selector_id in strings {
+            let handle = resolve(&selector_id).map_err(FromSelectorIdsError::Resolve)?;
+            environment_packages
+                .insert(handle)
+                .map_err(FromSelectorIdsError::Inconsistent)?;
+        }
+        Ok(environment_packages)
+    }
+
+    /// Inserts a package reference, preserving the sorted-by-selector-id
+    /// invariant.
+    ///
+    /// Returns `Ok(true)` if the entry was newly inserted, or `Ok(false)`
+    /// when the exact `(index, selector_id)` pair is already present (a
+    /// no-op). Returns an [`InconsistentInsertError`] when exactly one of
+    /// the two values is already present but paired with a different value.
+    pub fn insert(&mut self, handle: PackageHandle) -> Result<bool, InconsistentInsertError> {
+        let selector_search = self.entries.binary_search(&handle);
+        let position_by_index = self
+            .entries
+            .iter()
+            .position(|existing| existing.index == handle.index);
+
+        match (position_by_index, selector_search) {
+            (None, Err(insert_position)) => {
+                self.entries.insert(insert_position, handle);
+                Ok(true)
+            }
+            (Some(a), Ok(b)) if a == b => Ok(false),
+            _ => Err(InconsistentInsertError {
+                index: handle.index.0,
+                selector_id: handle.selector_id,
+            }),
+        }
+    }
+
+    /// Builds an `EnvironmentPackages` from a sequence of [`PackageHandle`]s.
+    ///
+    /// Returns an [`InconsistentInsertError`] if two handles reuse either an
+    /// index or a selector id with a different counterpart.
+    pub fn from_handles(
+        handles: impl IntoIterator<Item = PackageHandle>,
+    ) -> Result<Self, InconsistentInsertError> {
+        let mut environment_packages = Self::default();
+        for handle in handles {
+            environment_packages.insert(handle)?;
+        }
+        Ok(environment_packages)
+    }
+
+    /// Builds an `EnvironmentPackages` from package indices, looking up each
+    /// selector-id from the lockfile's `packages` list.
+    ///
+    /// Returns an [`InconsistentInsertError`] if two different indices
+    /// resolve to the same selector id, which indicates a corrupted
+    /// lockfile.
+    pub fn from_indices(
+        indices: impl IntoIterator<Item = PackageIndex>,
+        packages: &[LockedPackage],
+    ) -> Result<Self, InconsistentInsertError> {
+        Self::from_handles(
+            indices
+                .into_iter()
+                .map(|index| PackageHandle::new(index, &packages[index.0])),
+        )
+    }
+
+    /// Returns `true` if the set contains the given package index.
+    pub fn contains_index(&self, index: PackageIndex) -> bool {
+        self.entries.iter().any(|existing| existing.index == index)
+    }
+
+    /// Returns `true` if the set contains the given selector id.
+    pub fn contains_selector_id(&self, selector_id: &str) -> bool {
+        self.entries
+            .binary_search_by(|existing| existing.selector_id.as_str().cmp(selector_id))
+            .is_ok()
+    }
+
+    /// Returns the number of packages in the set.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns `true` if the set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Returns an iterator over the contained [`PackageHandle`]s in
+    /// sorted-by-selector-id order.
+    pub fn iter(&self) -> std::slice::Iter<'_, PackageHandle> {
+        self.entries.iter()
+    }
+}
+
+/// Error returned by [`EnvironmentPackages::from_selector_ids`] when either
+/// the resolver closure fails for some string or the resolved entries are
+/// internally inconsistent.
+#[derive(Debug, thiserror::Error)]
+pub enum FromSelectorIdsError<E> {
+    /// The resolver closure failed to map a selector id to a
+    /// [`PackageIndex`].
+    #[error(transparent)]
+    Resolve(E),
+
+    /// Two resolved entries reuse either a [`PackageIndex`] or a selector id
+    /// but are paired with different counterparts.
+    #[error(transparent)]
+    Inconsistent(#[from] InconsistentInsertError),
+}
+
+impl<'a> IntoIterator for &'a EnvironmentPackages {
+    type Item = &'a PackageHandle;
+    type IntoIter = std::slice::Iter<'a, PackageHandle>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
 
 /// An index into the `platforms` `Vec` of `LockFileInner`
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
@@ -176,7 +449,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>>,
+    packages: ahash::HashMap<PlatformIndex, EnvironmentPackages>,
 }
 
 impl LockFile {
@@ -353,7 +626,7 @@ impl<'lock> Environment<'lock> {
                 .packages
                 .get(&platform.index)?
                 .iter()
-                .map(|package| &self.lock_file.inner.packages[package.0]),
+                .map(|handle| &self.lock_file.inner.packages[handle.index.0]),
         )
     }
 
@@ -377,7 +650,7 @@ impl<'lock> Environment<'lock> {
                 (
                     platform,
                     data.iter()
-                        .map(|package| &self.lock_file.inner.packages[package.0]),
+                        .map(|handle| &self.lock_file.inner.packages[handle.index.0]),
                 )
             })
     }
@@ -1931,5 +2204,140 @@ packages:
         let reparsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
         let rerendered = reparsed.render_to_string().unwrap();
         similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    mod environment_packages_hash {
+        use std::{
+            hash::{Hash, Hasher},
+            str::FromStr,
+        };
+
+        use rattler_conda_types::{
+            package::DistArchiveIdentifier, PackageName, PackageRecord, Version,
+        };
+        use url::Url;
+
+        use crate::{
+            CondaBinaryData, CondaPackageData, EnvironmentPackages, LockedPackage, PackageHandle,
+            PackageIndex,
+        };
+
+        fn hash_of(value: &impl Hash) -> u64 {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        fn make_package(name: &str, version: &str) -> LockedPackage {
+            LockedPackage::Conda(CondaPackageData::Binary(Box::new(CondaBinaryData {
+                package_record: PackageRecord {
+                    subdir: "linux-64".into(),
+                    ..PackageRecord::new(
+                        PackageName::new_unchecked(name),
+                        Version::from_str(version).unwrap(),
+                        "build0".into(),
+                    )
+                },
+                location: Url::parse(&format!(
+                    "https://example.com/{name}-{version}-build0.tar.bz2"
+                ))
+                .unwrap()
+                .into(),
+                file_name: format!("{name}-{version}-build0.tar.bz2")
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                channel: None,
+            })))
+        }
+
+        fn packages() -> Vec<LockedPackage> {
+            vec![
+                make_package("alpha", "1.0.0"),
+                make_package("beta", "2.0.0"),
+                make_package("gamma", "3.0.0"),
+            ]
+        }
+
+        fn env_with(indices: &[usize], packages: &[LockedPackage]) -> EnvironmentPackages {
+            EnvironmentPackages::from_indices(
+                indices.iter().map(|&index| PackageIndex(index)),
+                packages,
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn empty_sets_are_equal() {
+            let packages = packages();
+            let a = env_with(&[], &packages);
+            let b = env_with(&[], &packages);
+            assert_eq!(a, b);
+            assert_eq!(hash_of(&a), hash_of(&b));
+        }
+
+        #[test]
+        fn same_packages_same_order() {
+            let packages = packages();
+            let a = env_with(&[0, 1], &packages);
+            let b = env_with(&[0, 1], &packages);
+            assert_eq!(a, b);
+            assert_eq!(hash_of(&a), hash_of(&b));
+        }
+
+        #[test]
+        fn same_packages_different_order() {
+            let packages = packages();
+            let a = env_with(&[0, 1], &packages);
+            let b = env_with(&[1, 0], &packages);
+            assert_eq!(a, b);
+            assert_eq!(hash_of(&a), hash_of(&b));
+        }
+
+        #[test]
+        fn different_packages_differ() {
+            let packages = packages();
+            let a = env_with(&[0, 1], &packages);
+            let b = env_with(&[0, 2], &packages);
+            assert_ne!(a, b);
+            assert_ne!(hash_of(&a), hash_of(&b));
+        }
+
+        #[test]
+        fn duplicates_are_deduplicated() {
+            let packages = packages();
+            let a = env_with(&[0, 0, 1], &packages);
+            let b = env_with(&[0, 1], &packages);
+            assert_eq!(a, b);
+            assert_eq!(hash_of(&a), hash_of(&b));
+        }
+
+        #[test]
+        fn insert_preserves_sorted_invariant() {
+            let packages = packages();
+            let mut env = env_with(&[2], &packages);
+            env.insert(PackageHandle::new(PackageIndex(0), &packages[0]))
+                .unwrap();
+            let ids = env.to_selector_ids();
+            let mut sorted = ids.clone();
+            sorted.sort();
+            assert_eq!(ids, sorted);
+        }
+
+        #[test]
+        fn insert_duplicate_pair_returns_false() {
+            let packages = packages();
+            let mut env = env_with(&[0, 1], &packages);
+            assert!(!env
+                .insert(PackageHandle::new(PackageIndex(0), &packages[0]))
+                .unwrap());
+        }
+
+        #[test]
+        fn insert_reused_selector_with_different_index_errors() {
+            let packages = packages();
+            let mut env = env_with(&[0], &packages);
+            let result = env.insert(PackageHandle::new(PackageIndex(1), &packages[0]));
+            assert!(result.is_err());
+        }
     }
 }

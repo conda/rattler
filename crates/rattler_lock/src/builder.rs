@@ -345,7 +345,26 @@ impl LockFileBuilder {
                 platform: platform_name.to_string(),
             }
         })?;
-        let package_idx = match &locked_package {
+        let handle = self.register_conda_package(locked_package);
+
+        self.environment_data(environment)
+            .packages
+            .entry(platform_index)
+            .or_default()
+            .insert(handle)?;
+
+        Ok(self)
+    }
+
+    /// Registers a conda package into the lockfile's package list (with
+    /// deduplication/merging) without adding it to any environment. Returns
+    /// a [`PackageHandle`] that can be inserted into an
+    /// [`EnvironmentPackages`] set later.
+    pub fn register_conda_package(
+        &mut self,
+        locked_package: CondaPackageData,
+    ) -> crate::PackageHandle {
+        let package_index = match &locked_package {
             CondaPackageData::Binary(binary_data) => {
                 let unique_identifier = UniqueBinaryIdentifier::from(binary_data.as_ref());
 
@@ -362,10 +381,10 @@ impl LockFileBuilder {
                     existing_idx
                 } else {
                     // Add new binary package
-                    let idx = PackageIndex(self.packages.len());
+                    let index = PackageIndex(self.packages.len());
                     self.packages.push(LockedPackage::Conda(locked_package));
-                    self.binary_package_indices.insert(unique_identifier, idx);
-                    idx
+                    self.binary_package_indices.insert(unique_identifier, index);
+                    index
                 }
             }
             CondaPackageData::Source(ref source_data) => {
@@ -373,22 +392,15 @@ impl LockFileBuilder {
                 if let Some(&existing_idx) = self.source_package_indices.get(&identifier) {
                     existing_idx
                 } else {
-                    let idx = PackageIndex(self.packages.len());
-                    self.source_package_indices.insert(identifier, idx);
+                    let index = PackageIndex(self.packages.len());
+                    self.source_package_indices.insert(identifier, index);
                     self.packages.push(LockedPackage::Conda(locked_package));
-                    idx
+                    index
                 }
             }
         };
 
-        // Add the package to the environment that it is intended for.
-        self.environment_data(environment)
-            .packages
-            .entry(platform_index)
-            .or_default()
-            .insert(package_idx);
-
-        Ok(self)
+        crate::PackageHandle::new(package_index, &self.packages[package_index.0])
     }
 
     /// Adds a pypi locked package to a specific environment and platform.
@@ -424,30 +436,40 @@ impl LockFileBuilder {
                 platform: platform_name.to_string(),
             }
         })?;
+        let handle = self.register_pypi_package(locked_package);
 
-        // Add the package to the list of packages, deduplicating by location.
+        self.environment_data(environment)
+            .packages
+            .entry(platform_index)
+            .or_default()
+            .insert(handle)?;
+
+        Ok(self)
+    }
+
+    /// Registers a pypi package into the lockfile's package list
+    /// (deduplicating by location and merging `requires_dist`) without
+    /// adding it to any environment. Returns a [`PackageHandle`] that can be
+    /// inserted into an [`EnvironmentPackages`] set later.
+    pub fn register_pypi_package(
+        &mut self,
+        locked_package: PypiPackageData,
+    ) -> crate::PackageHandle {
         let location = locked_package.location().clone();
-        let package_idx = if let Some(&existing_idx) = self.pypi_package_indices.get(&location) {
+        let package_index = if let Some(&existing_idx) = self.pypi_package_indices.get(&location) {
             let LockedPackage::Pypi(pypi_package) = &mut self.packages[existing_idx.0] else {
                 panic!("Internal error: Pypi index was pointing to Conda");
             };
             merge_pypi_requires_dist(pypi_package, &locked_package);
             existing_idx
         } else {
-            let idx = PackageIndex(self.packages.len());
-            self.pypi_package_indices.insert(location, idx);
+            let index = PackageIndex(self.packages.len());
+            self.pypi_package_indices.insert(location, index);
             self.packages.push(LockedPackage::Pypi(locked_package));
-            idx
+            index
         };
 
-        // Add the package to the environment that it is intended for.
-        self.environment_data(environment)
-            .packages
-            .entry(platform_index)
-            .or_default()
-            .insert(package_idx);
-
-        Ok(self)
+        crate::PackageHandle::new(package_index, &self.packages[package_index.0])
     }
 
     /// Sets the channels of an environment.

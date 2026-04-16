@@ -61,6 +61,11 @@ pub enum ParseCondaLockError {
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
+
+    /// An entry in the lockfile reuses either a [`crate::PackageIndex`] or a
+    /// selector id that is already mapped to a different value.
+    #[error(transparent)]
+    InconsistentEnvironmentPackage(#[from] crate::InconsistentInsertError),
 }
 
 pub(crate) fn from_str_with_base_directory(
