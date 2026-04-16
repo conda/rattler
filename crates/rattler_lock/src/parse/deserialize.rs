@@ -435,6 +435,7 @@ fn convert_raw_pypi_package(
             location,
             requires_dist,
             requires_python: raw_package.requires_python,
+            source_data: crate::SourceData::default(),
         })))
     }
 }

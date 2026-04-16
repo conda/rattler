@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{source::SourceLocation, UrlOrPath};
+use crate::{source::SourceLocation, SourceData, UrlOrPath};
 
 /// Represents a conda-build variant value.
 ///
@@ -324,6 +324,10 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// source.
     pub sources: BTreeMap<String, SourceLocation>,
 
+    /// The build and host environment packages needed to build this source
+    /// package.
+    pub source_data: SourceData,
+
     /// The metadata for this source package.
     pub metadata: D,
 }
@@ -387,6 +391,7 @@ impl CondaSourceData<SourceMetadata> {
                 variants: self.variants,
                 identifier_hash: self.identifier_hash,
                 sources: self.sources,
+                source_data: self.source_data,
                 metadata: *full,
             }),
             SourceMetadata::Partial(_) => None,
@@ -408,6 +413,7 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             identifier_hash,
             sources,
+            source_data: SourceData::default(),
             metadata: SourceMetadata::Full(Box::new(package_record)),
         }
     }
@@ -429,6 +435,7 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             identifier_hash,
             sources,
+            source_data: SourceData::default(),
             metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
         }
     }
@@ -477,6 +484,7 @@ impl From<CondaSourceData<PackageRecord>> for CondaSourceData<SourceMetadata> {
             variants: value.variants,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
+            source_data: value.source_data,
             metadata: SourceMetadata::Full(Box::new(value.metadata)),
         }
     }
@@ -490,6 +498,7 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             variants: value.variants,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
+            source_data: value.source_data,
             metadata: SourceMetadata::Partial(value.metadata),
         }
     }

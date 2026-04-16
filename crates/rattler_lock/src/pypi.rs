@@ -1,4 +1,4 @@
-use crate::{PackageHashes, UrlOrPath, Verbatim};
+use crate::{PackageHashes, SourceData, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
@@ -58,6 +58,10 @@ pub struct PypiSourceData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
+
+    /// The build and host environment packages needed to build this source
+    /// package.
+    pub source_data: SourceData,
 }
 
 impl PartialOrd for PypiDistributionData {

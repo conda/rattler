@@ -154,6 +154,7 @@ impl<'a> SourcePackageDataModel<'a> {
             package_build_source: self.source,
             identifier_hash: Some(hash),
             sources: self.source_depends,
+            source_data: crate::SourceData::default(),
             metadata,
         };
 

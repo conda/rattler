@@ -268,6 +268,7 @@ mod tests {
             location: path_location("./my-pkg"),
             requires_dist: vec![],
             requires_python: None,
+            source_data: crate::SourceData::default(),
         };
         let data = crate::PypiPackageData::from(data);
         let model = PypiPackageDataModel::from(&data);

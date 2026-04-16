@@ -422,6 +422,18 @@ impl<'a> IntoIterator for &'a EnvironmentPackages {
     }
 }
 
+/// The packages needed to build a source package.
+///
+/// Both `build_packages` and `host_packages` are sets of indices into the
+/// lockfile's package table, mirroring how environments store their packages.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
+pub struct SourceData {
+    /// Packages in the build environment (compilers, build tools, etc.).
+    pub build_packages: EnvironmentPackages,
+    /// Packages in the host environment (libraries to link against, etc.).
+    pub host_packages: EnvironmentPackages,
+}
+
 /// An index into the `platforms` `Vec` of `LockFileInner`
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 struct PlatformIndex(usize);
@@ -2013,7 +2025,9 @@ packages:
 
         use rattler_conda_types::{PackageName, PackageRecord};
 
-        use crate::{CondaPackageData, CondaSourceData, PlatformData, SourceMetadata, UrlOrPath};
+        use crate::{
+            CondaPackageData, CondaSourceData, PlatformData, SourceData, SourceMetadata, UrlOrPath,
+        };
 
         let source_pkg = CondaPackageData::Source(Box::new(CondaSourceData {
             location: UrlOrPath::Path("my-source-pkg".into()),
@@ -2024,6 +2038,7 @@ packages:
             )]),
             identifier_hash: None,
             sources: BTreeMap::new(),
+            source_data: SourceData::default(),
             metadata: SourceMetadata::Full(Box::new({
                 let version: rattler_conda_types::Version = "1.0.0".parse().unwrap();
                 let mut r = PackageRecord::new(
