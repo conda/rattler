@@ -90,10 +90,13 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
             b'(' | b')' if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
                 break;
             }
-            _ if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
-                if check_word_delimiter(input, i, "and") || check_word_delimiter(input, i, "or") {
-                    break;
-                }
+            _ if !in_double_quote
+                && !in_single_quote
+                && bracket_depth == 0
+                && (check_word_delimiter(input, i, "and")
+                    || check_word_delimiter(input, i, "or")) =>
+            {
+                break;
             }
             _ => {}
         }

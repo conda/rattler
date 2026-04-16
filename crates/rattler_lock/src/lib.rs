@@ -137,10 +137,9 @@ struct LockFileInner {
     version: FileFormatVersion,
     platforms: Vec<PlatformData>,
     environments: Vec<EnvironmentData>,
-    conda_packages: Vec<CondaPackageData>,
-    pypi_packages: Vec<PypiPackageData>,
+    packages: Vec<LockedPackage>,
 
-    environment_lookup: ahash::HashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, EnvironmentIndex>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -148,10 +147,15 @@ struct LockFileInner {
 /// For instance different environments might select the same Pypi package but
 /// with different extras.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
-enum EnvironmentPackageData {
-    Conda(usize),
-    Pypi(usize),
-}
+pub struct PackageIndex(usize);
+
+/// An index into the `platforms` `Vec` of `LockFileInner`
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+struct PlatformIndex(usize);
+
+/// An index into the `platforms` `Vec` of `LockFileInner`
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+struct EnvironmentIndex(usize);
 
 /// Information about a specific environment in the lock file.
 ///
@@ -172,7 +176,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>>,
 }
 
 impl LockFile {
@@ -230,7 +234,7 @@ impl LockFile {
             .platforms
             .iter()
             .enumerate()
-            .map(|(index, _)| Platform::new(&self.inner, index))
+            .map(|(index, _)| Platform::new(&self.inner, PlatformIndex(index)))
     }
 
     /// Returns the environment with the given name.
@@ -271,7 +275,7 @@ impl LockFile {
 
     /// Check if there are any packages in the lockfile
     pub fn is_empty(&self) -> bool {
-        self.inner.conda_packages.is_empty() && self.inner.pypi_packages.is_empty()
+        self.inner.packages.is_empty()
     }
 }
 
@@ -279,13 +283,13 @@ impl LockFile {
 #[derive(Clone, Copy)]
 pub struct Environment<'lock> {
     lock_file: &'lock LockFile,
-    index: usize,
+    index: EnvironmentIndex,
 }
 
 impl<'lock> Environment<'lock> {
     /// Returns a reference to the internal data structure.
     fn data(&self) -> &'lock EnvironmentData {
-        &self.lock_file.inner.environments[self.index]
+        &self.lock_file.inner.environments[self.index.0]
     }
 
     /// Returns the lock file to which this environment belongs.
@@ -337,7 +341,7 @@ impl<'lock> Environment<'lock> {
     pub fn packages(
         &self,
         platform: Platform<'lock>,
-    ) -> Option<impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_>
+    ) -> Option<impl DoubleEndedIterator<Item = &'lock LockedPackage> + ExactSizeIterator + '_>
     {
         if std::ptr::from_ref(self.lock_file.inner.as_ref())
             != std::ptr::from_ref(platform.lock_file_inner)
@@ -349,14 +353,7 @@ impl<'lock> Environment<'lock> {
                 .packages
                 .get(&platform.index)?
                 .iter()
-                .map(move |package| match package {
-                    EnvironmentPackageData::Conda(data) => {
-                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
-                    }
-                    EnvironmentPackageData::Pypi(data) => {
-                        LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
-                    }
-                }),
+                .map(|package| &self.lock_file.inner.packages[package.0]),
         )
     }
 
@@ -367,7 +364,7 @@ impl<'lock> Environment<'lock> {
     ) -> impl ExactSizeIterator<
         Item = (
             Platform<'lock>,
-            impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_,
+            impl DoubleEndedIterator<Item = &'lock LockedPackage> + ExactSizeIterator + '_,
         ),
     > + '_ {
         self.data()
@@ -379,14 +376,8 @@ impl<'lock> Environment<'lock> {
             .map(move |(platform, data)| {
                 (
                     platform,
-                    data.iter().map(move |package| match package {
-                        EnvironmentPackageData::Conda(data) => {
-                            LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
-                        }
-                        EnvironmentPackageData::Pypi(data) => {
-                            LockedPackageRef::Pypi(&self.lock_file.inner.pypi_packages[*data])
-                        }
-                    }),
+                    data.iter()
+                        .map(|package| &self.lock_file.inner.packages[package.0]),
                 )
             })
     }
@@ -402,7 +393,7 @@ impl<'lock> Environment<'lock> {
     > + '_ {
         self.packages_by_platform()
             .map(move |(platform, packages)| {
-                (platform, packages.filter_map(LockedPackageRef::as_pypi))
+                (platform, packages.filter_map(LockedPackage::as_pypi))
             })
     }
 
@@ -417,7 +408,7 @@ impl<'lock> Environment<'lock> {
     > + '_ {
         self.packages_by_platform()
             .map(move |(platform, packages)| {
-                (platform, packages.filter_map(LockedPackageRef::as_conda))
+                (platform, packages.filter_map(LockedPackage::as_conda))
             })
     }
 
@@ -445,7 +436,7 @@ impl<'lock> Environment<'lock> {
         platform: Platform<'lock>,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_> {
         self.packages(platform)
-            .map(|packages| packages.filter_map(LockedPackageRef::as_conda))
+            .map(|packages| packages.filter_map(LockedPackage::as_conda))
     }
 
     /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
@@ -477,7 +468,7 @@ impl<'lock> Environment<'lock> {
         platform: Platform<'lock>,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock PypiPackageData> + '_> {
         self.packages(platform)
-            .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
+            .map(|pkgs| pkgs.filter_map(LockedPackage::as_pypi))
     }
 
     /// Returns whether this environment has any pypi packages for the specified platform.
@@ -501,7 +492,7 @@ impl<'lock> Environment<'lock> {
 #[derive(Clone)]
 pub struct OwnedEnvironment {
     lock_file: LockFile,
-    index: usize,
+    index: EnvironmentIndex,
 }
 
 impl OwnedEnvironment {
@@ -519,63 +510,6 @@ impl OwnedEnvironment {
     }
 }
 
-/// Data related to a single locked package in an [`Environment`].
-#[derive(Clone, Copy)]
-pub enum LockedPackageRef<'lock> {
-    /// A conda package
-    Conda(&'lock CondaPackageData),
-
-    /// A pypi package
-    Pypi(&'lock PypiPackageData),
-}
-
-impl<'lock> LockedPackageRef<'lock> {
-    /// Returns the name of the package as it occurs in the lock file. This
-    /// might not be the normalized name.
-    pub fn name(self) -> &'lock str {
-        match self {
-            LockedPackageRef::Conda(data) => data.name().as_source(),
-            LockedPackageRef::Pypi(data) => data.name().as_ref(),
-        }
-    }
-
-    /// Returns the location of the package.
-    pub fn location(self) -> &'lock UrlOrPath {
-        match self {
-            LockedPackageRef::Conda(data) => data.location(),
-            LockedPackageRef::Pypi(data) => data.location().inner(),
-        }
-    }
-
-    /// Returns the pypi package if this is a pypi package.
-    pub fn as_pypi(self) -> Option<&'lock PypiPackageData> {
-        match self {
-            LockedPackageRef::Conda(_) => None,
-            LockedPackageRef::Pypi(data) => Some(data),
-        }
-    }
-
-    /// Returns the conda package if this is a conda package.
-    pub fn as_conda(self) -> Option<&'lock CondaPackageData> {
-        match self {
-            LockedPackageRef::Conda(data) => Some(data),
-            LockedPackageRef::Pypi(..) => None,
-        }
-    }
-
-    /// Returns the package as a binary conda package if this is a binary conda
-    /// package.
-    pub fn as_binary_conda(self) -> Option<&'lock CondaBinaryData> {
-        self.as_conda().and_then(CondaPackageData::as_binary)
-    }
-
-    /// Returns the package as a source conda package if this is a source conda
-    /// package.
-    pub fn as_source_conda(self) -> Option<&'lock CondaSourceData> {
-        self.as_conda().and_then(CondaPackageData::as_source)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::path::{Path, PathBuf};
@@ -583,7 +517,7 @@ mod test {
     use rattler_conda_types::RepoDataRecord;
     use rstest::*;
 
-    use crate::platform::PlatformName;
+    use crate::{platform::PlatformName, LockedPackage};
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
@@ -777,7 +711,7 @@ mod test {
         let pypi_packages: Vec<_> = env
             .packages(linux)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
+            .filter_map(LockedPackage::as_pypi)
             .collect();
 
         // Package from a custom index should have that index_url
@@ -855,7 +789,7 @@ packages:
         let pypi_packages: Vec<_> = env
             .packages(linux)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
+            .filter_map(LockedPackage::as_pypi)
             .collect();
 
         // Package without explicit index: should use the first environment index
@@ -902,7 +836,7 @@ packages:
         for pkg in env
             .packages(platform)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
+            .filter_map(LockedPackage::as_pypi)
         {
             if let Some(wheel) = pkg.as_wheel() {
                 assert!(
@@ -927,7 +861,7 @@ packages:
         let numpy = env
             .packages(platform)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
+            .filter_map(LockedPackage::as_pypi)
             .find(|p| p.name().as_ref() == "numpy")
             .expect("numpy package");
         assert!(numpy.as_wheel().unwrap().index_url.is_none());
@@ -966,7 +900,7 @@ package:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         assert!(pkg.as_wheel().unwrap().index_url.is_none());
@@ -1000,7 +934,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         assert_eq!(
@@ -1117,7 +1051,7 @@ packages:
             .unwrap()
             .packages(platform)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_source_conda)
+            .find_map(LockedPackage::as_source_conda)
             .expect("expected a source package");
 
         // Partial metadata: record() should return None, name() should work.
@@ -1160,7 +1094,7 @@ packages:
             .unwrap()
             .packages(platform)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_source_conda)
+            .find_map(LockedPackage::as_source_conda)
             .expect("expected a source package");
 
         // The hash read from the lock file must be stored verbatim, not recomputed.
@@ -1199,7 +1133,7 @@ packages:
             .unwrap()
             .packages(platform)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_source_conda)
+            .filter_map(LockedPackage::as_source_conda)
             .collect();
 
         assert_eq!(source_packages.len(), 2);
@@ -1262,7 +1196,7 @@ packages:
         let pypi_packages: Vec<_> = env
             .packages(platform)
             .unwrap()
-            .filter_map(super::LockedPackageRef::as_pypi)
+            .filter_map(LockedPackage::as_pypi)
             .collect();
 
         assert_eq!(pypi_packages.len(), 3);
@@ -1448,7 +1382,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let source = pkg
@@ -1484,7 +1418,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let source = pkg
@@ -1522,7 +1456,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let source = pkg
@@ -1561,7 +1495,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let wheel = pkg
@@ -1605,7 +1539,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let wheel = pkg
@@ -1646,7 +1580,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let wheel = pkg
@@ -1689,7 +1623,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let wheel = pkg
@@ -1739,7 +1673,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let wheel = pkg
@@ -1785,7 +1719,7 @@ packages:
             .unwrap()
             .packages(linux)
             .unwrap()
-            .find_map(super::LockedPackageRef::as_pypi)
+            .find_map(LockedPackage::as_pypi)
             .expect("expected a pypi package");
 
         let source = pkg

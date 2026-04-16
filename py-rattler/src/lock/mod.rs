@@ -517,7 +517,7 @@ impl PyEnvironment {
     pub fn packages(&self, platform: PyLockPlatform) -> Option<Vec<PyLockedPackage>> {
         self.as_ref()
             .packages(platform.platform())
-            .map(|packages| packages.map(LockedPackage::from).map(Into::into).collect())
+            .map(|packages| packages.cloned().map(Into::into).collect())
     }
 
     /// Returns a list of all packages and platforms defined for this
@@ -529,7 +529,7 @@ impl PyEnvironment {
             .map(|(platform, pkgs)| {
                 (
                     platform.to_owned(&lock_file).into(),
-                    pkgs.map(|pkg| LockedPackage::from(pkg).into()).collect(),
+                    pkgs.cloned().map(Into::into).collect(),
                 )
             })
             .collect()
