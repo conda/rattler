@@ -24,11 +24,12 @@ use tokio::{
     time::{sleep, Duration, Instant},
 };
 
-#[cfg(any(target_os = "linux", target_os = "netbsd"))]
+#[cfg(target_os = "linux")]
 use nix::pty::ptsname_r;
 
 #[cfg(target_os = "netbsd")]
-/// NetBSD implementation using libc::ptsname_r
+/// NetBSD has `ptsname_r` in libc but apparently the `nix` crate does not expose it for NetBSD.
+/// Call `libc::ptsname_r` directly.
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     use std::ffi::CStr;
 
