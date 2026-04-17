@@ -7,9 +7,9 @@ use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner, PackageIndex,
-    ParseCondaLockError, PlatformIndex, PypiIndexes, PypiPackageData, SolveOptions,
-    SourceIdentifier, UrlOrPath, Verbatim,
+    CondaSourceData, EnvironmentData, EnvironmentIndex, EnvironmentPackages, LockFile,
+    LockFileInner, PackageHandle, PackageIndex, ParseCondaLockError, PlatformIndex, PypiIndexes,
+    PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath, Verbatim,
 };
 
 /// Information about a single locked package in an environment.
@@ -85,14 +85,16 @@ impl LockedPackage {
         }
     }
 
-    /// Returns a string that uniquely identifies this package in a lockfile.
+    /// Returns the opaque [`SelectorId`] that uniquely identifies this
+    /// package within a lockfile.
     ///
-    /// This matches the selector key used in the serialized lockfile format:
+    /// The underlying string matches the selector key used in the serialized
+    /// lockfile format:
     /// - Binary conda: the location URL/path
     /// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
     /// - Pypi: the verbatim location (preserving the original string if present)
-    pub fn selector_id(&self) -> String {
-        match self {
+    pub(crate) fn selector_id(&self) -> crate::SelectorId {
+        let raw = match self {
             LockedPackage::Conda(CondaPackageData::Binary(data)) => data.location.to_string(),
             LockedPackage::Conda(CondaPackageData::Source(data)) => {
                 SourceIdentifier::from_source_data(data).to_string()
@@ -103,7 +105,8 @@ impl LockedPackage {
                     .given()
                     .map_or_else(|| location.inner().to_string(), String::from)
             }
-        }
+        };
+        crate::SelectorId::new(raw)
     }
 }
 
@@ -375,10 +378,7 @@ impl LockFileBuilder {
     /// deduplication/merging) without adding it to any environment. Returns
     /// a [`PackageHandle`] that can be inserted into an
     /// [`EnvironmentPackages`] set later.
-    pub fn register_conda_package(
-        &mut self,
-        locked_package: CondaPackageData,
-    ) -> crate::PackageHandle {
+    pub fn register_conda_package(&mut self, locked_package: CondaPackageData) -> PackageHandle {
         let package_index = match &locked_package {
             CondaPackageData::Binary(binary_data) => {
                 let unique_identifier = UniqueBinaryIdentifier::from(binary_data.as_ref());
@@ -415,7 +415,7 @@ impl LockFileBuilder {
             }
         };
 
-        crate::PackageHandle::new(package_index, &self.packages[package_index.0])
+        PackageHandle::new(package_index, &self.packages[package_index.0])
     }
 
     /// Adds a pypi locked package to a specific environment and platform.
@@ -464,12 +464,9 @@ impl LockFileBuilder {
 
     /// Registers a pypi package into the lockfile's package list
     /// (deduplicating by location and merging `requires_dist`) without
-    /// adding it to any environment. Returns a [`PackageHandle`] that can be
-    /// inserted into an [`EnvironmentPackages`] set later.
-    pub fn register_pypi_package(
-        &mut self,
-        locked_package: PypiPackageData,
-    ) -> crate::PackageHandle {
+    /// adding it to any environment. Returns a [`PackageHandle`] that
+    /// can be inserted into an [`EnvironmentPackages`] set later.
+    pub fn register_pypi_package(&mut self, locked_package: PypiPackageData) -> PackageHandle {
         let location = locked_package.location().clone();
         let package_index = if let Some(&existing_idx) = self.pypi_package_indices.get(&location) {
             let LockedPackage::Pypi(pypi_package) = &mut self.packages[existing_idx.0] else {
@@ -484,7 +481,7 @@ impl LockFileBuilder {
             index
         };
 
-        crate::PackageHandle::new(package_index, &self.packages[package_index.0])
+        PackageHandle::new(package_index, &self.packages[package_index.0])
     }
 
     /// Registers a conda source package and attaches the provided build and
@@ -497,9 +494,9 @@ impl LockFileBuilder {
     pub fn register_conda_source_package(
         &mut self,
         mut data: CondaSourceData,
-        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
-        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
-    ) -> Result<crate::PackageHandle, RegisterSourcePackageError> {
+        build_packages: impl IntoIterator<Item = PackageHandle>,
+        host_packages: impl IntoIterator<Item = PackageHandle>,
+    ) -> Result<PackageHandle, RegisterSourcePackageError> {
         data.source_data = self.build_source_data(build_packages, host_packages)?;
         Ok(self.register_conda_package(CondaPackageData::Source(Box::new(data))))
     }
@@ -514,17 +511,17 @@ impl LockFileBuilder {
     pub fn register_pypi_source_package(
         &mut self,
         mut data: crate::PypiSourceData,
-        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
-        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
-    ) -> Result<crate::PackageHandle, RegisterSourcePackageError> {
+        build_packages: impl IntoIterator<Item = PackageHandle>,
+        host_packages: impl IntoIterator<Item = PackageHandle>,
+    ) -> Result<PackageHandle, RegisterSourcePackageError> {
         data.source_data = self.build_source_data(build_packages, host_packages)?;
         Ok(self.register_pypi_package(PypiPackageData::Source(Box::new(data))))
     }
 
     fn build_source_data(
         &self,
-        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
-        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
+        build_packages: impl IntoIterator<Item = PackageHandle>,
+        host_packages: impl IntoIterator<Item = PackageHandle>,
     ) -> Result<crate::SourceData, RegisterSourcePackageError> {
         let build_packages: Vec<_> = build_packages.into_iter().collect();
         let host_packages: Vec<_> = host_packages.into_iter().collect();
@@ -532,8 +529,8 @@ impl LockFileBuilder {
             handle.get(&self.packages)?;
         }
         Ok(crate::SourceData {
-            build_packages: crate::EnvironmentPackages::from_handles(build_packages)?,
-            host_packages: crate::EnvironmentPackages::from_handles(host_packages)?,
+            build_packages: EnvironmentPackages::from_handles(build_packages)?,
+            host_packages: EnvironmentPackages::from_handles(host_packages)?,
         })
     }
 
@@ -1083,15 +1080,15 @@ mod test {
             &pypi_source_handle.selector_id,
         ] {
             assert!(
-                yaml.contains(expected),
-                "expected selector id {expected:?} in rendered YAML:\n{yaml}"
+                yaml.contains(expected.as_str()),
+                "expected selector id {expected} in rendered YAML:\n{yaml}"
             );
         }
 
         // The orphan package must be stripped from the serialized output.
         assert!(
-            !yaml.contains(&orphan.selector_id),
-            "unreferenced package {:?} should not appear in the rendered YAML:\n{yaml}",
+            !yaml.contains(orphan.selector_id.as_str()),
+            "unreferenced package {} should not appear in the rendered YAML:\n{yaml}",
             orphan.selector_id
         );
 

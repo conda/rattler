@@ -147,8 +147,39 @@ struct LockFileInner {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PackageIndex(usize);
 
+/// Opaque identifier that refers to a single package within a [`LockFile`].
+///
+/// Produced by the crate whenever a package is registered; external callers
+/// only ever see the value by [`Display`] — typically when it surfaces in an
+/// error message. The underlying string representation is intentionally
+/// hidden so the lockfile format can evolve without exposing its encoding.
+///
+/// [`Display`]: std::fmt::Display
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct SelectorId(String);
+
+impl SelectorId {
+    pub(crate) fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for SelectorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// An opaque handle to a package stored in a [`LockFile`], bundling its
-/// [`PackageIndex`] with the selector-id string used to refer to it in the
+/// [`PackageIndex`] with the [`SelectorId`] used to refer to it in the
 /// lockfile format.
 ///
 /// Handles are produced by the lockfile builder (`register_*_package`) and
@@ -157,14 +188,15 @@ pub struct PackageIndex(usize);
 /// handle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageHandle {
-    pub(crate) selector_id: String,
+    pub(crate) selector_id: SelectorId,
     pub(crate) index: PackageIndex,
 }
 
 impl std::hash::Hash for PackageHandle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.selector_id.len().hash(state);
-        self.selector_id.hash(state);
+        let id = self.selector_id.as_str();
+        id.len().hash(state);
+        id.hash(state);
     }
 }
 
@@ -233,16 +265,16 @@ pub enum InvalidPackageHandleError {
     /// The handle's stored selector id doesn't match the package at its
     /// index — the handle was produced against a different lockfile.
     #[error(
-        "PackageHandle index {index} stores selector id {expected:?} but the \
-         package at that index has selector id {actual:?}"
+        "PackageHandle index {index} stores selector id {expected} but the \
+         package at that index has selector id {actual}"
     )]
     SelectorMismatch {
         /// The index stored by the handle.
         index: usize,
         /// The selector id the handle claims belongs to that index.
-        expected: String,
+        expected: SelectorId,
         /// The selector id of the package actually at that index.
-        actual: String,
+        actual: SelectorId,
     },
 }
 
@@ -250,21 +282,21 @@ pub enum InvalidPackageHandleError {
 /// handle conflicts with an existing entry.
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "EnvironmentPackages: inconsistent insert of (PackageIndex({index}), {selector_id:?}) \
+    "EnvironmentPackages: inconsistent insert of (PackageIndex({index}), {selector_id}) \
      — either the index or the selector id is already mapped to a different value"
 )]
 pub struct InconsistentInsertError {
     /// The package index that was being inserted.
     pub index: usize,
     /// The selector id that was being inserted.
-    pub selector_id: String,
+    pub selector_id: SelectorId,
 }
 
 /// A deduplicated set of package references, each stored as a
-/// [`PackageIndex`] paired with its [`LockedPackage::selector_id`] string.
+/// [`PackageIndex`] paired with its [`SelectorId`].
 ///
-/// Entries are always sorted by selector id. Both the selector id string and
-/// the [`PackageIndex`] are kept unique — re-inserting the exact same
+/// Entries are always sorted by selector id. Both the selector id and the
+/// [`PackageIndex`] are kept unique — re-inserting the exact same
 /// `(index, selector_id)` pair is a no-op, and inserting a new pair that
 /// reuses one value but not the other is an [`InconsistentInsertError`].
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
@@ -275,9 +307,9 @@ pub struct EnvironmentPackages {
 }
 
 impl EnvironmentPackages {
-    /// Returns the referenced packages as a list of selector-id strings in
-    /// the set's sorted order.
-    pub fn to_selector_ids(&self) -> Vec<String> {
+    /// Returns the referenced packages as a list of [`SelectorId`]s in the
+    /// set's sorted order.
+    pub(crate) fn to_selector_ids(&self) -> Vec<SelectorId> {
         self.entries
             .iter()
             .map(|handle| handle.selector_id.clone())
@@ -285,15 +317,15 @@ impl EnvironmentPackages {
     }
 
     /// Builds an `EnvironmentPackages` by resolving a list of selector-id
-    /// strings to [`PackageIndex`] values via the caller-supplied `resolve`
-    /// closure.
+    /// strings (as read from the serialized lockfile) to [`PackageHandle`]s
+    /// via the caller-supplied `resolve` closure.
     ///
     /// The closure's `Err` path lets callers produce a context-rich error
     /// when a selector string does not correspond to a known package.
     /// `FromSelectorIdsError` wraps either that error or a consistency
     /// violation ([`InconsistentInsertError`]) when two entries reuse an
     /// index or a selector id with a different counterpart.
-    pub fn from_selector_ids<I, E>(
+    pub(crate) fn from_selector_ids<I, E>(
         strings: I,
         mut resolve: impl FnMut(&str) -> Result<PackageHandle, E>,
     ) -> Result<Self, FromSelectorIdsError<E>>
@@ -368,18 +400,6 @@ impl EnvironmentPackages {
         )
     }
 
-    /// Returns `true` if the set contains the given package index.
-    pub fn contains_index(&self, index: PackageIndex) -> bool {
-        self.entries.iter().any(|existing| existing.index == index)
-    }
-
-    /// Returns `true` if the set contains the given selector id.
-    pub fn contains_selector_id(&self, selector_id: &str) -> bool {
-        self.entries
-            .binary_search_by(|existing| existing.selector_id.as_str().cmp(selector_id))
-            .is_ok()
-    }
-
     /// Returns the number of packages in the set.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -397,9 +417,9 @@ impl EnvironmentPackages {
     }
 }
 
-/// Error returned by [`EnvironmentPackages::from_selector_ids`] when either
-/// the resolver closure fails for some string or the resolved entries are
-/// internally inconsistent.
+/// Error returned when parsing selector-id strings for an
+/// [`EnvironmentPackages`] set, reporting either a failed lookup from the
+/// resolver closure or an internal inconsistency among the resolved entries.
 #[derive(Debug, thiserror::Error)]
 pub enum FromSelectorIdsError<E> {
     /// The resolver closure failed to map a selector id to a

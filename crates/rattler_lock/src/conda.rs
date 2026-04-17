@@ -521,41 +521,6 @@ pub struct InputHash {
     pub globs: Vec<String>,
 }
 
-impl PartialOrd<Self> for CondaPackageData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for CondaPackageData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Compare by location first
-        self.location()
-            .cmp(other.location())
-            // Then by name
-            .then_with(|| self.name().cmp(other.name()))
-            // Then by additional fields from package records if available
-            .then_with(|| match (self.record(), other.record()) {
-                (Some(pkg_a), Some(pkg_b)) => pkg_a
-                    .version
-                    .cmp(&pkg_b.version)
-                    .then_with(|| pkg_a.build.cmp(&pkg_b.build))
-                    .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir)),
-                (Some(_), None) => Ordering::Less,
-                (None, Some(_)) => Ordering::Greater,
-                (None, None) => Ordering::Equal,
-            })
-            // For source packages, also compare by variants and build source as tiebreakers
-            .then_with(|| match (self.as_source(), other.as_source()) {
-                (Some(src_a), Some(src_b)) => src_a
-                    .variants
-                    .cmp(&src_b.variants)
-                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
-                _ => Ordering::Equal,
-            })
-    }
-}
-
 impl From<RepoDataRecord> for CondaPackageData {
     fn from(value: RepoDataRecord) -> Self {
         let location = UrlOrPath::from(value.url).normalize().into_owned();

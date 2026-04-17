@@ -2,7 +2,6 @@ use crate::{PackageHashes, SourceData, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
-use std::cmp::Ordering;
 use std::fs;
 use std::path::Path;
 
@@ -62,53 +61,6 @@ pub struct PypiSourceData {
     /// The build and host environment packages needed to build this source
     /// package.
     pub source_data: SourceData,
-}
-
-impl PartialOrd for PypiDistributionData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PypiDistributionData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name
-            .cmp(&other.name)
-            .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.location.cmp(&other.location))
-            .then_with(|| self.hash.cmp(&other.hash))
-    }
-}
-
-impl PartialOrd for PypiSourceData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PypiSourceData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name
-            .cmp(&other.name)
-            .then_with(|| self.location.cmp(&other.location))
-    }
-}
-
-impl PartialOrd for PypiPackageData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PypiPackageData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::Distribution(a), Self::Distribution(b)) => a.cmp(b),
-            (Self::Source(a), Self::Source(b)) => a.cmp(b),
-            (Self::Distribution(_), Self::Source(_)) => Ordering::Less,
-            (Self::Source(_), Self::Distribution(_)) => Ordering::Greater,
-        }
-    }
 }
 
 impl PypiPackageData {

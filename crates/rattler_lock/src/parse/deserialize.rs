@@ -17,10 +17,12 @@ use crate::{
         models::{self, legacy::LegacyCondaPackageData, v6, v7},
         V5, V6, V7,
     },
+    platform::{ParsePlatformError, PlatformData, PlatformName},
     Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
-    EnvironmentPackages, LockFile, LockFileInner, LockedPackage, PackageHashes, PackageIndex,
-    ParseCondaLockError, PlatformIndex, PypiDistributionData, PypiIndexes, PypiPackageData,
-    PypiSourceData, SolveOptions, SourceIdentifier, UrlOrPath, Verbatim,
+    EnvironmentPackages, LockFile, LockFileInner, LockedPackage, PackageHandle, PackageHashes,
+    PackageIndex, ParseCondaLockError, PlatformIndex, PypiDistributionData, PypiIndexes,
+    PypiPackageData, PypiSourceData, SolveOptions, SourceData, SourceIdentifier, UrlOrPath,
+    Verbatim,
 };
 
 #[serde_as]
@@ -61,8 +63,8 @@ struct DeserializablePlatformData {
     virtual_packages: Vec<String>,
 }
 
-impl TryFrom<&DeserializablePlatformData> for crate::platform::PlatformData {
-    type Error = crate::platform::ParsePlatformError;
+impl TryFrom<&DeserializablePlatformData> for PlatformData {
+    type Error = ParsePlatformError;
 
     fn try_from(value: &DeserializablePlatformData) -> Result<Self, Self::Error> {
         let subdir = value.subdir.as_ref().map_or_else(
@@ -71,7 +73,7 @@ impl TryFrom<&DeserializablePlatformData> for crate::platform::PlatformData {
         )?;
 
         Ok(Self {
-            name: crate::platform::PlatformName::try_from(value.name.clone())?,
+            name: PlatformName::try_from(value.name.clone())?,
             subdir,
             virtual_packages: value.virtual_packages.clone(),
         })
@@ -461,7 +463,7 @@ fn convert_raw_pypi_package(
             location,
             requires_dist,
             requires_python: raw_package.requires_python,
-            source_data: crate::SourceData::default(),
+            source_data: SourceData::default(),
         })))
     }
 }
@@ -744,7 +746,7 @@ fn parse_from_lock_legacy<P>(
 /// listed there and turn those into `Platform`.
 fn create_legacy_platforms<P>(
     raw: &DeserializableLockFileLegacy<P>,
-) -> Result<Vec<crate::platform::PlatformData>, ParseCondaLockError> {
+) -> Result<Vec<PlatformData>, ParseCondaLockError> {
     let mut unique_platforms = ahash::HashSet::default();
     raw.environments
         .iter()
@@ -755,9 +757,9 @@ fn create_legacy_platforms<P>(
         })
         .filter(move |(_, platform)| unique_platforms.insert(*platform))
         .map(|(_, subdir)| -> Result<_, ParseCondaLockError> {
-            let name = crate::platform::PlatformName::try_from(subdir.as_str())?;
+            let name = PlatformName::try_from(subdir.as_str())?;
 
-            Ok(crate::platform::PlatformData {
+            Ok(PlatformData {
                 name,
                 subdir: *subdir,
                 virtual_packages: Vec::new(),
@@ -769,11 +771,11 @@ fn create_legacy_platforms<P>(
 /// Extract a `Vec<Platform>` from the lock file.
 fn read_platforms<P>(
     raw: &DeserializableLockFile<P>,
-) -> Result<Vec<crate::platform::PlatformData>, ParseCondaLockError> {
+) -> Result<Vec<PlatformData>, ParseCondaLockError> {
     let mut unique_platforms = ahash::HashSet::default();
     raw.platforms
         .iter()
-        .map(crate::platform::PlatformData::try_from)
+        .map(PlatformData::try_from)
         .map(move |platform| match platform {
             Ok(platform) => {
                 if unique_platforms.insert(platform.name.clone()) {
@@ -871,10 +873,10 @@ fn parse_from_lock<P>(
         // Try conda binary (by URL), then source (by SourceIdentifier), then
         // pypi (by Verbatim<UrlOrPath>). The selector id formats don't
         // overlap between variants, so the first lookup that parses wins.
-        if let Some(index) = s
-            .parse::<UrlOrPath>()
-            .ok()
-            .and_then(|url| binary_url_lookup.get(&url).copied())
+        let url_or_path = s.parse::<UrlOrPath>().ok();
+        if let Some(index) = url_or_path
+            .as_ref()
+            .and_then(|url| binary_url_lookup.get(url).copied())
         {
             Ok(index)
         } else if let Some(index) = s
@@ -883,9 +885,7 @@ fn parse_from_lock<P>(
             .and_then(|identifier| source_identifier_lookup.get(&identifier).copied())
         {
             Ok(index)
-        } else if let Some(index) = s
-            .parse::<UrlOrPath>()
-            .ok()
+        } else if let Some(index) = url_or_path
             .map(Verbatim::new)
             .and_then(|verbatim| pypi_url_lookup.get(&verbatim).copied())
         {
@@ -903,16 +903,16 @@ fn parse_from_lock<P>(
         // Resolve in a scoped block so the immutable borrow of `packages`
         // that the closure takes is dropped before we mutate `packages`.
         let (build_packages, host_packages) = {
-            let resolve = |s: &str| -> Result<crate::PackageHandle, ParseCondaLockError> {
+            let resolve = |s: &str| -> Result<PackageHandle, ParseCondaLockError> {
                 let index = resolve_index(s)?;
-                Ok(crate::PackageHandle::new(index, &packages[index.0]))
+                Ok(PackageHandle::new(index, &packages[index.0]))
             };
-            let build = crate::EnvironmentPackages::from_selector_ids(build_strings, &resolve)?;
-            let host = crate::EnvironmentPackages::from_selector_ids(host_strings, &resolve)?;
+            let build = EnvironmentPackages::from_selector_ids(build_strings, &resolve)?;
+            let host = EnvironmentPackages::from_selector_ids(host_strings, &resolve)?;
             (build, host)
         };
 
-        let source_data = crate::SourceData {
+        let source_data = SourceData {
             build_packages,
             host_packages,
         };
