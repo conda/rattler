@@ -921,4 +921,238 @@ mod test {
             Err(crate::RegisterSourcePackageError::InvalidHandle(_))
         ));
     }
+
+    #[test]
+    fn lock_file_with_conda_and_pypi_source_packages_serializes_all_packages() {
+        use std::collections::BTreeMap;
+
+        use pep508_rs::PackageName as PypiPackageName;
+        use typed_path::Utf8TypedPathBuf;
+
+        use crate::{
+            CondaPackageData, CondaSourceData, LockedPackage, PypiPackageData, PypiSourceData,
+            SourceMetadata, UrlOrPath, Verbatim,
+        };
+
+        let make_binary = |name: &str| {
+            let mut record = PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str("1.0.0").unwrap(),
+                "build0".into(),
+            );
+            record.subdir = "linux-64".into();
+            // Use a path location: path-based locations derive no channel,
+            // which keeps the serialized YAML free of the `channel: null`
+            // quirk triggered by URL-based binaries with explicit
+            // `channel: None`.
+            CondaBinaryData {
+                package_record: record,
+                location: UrlOrPath::Path(Utf8TypedPathBuf::from(format!(
+                    "./{name}-1.0.0-build0.tar.bz2"
+                ))),
+                file_name: format!("{name}-1.0.0-build0.tar.bz2")
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                channel: None,
+            }
+        };
+
+        let make_conda_source = |name: &str| CondaSourceData {
+            location: UrlOrPath::Path(Utf8TypedPathBuf::from(format!("./{name}"))),
+            package_build_source: None,
+            variants: BTreeMap::new(),
+            identifier_hash: None,
+            sources: BTreeMap::new(),
+            source_data: crate::SourceData::default(),
+            metadata: SourceMetadata::Full(Box::new({
+                let mut record = PackageRecord::new(
+                    PackageName::new_unchecked(name),
+                    Version::from_str("0.1.0").unwrap(),
+                    "py_0".into(),
+                );
+                record.subdir = "noarch".into();
+                record
+            })),
+        };
+
+        let make_pypi_source = |name: &str| PypiSourceData {
+            name: PypiPackageName::from_str(name).unwrap(),
+            location: Verbatim::new(UrlOrPath::Path(Utf8TypedPathBuf::from(format!("./{name}")))),
+            requires_dist: vec![],
+            requires_python: None,
+            source_data: crate::SourceData::default(),
+        };
+
+        let mut builder = LockFile::builder()
+            .with_platforms(vec![crate::PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap();
+
+        // Register the four binary packages that will serve as build/host
+        // environments for the two source packages.
+        let conda_compiler = builder.register_conda_package(make_binary("conda-compiler").into());
+        let conda_runtime = builder.register_conda_package(make_binary("conda-runtime").into());
+        let pypi_builder = builder.register_conda_package(make_binary("pypi-build-tool").into());
+        let pypi_runtime = builder.register_conda_package(make_binary("pypi-runtime").into());
+
+        // Register the two source packages, each with its own build/host pair.
+        let conda_source_handle = builder
+            .register_conda_source_package(
+                make_conda_source("my-conda-pkg"),
+                [conda_compiler.clone()],
+                [conda_runtime.clone()],
+            )
+            .unwrap();
+        let pypi_source_handle = builder
+            .register_pypi_source_package(
+                make_pypi_source("my-pypi-pkg"),
+                [pypi_builder.clone()],
+                [pypi_runtime.clone()],
+            )
+            .unwrap();
+
+        // An extra package that nothing references — neither added to an
+        // environment, nor used as a build/host/runtime dependency. It must
+        // be stripped from the serialized output.
+        let orphan = builder.register_conda_package(make_binary("orphan").into());
+
+        // Make every registered package reachable from the environment so it
+        // actually appears in the serialized packages list.
+        builder
+            .add_conda_package("default", "linux-64", make_binary("conda-compiler").into())
+            .unwrap()
+            .add_conda_package("default", "linux-64", make_binary("conda-runtime").into())
+            .unwrap()
+            .add_conda_package("default", "linux-64", make_binary("pypi-build-tool").into())
+            .unwrap()
+            .add_conda_package("default", "linux-64", make_binary("pypi-runtime").into())
+            .unwrap()
+            .add_conda_package(
+                "default",
+                "linux-64",
+                CondaPackageData::Source(Box::new(make_conda_source("my-conda-pkg"))),
+            )
+            .unwrap()
+            .add_pypi_package(
+                "default",
+                "linux-64",
+                PypiPackageData::Source(Box::new(make_pypi_source("my-pypi-pkg"))),
+            )
+            .unwrap();
+
+        let lock_file = builder.finish();
+
+        // The two source packages still carry the source_data populated by
+        // `register_*_source_package` — deduplication kept the first
+        // registration and its build/host environments.
+        let conda_source = lock_file.inner.packages[conda_source_handle.index.0]
+            .as_source_conda()
+            .unwrap();
+        assert_eq!(
+            conda_source.source_data.build_packages.to_selector_ids(),
+            vec![conda_compiler.selector_id.clone()]
+        );
+        assert_eq!(
+            conda_source.source_data.host_packages.to_selector_ids(),
+            vec![conda_runtime.selector_id.clone()]
+        );
+        let pypi_source = lock_file.inner.packages[pypi_source_handle.index.0]
+            .as_pypi()
+            .and_then(crate::PypiPackageData::as_source)
+            .unwrap();
+        assert_eq!(
+            pypi_source.source_data.build_packages.to_selector_ids(),
+            vec![pypi_builder.selector_id.clone()]
+        );
+        assert_eq!(
+            pypi_source.source_data.host_packages.to_selector_ids(),
+            vec![pypi_runtime.selector_id.clone()]
+        );
+
+        // Serialize and check all six reachable packages appear in the YAML.
+        let yaml = lock_file.render_to_string().unwrap();
+        for expected in [
+            &conda_compiler.selector_id,
+            &conda_runtime.selector_id,
+            &pypi_builder.selector_id,
+            &pypi_runtime.selector_id,
+            &conda_source_handle.selector_id,
+            &pypi_source_handle.selector_id,
+        ] {
+            assert!(
+                yaml.contains(expected),
+                "expected selector id {expected:?} in rendered YAML:\n{yaml}"
+            );
+        }
+
+        // The orphan package must be stripped from the serialized output.
+        assert!(
+            !yaml.contains(&orphan.selector_id),
+            "unreferenced package {:?} should not appear in the rendered YAML:\n{yaml}",
+            orphan.selector_id
+        );
+
+        // Top-level packages list must contain all six (two source + four
+        // binary), each appearing exactly once as a `packages` entry.
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let top_level = parsed["packages"].as_sequence().unwrap();
+        assert_eq!(
+            top_level.len(),
+            6,
+            "expected 6 top-level packages, got {}:\n{yaml}",
+            top_level.len()
+        );
+
+        // Deserializing must succeed and expose the same six packages plus
+        // the build/host references on both source packages.
+        let reparsed = LockFile::from_str_with_base_directory(&yaml, None).unwrap();
+        assert_eq!(reparsed.inner.packages.len(), 6);
+        let reparsed_conda_source = reparsed
+            .inner
+            .packages
+            .iter()
+            .find_map(LockedPackage::as_source_conda)
+            .expect("conda source package survives round-trip");
+        assert_eq!(
+            reparsed_conda_source.source_data.build_packages.len(),
+            1,
+            "conda source kept its build package"
+        );
+        assert_eq!(
+            reparsed_conda_source.source_data.host_packages.len(),
+            1,
+            "conda source kept its host package"
+        );
+        let reparsed_pypi_source = reparsed
+            .inner
+            .packages
+            .iter()
+            .find_map(|p| p.as_pypi().and_then(crate::PypiPackageData::as_source))
+            .expect("pypi source package survives round-trip");
+        assert_eq!(
+            reparsed_pypi_source.source_data.build_packages.len(),
+            1,
+            "pypi source kept its build package"
+        );
+        assert_eq!(
+            reparsed_pypi_source.source_data.host_packages.len(),
+            1,
+            "pypi source kept its host package"
+        );
+
+        // Two full round-trips must reproduce the original YAML byte-for-byte.
+        let yaml_after_first = LockFile::from_str_with_base_directory(&yaml, None)
+            .unwrap()
+            .render_to_string()
+            .unwrap();
+        similar_asserts::assert_eq!(yaml, yaml_after_first);
+        let yaml_after_second = LockFile::from_str_with_base_directory(&yaml_after_first, None)
+            .unwrap()
+            .render_to_string()
+            .unwrap();
+        similar_asserts::assert_eq!(yaml, yaml_after_second);
+    }
 }
