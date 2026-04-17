@@ -27,6 +27,21 @@ use tokio::{
 #[cfg(any(target_os = "linux", target_os = "netbsd"))]
 use nix::pty::ptsname_r;
 
+#[cfg(target_os = "netbsd")]
+/// NetBSD implementation using libc::ptsname_r
+fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
+    use std::ffi::CStr;
+
+    let mut buf: [libc::c_char; 128] = [0; 128];
+
+    unsafe {
+        match libc::ptsname_r(fd.as_raw_fd(), buf.as_mut_ptr(), buf.len()) {
+            0 => Ok(CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()),
+            _ => Err(nix::Error::last()),
+        }
+    }
+}
+
 /// Start a process in a forked tty so you can interact with it the same as you would
 /// within a terminal
 ///
@@ -111,7 +126,7 @@ impl PtyProcess {
         grantpt(&master_fd)?;
         unlockpt(&master_fd)?;
 
-        let slave_name = unsafe { ptsname(&master_fd) }?;
+        let slave_name = ptsname_r(&master_fd)?;
 
         // Get the current window size if it was not specified
         let window_size = opts.window_size.unwrap_or_else(|| {
