@@ -94,7 +94,7 @@ mod url_or_path;
 mod utils;
 mod verbatim;
 
-pub use builder::{LockFileBuilder, LockedPackage};
+pub use builder::{LockFileBuilder, LockedPackage, RegisterSourcePackageError};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,

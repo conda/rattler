@@ -155,6 +155,21 @@ impl<'a> From<&'a CondaBinaryData> for UniqueBinaryIdentifier {
     }
 }
 
+/// Error returned by [`LockFileBuilder::register_conda_source_package`] and
+/// [`LockFileBuilder::register_pypi_source_package`].
+#[derive(Debug, thiserror::Error)]
+pub enum RegisterSourcePackageError {
+    /// A build or host [`PackageHandle`] does not refer to a package
+    /// registered with this builder.
+    #[error(transparent)]
+    InvalidHandle(#[from] crate::InvalidPackageHandleError),
+
+    /// The build or host handle list reuses either a [`PackageIndex`] or a
+    /// selector id with a different counterpart.
+    #[error(transparent)]
+    InconsistentInsert(#[from] crate::InconsistentInsertError),
+}
+
 /// Merges `requires_dist` from `other` into `existing`, adding any entries
 /// not already present. This handles the case where different environments
 /// produce different marker-evaluated dependency lists for the same package.
@@ -472,6 +487,56 @@ impl LockFileBuilder {
         crate::PackageHandle::new(package_index, &self.packages[package_index.0])
     }
 
+    /// Registers a conda source package and attaches the provided build and
+    /// host environment packages to it.
+    ///
+    /// Every handle in `build_packages` / `host_packages` must have been
+    /// produced by a prior `register_*_package` call on this builder;
+    /// passing a handle from another builder returns
+    /// [`RegisterSourcePackageError::InvalidHandle`].
+    pub fn register_conda_source_package(
+        &mut self,
+        mut data: CondaSourceData,
+        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
+        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
+    ) -> Result<crate::PackageHandle, RegisterSourcePackageError> {
+        data.source_data = self.build_source_data(build_packages, host_packages)?;
+        Ok(self.register_conda_package(CondaPackageData::Source(Box::new(data))))
+    }
+
+    /// Registers a pypi source package and attaches the provided build and
+    /// host environment packages to it.
+    ///
+    /// Every handle in `build_packages` / `host_packages` must have been
+    /// produced by a prior `register_*_package` call on this builder;
+    /// passing a handle from another builder returns
+    /// [`RegisterSourcePackageError::InvalidHandle`].
+    pub fn register_pypi_source_package(
+        &mut self,
+        mut data: crate::PypiSourceData,
+        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
+        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
+    ) -> Result<crate::PackageHandle, RegisterSourcePackageError> {
+        data.source_data = self.build_source_data(build_packages, host_packages)?;
+        Ok(self.register_pypi_package(PypiPackageData::Source(Box::new(data))))
+    }
+
+    fn build_source_data(
+        &self,
+        build_packages: impl IntoIterator<Item = crate::PackageHandle>,
+        host_packages: impl IntoIterator<Item = crate::PackageHandle>,
+    ) -> Result<crate::SourceData, RegisterSourcePackageError> {
+        let build_packages: Vec<_> = build_packages.into_iter().collect();
+        let host_packages: Vec<_> = host_packages.into_iter().collect();
+        for handle in build_packages.iter().chain(host_packages.iter()) {
+            handle.get(&self.packages)?;
+        }
+        Ok(crate::SourceData {
+            build_packages: crate::EnvironmentPackages::from_handles(build_packages)?,
+            host_packages: crate::EnvironmentPackages::from_handles(host_packages)?,
+        })
+    }
+
     /// Sets the channels of an environment.
     pub fn with_pypi_indexes(
         mut self,
@@ -739,5 +804,121 @@ mod test {
                 mode
             );
         }
+    }
+
+    #[test]
+    fn register_conda_source_package_attaches_build_and_host() {
+        use std::collections::BTreeMap;
+
+        use crate::{CondaSourceData, SourceMetadata};
+
+        let make_binary = |name: &str| {
+            let mut record = PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str("1.0.0").unwrap(),
+                "build0".into(),
+            );
+            record.subdir = "linux-64".into();
+            CondaBinaryData {
+                package_record: record,
+                location: Url::parse(&format!(
+                    "https://example.com/linux-64/{name}-1.0.0-build0.tar.bz2"
+                ))
+                .unwrap()
+                .into(),
+                file_name: format!("{name}-1.0.0-build0.tar.bz2")
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                channel: None,
+            }
+        };
+
+        let mut builder = LockFile::builder();
+        let compiler = builder.register_conda_package(make_binary("compiler").into());
+        let runtime = builder.register_conda_package(make_binary("runtime").into());
+
+        let source = CondaSourceData {
+            location: crate::UrlOrPath::Path("./my-pkg".into()),
+            package_build_source: None,
+            variants: BTreeMap::new(),
+            identifier_hash: None,
+            sources: BTreeMap::new(),
+            source_data: crate::SourceData::default(),
+            metadata: SourceMetadata::Full(Box::new(PackageRecord::new(
+                PackageName::new_unchecked("my-pkg"),
+                Version::from_str("0.1.0").unwrap(),
+                "py_0".into(),
+            ))),
+        };
+
+        let handle = builder
+            .register_conda_source_package(source, [compiler.clone()], [runtime.clone()])
+            .unwrap();
+
+        let lock_file = builder.finish();
+        let packages = &lock_file.inner.packages;
+        let source_data = packages[handle.index.0]
+            .as_source_conda()
+            .expect("registered package is a source conda package")
+            .source_data
+            .clone();
+        assert_eq!(
+            source_data.build_packages.to_selector_ids(),
+            vec![compiler.selector_id]
+        );
+        assert_eq!(
+            source_data.host_packages.to_selector_ids(),
+            vec![runtime.selector_id]
+        );
+    }
+
+    #[test]
+    fn register_conda_source_package_rejects_foreign_handle() {
+        use std::collections::BTreeMap;
+
+        use crate::{CondaSourceData, SourceMetadata};
+
+        let binary = CondaBinaryData {
+            package_record: {
+                let mut r = PackageRecord::new(
+                    PackageName::new_unchecked("other"),
+                    Version::from_str("1.0.0").unwrap(),
+                    "build0".into(),
+                );
+                r.subdir = "linux-64".into();
+                r
+            },
+            location: Url::parse("https://example.com/linux-64/other-1.0.0-build0.tar.bz2")
+                .unwrap()
+                .into(),
+            file_name: "other-1.0.0-build0.tar.bz2"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            channel: None,
+        };
+
+        let mut foreign = LockFile::builder();
+        let foreign_handle = foreign.register_conda_package(binary.into());
+
+        let mut builder = LockFile::builder();
+        let source = CondaSourceData {
+            location: crate::UrlOrPath::Path("./my-pkg".into()),
+            package_build_source: None,
+            variants: BTreeMap::new(),
+            identifier_hash: None,
+            sources: BTreeMap::new(),
+            source_data: crate::SourceData::default(),
+            metadata: SourceMetadata::Full(Box::new(PackageRecord::new(
+                PackageName::new_unchecked("my-pkg"),
+                Version::from_str("0.1.0").unwrap(),
+                "py_0".into(),
+            ))),
+        };
+
+        let result = builder.register_conda_source_package(source, [foreign_handle], []);
+        assert!(matches!(
+            result,
+            Err(crate::RegisterSourcePackageError::InvalidHandle(_))
+        ));
     }
 }
