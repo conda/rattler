@@ -304,11 +304,19 @@ pub enum PackageRef<'a> {
     Pypi(&'a PypiPackageData),
 }
 
-impl PackageData<'_> {
-    fn source_name(&self) -> &str {
-        match self.package {
-            PackageRef::Conda(p) => p.name().as_source(),
-            PackageRef::Pypi(p) => p.name().as_ref(),
+impl PackageRef<'_> {
+    fn selector_id(&self) -> String {
+        match self {
+            PackageRef::Conda(CondaPackageData::Binary(data)) => data.location.to_string(),
+            PackageRef::Conda(CondaPackageData::Source(data)) => {
+                crate::SourceIdentifier::from_source_data(data).to_string()
+            }
+            PackageRef::Pypi(data) => {
+                let location = data.location();
+                location
+                    .given()
+                    .map_or_else(|| location.inner().to_string(), String::from)
+            }
         }
     }
 }
@@ -329,15 +337,7 @@ impl PartialOrd<Self> for PackageData<'_> {
 
 impl Ord for PackageData<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        use PackageRef::{Conda, Pypi};
-        self.source_name().cmp(other.source_name()).then_with(|| {
-            match (self.package, other.package) {
-                (Conda(a), Conda(b)) => a.cmp(b),
-                (Pypi(a), Pypi(b)) => a.cmp(b),
-                (Pypi(_), _) => Ordering::Less,
-                (_, Pypi(_)) => Ordering::Greater,
-            }
-        })
+        self.package.selector_id().cmp(&other.package.selector_id())
     }
 }
 
