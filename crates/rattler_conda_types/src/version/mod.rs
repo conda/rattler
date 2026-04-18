@@ -1231,8 +1231,10 @@ mod test {
 
     #[test]
     fn dev_is_only_special_for_exact_runs() {
+        // Because 1.2.devdev is not considered a dev version, it must sort after 1.2dev
         assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2.devdev").unwrap());
         assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2devdev").unwrap());
+        // Same with post
         assert!(Version::from_str("1.2postpost").unwrap() < Version::from_str("1.2post").unwrap());
 
         // 1.2dev is a dev version, but 1.2devdev is not.
