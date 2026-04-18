@@ -19,6 +19,9 @@ class ChannelConfig:
         ChannelConfig(channel_alias="https://repo.prefix.dev/", root_dir="/path/to/root/dir")
         >>>
         ```
+
+        Raises:
+            InvalidUrlError: If the channel alias is invalid.
         """
         if root_dir is None:
             # Use the current working directory as the root directory.

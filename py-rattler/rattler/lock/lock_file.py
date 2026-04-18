@@ -35,6 +35,9 @@ class LockFile:
         LockFile()
         >>>
         ```
+
+        Raises:
+            IoError: If the lock file could not be read.
         """
         return LockFile._from_py_lock_file(PyLockFile.from_path(path))
 
@@ -51,6 +54,9 @@ class LockFile:
         ...     lock_file.to_path(fp.name)
         >>>
         ```
+
+        Raises:
+            IoError: If the lock file could not be written.
         """
         return self._lock_file.to_path(path)
 

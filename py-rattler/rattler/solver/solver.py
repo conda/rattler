@@ -82,6 +82,9 @@ async def solve(
 
     Returns:
         Resolved list of `RepoDataRecord`s.
+
+    Raises:
+        ValueError: If the solver failed to find a solution.
     """
 
     platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
@@ -189,6 +192,9 @@ async def solve_with_sparse_repodata(
 
     Returns:
         Resolved list of `RepoDataRecord`s.
+
+    Raises:
+        ValueError: If the solver failed to find a solution.
     """
     return [
         RepoDataRecord._from_py_record(solved_package)

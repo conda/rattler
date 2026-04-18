@@ -348,6 +348,9 @@ async def install(
         reporter: An optional :class:`InstallerReporter` instance that receives progress
                 callbacks during installation. When provided, `show_progress` is ignored.
                 Subclass :class:`InstallerReporter` and override the methods you need.
+
+    Raises:
+        ValueError: If the installation fails.
     """
 
     await py_install(

@@ -35,6 +35,14 @@ class Client:
         user_agent: str | None = None,
         timeout: int | None = None,
     ) -> None:
+        """
+        Create a new client with the given middlewares, headers, user agent and timeout.
+
+        Raises:
+            InvalidHeaderNameError: If a header name is invalid.
+        InvalidHeaderValueError: If a header value is invalid.
+        AuthenticationStorageError: If the authentication storage could not be queried.
+        """
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None,
             headers,

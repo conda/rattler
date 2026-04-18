@@ -112,6 +112,9 @@ class MatchSpec:
         InvalidMatchSpecError: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the match specification is invalid.
         """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(

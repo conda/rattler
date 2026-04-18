@@ -58,6 +58,12 @@ class SparseRepoData:
         subdir: str,
         path: os.PathLike[str] | str,
     ) -> None:
+        """
+        Construct a new SparseRepoData from a channel, subdirectory, and path.
+
+        Raises:
+            ValueError: If the repodata file is invalid or cannot be loaded.
+        """
         if not isinstance(channel, Channel):
             raise TypeError(
                 "SparseRepoData constructor received unsupported type "

@@ -5,6 +5,12 @@ from rattler.rattler import PyPackageName
 
 class PackageName:
     def __init__(self, source: str) -> None:
+        """
+        Construct a new PackageName from a string.
+
+        Raises:
+            InvalidPackageNameError: If the package name is invalid.
+        """
         if not isinstance(source, str):
             raise TypeError(
                 "PackageName constructor received unsupported type "

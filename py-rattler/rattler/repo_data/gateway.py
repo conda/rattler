@@ -198,6 +198,9 @@ class Gateway:
             A list of lists of `RepoDataRecord`s. The outer list contains the results for each
             source in the same order they are provided in the `sources` argument.
 
+        Raises:
+            ValueError: If the query failed.
+
         Examples
         --------
         ```python
@@ -238,6 +241,9 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
+
+        Raises:
+            ValueError: If the query failed.
 
         Examples
         --------

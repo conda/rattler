@@ -71,6 +71,9 @@ class PrefixRecord(RepoDataRecord):
         >>> assert isinstance(r, PrefixRecord)
         >>>
         ```
+
+        Raises:
+            IoError: If the file does not exist or cannot be read.
         """
         return PrefixRecord._from_py_record(PyRecord.from_path(path))
 

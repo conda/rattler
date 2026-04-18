@@ -112,6 +112,9 @@ def activate(
         An ActivationResult object containing the new PATH environment variable
         and the script to run to activate the environment.
 
+        Raises:
+            ValueError: If activation failed.
+
     Examples
     --------
     ```python
