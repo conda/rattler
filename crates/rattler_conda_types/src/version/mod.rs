@@ -1224,6 +1224,11 @@ mod test {
         assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2.devdev").unwrap());
         assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2devdev").unwrap());
         assert!(Version::from_str("1.2postpost").unwrap() < Version::from_str("1.2post").unwrap());
+
+        // 1.2dev is a dev version, but 1.2devdev is not.
+        assert!(Version::from_str("1.2dev").unwrap().is_dev());
+        assert!(!Version::from_str("1.2devdev").unwrap().is_dev());
+        assert!(!Version::from_str("1.2.devdev").unwrap().is_dev());
     }
 
     #[test]
