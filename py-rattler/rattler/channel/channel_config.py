@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 from rattler.rattler import PyChannelConfig
+from rattler.exceptions import InvalidUrlError
 
 
 class ChannelConfig:

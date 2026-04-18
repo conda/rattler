@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple, Union
 
-from rattler.rattler import PyVersion, InvalidVersionError
+from rattler.rattler import PyVersion
+from rattler.exceptions import InvalidVersionError, VersionBumpError
 
 
 class Version:
@@ -151,6 +152,9 @@ class Version:
         Version("1.5.0.0.0.1")
         >>>
         ```
+
+        Raises:
+            VersionBumpError: If the segment cannot be bumped, for example if the index is out of range.
         """
         return Version._from_py_version(self._version.bump_segment(index))
 

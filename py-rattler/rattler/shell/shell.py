@@ -12,6 +12,7 @@ from rattler.rattler import (
     PyShellEnum,
     PyActivationResult,
 )
+from rattler.exceptions import ActivationError, ShellError
 
 
 class PathModificationBehavior(Enum):
@@ -112,8 +113,9 @@ def activate(
         An ActivationResult object containing the new PATH environment variable
         and the script to run to activate the environment.
 
-        Raises:
-            ValueError: If activation failed.
+    Raises:
+        ActivationError: If environment activation fails.
+        ShellError: If activation script generation fails for the selected shell.
 
     Examples
     --------

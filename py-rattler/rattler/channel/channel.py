@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from rattler.lock.channel import LockChannel
 
 from rattler.rattler import PyChannel
+from rattler.exceptions import InvalidChannelError
 from rattler.channel.channel_config import ChannelConfig
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rattler.rattler import PyPackageName
+from rattler.exceptions import InvalidPackageNameError
 
 
 class PackageName:
@@ -42,6 +43,9 @@ class PackageName:
         This extracts the package name by splitting on whitespace or version constraint characters
         (`>`, `<`, `=`, `!`, `~`, `;`).
 
+        Raises:
+            InvalidPackageNameError: If the package name could not be parsed from the matchspec.
+
         Examples
         --------
         ```python
@@ -65,6 +69,9 @@ class PackageName:
         This extracts the package name by splitting on whitespace or version constraint characters
         (`>`, `<`, `=`, `!`, `~`, `;`). The original capitalization is preserved in the source,
         while the normalized version is lowercase.
+
+        Raises:
+            InvalidPackageNameError: If the package name could not be parsed from the matchspec.
 
         Examples
         --------

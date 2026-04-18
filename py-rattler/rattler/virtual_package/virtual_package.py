@@ -3,8 +3,8 @@ from typing import List
 import warnings
 
 from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverrides
-
 from rattler.virtual_package.generic import GenericVirtualPackage
+from rattler.exceptions import DetectVirtualPackageError
 
 
 class Override:
@@ -192,7 +192,7 @@ class VirtualPackage:
         if the versions could not be properly detected.
 
         Raises:
-            ValueError: If the current system's virtual packages could not be detected.
+            DetectVirtualPackageError: If the current system's virtual packages could not be detected.
 
         .. deprecated:: 0.7.0 Use `detect` instead.
         """
@@ -205,7 +205,7 @@ class VirtualPackage:
         Returns virtual packages detected for the current system with the given overrides.
 
         Raises:
-            ValueError: If the virtual packages could not be detected.
+            DetectVirtualPackageError: If the virtual packages could not be detected.
         """
         return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(overrides._overrides)]
 

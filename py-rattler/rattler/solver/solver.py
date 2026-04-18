@@ -13,6 +13,7 @@ from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.virtual_package.generic import GenericVirtualPackage
 from rattler.virtual_package.virtual_package import VirtualPackage
+from rattler.exceptions import SolverError, GatewayError, IoError
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
@@ -84,7 +85,9 @@ async def solve(
         Resolved list of `RepoDataRecord`s.
 
     Raises:
-        ValueError: If the solver failed to find a solution.
+        SolverError: If the solver failed to find a solution.
+        GatewayError: If fetching or accessing repodata through
+            the gateway fails.
     """
 
     platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
@@ -194,7 +197,8 @@ async def solve_with_sparse_repodata(
         Resolved list of `RepoDataRecord`s.
 
     Raises:
-        ValueError: If the solver failed to find a solution.
+        SolverError: If the solver failed to find a solution.
+        IoError: If reading from `SparseRepoData` fails, such as when it has been closed.
     """
     return [
         RepoDataRecord._from_py_record(solved_package)

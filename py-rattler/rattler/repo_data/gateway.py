@@ -13,6 +13,7 @@ from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+from rattler.exceptions import GatewayError, FetchRepoDataError
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
@@ -199,7 +200,8 @@ class Gateway:
             source in the same order they are provided in the `sources` argument.
 
         Raises:
-            ValueError: If the query failed.
+            GatewayError: If the gateway query fails.
+            FetchRepoDataError: If fetching repository data for one of the sources fails.
 
         Examples
         --------
@@ -243,7 +245,8 @@ class Gateway:
             A list of package names that are present in the given subdirectories.
 
         Raises:
-            ValueError: If the query failed.
+            GatewayError: If the gateway query failed.
+            FetchRepoDataError: If fetching repodata for the query failed.
 
         Examples
         --------

@@ -10,6 +10,11 @@ from rattler.networking.middleware import (
     S3Middleware,
 )
 from rattler.rattler import PyClientWithMiddleware
+from rattler.exceptions import (
+    InvalidHeaderNameError,
+    InvalidHeaderValueError,
+    AuthenticationStorageError,
+)
 
 
 class Client:
@@ -40,8 +45,8 @@ class Client:
 
         Raises:
             InvalidHeaderNameError: If a header name is invalid.
-        InvalidHeaderValueError: If a header value is invalid.
-        AuthenticationStorageError: If the authentication storage could not be queried.
+            InvalidHeaderValueError: If a header value is invalid.
+            AuthenticationStorageError: If the authentication storage could not be queried.
         """
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None,

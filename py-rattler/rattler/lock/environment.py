@@ -55,8 +55,6 @@ class Environment:
         >>>
         ```
 
-        Raises:
-            ValueError: If the platform is not found in the environment.
         """
         return [Platform._from_py_platform(p) for p in self._env.platforms()]
 
@@ -114,8 +112,6 @@ class Environment:
         >>>
         ```
 
-        Raises:
-            ValueError: If the environment is not found in the lock file.
         """
         return {
             Platform._from_py_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
@@ -185,8 +181,6 @@ class Environment:
         >>>
         ```
 
-        Raises:
-            ValueError: If the platform is not found in the environment.
         """
         if records := self._env.conda_repodata_records_for_platform(platform._inner):
             return [RepoDataRecord._from_py_record(r) for r in records]

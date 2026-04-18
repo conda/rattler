@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from rattler.lock.environment import Environment
 
 from rattler.rattler import PyLockFile
+from rattler.exceptions import IoError
 
 
 class LockFile:

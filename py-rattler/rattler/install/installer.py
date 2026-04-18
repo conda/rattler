@@ -9,6 +9,7 @@ from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
 
 from rattler.rattler import py_install
+from rattler.exceptions import InstallerError, TransactionError, IoError
 
 
 @runtime_checkable
@@ -350,7 +351,9 @@ async def install(
                 Subclass :class:`InstallerReporter` and override the methods you need.
 
     Raises:
-        ValueError: If the installation fails.
+        InstallerError: If the installation failed.
+        TransactionError: If the transaction failed.
+        IoError: If an I/O error occurred during installation.
     """
 
     await py_install(
