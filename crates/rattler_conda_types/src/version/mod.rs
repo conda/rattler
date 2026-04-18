@@ -324,6 +324,16 @@ impl Version {
             .any(Component::is_dev)
     }
 
+    /// Returns true if this is considered a post version.
+    ///
+    /// If a version has a single component named "post" it is considered to be
+    /// a post version.
+    pub fn is_post(&self) -> bool {
+        self.segments()
+            .flat_map(|segment| segment.components())
+            .any(Component::is_post)
+    }
+
     /// Check if this version version and local strings start with the same as
     /// other.
     pub fn starts_with(&self, other: &Self) -> bool {
@@ -1229,6 +1239,11 @@ mod test {
         assert!(Version::from_str("1.2dev").unwrap().is_dev());
         assert!(!Version::from_str("1.2devdev").unwrap().is_dev());
         assert!(!Version::from_str("1.2.devdev").unwrap().is_dev());
+
+        // 1.2post is a post version, but 1.2postpost is not.
+        assert!(Version::from_str("1.2post").unwrap().is_post());
+        assert!(!Version::from_str("1.2postpost").unwrap().is_post());
+        assert!(!Version::from_str("1.2.postpost").unwrap().is_post());
     }
 
     #[test]
