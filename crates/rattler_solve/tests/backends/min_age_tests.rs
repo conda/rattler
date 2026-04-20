@@ -64,22 +64,25 @@ pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that packages can be exempted from `min_age` filtering.
-pub fn solve_min_age_with_exemption<T: SolverImpl + Default>() {
+/// Test that packages can override the global cutoff.
+pub fn solve_min_age_with_package_override<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
     // 1000 days minimum age - would normally filter out 2024 packages
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
-    // But we exempt "pkg-a" from the filter
-    let config =
-        exclude_newer_duration_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    // But we override "pkg-a" to allow the newest available version
+    let config = exclude_newer_duration_config(min_age).with_package_duration_with_now(
+        "pkg-a".parse().unwrap(),
+        std::time::Duration::ZERO,
+        fixed_now(),
+    );
 
-    SolverCase::new("min_age with exemption")
+    SolverCase::new("min_age with package override")
         .repository(repo)
         .specs(["pkg-a"])
         .exclude_newer(config)
-        .expect_present([("pkg-a", "2.0")]) // Gets latest because it's exempt
+        .expect_present([("pkg-a", "2.0")]) // Gets latest because the package cutoff overrides the global one
         .run::<T>();
 }
 
@@ -101,23 +104,26 @@ pub fn solve_min_age_with_dependencies<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that exemptions work correctly with dependencies.
-pub fn solve_min_age_exempt_dependency<T: SolverImpl + Default>() {
+/// Test that package-specific cutoffs work correctly with dependencies.
+pub fn solve_min_age_package_override_dependency<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
     // 1000 days minimum age
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
-    // Exempt pkg-a but not pkg-b
-    let config =
-        exclude_newer_duration_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    // Override pkg-a but not pkg-b
+    let config = exclude_newer_duration_config(min_age).with_package_duration_with_now(
+        "pkg-a".parse().unwrap(),
+        std::time::Duration::ZERO,
+        fixed_now(),
+    );
 
-    SolverCase::new("min_age exempt dependency")
+    SolverCase::new("min_age package override dependency")
         .repository(repo)
         .specs(["pkg-b"])
         .exclude_newer(config)
-        // pkg-b 2.0 is too new and not exempt, so we get pkg-b 1.0
-        // pkg-a is exempt, but pkg-b 1.0 only requires "pkg-a" (any version)
+        // pkg-b 2.0 is too new and not overridden, so we get pkg-b 1.0
+        // pkg-a is overridden, but pkg-b 1.0 only requires "pkg-a" (any version)
         // so the solver can choose either pkg-a 1.0 or 2.0
         .expect_present(["pkg-b"])
         .expect_absent([("pkg-b", "2.0")])
@@ -151,8 +157,8 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that exempt packages are included even without a timestamp.
-pub fn solve_min_age_exempt_no_timestamp<T: SolverImpl + Default>() {
+/// Test that package-specific cutoffs do not override missing timestamps.
+pub fn solve_min_age_package_override_no_timestamp<T: SolverImpl + Default>() {
     let repo = vec![
         PackageBuilder::new("pkg-a")
             .version("1.0")
@@ -167,16 +173,20 @@ pub fn solve_min_age_exempt_no_timestamp<T: SolverImpl + Default>() {
     // 1000 days minimum age
     let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
 
-    // Exempt pkg-a from the filter
-    let config =
-        exclude_newer_duration_config(min_age).with_exempt_package("pkg-a".parse().unwrap());
+    // Override pkg-a to allow the newest timestamps, but unknown timestamps
+    // still require include_unknown_timestamp=true.
+    let config = exclude_newer_duration_config(min_age).with_package_duration_with_now(
+        "pkg-a".parse().unwrap(),
+        std::time::Duration::ZERO,
+        fixed_now(),
+    );
 
-    SolverCase::new("min_age exempt package without timestamp")
+    SolverCase::new("min_age package override without timestamp")
         .repository(repo)
         .specs(["pkg-a"])
         .exclude_newer(config)
-        // pkg-a 2.0 has no timestamp but is exempt, so it should be selected
-        .expect_present([("pkg-a", "2.0")])
+        .expect_present([("pkg-a", "1.0")])
+        .expect_absent([("pkg-a", "2.0")])
         .run::<T>();
 }
 

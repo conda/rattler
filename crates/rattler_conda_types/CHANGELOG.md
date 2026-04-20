@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.5...rattler_conda_types-v0.44.6) - 2026-04-13
+
+### Other
+
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+- reduce size of PackageName and MatchSpec ([#2322](https://github.com/conda/rattler/pull/2322))
+
+## [0.44.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.4...rattler_conda_types-v0.44.5) - 2026-04-08
+
+### Added
+
+- parse and evaluate license_family in MatchSpec ([#2175](https://github.com/conda/rattler/pull/2175))
+
+### Fixed
+
+- StrictVersion Ord contract violation ([#2225](https://github.com/conda/rattler/pull/2225))
+
+## [0.44.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.3...rattler_conda_types-v0.44.4) - 2026-04-07
+
+### Added
+
+- Implement `rattler list` subcommand (and smaller `PrefixData` improvements) ([#2266](https://github.com/conda/rattler/pull/2266))
+
 ## [0.44.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.2...rattler_conda_types-v0.44.3) - 2026-03-25
 
 ### Added

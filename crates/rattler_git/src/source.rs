@@ -14,7 +14,7 @@ use tracing::instrument;
 
 use crate::{
     credentials::GIT_STORE,
-    git::GitRemote,
+    git::{CheckoutOptions, GitRemote},
     resolver::RepositoryReference,
     sha::{GitOid, GitSha},
     url::RepositoryUrl,
@@ -31,6 +31,8 @@ pub struct GitSource {
     cache: PathBuf,
     /// The reporter to use for this source.
     reporter: Option<Arc<dyn Reporter>>,
+    /// Options controlling checkout behavior (submodules, etc.).
+    checkout_options: CheckoutOptions,
 }
 
 impl GitSource {
@@ -45,6 +47,7 @@ impl GitSource {
             client: client.into(),
             cache: cache.into(),
             reporter: None,
+            checkout_options: CheckoutOptions::default(),
         }
     }
 
@@ -53,6 +56,15 @@ impl GitSource {
     pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
+            ..self
+        }
+    }
+
+    /// Set the [`CheckoutOptions`] to use for the [`GitSource`].
+    #[must_use]
+    pub fn with_checkout_options(self, options: CheckoutOptions) -> Self {
+        Self {
+            checkout_options: options,
             ..self
         }
     }
@@ -143,7 +155,12 @@ impl GitSource {
             actual_rev,
             checkout_path.display()
         );
-        db.copy_to(actual_rev.into(), &checkout_path)?;
+        db.copy_to(
+            actual_rev.into(),
+            &checkout_path,
+            &self.git.repository,
+            &self.checkout_options,
+        )?;
 
         // Report the checkout operation to the reporter.
         if let (Some(task), Some(reporter)) = (task, self.reporter.as_ref()) {

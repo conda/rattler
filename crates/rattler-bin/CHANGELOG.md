@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/conda/rattler/compare/rattler-bin-v0.1.4...rattler-bin-v0.1.5) - 2026-04-13
+
+### Fixed
+
+- CLI crash on malformed virtual package version ([#2327](https://github.com/conda/rattler/pull/2327))
+
+## [0.1.4](https://github.com/conda/rattler/compare/rattler-bin-v0.1.3...rattler-bin-v0.1.4) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell, rattler_upload, rattler_networking, rattler_package_streaming, rattler_cache, rattler_menuinst, rattler, rattler_solve, rattler_repodata_gateway, rattler_virtual_packages
+
+## [0.1.3](https://github.com/conda/rattler/compare/rattler-bin-v0.1.2...rattler-bin-v0.1.3) - 2026-04-07
+
+### Added
+
+- Add CLI run command ([#2263](https://github.com/conda/rattler/pull/2263))
+- Implement `rattler list` subcommand (and smaller `PrefixData` improvements) ([#2266](https://github.com/conda/rattler/pull/2266))
+- *(bin)* Add `rattler completion` command ([#2293](https://github.com/conda/rattler/pull/2293))
+
 ## [0.1.2](https://github.com/conda/rattler/compare/rattler-bin-v0.1.1...rattler-bin-v0.1.2) - 2026-03-27
 
 ### Added

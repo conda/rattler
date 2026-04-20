@@ -2,6 +2,7 @@
 /// Source: <https://github.com/astral-sh/uv/blob/4b8cc3e29e4c2a6417479135beaa9783b05195d3/crates/uv-git/src/lib.rs>
 /// This module expose types and functions to interact with Git repositories.
 use ::url::Url;
+pub use git::CheckoutOptions;
 use git::{GitBinaryError, GitReference};
 use sha::{GitSha, OidParseError};
 
@@ -208,4 +209,7 @@ pub enum GitError {
 
     #[error("corrupted or invalid git repository at {0}")]
     InvalidRepository(std::path::PathBuf),
+
+    #[error("failed to set submodule url for {0}: {1}")]
+    SubmoduleUrl(String, String),
 }

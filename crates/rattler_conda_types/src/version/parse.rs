@@ -3,9 +3,8 @@ use crate::version::flags::Flags;
 use crate::version::segment::Segment;
 use crate::version::{ComponentVec, SegmentVec};
 use nom::branch::alt;
-use nom::bytes::complete::tag_no_case;
 use nom::character::complete::{alpha1, char, digit1, one_of};
-use nom::combinator::{map, opt, value};
+use nom::combinator::{map, opt};
 use nom::error::{ErrorKind, FromExternalError, ParseError};
 use nom::sequence::terminated;
 use nom::{IResult, Parser};
@@ -132,12 +131,15 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
     alt((
         // Parse a numeral
         map(numeral_parser, Component::Numeral),
-        // Parse special case components
-        value(Component::Post, tag_no_case("post")),
-        value(Component::Dev, tag_no_case("dev")),
-        // Parse an identifier
+        // Parse an identifier. `dev` and `post` are only special when they make up the entire
+        // non-numeric run; longer identifiers such as `devdev` remain plain strings.
         map(alpha1, |alpha: &'i str| {
-            Component::Iden(alpha.to_lowercase().into_boxed_str())
+            let alpha = alpha.to_lowercase();
+            match alpha.as_str() {
+                "post" => Component::Post,
+                "dev" => Component::Dev,
+                _ => Component::Iden(alpha.into_boxed_str()),
+            }
         }),
     ))
     .parse(input)

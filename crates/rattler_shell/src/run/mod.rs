@@ -22,6 +22,9 @@ pub enum RunError {
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Unsupported shell: {0}")]
+    UnsupportedShell(String),
 }
 
 /// Run a subprocess in an activated environment (inherited stdio, `command` non-empty).
@@ -111,11 +114,20 @@ pub fn run_in_environment(
     )?;
 
     match shell {
-        ShellEnum::Bash(_) => Ok(Command::new(shell.executable()).arg(file.path()).output()?),
+        ShellEnum::Bash(_)
+        | ShellEnum::Zsh(_)
+        | ShellEnum::Fish(_)
+        | ShellEnum::Xonsh(_)
+        | ShellEnum::NuShell(_) => {
+            Ok(Command::new(shell.executable()).arg(file.path()).output()?)
+        }
         ShellEnum::CmdExe(_) => Ok(Command::new(shell.executable())
             .arg("/c")
             .arg(file.path())
             .output()?),
-        _ => unimplemented!("Unsupported shell: {:?}", shell),
+        ShellEnum::PowerShell(_) => Ok(Command::new(shell.executable())
+            .arg("-File")
+            .arg(file.path())
+            .output()?),
     }
 }

@@ -36,13 +36,14 @@ type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionI
 
 fn exclude_newer_reason(
     config: &ExcludeNewer,
+    package: &PackageName,
     channel: Option<&str>,
     timestamp: Option<&rattler_conda_types::utils::TimestampMs>,
 ) -> Option<String> {
+    let cutoff = config.cutoff_for_package(package, channel);
     match timestamp {
-        Some(timestamp) if *timestamp > config.cutoff_for_channel(channel) => Some(format!(
-            "the package is uploaded after the cutoff date of {}",
-            config.cutoff_for_channel(channel)
+        Some(timestamp) if *timestamp > cutoff => Some(format!(
+            "the package is uploaded after the cutoff date of {cutoff}"
         )),
         None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
         _ => None,
@@ -435,6 +436,7 @@ impl<'a> CondaDependencyProvider<'a> {
                         let reason = pool.intern_string(
                             exclude_newer_reason(
                                 config,
+                                &record.package_record.name,
                                 record.channel.as_deref(),
                                 record.package_record.timestamp.as_ref(),
                             )

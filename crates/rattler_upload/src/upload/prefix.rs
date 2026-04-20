@@ -53,6 +53,14 @@ pub enum PrefixUploadError {
     #[error("attestation requested but trusted publishing is not configured")]
     AttestationRequiresTrustedPublishing,
 
+    /// Attestation was requested but an API key was provided, which bypasses trusted publishing.
+    #[error("--generate-attestation cannot be used with an API key")]
+    #[diagnostic(help(
+        "Attestation requires trusted publishing (OIDC). Remove the API key / PREFIX_API_KEY \
+         environment variable and configure trusted publishing on prefix.dev instead."
+    ))]
+    AttestationWithApiKey,
+
     /// The server returned an authentication error (HTTP 401 or 403).
     #[error("authentication failed (HTTP {status})")]
     AuthenticationFailed {
@@ -187,7 +195,12 @@ pub async fn upload_package_to_prefix(
     // Check if we're using trusted publishing and if we should generate attestations
     #[cfg(feature = "sigstore-sign")]
     let (token, should_generate_attestation) = match prefix_data.api_key {
-        Some(api_key) => (api_key, false),
+        Some(api_key) => {
+            if wants_attestation {
+                return Err(PrefixUploadError::AttestationWithApiKey);
+            }
+            (api_key, false)
+        }
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
             TrustedPublishResult::Configured(token) => {
                 // When using trusted publishing, we can generate attestations

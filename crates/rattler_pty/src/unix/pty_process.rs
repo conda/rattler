@@ -27,6 +27,9 @@ use tokio::{
 #[cfg(target_os = "linux")]
 use nix::pty::ptsname_r;
 
+#[cfg(target_os = "netbsd")]
+use nix::pty::ptsname;
+
 /// Start a process in a forked tty so you can interact with it the same as you would
 /// within a terminal
 ///
@@ -112,7 +115,12 @@ impl PtyProcess {
         unlockpt(&master_fd)?;
 
         // on Linux this is the libc function, on OSX this is our implementation of ptsname_r
+        #[cfg(not(target_os = "netbsd"))]
         let slave_name = ptsname_r(&master_fd)?;
+
+        // But NetBSD uses the POSIX ptsname instead
+        #[cfg(target_os = "netbsd")]
+        let slave_name = unsafe { ptsname(&master_fd) }?;
 
         // Get the current window size if it was not specified
         let window_size = opts.window_size.unwrap_or_else(|| {

@@ -9,7 +9,7 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
@@ -101,8 +101,8 @@ impl fmt::Display for SolveError {
 ///
 /// // Only allow packages that have been published for at least 1 hour
 /// let config = ExcludeNewer::from_duration(Duration::from_secs(60 * 60))
-///     // But allow "my-internal-package" to bypass this check
-///     .with_exempt_package("my-internal-package".parse().unwrap())
+///     // But allow "my-internal-package" to use a package-specific cutoff
+///     .with_package_duration("my-internal-package".parse().unwrap(), Duration::ZERO)
 ///     // And allow a trusted internal channel to skip the delay entirely
 ///     .with_channel_duration("my-internal-channel", Duration::ZERO);
 /// ```
@@ -117,8 +117,9 @@ pub struct ExcludeNewer {
     /// The key is matched against [`RepoDataRecord::channel`] exactly.
     channel_cutoffs: HashMap<String, DateTime<Utc>>,
 
-    /// Packages that are exempt from the cutoff requirement.
-    exempt_packages: HashSet<PackageName>,
+    /// Package-specific cutoff dates that override both [`Self::cutoff`] and
+    /// [`Self::channel_cutoffs`] for matching package names.
+    package_cutoffs: HashMap<PackageName, DateTime<Utc>>,
 
     /// Whether to include packages that don't have a timestamp.
     include_unknown_timestamp: bool,
@@ -136,7 +137,7 @@ impl ExcludeNewer {
         Self {
             cutoff,
             channel_cutoffs: HashMap::new(),
-            exempt_packages: HashSet::new(),
+            package_cutoffs: HashMap::new(),
             include_unknown_timestamp: false,
         }
     }
@@ -152,20 +153,38 @@ impl ExcludeNewer {
         Self {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
-            exempt_packages: HashSet::new(),
+            package_cutoffs: HashMap::new(),
             include_unknown_timestamp: false,
         }
     }
 
-    /// Adds a package to the set of exempt packages.
-    pub fn with_exempt_package(mut self, package: PackageName) -> Self {
-        self.exempt_packages.insert(package);
+    /// Sets the absolute cutoff override for a specific package.
+    pub fn with_package_cutoff(mut self, package: PackageName, cutoff: DateTime<Utc>) -> Self {
+        self.package_cutoffs.insert(package, cutoff);
         self
     }
 
-    /// Sets the set of exempt packages.
-    pub fn with_exempt_packages(mut self, packages: impl IntoIterator<Item = PackageName>) -> Self {
-        self.exempt_packages = packages.into_iter().collect();
+    /// Sets the duration override for a specific package.
+    pub fn with_package_duration(
+        mut self,
+        package: PackageName,
+        duration: std::time::Duration,
+    ) -> Self {
+        self.package_cutoffs
+            .insert(package, Self::cutoff_from_duration(duration, Utc::now()));
+        self
+    }
+
+    /// Sets the duration override for a specific package using an explicit
+    /// reference time.
+    pub fn with_package_duration_with_now(
+        mut self,
+        package: PackageName,
+        duration: std::time::Duration,
+        now: DateTime<Utc>,
+    ) -> Self {
+        self.package_cutoffs
+            .insert(package, Self::cutoff_from_duration(duration, now));
         self
     }
 
@@ -213,21 +232,21 @@ impl ExcludeNewer {
         self
     }
 
-    /// Returns `true` if the given package is exempt from the minimum release
-    /// age check.
-    pub fn is_exempt(&self, package: &PackageName) -> bool {
-        self.exempt_packages.contains(package)
-    }
-
     /// Returns whether packages without a timestamp are included.
     pub fn include_unknown_timestamp(&self) -> bool {
         self.include_unknown_timestamp
     }
 
-    /// Computes the cutoff time for records from the given channel.
-    pub fn cutoff_for_channel(&self, channel: Option<&str>) -> DateTime<Utc> {
-        channel
-            .and_then(|channel| self.channel_cutoffs.get(channel).copied())
+    /// Computes the cutoff time for the given package and channel.
+    pub fn cutoff_for_package(
+        &self,
+        package: &PackageName,
+        channel: Option<&str>,
+    ) -> DateTime<Utc> {
+        self.package_cutoffs
+            .get(package)
+            .copied()
+            .or_else(|| channel.and_then(|channel| self.channel_cutoffs.get(channel).copied()))
             .unwrap_or(self.cutoff)
     }
 
@@ -238,12 +257,8 @@ impl ExcludeNewer {
         channel: Option<&str>,
         timestamp: Option<&TimestampMs>,
     ) -> bool {
-        if self.is_exempt(package) {
-            return false;
-        }
-
         match timestamp {
-            Some(timestamp) => *timestamp > self.cutoff_for_channel(channel),
+            Some(timestamp) => *timestamp > self.cutoff_for_package(package, channel),
             None => !self.include_unknown_timestamp(),
         }
     }
