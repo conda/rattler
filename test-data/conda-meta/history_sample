@@ -1,0 +1,21 @@
+==> 2024-01-15 10:30:00 <==
+# cmd: conda create -n test python=3.12
+# conda version: 24.1.0
+# install specs: ['python=3.12']
+python-3.12.0-h1234567_0
+openssl-3.2.0-h8765432_0
+pip-24.0-pyhd8ed1ab_0
+
+==> 2024-01-16 14:20:00 <==
+# cmd: conda install numpy pandas
+# conda version: 24.1.0
+# update specs: ['numpy', 'pandas']
++numpy-1.26.3-py312h1234567_0
++pandas-2.1.5-py312h7654321_0
++python-dateutil-2.8.2-pyhd8ed1ab_0
+
+==> 2024-01-17 09:00:00 <==
+# cmd: conda remove pip
+# conda version: 24.1.0
+# remove specs: ['pip']
+-pip-24.0-pyhd8ed1ab_0
