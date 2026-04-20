@@ -61,6 +61,41 @@ impl RepoDataState {
         let file = fs::File::create(path)?;
         Ok(serde_json::to_writer_pretty(file, self)?)
     }
+
+    /// Computes the expiration time for the cache state based on the HTTP headers.
+    pub fn expires_at(&self) -> Option<SystemTime> {
+        use http::{header, Request, Response};
+        use http_cache_semantics::CachePolicy;
+
+        let req = Request::builder()
+            .uri(self.url.as_str())
+            .method("GET")
+            .body(())
+            .unwrap();
+
+        let mut res = Response::builder().status(200);
+        if let Some(cc) = &self.cache_headers.cache_control {
+            res = res.header(header::CACHE_CONTROL, cc);
+        }
+        if let Some(etag) = &self.cache_headers.etag {
+            res = res.header(header::ETAG, etag);
+        }
+        if let Some(lm) = &self.cache_headers.last_modified {
+            res = res.header(header::LAST_MODIFIED, lm);
+        }
+        let res = res.body(()).unwrap();
+
+        let policy = CachePolicy::new(&req, &res);
+        let ttl = policy.time_to_live(self.cache_last_modified);
+
+        if ttl > std::time::Duration::from_secs(0) {
+            self.cache_last_modified
+                .checked_add(ttl)
+                .or_else(|| Some(SystemTime::now()))
+        } else {
+            Some(SystemTime::now())
+        }
+    }
 }
 
 impl FromStr for RepoDataState {

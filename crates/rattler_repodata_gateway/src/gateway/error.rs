@@ -86,17 +86,31 @@ impl From<reqwest::Error> for GatewayError {
 
 #[derive(Debug, Error)]
 pub enum HttpOrFilesystemError {
-    #[error(transparent)]
-    Http(#[from] reqwest::Error),
+    #[error("{0}")]
+    Http(reqwest::Error, Option<std::time::SystemTime>),
 
     #[error(transparent)]
-    Filesystem(#[from] io::Error),
+    Filesystem(io::Error),
+}
+
+impl From<reqwest::Error> for HttpOrFilesystemError {
+    fn from(err: reqwest::Error) -> Self {
+        HttpOrFilesystemError::Http(err, None)
+    }
+}
+
+impl From<io::Error> for HttpOrFilesystemError {
+    fn from(err: io::Error) -> Self {
+        HttpOrFilesystemError::Filesystem(err)
+    }
 }
 
 impl From<fetch::RepoDataNotFoundError> for HttpOrFilesystemError {
     fn from(value: RepoDataNotFoundError) -> Self {
         match value {
-            RepoDataNotFoundError::HttpError(err) => HttpOrFilesystemError::Http(err),
+            RepoDataNotFoundError::HttpError(err, expires_at) => {
+                HttpOrFilesystemError::Http(err, expires_at)
+            }
             RepoDataNotFoundError::FileSystemError(err) => HttpOrFilesystemError::Filesystem(err),
         }
     }

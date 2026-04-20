@@ -26,4 +26,9 @@ impl SubdirClient for RemoteSubdirClient {
     fn package_names(&self) -> Vec<String> {
         self.sparse.package_names()
     }
+
+    fn has_expired(&self) -> bool {
+        self.expires_at
+            .is_some_and(|exp| std::time::SystemTime::now() >= exp)
+    }
 }

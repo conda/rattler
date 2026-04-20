@@ -278,6 +278,12 @@ where
         self.map.retain(|k, v| f(k, v));
     }
 
+    /// Removes a key from the map, returning the value at the key if the key
+    /// was previously in the map.
+    pub fn remove(&self, key: &K) -> Option<PendingOrFetched<V>> {
+        self.map.remove(key).map(|(_, v)| v)
+    }
+
     /// Clears all non-pending cached values, preserving only in-flight entries.
     ///
     /// This removes entries whose state is `Fetched(..)` while keeping entries

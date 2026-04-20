@@ -21,8 +21,8 @@ cfg_if! {
 #[derive(Debug, thiserror::Error)]
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
-    #[error(transparent)]
-    HttpError(reqwest::Error),
+    #[error("{0}")]
+    HttpError(reqwest::Error, Option<std::time::SystemTime>),
 
     /// There was a file system error
     #[error(transparent)]
@@ -80,7 +80,7 @@ impl From<reqwest::Error> for FetchRepoDataError {
 
 impl From<reqwest::Error> for RepoDataNotFoundError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(err.redact())
+        Self::HttpError(err.redact(), None)
     }
 }
 

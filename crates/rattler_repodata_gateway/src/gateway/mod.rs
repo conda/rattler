@@ -22,6 +22,7 @@ use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
+use coalesced_map::PendingOrFetched;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
@@ -323,6 +324,22 @@ impl GatewayInner {
     ) -> Result<Arc<Subdir>, GatewayError> {
         let key = (channel.clone(), platform);
         let channel = channel.clone();
+
+        if let Some(cached) = self.subdirs.get(&key) {
+            if cached.has_expired() {
+                // Determine if we are the ones to remove it. E.g if another concurrent request
+                // was already triggered, we should wait on it rather than trying to init it again.
+                // We use remove over retain to avoid scanning the entire map.
+                if let Some(PendingOrFetched::Fetched(c)) = self.subdirs.remove(&key) {
+                    if !Arc::ptr_eq(&c, &cached) {
+                        // We removed a different underlying entry, we should probably
+                        // put it back and we can just wait for the pending request.
+                        // However we can't easily insert without `.get_or_try_init`, so we
+                        // actually just drop the remove, and it will be caught in the block below.
+                    }
+                }
+            }
+        }
 
         self.subdirs
             .get_or_try_init(key, || async move {
@@ -747,7 +764,22 @@ mod test {
             }
         }
 
-        let local_channel = remote_conda_forge().await;
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        let noarch_path = channel_dir.path().join("noarch");
+        std::fs::create_dir_all(&noarch_path).unwrap();
+
+        let repodata = make_repodata("python", "3.9");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata).unwrap();
+        std::fs::write(noarch_path.join("repodata.json"), &repodata).unwrap();
+
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("public, max-age=3600"),
+        )
+        .await;
+        let local_channel = server.channel();
 
         // Create a gateway with a custom channel configuration that disables caching.
         let gateway = Gateway::builder()
@@ -765,7 +797,7 @@ mod test {
         // Construct a simple query
         let query = gateway
             .query(
-                vec![local_channel.channel()],
+                vec![local_channel.clone()],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![PackageName::from_str("python").unwrap()].into_iter(),
             )
@@ -786,7 +818,7 @@ mod test {
         // Now clear the cache and run the query again.
         gateway
             .clear_repodata_cache(
-                &local_channel.channel(),
+                &local_channel,
                 SubdirSelection::default(),
                 super::CacheClearMode::InMemoryOnly,
             )
@@ -996,6 +1028,65 @@ mod test {
         )
     }
 
+    #[tokio::test]
+    async fn test_gateway_in_memory_cache_respects_cache_control() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+
+        let repodata_v1 = make_repodata("testpkg", "1.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
+
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("max-age=1, must-revalidate"),
+        )
+        .await;
+        let channel = server.channel();
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1);
+        assert_eq!(all_records[0].package_record.version.as_str(), "1.0.0");
+
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        let repodata_v2 = make_repodata("testpkg", "2.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v2).unwrap();
+
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1);
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "2.0.0",
+            "expected cache-control max-age to trigger refresh"
+        );
+    }
+
     /// Integration test that verifies cache clearing actually works end-to-end.
     /// Creates a simple channel with a single package, queries it, modifies
     /// the source data, and verifies that memory-only cache clearing still
@@ -1011,8 +1102,12 @@ mod test {
         let repodata_v1 = make_repodata("testpkg", "1.0.0");
         std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
 
-        // Start the SimpleChannelServer
-        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        // Start the server with a long max-age so memory cache doesn't expire immediately
+        let server = SimpleChannelServer::with_cache_control(
+            channel_dir.path(),
+            Some("public, max-age=3600"),
+        )
+        .await;
         let channel = server.channel();
 
         // Create a temporary cache directory
