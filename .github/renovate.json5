@@ -7,8 +7,7 @@
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
   schedule: ["before 4am on Tuesday"],
-  prHourlyLimit: 10,
-  prConcurrentLimit: 3,
+  prHourlyLimit: 2,
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
