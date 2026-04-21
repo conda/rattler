@@ -416,7 +416,7 @@ jobs:
           ref: ${{ inputs.sha }}
       - name: Extract release notes
         id: release_notes
-        uses: ffurrer2/extract-release-notes@202313ec7461b6b9e401996714484690ab1ae105 # v3
+        uses: ffurrer2/extract-release-notes@273da39a24fb7db106a35526c8162815faffd31d # v3
         with:
           changelog_file: py-rattler/CHANGELOG.md
       - name: Verify release notes
