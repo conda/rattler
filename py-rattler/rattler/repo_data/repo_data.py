@@ -17,20 +17,12 @@ class ChannelRelations:
     ``info.channel_relations`` as specified by
     [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
 
-    Both ``base`` and ``overrides`` are optional relative-path channel
-    references (e.g. ``"../conda-forge"``).
-
-    `ChannelRelations` values are read-only views. To change a relation,
-    construct a new `ChannelRelations` and pass it to a new `ChannelInfo`
-    and `RepoData`.
+    `ChannelRelations` is a read-only view obtained via
+    ``RepoData.from_path(...).info.channel_relations``; it cannot be
+    constructed directly.
     """
 
-    def __init__(
-        self,
-        base: Optional[str] = None,
-        overrides: Optional[str] = None,
-    ) -> None:
-        self._inner = PyChannelRelations(base=base, overrides=overrides)
+    _inner: PyChannelRelations
 
     @classmethod
     def _from_inner(cls, py_channel_relations: PyChannelRelations) -> ChannelRelations:
@@ -56,21 +48,11 @@ class ChannelInfo:
     """
     The ``info`` section of a ``repodata.json`` file.
 
-    `ChannelInfo` values are read-only views. To change a field, construct a
-    new `ChannelInfo` and pass it to a new `RepoData`.
+    `ChannelInfo` is a read-only view obtained via
+    ``RepoData.from_path(...).info``; it cannot be constructed directly.
     """
 
-    def __init__(
-        self,
-        subdir: Optional[str] = None,
-        base_url: Optional[str] = None,
-        channel_relations: Optional[ChannelRelations] = None,
-    ) -> None:
-        self._inner = PyChannelInfo(
-            subdir=subdir,
-            base_url=base_url,
-            channel_relations=channel_relations._inner if channel_relations is not None else None,
-        )
+    _inner: PyChannelInfo
 
     @classmethod
     def _from_inner(cls, py_channel_info: PyChannelInfo) -> ChannelInfo:
@@ -112,20 +94,10 @@ class RepoData:
     """
     Repository metadata as deserialized from a ``repodata.json`` file.
 
-    `RepoData` values are read-only views. Construct a new one from its
-    components (e.g. a different `ChannelInfo`) to produce modified
-    repodata.
+    `RepoData` is obtained via `RepoData.from_path(path)`.
     """
 
-    def __init__(
-        self,
-        info: Optional[ChannelInfo] = None,
-        version: Optional[int] = None,
-    ) -> None:
-        self._repo_data = PyRepoData(
-            info=info._inner if info is not None else None,
-            version=version,
-        )
+    _repo_data: PyRepoData
 
     @classmethod
     def from_path(cls, path: Union[str, PathLike[str]]) -> RepoData:

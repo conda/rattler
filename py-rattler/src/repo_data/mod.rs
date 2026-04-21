@@ -33,20 +33,6 @@ impl From<RepoData> for PyRepoData {
 
 #[pymethods]
 impl PyRepoData {
-    /// Constructs a new `RepoData` from its components. All fields are
-    /// optional; packages, conda packages and removed sets start out empty.
-    #[new]
-    #[pyo3(signature = (info=None, version=None))]
-    pub fn new(info: Option<PyChannelInfo>, version: Option<u64>) -> Self {
-        Self {
-            inner: RepoData {
-                info: info.map(Into::into),
-                version,
-                ..RepoData::default()
-            },
-        }
-    }
-
     /// Apply a patch to a repodata file Note that we currently do not handle revoked instructions.
     pub fn apply_patches(&mut self, instructions: &PyPatchInstructions) {
         self.inner.apply_patches(&instructions.inner);
@@ -115,22 +101,6 @@ impl From<PyChannelInfo> for ChannelInfo {
 
 #[pymethods]
 impl PyChannelInfo {
-    #[new]
-    #[pyo3(signature = (subdir=None, base_url=None, channel_relations=None))]
-    pub fn new(
-        subdir: Option<String>,
-        base_url: Option<String>,
-        channel_relations: Option<PyChannelRelations>,
-    ) -> Self {
-        Self {
-            inner: ChannelInfo {
-                subdir,
-                base_url,
-                channel_relations: channel_relations.map(Into::into),
-            },
-        }
-    }
-
     #[getter]
     pub fn subdir(&self) -> Option<String> {
         self.inner.subdir.clone()
@@ -172,14 +142,6 @@ impl From<PyChannelRelations> for ChannelRelations {
 
 #[pymethods]
 impl PyChannelRelations {
-    #[new]
-    #[pyo3(signature = (base=None, overrides=None))]
-    pub fn new(base: Option<String>, overrides: Option<String>) -> Self {
-        Self {
-            inner: ChannelRelations { base, overrides },
-        }
-    }
-
     #[getter]
     pub fn base(&self) -> Option<String> {
         self.inner.base.clone()
