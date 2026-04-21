@@ -454,7 +454,7 @@ jobs:
           merge-multiple: true
           path: wheels
       - name: Publish to PyPi
-        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           skip-existing: true
           packages-dir: wheels
