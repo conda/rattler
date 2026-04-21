@@ -95,9 +95,9 @@ impl fmt::Display for SolveError {
 ///
 /// # Backend support
 ///
-/// Cancellation is currently only observed by the [`resolvo`](crate::resolvo)
-/// backend. Other backends (such as [`libsolv_c`](crate::libsolv_c)) silently
-/// ignore the token and will run to completion.
+/// Cancellation is currently only observed by the `resolvo` backend. Other
+/// backends (such as `libsolv_c`) silently ignore the token and will run to
+/// completion.
 ///
 /// # Example
 ///
@@ -412,8 +412,8 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// another thread, the solver stops as soon as possible and returns
     /// [`SolveError::Cancelled`].
     ///
-    /// Only the [`resolvo`](crate::resolvo) backend observes this token.
-    /// Other backends ignore it.
+    /// Only the `resolvo` backend observes this token. Other backends
+    /// ignore it.
     pub cancellation_token: Option<CancellationToken>,
 }
 
