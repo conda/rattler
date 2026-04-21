@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple, Union
 
-from rattler.rattler import PyVersion, InvalidVersionError
+from rattler.rattler import PyVersion
+from rattler.exceptions import InvalidVersionError, VersionBumpError
 
 
 class Version:
@@ -20,6 +21,12 @@ class Version:
     _version: PyVersion
 
     def __init__(self, version: str) -> None:
+        """
+        Create a new version from the given string.
+
+        Raises:
+            InvalidVersionError: If the version string is not valid.
+        """
         if isinstance(version, str):
             self._version = PyVersion(version)
         else:
@@ -145,6 +152,9 @@ class Version:
         Version("1.5.0.0.0.1")
         >>>
         ```
+
+        Raises:
+            VersionBumpError: If the segment cannot be bumped, for example if the index is out of range.
         """
         return Version._from_py_version(self._version.bump_segment(index))
 
@@ -356,6 +366,9 @@ class Version:
         segment
         >>>
         ```
+
+        Raises:
+            InvalidVersionError: If the version becomes invalid due to the operation.
         """
         new_py_version = self._version.pop_segments(n)
         if new_py_version:
@@ -377,6 +390,9 @@ class Version:
         Version("2!1.2")
         >>>
         ```
+
+        Raises:
+            InvalidVersionError: If the provided range is invalid.
         """
         new_py_version = self._version.with_segments(start, stop)
         if new_py_version:

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Optional
 from rattler.channel.channel import Channel
 
 from rattler.rattler import PyNamelessMatchSpec
+from rattler.exceptions import InvalidMatchSpecError
 
 if TYPE_CHECKING:
     from rattler.match_spec import MatchSpec
@@ -39,6 +40,9 @@ class NamelessMatchSpec:
         NamelessMatchSpec("==24")
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the match specification is invalid.
         """
         if isinstance(spec, str):
             self._nameless_match_spec = PyNamelessMatchSpec(

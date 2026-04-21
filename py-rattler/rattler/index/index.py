@@ -6,6 +6,13 @@ from typing import Optional, Literal
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
+from rattler.exceptions import (
+    CacheDirError,
+    IoError,
+    InvalidUrlError,
+    AuthenticationStorageError,
+    PyRattlerError,
+)
 
 
 @dataclass
@@ -56,6 +63,10 @@ async def index_fs(
         write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+
+    Raises:
+        CacheDirError: If the cache directory could not be created or accessed.
+        IoError: If an I/O error occurred during indexing.
     """
     await py_index_fs(
         channel_directory,
@@ -98,6 +109,12 @@ async def index_s3(
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
         precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
+
+    Raises:
+        InvalidUrlError: If `channel_url` is not a valid S3 URL.
+        AuthenticationStorageError: If authentication with or access to the S3 backend fails.
+        ValueError: If credentials cannot be resolved.
+        PyRattlerError: If another typed indexing error is surfaced by the underlying rattler binding.
     """
     await py_index_s3(
         channel_url,

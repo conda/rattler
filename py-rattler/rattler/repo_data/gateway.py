@@ -13,6 +13,7 @@ from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+from rattler.exceptions import GatewayError, FetchRepoDataError
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
@@ -198,6 +199,10 @@ class Gateway:
             A list of lists of `RepoDataRecord`s. The outer list contains the results for each
             source in the same order they are provided in the `sources` argument.
 
+        Raises:
+            GatewayError: If the gateway query fails.
+            FetchRepoDataError: If fetching repository data for one of the sources fails.
+
         Examples
         --------
         ```python
@@ -238,6 +243,10 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
+
+        Raises:
+            GatewayError: If the gateway query failed.
+            FetchRepoDataError: If fetching repodata for the query failed.
 
         Examples
         --------

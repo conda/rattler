@@ -54,6 +54,7 @@ class Environment:
         [...]
         >>>
         ```
+
         """
         return [Platform._from_py_platform(p) for p in self._env.platforms()]
 
@@ -110,6 +111,7 @@ class Environment:
         [Platform(...)]
         >>>
         ```
+
         """
         return {
             Platform._from_py_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
@@ -178,6 +180,7 @@ class Environment:
         RepoDataRecord(...)
         >>>
         ```
+
         """
         if records := self._env.conda_repodata_records_for_platform(platform._inner):
             return [RepoDataRecord._from_py_record(r) for r in records]

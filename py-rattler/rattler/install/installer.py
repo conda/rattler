@@ -9,6 +9,7 @@ from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
 
 from rattler.rattler import py_install
+from rattler.exceptions import InstallerError, TransactionError, IoError
 
 
 @runtime_checkable
@@ -348,6 +349,11 @@ async def install(
         reporter: An optional :class:`InstallerReporter` instance that receives progress
                 callbacks during installation. When provided, `show_progress` is ignored.
                 Subclass :class:`InstallerReporter` and override the methods you need.
+
+    Raises:
+        InstallerError: If the installation failed.
+        TransactionError: If the transaction failed.
+        IoError: If an I/O error occurred during installation.
     """
 
     await py_install(

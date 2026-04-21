@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 from rattler.channel.channel import Channel
 from rattler.package.package_name_matcher import PackageNameMatcher
 from rattler.rattler import PyMatchSpec
+from rattler.exceptions import InvalidMatchSpecError, PackageNameMatcherParseError
 
 if TYPE_CHECKING:
     from rattler.match_spec import NamelessMatchSpec
@@ -112,6 +113,9 @@ class MatchSpec:
         InvalidMatchSpecError: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the match specification is invalid.
         """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(
@@ -239,6 +243,9 @@ class MatchSpec:
         exceptions.PackageNameMatcherParseError
         >>>
         ```
+
+        Raises:
+            PackageNameMatcherParseError: If the package name is invalid.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
 
@@ -258,6 +265,9 @@ class MatchSpec:
         MatchSpec("_libgcc_mutex[sha256="adfa71f158cbd872a36394c56c3568e6034aa55c623634b37a4836bd036e6b91", url="https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"]")
         >>>
         ```
+
+        Raises:
+            InvalidMatchSpecError: If the URL is not a valid match specification.
         """
         return cls._from_py_match_spec(PyMatchSpec.from_url(url))
 

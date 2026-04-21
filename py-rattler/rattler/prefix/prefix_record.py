@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List, Optional
 
 from rattler.rattler import PyRecord, PyLink
+from rattler.exceptions import IoError
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
 from pathlib import Path
@@ -71,6 +72,9 @@ class PrefixRecord(RepoDataRecord):
         >>> assert isinstance(r, PrefixRecord)
         >>>
         ```
+
+        Raises:
+            IoError: If the file does not exist or cannot be read.
         """
         return PrefixRecord._from_py_record(PyRecord.from_path(path))
 

@@ -11,6 +11,13 @@ from enum import Enum
 
 from rattler.rattler import PySparseRepoData, PyPackageFormatSelection
 from rattler.repo_data.record import RepoDataRecord
+from rattler.exceptions import (
+    CacheDirError,
+    FetchRepoDataError,
+    IoError,
+    InvalidUrlError,
+    ParsePlatformError,
+)
 
 
 class PackageFormatSelection(Enum):
@@ -58,6 +65,16 @@ class SparseRepoData:
         subdir: str,
         path: os.PathLike[str] | str,
     ) -> None:
+        """
+        Construct a new SparseRepoData from a channel, subdirectory, and path.
+
+        Raises:
+            CacheDirError: If the cache directory could not be created or accessed.
+            FetchRepoDataError: If fetching repository data fails.
+            IoError: If an I/O error occurred while loading the repodata.
+            InvalidUrlError: If a channel URL is invalid.
+            ParsePlatformError: If the subdirectory is not a valid platform.
+        """
         if not isinstance(channel, Channel):
             raise TypeError(
                 "SparseRepoData constructor received unsupported type "
@@ -118,6 +135,10 @@ class SparseRepoData:
         `conda_packages` fields of the repodata and returning the unique
         package names.
 
+        Raises:
+            IoError: If reading package names fails, such as when the repodata file
+                has been closed.
+
         Examples
         --------
         ```python
@@ -151,6 +172,10 @@ class SparseRepoData:
     ) -> List[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
+
+        Raises:
+            IoError: If reading records fails, such as when the repodata file
+                has been closed.
 
         Examples
         --------

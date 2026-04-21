@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Union, List, TYPE_CHECKING
+from rattler.exceptions import IoError
 
 
 if TYPE_CHECKING:
@@ -19,6 +20,16 @@ class RepoData:
             )
 
         self._repo_data = PyRepoData.from_path(path)
+
+    @classmethod
+    def from_path(cls, path: Union[str, PathLike[str]]) -> RepoData:
+        """
+        Parses a rattler-repo data file from a file.
+
+        Raises:
+            IoError: If the repodata file could not be read.
+        """
+        return cls(path)
 
     def apply_patches(self, instructions: PatchInstructions) -> None:
         """
