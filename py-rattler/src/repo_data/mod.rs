@@ -33,6 +33,20 @@ impl From<RepoData> for PyRepoData {
 
 #[pymethods]
 impl PyRepoData {
+    /// Constructs a new `RepoData` from its components. All fields are
+    /// optional; packages, conda packages and removed sets start out empty.
+    #[new]
+    #[pyo3(signature = (info=None, version=None))]
+    pub fn new(info: Option<PyChannelInfo>, version: Option<u64>) -> Self {
+        Self {
+            inner: RepoData {
+                info: info.map(Into::into),
+                version,
+                ..RepoData::default()
+            },
+        }
+    }
+
     /// Apply a patch to a repodata file Note that we currently do not handle revoked instructions.
     pub fn apply_patches(&mut self, instructions: &PyPatchInstructions) {
         self.inner.apply_patches(&instructions.inner);
@@ -47,6 +61,12 @@ impl PyRepoData {
     #[getter]
     pub fn info(&self) -> Option<PyChannelInfo> {
         self.inner.info.clone().map(Into::into)
+    }
+
+    /// Returns the repodata format version, if any.
+    #[getter]
+    pub fn version(&self) -> Option<u64> {
+        self.inner.version
     }
 }
 
@@ -116,19 +136,9 @@ impl PyChannelInfo {
         self.inner.subdir.clone()
     }
 
-    #[setter]
-    pub fn set_subdir(&mut self, value: Option<String>) {
-        self.inner.subdir = value;
-    }
-
     #[getter]
     pub fn base_url(&self) -> Option<String> {
         self.inner.base_url.clone()
-    }
-
-    #[setter]
-    pub fn set_base_url(&mut self, value: Option<String>) {
-        self.inner.base_url = value;
     }
 
     /// Channel relations declared by this channel (CEP-42). `None` when the
@@ -136,11 +146,6 @@ impl PyChannelInfo {
     #[getter]
     pub fn channel_relations(&self) -> Option<PyChannelRelations> {
         self.inner.channel_relations.clone().map(Into::into)
-    }
-
-    #[setter]
-    pub fn set_channel_relations(&mut self, value: Option<PyChannelRelations>) {
-        self.inner.channel_relations = value.map(Into::into);
     }
 }
 
@@ -180,18 +185,8 @@ impl PyChannelRelations {
         self.inner.base.clone()
     }
 
-    #[setter]
-    pub fn set_base(&mut self, value: Option<String>) {
-        self.inner.base = value;
-    }
-
     #[getter]
     pub fn overrides(&self) -> Option<String> {
         self.inner.overrides.clone()
-    }
-
-    #[setter]
-    pub fn set_overrides(&mut self, value: Option<String>) {
-        self.inner.overrides = value;
     }
 }

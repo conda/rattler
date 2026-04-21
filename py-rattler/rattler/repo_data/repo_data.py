@@ -19,40 +19,34 @@ class ChannelRelations:
 
     Both ``base`` and ``overrides`` are optional relative-path channel
     references (e.g. ``"../conda-forge"``).
+
+    `ChannelRelations` values are read-only views. To change a relation,
+    construct a new `ChannelRelations` and pass it to a new `ChannelInfo`
+    and `RepoData`.
     """
 
     def __init__(
         self,
         base: Optional[str] = None,
         overrides: Optional[str] = None,
-        _inner: Optional[PyChannelRelations] = None,
     ) -> None:
-        if _inner is not None:
-            self._inner = _inner
-        else:
-            self._inner = PyChannelRelations(base=base, overrides=overrides)
+        self._inner = PyChannelRelations(base=base, overrides=overrides)
 
     @classmethod
     def _from_inner(cls, py_channel_relations: PyChannelRelations) -> ChannelRelations:
-        return cls(_inner=py_channel_relations)
+        instance = cls.__new__(cls)
+        instance._inner = py_channel_relations
+        return instance
 
     @property
     def base(self) -> Optional[str]:
         """A reference to a channel with higher priority than the declaring channel."""
         return self._inner.base
 
-    @base.setter
-    def base(self, value: Optional[str]) -> None:
-        self._inner.base = value
-
     @property
     def overrides(self) -> Optional[str]:
         """A reference to a channel with lower priority than the declaring channel."""
         return self._inner.overrides
-
-    @overrides.setter
-    def overrides(self, value: Optional[str]) -> None:
-        self._inner.overrides = value
 
     def __repr__(self) -> str:
         return f"ChannelRelations(base={self.base!r}, overrides={self.overrides!r})"
@@ -61,28 +55,38 @@ class ChannelRelations:
 class ChannelInfo:
     """
     The ``info`` section of a ``repodata.json`` file.
+
+    `ChannelInfo` values are read-only views. To change a field, construct a
+    new `ChannelInfo` and pass it to a new `RepoData`.
     """
 
-    def __init__(self, py_channel_info: PyChannelInfo) -> None:
-        self._inner = py_channel_info
+    def __init__(
+        self,
+        subdir: Optional[str] = None,
+        base_url: Optional[str] = None,
+        channel_relations: Optional[ChannelRelations] = None,
+    ) -> None:
+        self._inner = PyChannelInfo(
+            subdir=subdir,
+            base_url=base_url,
+            channel_relations=channel_relations._inner if channel_relations is not None else None,
+        )
+
+    @classmethod
+    def _from_inner(cls, py_channel_info: PyChannelInfo) -> ChannelInfo:
+        instance = cls.__new__(cls)
+        instance._inner = py_channel_info
+        return instance
 
     @property
     def subdir(self) -> Optional[str]:
         """The channel's subdirectory (e.g. ``"linux-64"``)."""
         return self._inner.subdir
 
-    @subdir.setter
-    def subdir(self, value: Optional[str]) -> None:
-        self._inner.subdir = value
-
     @property
     def base_url(self) -> Optional[str]:
         """The base URL for all package URLs in this channel, if any."""
         return self._inner.base_url
-
-    @base_url.setter
-    def base_url(self, value: Optional[str]) -> None:
-        self._inner.base_url = value
 
     @property
     def channel_relations(self) -> Optional[ChannelRelations]:
@@ -97,10 +101,6 @@ class ChannelInfo:
             return None
         return ChannelRelations._from_inner(relations)
 
-    @channel_relations.setter
-    def channel_relations(self, value: Optional[ChannelRelations]) -> None:
-        self._inner.channel_relations = None if value is None else value._inner
-
     def __repr__(self) -> str:
         return (
             f"ChannelInfo(subdir={self.subdir!r}, base_url={self.base_url!r}, "
@@ -109,23 +109,56 @@ class ChannelInfo:
 
 
 class RepoData:
-    def __init__(self, path: Union[str, PathLike[str]]) -> None:
+    """
+    Repository metadata as deserialized from a ``repodata.json`` file.
+
+    `RepoData` values are read-only views. Construct a new one from its
+    components (e.g. a different `ChannelInfo`) to produce modified
+    repodata.
+    """
+
+    def __init__(
+        self,
+        info: Optional[ChannelInfo] = None,
+        version: Optional[int] = None,
+    ) -> None:
+        self._repo_data = PyRepoData(
+            info=info._inner if info is not None else None,
+            version=version,
+        )
+
+    @classmethod
+    def from_path(cls, path: Union[str, PathLike[str]]) -> RepoData:
+        """
+        Load a `RepoData` from a ``repodata.json`` file on disk.
+
+        Examples
+        --------
+        ```python
+        >>> repo_data = RepoData.from_path("../test-data/test-server/repo/noarch/repodata.json")
+        >>> repo_data
+        RepoData()
+        >>>
+        ```
+        """
         if not isinstance(path, (str, Path)):
             raise TypeError(
-                f"RepoData constructor received unsupported type  {type(path).__name__!r} for the `path` parameter"
+                f"RepoData.from_path received unsupported type {type(path).__name__!r} for the `path` parameter"
             )
-
-        self._repo_data = PyRepoData.from_path(path)
+        return cls._from_py_repo_data(PyRepoData.from_path(path))
 
     @property
     def info(self) -> Optional[ChannelInfo]:
-        """
-        Returns the channel info contained in the repodata, if any.
-        """
+        """Returns the channel info contained in the repodata, if any."""
         info = self._repo_data.info
         if info is None:
             return None
-        return ChannelInfo(info)
+        return ChannelInfo._from_inner(info)
+
+    @property
+    def version(self) -> Optional[int]:
+        """Returns the repodata format version, if any."""
+        return self._repo_data.version
 
     def apply_patches(self, instructions: PatchInstructions) -> None:
         """
@@ -143,7 +176,7 @@ class RepoData:
         --------
         ```python
         >>> from rattler import Channel
-        >>> repo_data = RepoData("../test-data/test-server/repo/noarch/repodata.json")
+        >>> repo_data = RepoData.from_path("../test-data/test-server/repo/noarch/repodata.json")
         >>> repo_data.into_repo_data(Channel("test"))
         [...]
         >>>
@@ -172,7 +205,7 @@ class RepoData:
         Examples
         --------
         ```python
-        >>> repo_data = RepoData("../test-data/test-server/repo/noarch/repodata.json")
+        >>> repo_data = RepoData.from_path("../test-data/test-server/repo/noarch/repodata.json")
         >>> repo_data
         RepoData()
         >>>
