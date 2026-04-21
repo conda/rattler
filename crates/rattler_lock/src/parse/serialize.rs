@@ -16,7 +16,9 @@ use crate::{
 };
 
 fn selector_ids_to_strings(ids: Vec<SelectorId>) -> Vec<String> {
-    ids.into_iter().map(SelectorId::into_inner).collect()
+    ids.into_iter()
+        .map(|id| id.as_long_str().to_string())
+        .collect()
 }
 
 #[serde_as]
@@ -108,16 +110,16 @@ enum SerializablePackageDataV7<'a> {
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
         match package.package {
-            PackageRef::Conda(CondaPackageData::Binary(binary)) => {
+            LockedPackage::Conda(CondaPackageData::Binary(binary)) => {
                 Self::Conda(binary.as_ref().into())
             }
-            PackageRef::Conda(CondaPackageData::Source(source)) => {
+            LockedPackage::Conda(CondaPackageData::Source(source)) => {
                 let mut model = v7::SourcePackageDataModel::from(source.as_ref());
                 model.build_packages = selector_ids_to_strings(package.build_packages);
                 model.host_packages = selector_ids_to_strings(package.host_packages);
                 Self::Source(model)
             }
-            PackageRef::Pypi(p) => {
+            LockedPackage::Pypi(p) => {
                 let mut model = v7::PypiPackageDataModel::from(p);
                 model.build_packages = selector_ids_to_strings(package.build_packages);
                 model.host_packages = selector_ids_to_strings(package.host_packages);
@@ -143,13 +145,13 @@ enum SerializablePackageSelector {
 impl SerializablePackageSelector {
     fn from_lock_file(inner: &LockFileInner, package: PackageIndex) -> Self {
         let pkg = &inner.packages[package.0];
-        let id = pkg.selector_id().into_inner();
+        let id = SelectorId::new(pkg).as_str().to_string();
         match pkg {
-            crate::LockedPackage::Conda(CondaPackageData::Binary(_)) => Self::Conda { conda: id },
-            crate::LockedPackage::Conda(CondaPackageData::Source(_)) => {
+            LockedPackage::Conda(CondaPackageData::Binary(_)) => Self::Conda { conda: id },
+            LockedPackage::Conda(CondaPackageData::Source(_)) => {
                 Self::CondaSource { conda_source: id }
             }
-            crate::LockedPackage::Pypi(_) => Self::Pypi { pypi: id },
+            LockedPackage::Pypi(_) => Self::Pypi { pypi: id },
         }
     }
 
@@ -235,37 +237,37 @@ impl Serialize for LockFile {
             .enumerate()
             .filter(|(index, _)| used_packages.contains(&PackageIndex(*index)))
             .filter_map(|(_, p)| {
-                let (package, source_data) = match p {
+                let source_data = match p {
                     LockedPackage::Conda(conda) => match conda {
-                        CondaPackageData::Binary(binary) => {
-                            if !seen_binary_locations.insert(binary.location.clone()) {
-                                return None;
-                            }
-                            (PackageRef::Conda(conda), None)
-                        }
-                        CondaPackageData::Source(source) => {
-                            (PackageRef::Conda(conda), Some(&source.source_data))
-                        }
+                        CondaPackageData::Binary(binary) => seen_binary_locations
+                            .insert(binary.location.clone())
+                            .then_some(None),
+                        CondaPackageData::Source(source) => Some(Some(&source.source_data)),
                     },
                     LockedPackage::Pypi(pypi) => {
                         let source_data = pypi.as_source().map(|s| &s.source_data);
-                        (PackageRef::Pypi(pypi), source_data)
+                        Some(source_data)
                     }
                 };
-                let (build_packages, host_packages) = source_data.map_or_else(
-                    || (Vec::new(), Vec::new()),
-                    |sd| {
-                        (
-                            sd.build_packages.to_selector_ids(),
-                            sd.host_packages.to_selector_ids(),
-                        )
-                    },
-                );
-                Some(PackageData {
-                    package,
-                    build_packages,
-                    host_packages,
-                })
+                if let Some(source_data) = source_data {
+                    let (build_packages, host_packages) = source_data.map_or_else(
+                        || (Vec::new(), Vec::new()),
+                        |sd| {
+                            (
+                                sd.build_packages.to_selector_ids(),
+                                sd.host_packages.to_selector_ids(),
+                            )
+                        },
+                    );
+                    Some(PackageData {
+                        selector_id: SelectorId::new(p),
+                        package: p,
+                        build_packages,
+                        host_packages,
+                    })
+                } else {
+                    None
+                }
             })
             .sorted()
             .collect();
@@ -294,36 +296,13 @@ impl Serialize for LockFile {
 
 #[derive(Debug, Clone)]
 pub struct PackageData<'a> {
-    pub package: PackageRef<'a>,
+    pub selector_id: SelectorId,
+    pub package: &'a LockedPackage,
     /// Pre-resolved selector ids for `source_data.build_packages`. Populated
     /// when building the serializable lockfile; empty for non-source packages.
     pub build_packages: Vec<SelectorId>,
     /// Pre-resolved selector ids for `source_data.host_packages`.
     pub host_packages: Vec<SelectorId>,
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum PackageRef<'a> {
-    Conda(&'a CondaPackageData),
-    Pypi(&'a PypiPackageData),
-}
-
-impl PackageRef<'_> {
-    fn selector_id(&self) -> SelectorId {
-        let raw = match self {
-            PackageRef::Conda(CondaPackageData::Binary(data)) => data.location.to_string(),
-            PackageRef::Conda(CondaPackageData::Source(data)) => {
-                crate::SourceIdentifier::from_source_data(data).to_string()
-            }
-            PackageRef::Pypi(data) => {
-                let location = data.location();
-                location
-                    .given()
-                    .map_or_else(|| location.inner().to_string(), String::from)
-            }
-        };
-        SelectorId::new(raw)
-    }
 }
 
 impl PartialEq for PackageData<'_> {
@@ -342,7 +321,7 @@ impl PartialOrd<Self> for PackageData<'_> {
 
 impl Ord for PackageData<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.package.selector_id().cmp(&other.package.selector_id())
+        self.selector_id.cmp(&other.selector_id)
     }
 }
 

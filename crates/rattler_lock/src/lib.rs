@@ -154,32 +154,106 @@ pub struct PackageIndex(usize);
 /// error message. The underlying string representation is intentionally
 /// hidden so the lockfile format can evolve without exposing its encoding.
 ///
-/// [`Display`]: std::fmt::Display
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct SelectorId(String);
+/// The underlying string matches the selector key used in the serialized
+/// lockfile format:
+/// - Binary conda: the location URL/path
+/// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
+/// - Pypi: the verbatim location (preserving the original string if present)
+#[derive(Clone, Debug, Eq)]
+pub(crate) struct SelectorId {
+    full_id: String,
+    short_offset: usize,
+}
+
+/// Discriminator for the three kinds of packages that can appear in a
+/// lockfile. Owns the prefix string used to build a [`SelectorId`], so the
+/// prefix choice lives in exactly one place.
+#[derive(Clone, Copy)]
+pub(crate) enum SelectorKind {
+    CondaBinary,
+    CondaSource,
+    Pypi,
+}
+
+impl SelectorKind {
+    fn prefix(self) -> &'static str {
+        match self {
+            Self::CondaBinary => "conda",
+            Self::CondaSource => "source",
+            Self::Pypi => "pypi",
+        }
+    }
+}
 
 impl SelectorId {
-    pub(crate) fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
+    pub(crate) fn from_parts(kind: SelectorKind, id: &str) -> Self {
+        let prefix = kind.prefix();
+        Self {
+            full_id: format!("{prefix}: {id}"),
+            short_offset: prefix.len() + 2,
+        }
+    }
+
+    pub(crate) fn new(package: &LockedPackage) -> Self {
+        match package {
+            LockedPackage::Conda(CondaPackageData::Binary(data)) => {
+                Self::from_parts(SelectorKind::CondaBinary, data.location.as_str())
+            }
+            LockedPackage::Conda(CondaPackageData::Source(data)) => Self::from_parts(
+                SelectorKind::CondaSource,
+                &SourceIdentifier::from_source_data(data).to_string(),
+            ),
+            LockedPackage::Pypi(data) => {
+                let location = data
+                    .location()
+                    .given()
+                    .unwrap_or_else(|| data.location().inner().as_str());
+                Self::from_parts(SelectorKind::Pypi, location)
+            }
+        }
     }
 
     pub(crate) fn as_str(&self) -> &str {
-        &self.0
+        &self.full_id[self.short_offset..]
     }
 
-    pub(crate) fn into_inner(self) -> String {
-        self.0
+    pub(crate) fn as_long_str(&self) -> &str {
+        &self.full_id
+    }
+}
+
+impl PartialEq for SelectorId {
+    fn eq(&self, other: &Self) -> bool {
+        self.full_id == other.full_id
+    }
+}
+
+impl Ord for SelectorId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.full_id.cmp(&other.full_id)
+    }
+}
+
+impl PartialOrd for SelectorId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::hash::Hash for SelectorId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.full_id.hash(state);
     }
 }
 
 impl std::fmt::Display for SelectorId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        write!(f, "{}", self.full_id)
     }
 }
 
 /// An opaque handle to a package stored in a [`LockFile`], bundling its
-/// [`PackageIndex`] with the [`SelectorId`] used to refer to it in the
+/// [`PackageIndex`] with a package id used to refer to it in the
 /// lockfile format.
 ///
 /// Handles are produced by the lockfile builder (`register_*_package`) and
@@ -216,7 +290,7 @@ impl PackageHandle {
     pub(crate) fn new(index: PackageIndex, package: &LockedPackage) -> Self {
         Self {
             index,
-            selector_id: package.selector_id(),
+            selector_id: SelectorId::new(package),
         }
     }
 
@@ -237,12 +311,12 @@ impl PackageHandle {
                 index: self.index.0,
                 len: packages.len(),
             })?;
-        let actual_selector_id = package.selector_id();
+        let actual_selector_id = SelectorId::new(package);
         if actual_selector_id != self.selector_id {
             return Err(InvalidPackageHandleError::SelectorMismatch {
                 index: self.index.0,
-                expected: self.selector_id.clone(),
-                actual: actual_selector_id,
+                expected: self.selector_id.as_long_str().to_string(),
+                actual: actual_selector_id.as_long_str().to_string(),
             });
         }
         Ok(package)
@@ -272,9 +346,9 @@ pub enum InvalidPackageHandleError {
         /// The index stored by the handle.
         index: usize,
         /// The selector id the handle claims belongs to that index.
-        expected: SelectorId,
+        expected: String,
         /// The selector id of the package actually at that index.
-        actual: SelectorId,
+        actual: String,
     },
 }
 
@@ -289,11 +363,11 @@ pub struct InconsistentInsertError {
     /// The package index that was being inserted.
     pub index: usize,
     /// The selector id that was being inserted.
-    pub selector_id: SelectorId,
+    pub selector_id: String,
 }
 
 /// A deduplicated set of package references, each stored as a
-/// [`PackageIndex`] paired with its [`SelectorId`].
+/// [`PackageIndex`] paired with its package id.
 ///
 /// Entries are always sorted by selector id. Both the selector id and the
 /// [`PackageIndex`] are kept unique — re-inserting the exact same
@@ -364,7 +438,7 @@ impl EnvironmentPackages {
             (Some(a), Ok(b)) if a == b => Ok(false),
             _ => Err(InconsistentInsertError {
                 index: handle.index.0,
-                selector_id: handle.selector_id,
+                selector_id: handle.selector_id.as_str().to_string(),
             }),
         }
     }
@@ -862,15 +936,16 @@ mod test {
     #[case::v7_conda_source_path("v7/conda-path-lock.yml")]
     #[case::v7_derived_channel("v7/derived-channel-lock.yml")]
     #[case::v7_sources("v7/sources-lock.yml")]
-    #[case::v7_source_timestamps_map("v7/source-timestamps-map-lock.yml")]
     #[case::v7_options("v7/options-lock.yml")]
     #[case::v7_pixi_build_pinned_source("v7/pixi-build-pinned-source-lock.yml")]
     #[case::v7_pixi_build_url_source("v7/pixi-build-url-source-lock.yml")]
     #[case::v7_pixi_build_git_tag_source("v7/pixi-build-git-tag-source-lock.yml")]
     #[case::v7_pixi_build_git_rev_only_source("v7/pixi-build-git-rev-only-source-lock.yml")]
-    #[case::v7_source_package_with_variants("v7/source-package-with-variants-lock.yml")]
     #[case::v7_multiple_source_packages_with_variants(
         "v7/multiple-source-packages-with-variants-lock.yml"
+    )]
+    #[case::v7_conda_source_with_build_and_host_packages(
+        "v7/conda-source-build-host-packages-lock.yml"
     )]
     #[case::v7_pypi_absolute_url("v7/pypi_absolute_url.yml")]
     #[case::v7_pypi_relative_url("v7/pypi_relative_url.yml")]

@@ -9,6 +9,7 @@ environments:
       - https://pypi.org/simple
     packages:
       osx-arm64:
+        - conda: https://prefix.dev/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/bzip2-1.0.8-h99b78c6_7.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/ca-certificates-2024.12.14-hf0a4a13_0.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/libexpat-2.6.4-h286801f_0.conda
@@ -24,12 +25,18 @@ environments:
         - conda: https://prefix.dev/conda-forge/osx-arm64/python_abi-3.13-5_cp313.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/readline-8.2-h92ec313_1.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/tk-8.6.13-h5083fa2_1.conda
-        - conda: https://prefix.dev/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/xz-5.6.3-h9a6d368_1.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/xz-gpl-tools-5.6.3-h9a6d368_1.conda
         - conda: https://prefix.dev/conda-forge/osx-arm64/xz-tools-5.6.3-h39f12f2_1.conda
         - pypi: https://files.pythonhosted.org/packages/8c/40/5792ccccd91d45e87d9e00033abc4f6ca8a828467b193f711139ff1f1cd9/numpy-2.2.1-cp313-cp313-macosx_11_0_arm64.whl
 packages:
+  - conda: https://prefix.dev/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
+    sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
+    md5: 8ac3367aafb1cc0a068483c580af8015
+    license: LicenseRef-Public-Domain
+    purls: []
+    size: 122354
+    timestamp: 1728047496079
   - conda: https://prefix.dev/conda-forge/osx-arm64/bzip2-1.0.8-h99b78c6_7.conda
     sha256: adfa71f158cbd872a36394c56c3568e6034aa55c623634b37a4836bd036e6b91
     md5: fc6948412dbbbe9a4c9ddbbcfe0a79ab
@@ -127,11 +134,6 @@ packages:
     purls: []
     size: 802321
     timestamp: 1724658775723
-  - pypi: https://files.pythonhosted.org/packages/8c/40/5792ccccd91d45e87d9e00033abc4f6ca8a828467b193f711139ff1f1cd9/numpy-2.2.1-cp313-cp313-macosx_11_0_arm64.whl
-    name: numpy
-    version: 2.2.1
-    sha256: 3ecc47cd7f6ea0336042be87d9e7da378e5c7e9b3c8ad0f7c966f714fc10d821
-    requires_python: ">=3.10"
   - conda: https://prefix.dev/conda-forge/osx-arm64/openssl-3.4.0-h81ee809_1.conda
     sha256: 97772762abc70b3a537683ca9fc3ff3d6099eb64e4aba3b9c99e6fce48422d21
     md5: 22f971393637480bda8c679f374d8861
@@ -197,13 +199,6 @@ packages:
     purls: []
     size: 3145523
     timestamp: 1699202432999
-  - conda: https://prefix.dev/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
-    sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
-    md5: 8ac3367aafb1cc0a068483c580af8015
-    license: LicenseRef-Public-Domain
-    purls: []
-    size: 122354
-    timestamp: 1728047496079
   - conda: https://prefix.dev/conda-forge/osx-arm64/xz-5.6.3-h9a6d368_1.conda
     sha256: 84f9405312032638a7c6249573c8f50423c314c8a4d149b34b720caecc0dc83c
     md5: 1d79c34d99f1e839a06b4631df091b64
@@ -237,3 +232,8 @@ packages:
     purls: []
     size: 81028
     timestamp: 1733407527563
+  - pypi: https://files.pythonhosted.org/packages/8c/40/5792ccccd91d45e87d9e00033abc4f6ca8a828467b193f711139ff1f1cd9/numpy-2.2.1-cp313-cp313-macosx_11_0_arm64.whl
+    name: numpy
+    version: 2.2.1
+    sha256: 3ecc47cd7f6ea0336042be87d9e7da378e5c7e9b3c8ad0f7c966f714fc10d821
+    requires_python: ">=3.10"

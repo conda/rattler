@@ -7,9 +7,11 @@ use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentIndex, EnvironmentPackages, LockFile,
-    LockFileInner, PackageHandle, PackageIndex, ParseCondaLockError, PlatformIndex, PypiIndexes,
-    PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath, Verbatim,
+    CondaSourceData, EnvironmentData, EnvironmentIndex, EnvironmentPackages,
+    InconsistentInsertError, InvalidPackageHandleError, LockFile, LockFileInner, PackageHandle,
+    PackageIndex, ParseCondaLockError, PlatformData, PlatformIndex, PypiIndexes, PypiPackageData,
+    PypiPrereleaseMode, PypiSourceData, SolveOptions, SourceData, SourceIdentifier, UrlOrPath,
+    Verbatim,
 };
 
 /// Information about a single locked package in an environment.
@@ -84,37 +86,13 @@ impl LockedPackage {
             LockedPackage::Pypi(data) => Some(data),
         }
     }
-
-    /// Returns the opaque [`SelectorId`] that uniquely identifies this
-    /// package within a lockfile.
-    ///
-    /// The underlying string matches the selector key used in the serialized
-    /// lockfile format:
-    /// - Binary conda: the location URL/path
-    /// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
-    /// - Pypi: the verbatim location (preserving the original string if present)
-    pub(crate) fn selector_id(&self) -> crate::SelectorId {
-        let raw = match self {
-            LockedPackage::Conda(CondaPackageData::Binary(data)) => data.location.to_string(),
-            LockedPackage::Conda(CondaPackageData::Source(data)) => {
-                SourceIdentifier::from_source_data(data).to_string()
-            }
-            LockedPackage::Pypi(data) => {
-                let location = data.location();
-                location
-                    .given()
-                    .map_or_else(|| location.inner().to_string(), String::from)
-            }
-        };
-        crate::SelectorId::new(raw)
-    }
 }
 
 /// A struct to incrementally build a lock-file.
 #[derive(Default)]
 pub struct LockFileBuilder {
     /// The known platforms
-    platforms: Vec<crate::PlatformData>,
+    platforms: Vec<PlatformData>,
 
     /// Metadata about the different environments stored in the lock file.
     environments: IndexMap<String, EnvironmentData>,
@@ -165,12 +143,12 @@ pub enum RegisterSourcePackageError {
     /// A build or host [`PackageHandle`] does not refer to a package
     /// registered with this builder.
     #[error(transparent)]
-    InvalidHandle(#[from] crate::InvalidPackageHandleError),
+    InvalidHandle(#[from] InvalidPackageHandleError),
 
     /// The build or host handle list reuses either a [`PackageIndex`] or a
     /// selector id with a different counterpart.
     #[error(transparent)]
-    InconsistentInsert(#[from] crate::InconsistentInsertError),
+    InconsistentInsert(#[from] InconsistentInsertError),
 }
 
 /// Merges `requires_dist` from `other` into `existing`, adding any entries
@@ -199,7 +177,7 @@ impl LockFileBuilder {
     /// known before.
     pub fn with_platforms(
         mut self,
-        platforms: Vec<crate::PlatformData>,
+        platforms: Vec<PlatformData>,
     ) -> Result<Self, ParseCondaLockError> {
         let mut unique_platforms = ahash::HashSet::default();
         for platform in platforms.iter() {
@@ -216,10 +194,7 @@ impl LockFileBuilder {
 
     /// Sets the `Vec<Platform>` into the `LockFile`, replacing any platforms that were
     /// known before.
-    pub fn add_platform(
-        mut self,
-        platform: crate::PlatformData,
-    ) -> Result<Self, ParseCondaLockError> {
+    pub fn add_platform(mut self, platform: PlatformData) -> Result<Self, ParseCondaLockError> {
         if self
             .platforms
             .iter()
@@ -510,7 +485,7 @@ impl LockFileBuilder {
     /// [`RegisterSourcePackageError::InvalidHandle`].
     pub fn register_pypi_source_package(
         &mut self,
-        mut data: crate::PypiSourceData,
+        mut data: PypiSourceData,
         build_packages: impl IntoIterator<Item = PackageHandle>,
         host_packages: impl IntoIterator<Item = PackageHandle>,
     ) -> Result<PackageHandle, RegisterSourcePackageError> {
@@ -522,13 +497,13 @@ impl LockFileBuilder {
         &self,
         build_packages: impl IntoIterator<Item = PackageHandle>,
         host_packages: impl IntoIterator<Item = PackageHandle>,
-    ) -> Result<crate::SourceData, RegisterSourcePackageError> {
+    ) -> Result<SourceData, RegisterSourcePackageError> {
         let build_packages: Vec<_> = build_packages.into_iter().collect();
         let host_packages: Vec<_> = host_packages.into_iter().collect();
         for handle in build_packages.iter().chain(host_packages.iter()) {
             handle.get(&self.packages)?;
         }
-        Ok(crate::SourceData {
+        Ok(SourceData {
             build_packages: EnvironmentPackages::from_handles(build_packages)?,
             host_packages: EnvironmentPackages::from_handles(host_packages)?,
         })
@@ -551,7 +526,7 @@ impl LockFileBuilder {
     pub fn set_pypi_prerelease_mode(
         &mut self,
         environment: impl Into<String>,
-        prerelease_mode: crate::PypiPrereleaseMode,
+        prerelease_mode: PypiPrereleaseMode,
     ) -> &mut Self {
         self.environment_data(environment)
             .options
@@ -563,7 +538,7 @@ impl LockFileBuilder {
     pub fn with_pypi_prerelease_mode(
         mut self,
         environment: impl Into<String>,
-        prerelease_mode: crate::PypiPrereleaseMode,
+        prerelease_mode: PypiPrereleaseMode,
     ) -> Self {
         self.set_pypi_prerelease_mode(environment, prerelease_mode);
         self
@@ -605,7 +580,9 @@ mod test {
     };
     use url::Url;
 
-    use crate::{platform::PlatformName, CondaBinaryData, LockFile, PypiPrereleaseMode};
+    use crate::{
+        platform::PlatformName, CondaBinaryData, LockFile, PlatformData, PypiPrereleaseMode,
+    };
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -628,7 +605,7 @@ mod test {
         };
 
         let lock_file = LockFile::builder()
-            .with_platforms(vec![crate::PlatformData {
+            .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
                 subdir: rattler_conda_types::Platform::Linux64,
                 virtual_packages: Vec::new(),
@@ -704,7 +681,7 @@ mod test {
         };
 
         let lock_file = LockFile::builder()
-            .with_platforms(vec![crate::PlatformData {
+            .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
                 subdir: rattler_conda_types::Platform::Linux64,
                 virtual_packages: Vec::new(),
@@ -759,7 +736,7 @@ mod test {
             PypiPrereleaseMode::IfNecessaryOrExplicit,
         ] {
             let lock_file = LockFile::builder()
-                .with_platforms(vec![crate::PlatformData {
+                .with_platforms(vec![PlatformData {
                     name: PlatformName::try_from("linux-64").unwrap(),
                     subdir: rattler_conda_types::Platform::Linux64,
                     virtual_packages: Vec::new(),
@@ -981,7 +958,7 @@ mod test {
         };
 
         let mut builder = LockFile::builder()
-            .with_platforms(vec![crate::PlatformData {
+            .with_platforms(vec![PlatformData {
                 name: PlatformName::try_from("linux-64").unwrap(),
                 subdir: rattler_conda_types::Platform::Linux64,
                 virtual_packages: Vec::new(),
@@ -1081,7 +1058,8 @@ mod test {
         ] {
             assert!(
                 yaml.contains(expected.as_str()),
-                "expected selector id {expected} in rendered YAML:\n{yaml}"
+                "expected selector id {} in rendered YAML:\n{yaml}",
+                expected.as_str()
             );
         }
 
@@ -1089,7 +1067,7 @@ mod test {
         assert!(
             !yaml.contains(orphan.selector_id.as_str()),
             "unreferenced package {} should not appear in the rendered YAML:\n{yaml}",
-            orphan.selector_id
+            orphan.selector_id.as_str()
         );
 
         // Top-level packages list must contain all six (two source + four

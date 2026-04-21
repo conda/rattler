@@ -2,33 +2,26 @@ version: 7
 platforms:
   - name: linux-64
 environments:
-  without-options:
-    channels: []
-    packages: {}
-    options: {}
-  with-exclude-newer:
-    channels: []
-    packages: {}
-    options:
-      exclude-newer: "2025-04-15T12:15:00+00:00"
-  with-strategy:
-    channels: []
-    packages: {}
-    options:
-      strategy: "lowest-version"
-  with-default-strategy:
-    channels: []
-    packages: {}
-    options:
-      strategy: "highest"
   with-channel-priority:
     channels: []
-    packages: {}
     options:
-      channel-priority: "disabled"
+      channel-priority: disabled
+    packages: {}
   with-default-channel-priority:
     channels: []
     packages: {}
+  with-default-strategy:
+    channels: []
+    packages: {}
+  with-exclude-newer:
+    channels: []
+    packages: {}
+  with-strategy:
+    channels: []
     options:
-      channel-priority: "strict"
+      strategy: lowest-version
+    packages: {}
+  without-options:
+    channels: []
+    packages: {}
 packages: []

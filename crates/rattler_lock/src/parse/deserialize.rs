@@ -21,8 +21,8 @@ use crate::{
     Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
     EnvironmentPackages, LockFile, LockFileInner, LockedPackage, PackageHandle, PackageHashes,
     PackageIndex, ParseCondaLockError, PlatformIndex, PypiDistributionData, PypiIndexes,
-    PypiPackageData, PypiSourceData, SolveOptions, SourceData, SourceIdentifier, UrlOrPath,
-    Verbatim,
+    PypiPackageData, PypiSourceData, SelectorId, SelectorKind, SolveOptions, SourceData,
+    SourceIdentifier, UrlOrPath, Verbatim,
 };
 
 #[serde_as]
@@ -132,9 +132,6 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
 
 /// Package data enum used during V7+ deserialization.
 ///
-/// Source packages carry their `SourceIdentifier` separately so we can use it
-/// directly for lookups without recomputing the hash.
-///
 /// Source variants carry the raw `build_packages` / `host_packages` selector
 /// strings as-read from the YAML; these are resolved to [`PackageIndex`]
 /// values in a second pass after all packages have been indexed.
@@ -142,9 +139,8 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
 enum PackageData {
     /// Binary conda package.
     Conda(CondaBinaryData),
-    /// Source conda package with its identifier for lookup.
+    /// Source conda package.
     CondaSource {
-        identifier: SourceIdentifier,
         data: CondaSourceData,
         build_packages: Vec<String>,
         host_packages: Vec<String>,
@@ -294,9 +290,8 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                 let mut model = v7::SourcePackageDataModel::deserialize(deserializer)?;
                 let build_packages = std::mem::take(&mut model.build_packages);
                 let host_packages = std::mem::take(&mut model.host_packages);
-                let (identifier, data) = model.into_parts().map_err(D::Error::custom)?;
+                let (_identifier, data) = model.into_parts().map_err(D::Error::custom)?;
                 PackageData::CondaSource {
-                    identifier,
                     data,
                     build_packages,
                     host_packages,
@@ -799,43 +794,27 @@ fn parse_from_lock<P>(
 ) -> Result<LockFile, ParseCondaLockError> {
     let platforms = read_platforms(&raw)?;
 
-    // Split the packages into conda and pypi packages, building lookups as we go.
-    // Binary packages are uniquely identified by URL.
-    // Source packages are uniquely identified by SourceIdentifier (name[hash] @ location).
+    // Split the packages into conda and pypi packages.
     //
     // Source packages' `build_packages` / `host_packages` selector strings are
     // collected here and resolved to [`PackageIndex`] values in a second pass
     // after all packages have been indexed.
-    let (
-        mut packages,
-        binary_url_lookup,
-        source_identifier_lookup,
-        pypi_url_lookup,
-        pending_source_data,
-    ) = {
+    let (mut packages, pending_source_data) = {
         let num_packages = raw.packages.len();
         let mut packages = Vec::with_capacity(num_packages);
-        let mut binary_url_lookup = ahash::HashMap::with_capacity(num_packages);
-        let mut source_identifier_lookup = ahash::HashMap::with_capacity(num_packages);
-        let mut pypi_url_lookup = ahash::HashMap::with_capacity(num_packages);
         let mut pending_source_data: Vec<(PackageIndex, Vec<String>, Vec<String>)> = Vec::new();
 
         for (index, package) in raw.packages.into_iter().enumerate() {
             let index = PackageIndex(index);
             let package = match package {
-                PackageData::Conda(binary) => {
-                    binary_url_lookup.insert(binary.location.clone(), index);
-                    Ok(LockedPackage::Conda(CondaPackageData::Binary(Box::new(
-                        binary,
-                    ))))
-                }
+                PackageData::Conda(binary) => Ok(LockedPackage::Conda(CondaPackageData::Binary(
+                    Box::new(binary),
+                ))),
                 PackageData::CondaSource {
-                    identifier,
                     data,
                     build_packages,
                     host_packages,
                 } => {
-                    source_identifier_lookup.insert(identifier, index);
                     if !build_packages.is_empty() || !host_packages.is_empty() {
                         pending_source_data.push((index, build_packages, host_packages));
                     }
@@ -848,7 +827,6 @@ fn parse_from_lock<P>(
                     build_packages,
                     host_packages,
                 } => {
-                    pypi_url_lookup.insert(data.location.clone(), index);
                     if !build_packages.is_empty() || !host_packages.is_empty() {
                         pending_source_data.push((index, build_packages, host_packages));
                     }
@@ -857,46 +835,31 @@ fn parse_from_lock<P>(
             }?;
             packages.push(package);
         }
-        Ok::<_, ParseCondaLockError>((
-            packages,
-            binary_url_lookup,
-            source_identifier_lookup,
-            pypi_url_lookup,
-            pending_source_data,
-        ))
+        Ok::<_, ParseCondaLockError>((packages, pending_source_data))
     }?;
 
+    // Build a sorted index of (SelectorId, PackageIndex) pairs. All lookups
+    // (source-package build/host references and per-environment package
+    // selectors) go through this via binary search on the full selector id.
+    let mut selector_index: Vec<(SelectorId, PackageIndex)> = packages
+        .iter()
+        .enumerate()
+        .map(|(i, pkg)| (SelectorId::new(pkg), PackageIndex(i)))
+        .collect();
+    selector_index.sort_by(|a, b| a.0.cmp(&b.0));
+
     // Resolve build_packages/host_packages selector strings to PackageIndex
-    // values and populate each source package's `source_data`. This runs after
-    // the initial indexing pass so all lookups are fully populated.
+    // values. The strings in the lockfile are the full (kind-prefixed)
+    // SelectorId form, so we binary-search `selector_index` directly.
     let resolve_index = |s: &str| -> Result<PackageIndex, ParseCondaLockError> {
-        // Try conda binary (by URL), then source (by SourceIdentifier), then
-        // pypi (by Verbatim<UrlOrPath>). The selector id formats don't
-        // overlap between variants, so the first lookup that parses wins.
-        let url_or_path = s.parse::<UrlOrPath>().ok();
-        if let Some(index) = url_or_path
-            .as_ref()
-            .and_then(|url| binary_url_lookup.get(url).copied())
-        {
-            Ok(index)
-        } else if let Some(index) = s
-            .parse::<SourceIdentifier>()
-            .ok()
-            .and_then(|identifier| source_identifier_lookup.get(&identifier).copied())
-        {
-            Ok(index)
-        } else if let Some(index) = url_or_path
-            .map(Verbatim::new)
-            .and_then(|verbatim| pypi_url_lookup.get(&verbatim).copied())
-        {
-            Ok(index)
-        } else {
-            Err(ParseCondaLockError::MissingPackage {
+        selector_index
+            .binary_search_by(|(sel, _)| sel.as_long_str().cmp(s))
+            .map(|pos| selector_index[pos].1)
+            .map_err(|_not_found| ParseCondaLockError::MissingPackage {
                 environment: String::new(),
                 platform: String::new(),
                 location: s.to_owned(),
             })
-        }
     };
 
     for (pkg_idx, build_strings, host_strings) in pending_source_data {
@@ -960,9 +923,7 @@ fn parse_from_lock<P>(
                     selector,
                     &env_name,
                     platform_data.subdir,
-                    &binary_url_lookup,
-                    &source_identifier_lookup,
-                    &pypi_url_lookup,
+                    &selector_index,
                 )?;
                 resolved.insert(package_data);
             }
@@ -1018,47 +979,38 @@ fn parse_from_lock<P>(
 }
 
 /// Resolves a package selector to an `EnvironmentPackageData`.
+///
+/// Builds the full (kind-prefixed) selector id from the YAML-tagged selector
+/// variant and binary-searches `selector_index`. The pypi `given`-over-`inner`
+/// preference must match [`SelectorId::new`] (see `crates/rattler_lock/src/lib.rs`).
 fn resolve_package_selector(
     selector: DeserializablePackageSelector,
     env_name: &str,
     platform: rattler_conda_types::Platform,
-    binary_url_lookup: &ahash::HashMap<UrlOrPath, PackageIndex>,
-    source_identifier_lookup: &ahash::HashMap<SourceIdentifier, PackageIndex>,
-    pypi_url_lookup: &ahash::HashMap<Verbatim<UrlOrPath>, PackageIndex>,
+    selector_index: &[(SelectorId, PackageIndex)],
 ) -> Result<PackageIndex, ParseCondaLockError> {
-    match selector {
+    let (kind, id) = match selector {
         DeserializablePackageSelector::Conda { conda } => {
-            let idx = binary_url_lookup.get(&conda).ok_or_else(|| {
-                ParseCondaLockError::MissingPackage {
-                    environment: env_name.to_owned(),
-                    platform: platform.to_string(),
-                    location: conda.to_string(),
-                }
-            })?;
-            Ok(*idx)
+            (SelectorKind::CondaBinary, conda.as_str().to_owned())
         }
         DeserializablePackageSelector::CondaSource {
             conda_source: source,
-        } => {
-            let idx = source_identifier_lookup.get(&source).ok_or_else(|| {
-                ParseCondaLockError::MissingPackage {
-                    environment: env_name.to_owned(),
-                    platform: platform.to_string(),
-                    location: source.to_string(),
-                }
-            })?;
-            Ok(*idx)
-        }
+        } => (SelectorKind::CondaSource, source.to_string()),
         DeserializablePackageSelector::Pypi { pypi } => {
-            let idx =
-                pypi_url_lookup
-                    .get(&pypi)
-                    .ok_or_else(|| ParseCondaLockError::MissingPackage {
-                        environment: env_name.to_owned(),
-                        platform: platform.to_string(),
-                        location: pypi.inner().to_string(),
-                    })?;
-            Ok(*idx)
+            let id = pypi
+                .given()
+                .map_or_else(|| pypi.inner().as_str().to_owned(), str::to_owned);
+            (SelectorKind::Pypi, id)
         }
-    }
+    };
+    let full_id = SelectorId::from_parts(kind, &id);
+
+    selector_index
+        .binary_search_by(|(sel, _)| sel.cmp(&full_id))
+        .map(|pos| selector_index[pos].1)
+        .map_err(|_not_found| ParseCondaLockError::MissingPackage {
+            environment: env_name.to_owned(),
+            platform: platform.to_string(),
+            location: id,
+        })
 }

@@ -24,9 +24,9 @@ environments:
         - pypi: ./
         - pypi: ./my_subdir
 packages:
-  - pypi: ./my_subdir
-    name: my-subdir
   - pypi: ./
     name: pixi-repro
     requires_dist:
       - my-subdir @ file:my_subdir
+  - pypi: ./my_subdir
+    name: my-subdir
