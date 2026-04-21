@@ -14,8 +14,9 @@ use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
     package::{ArchiveIdentifier, DistArchiveType},
     utils::TimestampMs,
-    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
-    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
+    SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -317,6 +318,7 @@ impl<'a> CondaDependencyProvider<'a> {
         exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
+        channel_config: &ChannelConfig,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -336,11 +338,23 @@ impl<'a> CondaDependencyProvider<'a> {
             .map(|name| pool.intern_package_name(name))
             .collect();
 
-        // TODO: Normalize these channel names to urls so we can compare them correctly.
-        let channel_specific_specs = match_specs
+        // Build a list of (spec, normalized_channel_url) pairs for every
+        // channel-pinned spec
+        let channel_specific_specs: Vec<(&MatchSpec, String)> = match_specs
             .iter()
-            .filter(|spec| spec.channel.is_some())
-            .collect::<Vec<_>>();
+            .filter_map(|spec| {
+                spec.channel.as_ref().map(|chan| {
+                    // If the channel was originally given as a short name,
+                    // re-expand it with the provided config
+                    let normalized_url = chan
+                        .name
+                        .as_ref()
+                        .map(|name| Channel::from_name(name, channel_config).canonical_name())
+                        .unwrap_or_else(|| chan.canonical_name());
+                    (spec, normalized_url)
+                })
+            })
+            .collect();
 
         // Hashmap that maps the package name to the channel it was first found in.
         let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
@@ -448,35 +462,40 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
-                    if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        spec.name
-                            .as_exact()
-                            .expect("expecting an exact package name")
-                            .as_normalized()
-                            == record.package_record.name.as_normalized()
-                    }) {
-                        // Check if the spec has a channel, and compare it to the repodata
-                        // channel
-                        if let Some(spec_channel) = &spec.channel {
-                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
-                                tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
-                                        Some(channel) => format!("from {}", &channel),
-                                        None => "without a channel".to_string(),
-                                    });
-                                // Add record to the excluded with reason of being in the non
-                                // requested channel.
-                                let message = format!(
-                                    "candidate not in requested channel: '{}'",
-                                    spec_channel
-                                        .name
-                                        .clone()
-                                        .unwrap_or(spec_channel.base_url.to_string())
-                                );
-                                candidates
-                                    .excluded
-                                    .push((solvable_id, pool.intern_string(message)));
-                                continue;
-                            }
+                    if let Some((_, spec_channel_url)) =
+                        channel_specific_specs.iter().find(|(spec, _)| {
+                            spec.name
+                                .as_exact()
+                                .expect("expecting an exact package name")
+                                .as_normalized()
+                                == record.package_record.name.as_normalized()
+                        })
+                    {
+                        // Normalize the record's channel string to a canonical URL
+                        let record_channel_url = record.channel.as_ref().map(|ch| {
+                            Channel::from_str(ch, channel_config)
+                                .map(|c| c.canonical_name())
+                                .unwrap_or_else(|_| ch.clone())
+                        });
+
+                        if record_channel_url.as_deref() != Some(spec_channel_url.as_str()) {
+                            tracing::debug!(
+                                "Ignoring {} {} because it was not requested from that channel.",
+                                &record.package_record.name.as_normalized(),
+                                match &record.channel {
+                                    Some(channel) => format!("from {}", &channel),
+                                    None => "without a channel".to_string(),
+                                }
+                            );
+                            // Add record to the excluded with reason of being in the non
+                            // requested channel.
+                            let message = format!(
+                                "candidate not in requested channel: '{spec_channel_url}'"
+                            );
+                            candidates
+                                .excluded
+                                .push((solvable_id, pool.intern_string(message)));
+                            continue;
                         }
                     }
                 }
@@ -955,6 +974,7 @@ impl super::SolverImpl for Solver {
             task.exclude_newer.as_ref(),
             task.strategy,
             dependency_overrides,
+            &task.channel_config,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.

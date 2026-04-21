@@ -14,7 +14,8 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    utils::TimestampMs, GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
+    utils::TimestampMs, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageName,
+    RepoDataRecord, SolverResult,
 };
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
@@ -354,6 +355,18 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Dependency overrides that replace dependencies of matching packages.
     pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
+
+    /// Channel configuration used to normalize short channel names (e.g.
+    /// `conda-forge`) in [`MatchSpec`]s to their canonical base URLs before
+    /// comparing them with the channel stored in each [`RepoDataRecord`].
+    ///
+    /// When a [`MatchSpec`] is parsed with a different [`ChannelConfig`] than
+    /// the one used to load the repodata (e.g. a custom `channel_alias`), the
+    /// expanded URLs can differ, causing channel-pinned specs to silently match
+    /// the wrong packages.  Providing the same [`ChannelConfig`] here as the
+    /// one used when loading packages guarantees that the comparison is
+    /// performed on canonical URLs.
+    pub channel_config: ChannelConfig,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -372,6 +385,9 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             exclude_newer: None,
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
+            channel_config: ChannelConfig::default_with_root_dir(
+                std::env::current_dir().unwrap_or_default(),
+            ),
         }
     }
 }
