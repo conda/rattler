@@ -75,7 +75,7 @@ use repo_data::{
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
-    PyRepoData,
+    PyChannelInfo, PyChannelRelations, PyRepoData,
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
@@ -142,6 +142,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PySparseRepoData>()?;
     m.add_class::<PyPackageFormatSelection>()?;
     m.add_class::<PyRepoData>()?;
+    m.add_class::<PyChannelInfo>()?;
+    m.add_class::<PyChannelRelations>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PySourceConfig>()?;

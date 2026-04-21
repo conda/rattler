@@ -205,6 +205,7 @@ mod tests {
                     base_url: "./".to_string(),
                     shards_base_url: "./shards/".to_string(),
                     created_at: Some(chrono::Utc::now()),
+                    channel_relations: None,
                 },
                 shards,
             };

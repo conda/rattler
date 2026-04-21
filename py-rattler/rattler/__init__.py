@@ -1,6 +1,8 @@
 from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
+    ChannelInfo,
+    ChannelRelations,
     PackageRecord,
     RepoData,
     RepoDataRecord,
@@ -55,6 +57,8 @@ __all__ = [
     "VersionWithSource",
     "MatchSpec",
     "NamelessMatchSpec",
+    "ChannelInfo",
+    "ChannelRelations",
     "PackageRecord",
     "Channel",
     "ChannelConfig",

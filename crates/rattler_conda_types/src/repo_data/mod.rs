@@ -93,6 +93,46 @@ pub struct ChannelInfo {
     /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+
+    /// Optional relationships to other channels as defined in
+    /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
+    #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
+    pub channel_relations: Option<ChannelRelations>,
+}
+
+/// Relationships between a channel and other channels as declared in the
+/// channel's `repodata.json` (or sharded repodata index) under
+/// `info.channel_relations`.
+///
+/// See [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md) for
+/// details. Both fields are relative-path channel references (e.g.
+/// `../conda-forge`) resolved against the declaring channel's base URL
+/// without its subdir component.
+///
+/// A channel MUST NOT declare both `base` and `overrides` referencing the
+/// same channel.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct ChannelRelations {
+    /// A reference to a channel with higher priority than the declaring
+    /// channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+
+    /// A reference to a channel with lower priority than the declaring
+    /// channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<String>,
+}
+
+impl ChannelRelations {
+    /// Returns true if neither `base` nor `overrides` is set.
+    pub fn is_empty(&self) -> bool {
+        self.base.is_none() && self.overrides.is_none()
+    }
+
+    pub(crate) fn is_none_or_empty(value: &Option<ChannelRelations>) -> bool {
+        value.as_ref().is_none_or(ChannelRelations::is_empty)
+    }
 }
 
 /// Packages stored under the `v3` top-level key.
@@ -828,7 +868,8 @@ mod test {
     use crate::{
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
-        Channel, ChannelConfig, ExperimentalV3Packages, PackageRecord, RepoData,
+        Channel, ChannelConfig, ChannelInfo, ChannelRelations, ExperimentalV3Packages,
+        PackageRecord, RepoData,
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -875,6 +916,72 @@ mod test {
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    // See https://github.com/conda/ceps/blob/main/cep-0042.md
+    #[test]
+    fn test_channel_relations() {
+        // Deserialize a repodata.json with channel_relations set.
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "channel_relations": {
+                    "base": "../conda-forge",
+                    "overrides": "../fallback-channel"
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let relations = repodata
+            .info
+            .as_ref()
+            .and_then(|i| i.channel_relations.as_ref())
+            .unwrap();
+        assert_eq!(relations.base.as_deref(), Some("../conda-forge"));
+        assert_eq!(relations.overrides.as_deref(), Some("../fallback-channel"));
+
+        // Round trip with a single field set and the other omitted.
+        let partial = RepoData {
+            version: Some(2),
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                channel_relations: Some(ChannelRelations {
+                    base: Some("../conda-forge".to_string()),
+                    overrides: None,
+                }),
+            }),
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            experimental_v3: ExperimentalV3Packages::default(),
+            removed: ahash::HashSet::default(),
+        };
+        let json = serde_json::to_string(&partial).unwrap();
+        assert!(json.contains("\"channel_relations\""));
+        assert!(json.contains("\"base\":\"../conda-forge\""));
+        assert!(!json.contains("\"overrides\""));
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), partial);
+
+        // `channel_relations` must be omitted when it is `None` as well as
+        // when both of its fields are unset.
+        for channel_relations in [None, Some(ChannelRelations::default())] {
+            let repodata = RepoData {
+                version: Some(2),
+                info: Some(ChannelInfo {
+                    subdir: Some("linux-64".to_string()),
+                    base_url: None,
+                    channel_relations,
+                }),
+                packages: IndexMap::default(),
+                conda_packages: IndexMap::default(),
+                experimental_v3: ExperimentalV3Packages::default(),
+                removed: ahash::HashSet::default(),
+            };
+            let json = serde_json::to_string(&repodata).unwrap();
+            assert!(!json.contains("channel_relations"));
+        }
     }
 
     #[test]
