@@ -1,8 +1,8 @@
 version: 7
 platforms:
   - name: linux-64
-  - name: osx-arm64
   - name: osx-64
+  - name: osx-arm64
   - name: win-64
 environments:
   default:
@@ -12,17 +12,17 @@ environments:
       - https://pypi.org/simple
     packages:
       linux-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       osx-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       osx-arm64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       win-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
 packages:
   - pypi: ../my_subdir
     name: my-subdir

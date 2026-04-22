@@ -14,16 +14,6 @@ environments:
         - conda_source: "my-package[2a17d7b3] @ my-package-win"
         - conda_source: "my-package[bfd2b14c] @ my-package-linux"
 packages:
-  - conda_source: "my-package[bfd2b14c] @ my-package-linux"
-    version: 1.0.0
-    subdir: noarch
-    noarch: generic
-    variants:
-      python: "3.11"
-      target_platform: linux-64
-    depends:
-      - python >=3.8
-    license: MIT
   - conda_source: "my-package[2a17d7b3] @ my-package-win"
     version: 1.0.0
     subdir: noarch
@@ -31,6 +21,16 @@ packages:
     variants:
       python: "3.11"
       target_platform: win-64
+    depends:
+      - python >=3.8
+    license: MIT
+  - conda_source: "my-package[bfd2b14c] @ my-package-linux"
+    version: 1.0.0
+    subdir: noarch
+    noarch: generic
+    variants:
+      python: "3.11"
+      target_platform: linux-64
     depends:
       - python >=3.8
     license: MIT

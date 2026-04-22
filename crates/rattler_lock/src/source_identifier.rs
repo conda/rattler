@@ -192,6 +192,7 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
         location: _,
         identifier_hash: _,
         sources,
+        source_data: _,
     } = source_data;
 
     let mut fields: BTreeMap<&str, &dyn DynHash> = BTreeMap::new();

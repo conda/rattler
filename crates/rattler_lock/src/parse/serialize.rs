@@ -7,15 +7,19 @@ use std::{
 use itertools::Itertools;
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
-use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
-    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier,
-    UrlOrPath, Verbatim,
+    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
 };
+
+fn selector_ids_to_strings(ids: Vec<SelectorId>) -> Vec<String> {
+    ids.into_iter()
+        .map(|id| id.as_long_str().to_string())
+        .collect()
+}
 
 #[serde_as]
 #[derive(Serialize)]
@@ -59,7 +63,7 @@ struct SerializableEnvironment<'a> {
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     options: SolveOptions,
-    packages: BTreeMap<String, Vec<SerializablePackageSelector<'a>>>,
+    packages: BTreeMap<String, Vec<SerializablePackageSelector>>,
 }
 
 impl<'a> SerializableEnvironment<'a> {
@@ -82,8 +86,8 @@ impl<'a> SerializableEnvironment<'a> {
                         platform_name,
                         packages
                             .iter()
-                            .map(|&package_data| {
-                                SerializablePackageSelector::from_lock_file(inner, package_data)
+                            .map(|handle| {
+                                SerializablePackageSelector::from_lock_file(inner, handle.index)
                             })
                             .sorted()
                             .collect(),
@@ -105,77 +109,70 @@ enum SerializablePackageDataV7<'a> {
 
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
-        match package {
-            PackageData::Conda(CondaPackageData::Binary(binary)) => {
+        match package.package {
+            LockedPackage::Conda(CondaPackageData::Binary(binary)) => {
                 Self::Conda(binary.as_ref().into())
             }
-            PackageData::Conda(CondaPackageData::Source(source)) => {
-                Self::Source(source.as_ref().into())
+            LockedPackage::Conda(CondaPackageData::Source(source)) => {
+                let mut model = v7::SourcePackageDataModel::from(source.as_ref());
+                model.build_packages = selector_ids_to_strings(package.build_packages);
+                model.host_packages = selector_ids_to_strings(package.host_packages);
+                Self::Source(model)
             }
-            PackageData::Pypi(p) => Self::Pypi(p.into()),
+            LockedPackage::Pypi(p) => {
+                let mut model = v7::PypiPackageDataModel::from(p);
+                model.build_packages = selector_ids_to_strings(package.build_packages);
+                model.host_packages = selector_ids_to_strings(package.host_packages);
+                Self::Pypi(model)
+            }
         }
     }
 }
 
 /// Package selector for V7+ environments.
 ///
-/// For V7+, binary conda packages are uniquely identified by their URL (which includes the
-/// filename), and source packages use `SourceIdentifier` with an embedded hash.
+/// For V7+, each package variant is uniquely identified by its
+/// [`LockedPackage::selector_id`](crate::LockedPackage::selector_id) string,
+/// stored under the appropriate YAML key (`conda`, `conda_source`, or `pypi`).
 #[derive(Serialize, Eq, PartialEq)]
 #[serde(untagged, rename_all = "snake_case")]
-enum SerializablePackageSelector<'a> {
-    /// Binary conda packages are uniquely identified by their URL.
-    Conda {
-        conda: &'a UrlOrPath,
-    },
-    /// Source packages use `SourceIdentifier` which uniquely identifies the package
-    /// via the format `name[hash] @ location`. No additional disambiguation fields needed.
-    CondaSource {
-        conda_source: SourceIdentifier,
-    },
-    Pypi {
-        pypi: &'a Verbatim<UrlOrPath>,
-    },
+enum SerializablePackageSelector {
+    Conda { conda: String },
+    CondaSource { conda_source: String },
+    Pypi { pypi: String },
 }
 
-impl<'a> SerializablePackageSelector<'a> {
-    fn from_lock_file(inner: &'a LockFileInner, package: PackageIndex) -> Self {
-        match &inner.packages[package.0] {
-            crate::LockedPackage::Conda(p) => Self::from_conda(p),
-            crate::LockedPackage::Pypi(p) => Self::from_pypi(p),
+impl SerializablePackageSelector {
+    fn from_lock_file(inner: &LockFileInner, package: PackageIndex) -> Self {
+        let pkg = &inner.packages[package.0];
+        let id = SelectorId::new(pkg).as_str().to_string();
+        match pkg {
+            LockedPackage::Conda(CondaPackageData::Binary(_)) => Self::Conda { conda: id },
+            LockedPackage::Conda(CondaPackageData::Source(_)) => {
+                Self::CondaSource { conda_source: id }
+            }
+            LockedPackage::Pypi(_) => Self::Pypi { pypi: id },
         }
     }
 
-    fn from_conda(package: &'a CondaPackageData) -> Self {
-        match package {
-            // Source packages use SourceIdentifier with an embedded hash
-            CondaPackageData::Source(source_data) => Self::CondaSource {
-                conda_source: SourceIdentifier::from_source_data(source_data),
-            },
-            // Binary packages are uniquely identified by their URL
-            CondaPackageData::Binary(binary_data) => Self::Conda {
-                conda: &binary_data.location,
-            },
-        }
-    }
-
-    fn from_pypi(package: &'a PypiPackageData) -> Self {
-        Self::Pypi {
-            pypi: package.location(),
+    fn id(&self) -> &str {
+        match self {
+            Self::Conda { conda } => conda,
+            Self::CondaSource { conda_source } => conda_source,
+            Self::Pypi { pypi } => pypi,
         }
     }
 }
 
-impl PartialOrd for SerializablePackageSelector<'_> {
+impl PartialOrd for SerializablePackageSelector {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for SerializablePackageSelector<'_> {
+impl Ord for SerializablePackageSelector {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Helper to get package type ordering: Conda (0) < Source (1) < Pypi (2)
-        fn type_order(selector: &SerializablePackageSelector<'_>) -> u8 {
+        fn type_order(selector: &SerializablePackageSelector) -> u8 {
             match selector {
                 SerializablePackageSelector::Conda { .. } => 0,
                 SerializablePackageSelector::CondaSource { .. } => 1,
@@ -183,67 +180,9 @@ impl Ord for SerializablePackageSelector<'_> {
             }
         }
 
-        // First compare by type
-        let type_cmp = type_order(self).cmp(&type_order(other));
-        if type_cmp != Ordering::Equal {
-            return type_cmp;
-        }
-
-        // Same type, compare by content
-        match (self, other) {
-            (
-                SerializablePackageSelector::CondaSource { conda_source: a },
-                SerializablePackageSelector::CondaSource { conda_source: b },
-            ) => {
-                // Compare by name first, then by hash, then by location
-                a.name()
-                    .cmp(b.name())
-                    .then_with(|| a.hash().cmp(b.hash()))
-                    .then_with(|| compare_url_by_location(a.location(), b.location()))
-            }
-            // Conda and Pypi both compare by location
-            (
-                SerializablePackageSelector::Conda { conda: a },
-                SerializablePackageSelector::Conda { conda: b },
-            ) => compare_url_by_location(a, b),
-            (
-                SerializablePackageSelector::Pypi { pypi: a },
-                SerializablePackageSelector::Pypi { pypi: b },
-            ) => compare_url_by_location(a, b),
-            // Different types are already handled by type_cmp above
-            _ => unreachable!(),
-        }
-    }
-}
-
-/// First sort packages just by their filename. Since most of the time the urls
-/// end in the packages filename this causes the urls to be sorted by package
-/// name.
-fn compare_url_by_filename(a: &Url, b: &Url) -> Ordering {
-    if let (Some(a), Some(b)) = (
-        a.path_segments()
-            .and_then(Iterator::last)
-            .map(str::to_lowercase),
-        b.path_segments()
-            .and_then(Iterator::last)
-            .map(str::to_lowercase),
-    ) {
-        match a.cmp(&b) {
-            Ordering::Equal => {}
-            ordering => return ordering,
-        }
-    }
-
-    // Otherwise just sort by their full URL
-    a.cmp(b)
-}
-
-fn compare_url_by_location(a: &UrlOrPath, b: &UrlOrPath) -> Ordering {
-    match (a, b) {
-        (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
-        (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
-        (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
-        (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.as_str().cmp(b.as_str()),
+        type_order(self)
+            .cmp(&type_order(other))
+            .then_with(|| self.id().cmp(other.id()))
     }
 }
 
@@ -252,7 +191,7 @@ impl<'a> SerializeAs<PackageData<'a>> for V7 {
     where
         S: Serializer,
     {
-        SerializablePackageDataV7::from(*source).serialize(serializer)
+        SerializablePackageDataV7::from(source.clone()).serialize(serializer)
     }
 }
 
@@ -264,14 +203,12 @@ impl Serialize for LockFile {
         let inner = self.inner.as_ref();
 
         // Determine the package indexes that are used in the lock-file.
-        let mut used_packages = HashSet::new();
-        for env in inner.environments.iter() {
-            for packages in env.packages.values() {
-                for package in packages {
-                    used_packages.insert(*package);
-                }
-            }
-        }
+        let used_packages: HashSet<PackageIndex> = inner
+            .environments
+            .iter()
+            .flat_map(|env| env.packages.values())
+            .flat_map(|packages| packages.iter().map(|handle| handle.index))
+            .collect();
 
         // Collect all environments
         let environments = inner
@@ -300,16 +237,36 @@ impl Serialize for LockFile {
             .enumerate()
             .filter(|(index, _)| used_packages.contains(&PackageIndex(*index)))
             .filter_map(|(_, p)| {
-                match p {
-                    // Deduplicate binary packages by location
-                    LockedPackage::Conda(p) => match p {
+                let source_data = match p {
+                    LockedPackage::Conda(conda) => match conda {
                         CondaPackageData::Binary(binary) => seen_binary_locations
                             .insert(binary.location.clone())
-                            .then_some(PackageData::Conda(p)),
-
-                        CondaPackageData::Source(_) => Some(PackageData::Conda(p)),
+                            .then_some(None),
+                        CondaPackageData::Source(source) => Some(Some(&source.source_data)),
                     },
-                    LockedPackage::Pypi(p) => Some(PackageData::Pypi(p)),
+                    LockedPackage::Pypi(pypi) => {
+                        let source_data = pypi.as_source().map(|s| &s.source_data);
+                        Some(source_data)
+                    }
+                };
+                if let Some(source_data) = source_data {
+                    let (build_packages, host_packages) = source_data.map_or_else(
+                        || (Vec::new(), Vec::new()),
+                        |sd| {
+                            (
+                                sd.build_packages.to_selector_ids(),
+                                sd.host_packages.to_selector_ids(),
+                            )
+                        },
+                    );
+                    Some(PackageData {
+                        selector_id: SelectorId::new(p),
+                        package: p,
+                        build_packages,
+                        host_packages,
+                    })
+                } else {
+                    None
                 }
             })
             .sorted()
@@ -325,7 +282,7 @@ impl Serialize for LockFile {
             tmp
         };
 
-        let raw = SerializableLockFile {
+        let raw = SerializableLockFile::<V7> {
             version: FileFormatVersion::LATEST,
             platforms,
             environments,
@@ -337,20 +294,24 @@ impl Serialize for LockFile {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum PackageData<'a> {
-    Conda(&'a CondaPackageData),
-    Pypi(&'a PypiPackageData),
+#[derive(Debug, Clone)]
+pub struct PackageData<'a> {
+    pub selector_id: SelectorId,
+    pub package: &'a LockedPackage,
+    /// Pre-resolved selector ids for `source_data.build_packages`. Populated
+    /// when building the serializable lockfile; empty for non-source packages.
+    pub build_packages: Vec<SelectorId>,
+    /// Pre-resolved selector ids for `source_data.host_packages`.
+    pub host_packages: Vec<SelectorId>,
 }
 
-impl PackageData<'_> {
-    fn source_name(&self) -> &str {
-        match self {
-            PackageData::Conda(p) => p.name().as_source(),
-            PackageData::Pypi(p) => p.name().as_ref(),
-        }
+impl PartialEq for PackageData<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.package == other.package
     }
 }
+
+impl Eq for PackageData<'_> {}
 
 impl PartialOrd<Self> for PackageData<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -360,15 +321,7 @@ impl PartialOrd<Self> for PackageData<'_> {
 
 impl Ord for PackageData<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        use PackageData::{Conda, Pypi};
-        self.source_name()
-            .cmp(other.source_name())
-            .then_with(|| match (self, other) {
-                (Conda(a), Conda(b)) => a.cmp(b),
-                (Pypi(a), Pypi(b)) => a.cmp(b),
-                (Pypi(_), _) => Ordering::Less,
-                (_, Pypi(_)) => Ordering::Greater,
-            })
+        self.selector_id.cmp(&other.selector_id)
     }
 }
 

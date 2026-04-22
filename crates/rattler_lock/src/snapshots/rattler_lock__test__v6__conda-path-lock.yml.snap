@@ -36,12 +36,6 @@ packages:
     build_number: 398123
     subdir: noarch
     noarch: python
-  - conda_source: "minimal-project[e8b0daec] @ ../minimal-project"
-    version: "0.1"
-    build: first
-    subdir: linux-64
-    depends:
-      - __unix
   - conda_source: "minimal-project[593add86] @ ../minimal-project"
     version: "0.1"
     build: first
@@ -54,3 +48,9 @@ packages:
     subdir: win-64
     depends:
       - __win
+  - conda_source: "minimal-project[e8b0daec] @ ../minimal-project"
+    version: "0.1"
+    build: first
+    subdir: linux-64
+    depends:
+      - __unix
