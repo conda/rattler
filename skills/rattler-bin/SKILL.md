@@ -1,5 +1,5 @@
 ---
-name: rattler
+name: rattler-bin
 description: >-
   Use the rattler CLI (the rattler-bin Rust binary) to interact with the conda
   ecosystem: create environments, search packages, inspect and extract conda
