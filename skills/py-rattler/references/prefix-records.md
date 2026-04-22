@@ -109,9 +109,9 @@ PrefixPathsEntry(
 | `path_type` | `PrefixPathType` | How the file was installed |
 | `prefix_placeholder` | `str \| None` | Placeholder prefix in the file |
 | `file_mode` | `FileMode` | Binary or text file |
-| `sha256` | `bytes` | SHA256 hash of the original file |
-| `sha256_in_prefix` | `bytes` | SHA256 hash after prefix replacement |
-| `size_in_bytes` | `int` | File size in bytes |
+| `sha256` | `bytes \| None` | SHA256 hash of the original file |
+| `sha256_in_prefix` | `bytes \| None` | SHA256 hash after prefix replacement |
+| `size_in_bytes` | `int \| None` | File size in bytes |
 
 ---
 

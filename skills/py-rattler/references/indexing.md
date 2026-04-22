@@ -31,7 +31,8 @@ async def index_fs(
 **Example:**
 
 ```python
-from rattler import index_fs, Platform
+from rattler.index import index_fs
+from rattler import Platform
 
 # Index all platforms
 await index_fs("/path/to/my-channel")
@@ -103,8 +104,7 @@ class S3Credentials:
 **Example:**
 
 ```python
-from rattler import index_s3
-from rattler.index import S3Credentials
+from rattler.index import index_s3, S3Credentials
 
 await index_s3(
     "s3://my-conda-channel/",

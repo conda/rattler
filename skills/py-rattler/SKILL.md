@@ -67,14 +67,15 @@ asyncio.run(main())
 ```python
 from rattler import (
     # Solving & installing
-    solve, solve_with_sparse_repodata, install,
+    solve, solve_with_sparse_repodata, install, InstallerReporter,
     # Specifications
-    MatchSpec, NamelessMatchSpec, Version, VersionSpec,
+    MatchSpec, NamelessMatchSpec, Version, VersionSpec, VersionWithSource,
     # Channels & repodata
     Channel, ChannelConfig, ChannelPriority,
     Gateway, SourceConfig, RepoData, SparseRepoData,
+    ChannelInfo, ChannelRelations,
     # Package records
-    PackageRecord, RepoDataRecord, PatchInstructions,
+    PackageRecord, RepoDataRecord, WhlPackageRecord, PatchInstructions,
     # Platform & virtual packages
     Platform, VirtualPackage, GenericVirtualPackage, VirtualPackageOverrides, Override,
     # Networking
@@ -91,8 +92,6 @@ from rattler import (
     activate, Shell, ActivationVariables, ActivationResult, PathModificationBehavior,
     # Package streaming
     extract, extract_tar_bz2,
-    # Indexing
-    index_fs, index_s3,
     # PTY (Unix only)
     PtySession, PtyProcess, PtyProcessOptions,
 )
@@ -102,7 +101,7 @@ from rattler.networking import (
     AddHeadersMiddleware, OciMiddleware, S3Middleware, GCSMiddleware,
 )
 from rattler.repo_data import RepoDataSource, PackageFormatSelection
-from rattler.index import S3Credentials
+from rattler.index import index_fs, index_s3, S3Credentials
 ```
 
 ## Key Design Principles

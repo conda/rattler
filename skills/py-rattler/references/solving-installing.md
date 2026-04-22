@@ -15,7 +15,7 @@ async def solve(
     virtual_packages: Sequence[GenericVirtualPackage | VirtualPackage] | None = None,
     timeout: datetime.timedelta | None = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: datetime.datetime | None = None,
+    exclude_newer: datetime.datetime | datetime.timedelta | None = None,
     strategy: SolveStrategy = "highest",
     constraints: Sequence[MatchSpec | str] | None = None,
 ) -> list[RepoDataRecord]
@@ -34,7 +34,7 @@ async def solve(
 | `virtual_packages` | `Sequence[GenericVirtualPackage \| VirtualPackage] \| None` | `None` | Virtual packages considered active (e.g., `__linux`, `__cuda`) |
 | `timeout` | `datetime.timedelta \| None` | `None` | Maximum time the solver is allowed to run |
 | `channel_priority` | `ChannelPriority` | `Strict` | `Strict`: use first channel where a package is found. `Disabled`: search all channels |
-| `exclude_newer` | `datetime.datetime \| None` | `None` | Ignore packages published after this datetime |
+| `exclude_newer` | `datetime.datetime \| datetime.timedelta \| None` | `None` | Ignore packages newer than the given datetime, or newer than the cutoff produced by subtracting a timedelta from now |
 | `strategy` | `SolveStrategy` | `"highest"` | Version selection strategy (see below) |
 | `constraints` | `Sequence[MatchSpec \| str] \| None` | `None` | Additional constraints. Packages in constraints are not necessarily installed but if present must satisfy these |
 
@@ -86,7 +86,7 @@ async def solve_with_sparse_repodata(
     virtual_packages: Sequence[GenericVirtualPackage | VirtualPackage] | None = None,
     timeout: datetime.timedelta | None = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: datetime.datetime | None = None,
+    exclude_newer: datetime.datetime | datetime.timedelta | None = None,
     strategy: SolveStrategy = "highest",
     constraints: Sequence[MatchSpec | str] | None = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
@@ -119,6 +119,7 @@ async def install(
     show_progress: bool = True,
     client: Client | None = None,
     requested_specs: list[MatchSpec] | None = None,
+    reporter: InstallerReporter | None = None,
 ) -> None
 ```
 
@@ -134,9 +135,10 @@ async def install(
 | `ignored_packages` | `set[str] \| None` | `None` | Package names to leave untouched (not removed, installed, or updated) |
 | `platform` | `Platform \| None` | `None` | Target platform. Defaults to current platform |
 | `execute_link_scripts` | `bool` | `False` | Run post-link/pre-unlink scripts. **WARNING**: not sandboxed, can execute arbitrary code |
-| `show_progress` | `bool` | `True` | Show CLI progress bar |
+| `show_progress` | `bool` | `True` | Show CLI progress bar. Ignored when `reporter` is provided |
 | `client` | `Client \| None` | `None` | HTTP client for downloading. Default client used if `None` |
 | `requested_specs` | `list[MatchSpec] \| None` | `None` | Original specs to record in `conda-meta/*.json` |
+| `reporter` | `InstallerReporter \| None` | `None` | Custom progress reporter (structural Protocol). When provided, `show_progress` is ignored. See `InstallerReporter` below |
 
 **Returns:** `None`
 
@@ -154,4 +156,55 @@ await install(
     show_progress=True,
     requested_specs=[MatchSpec("python 3.12.*")],
 )
+```
+
+---
+
+## InstallerReporter
+
+A `@runtime_checkable` Protocol for receiving progress callbacks during `install()`. Uses structural subtyping — no inheritance required; implement only the methods you care about. All methods have no-op defaults.
+
+Methods that return `int` produce opaque tokens that are passed back to the corresponding `*_complete` callback to correlate start and finish events.
+
+**Callback methods (all optional):**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `on_transaction_start(total_operations: int)` | — | Installation begins with `total_operations` operations |
+| `on_transaction_operation_start(operation: int)` | — | An operation starts |
+| `on_populate_cache_start(operation: int, package_name: str)` | `int` (token) | Cache population for a package begins |
+| `on_populate_cache_complete(cache_entry: int)` | — | Cache population finished |
+| `on_validate_start(cache_entry: int)` | `int` (token) | Cache-entry validation begins |
+| `on_validate_complete(validate_idx: int)` | — | Validation finished |
+| `on_download_start(cache_entry: int)` | `int` (token) | Download begins |
+| `on_download_progress(download_idx: int, progress: int, total: int \| None)` | — | Periodic byte progress |
+| `on_download_completed(download_idx: int)` | — | Download finished |
+| `on_unlink_start(operation: int, package_name: str)` | `int` (token) | Unlink (remove) starts |
+| `on_unlink_complete(index: int)` | — | Unlink finished |
+| `on_link_start(operation: int, package_name: str)` | `int` (token) | Link (install) starts |
+| `on_link_complete(index: int)` | — | Link finished |
+| `on_transaction_operation_complete(operation: int)` | — | Operation finished |
+| `on_transaction_complete()` | — | Entire transaction finished |
+| `on_post_link_start(package_name: str, script_path: str)` | `int` (token) | Post-link script starts |
+| `on_post_link_complete(index: int, success: bool)` | — | Post-link script finished |
+| `on_pre_unlink_start(package_name: str, script_path: str)` | `int` (token) | Pre-unlink script starts |
+| `on_pre_unlink_complete(index: int, success: bool)` | — | Pre-unlink script finished |
+
+**Example:**
+
+```python
+from rattler import install, InstallerReporter
+
+class MyReporter:  # no need to inherit — structural typing is enough
+    def on_transaction_start(self, total_operations: int) -> None:
+        print(f"Starting {total_operations} operations")
+
+    def on_download_progress(self, download_idx, progress, total) -> None:
+        pct = f"{progress}/{total}" if total else str(progress)
+        print(f"  [{download_idx}] {pct} bytes")
+
+    def on_transaction_complete(self) -> None:
+        print("Done!")
+
+await install(records, target_prefix="/opt/envs/myenv", reporter=MyReporter())
 ```

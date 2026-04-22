@@ -79,7 +79,7 @@ ActivationVariables(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `current_prefix` | `os.PathLike[str] \| None` | `None` | Currently active conda prefix (e.g., `os.environ["CONDA_PREFIX"]`) |
-| `current_path` | `Iterable[str] \| None` | `None` | Current PATH entries (e.g., `os.environ["PATH"].split(os.pathsep)`) |
+| `current_path` | `Iterable[str] \| Iterable[os.PathLike[str]] \| None` | `None` | Current PATH entries (e.g., `os.environ["PATH"].split(os.pathsep)`) |
 | `path_modification_behavior` | `PathModificationBehavior` | `Prepend` | How to modify PATH |
 
 ---

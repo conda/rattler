@@ -25,7 +25,7 @@ v = Version("1.0.0dev1")      # dev version
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `epoch` | `str \| None` | Epoch number, or `None` if not defined |
+| `epoch` | `int \| None` | Epoch number, or `None` if not defined |
 | `has_local` | `bool` | `True` if a local segment is defined (part after `+`) |
 | `is_dev` | `bool` | `True` if version contains a "dev" component |
 | `segment_count` | `int` | Number of segments (excludes epoch and local) |
@@ -112,3 +112,40 @@ VersionSpec("~=1.2.3")          # compatible release
 ### Operators
 
 Supports `==`, `!=`, and `hash()`.
+
+---
+
+## VersionWithSource
+
+A subclass of `Version` that preserves the original source string. Useful when you want to retain the exact input representation after parsing (e.g., `"1.01"` parses as `Version("1.1")` but `VersionWithSource("1.01")` keeps `"1.01"` as its string form).
+
+### Constructor
+
+```python
+VersionWithSource(version: str | Version)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `version` | `str \| Version` | Source string (preserved as-is) or existing `Version` (source becomes `str(version)`) |
+
+### Behavior
+
+- `__str__()` returns the original source string, not the parsed normalized form.
+- `__repr__()` returns e.g. `VersionWithSource(version="1.1", source="1.01")`.
+- Inherits all comparison, segment, bumping, and modification methods from `Version`.
+- Comparison and hashing are based on the parsed `Version`, not the source string. So `VersionWithSource("1.01") == VersionWithSource("1.1")` is `True`.
+
+**Example:**
+
+```python
+from rattler import VersionWithSource
+
+v1 = VersionWithSource("1.01")
+v2 = VersionWithSource("1.1")
+str(v1)          # "1.01"
+str(v2)          # "1.1"
+v1 == v2         # True — compared by parsed version
+```
+
+`VersionWithSource` is the type returned by `PackageRecord.version` and `IndexJson.version`.

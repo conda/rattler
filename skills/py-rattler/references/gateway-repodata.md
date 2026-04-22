@@ -175,20 +175,50 @@ records = await solve([DatabaseSource(db)], specs=["my-package"])
 
 ## RepoData
 
-In-memory representation of a `repodata.json` file.
+In-memory representation of a `repodata.json` file. Construct via `RepoData.from_path(...)`; there is no public `__init__`.
 
-### Constructor
+### Class Methods
 
-```python
-RepoData(path: str | os.PathLike[str])
-```
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `from_path` | `RepoData.from_path(path: str \| os.PathLike[str]) -> RepoData` | Load from a `repodata.json` file on disk |
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `info` | `ChannelInfo \| None` | The `info` section of the repodata (may be absent) |
+| `version` | `int \| None` | The repodata format version, if any |
 
 ### Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `apply_patches` | `apply_patches(instructions: PatchInstructions) -> None` | Apply a patch to the repodata |
+| `apply_patches` | `apply_patches(instructions: PatchInstructions) -> None` | Apply a patch to the repodata (note: does not handle revoked instructions) |
 | `into_repo_data` | `into_repo_data(channel: Channel) -> list[RepoDataRecord]` | Convert to a list of `RepoDataRecord` given the source channel |
+
+---
+
+## ChannelInfo
+
+The `info` section of a `repodata.json` file. Read-only view obtained via `RepoData.from_path(...).info`; cannot be constructed directly.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `subdir` | `str \| None` | The channel's subdirectory (e.g., `"linux-64"`) |
+| `base_url` | `str \| None` | Base URL for all package URLs in this channel, if any |
+| `channel_relations` | `ChannelRelations \| None` | Relations to other channels (CEP-42), or `None` |
+
+---
+
+## ChannelRelations
+
+Relationships to other channels declared in `repodata.json` under `info.channel_relations` per [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md). Read-only view obtained via `ChannelInfo.channel_relations`; cannot be constructed directly.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `base` | `str \| None` | Reference to a channel with higher priority than the declaring channel |
+| `overrides` | `str \| None` | Reference to a channel with lower priority than the declaring channel |
 
 ---
 

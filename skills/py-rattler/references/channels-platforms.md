@@ -94,7 +94,7 @@ PlatformLiteral = Literal[
     "linux-32", "linux-64", "linux-aarch64", "linux-armv6l", "linux-armv7l",
     "linux-loongarch64", "linux-ppc64le", "linux-ppc64", "linux-ppc",
     "linux-s390x", "linux-riscv32", "linux-riscv64",
-    "freebsd-64",
+    "freebsd-32", "freebsd-64", "freebsd-arm64",
     "osx-64", "osx-arm64",
     "win-32", "win-64", "win-arm64",
     "emscripten-wasm32", "wasi-wasm32", "zos-z",
@@ -106,7 +106,7 @@ PlatformLiteral = Literal[
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `current` | `Platform.current() -> Platform` | Detect the current platform |
-| `all` | `Platform.all() -> Iterator[Platform]` | Iterate over all 23 supported platforms |
+| `all` | `Platform.all() -> Iterator[Platform]` | Iterate over all 25 supported platforms |
 
 ### Properties
 
@@ -127,7 +127,7 @@ from rattler import Platform
 p = Platform.current()
 print(p)           # e.g., "osx-arm64"
 print(p.is_osx)    # True
-print(p.arch)      # Arch("aarch64")
+print(p.arch)      # Arch(aarch64)
 
 for platform in Platform.all():
     print(platform)

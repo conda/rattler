@@ -10,6 +10,7 @@ HTTP client with composable middleware for authentication, retries, mirrors, and
 Client(
     middlewares: list[...] | None = None,
     headers: dict[str, str] | None = None,
+    user_agent: str | None = None,
     timeout: int | None = None,
 )
 ```
@@ -18,13 +19,14 @@ Client(
 |-----------|------|---------|-------------|
 | `middlewares` | `list \| None` | `None` | List of middleware instances (applied in order) |
 | `headers` | `dict[str, str] \| None` | `None` | Default headers for all requests |
+| `user_agent` | `str \| None` | `None` | User-Agent header value |
 | `timeout` | `int \| None` | `None` | Request timeout in seconds |
 
 ### Static Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `default_client` | `Client.default_client(max_retries: int = 3) -> Client` | Client with standard middleware stack: retry, authentication, OCI, GCS, S3 |
+| `default_client` | `Client.default_client(max_retries: int = 3, headers: dict[str, str] \| None = None, user_agent: str \| None = None, timeout: int \| None = None) -> Client` | Client with standard middleware stack: retry, authentication, OCI, GCS, S3 |
 | `authenticated_client` | `Client.authenticated_client() -> Client` | Same as `default_client()` (full middleware stack) |
 
 **Example:**

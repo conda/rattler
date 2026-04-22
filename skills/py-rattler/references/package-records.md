@@ -27,6 +27,7 @@ PackageRecord(
     license: str | None = None,
     license_family: str | None = None,
     python_site_packages_path: str | None = None,
+    extra_depends: dict[str, list[str]] | None = None,
 )
 ```
 
@@ -34,7 +35,7 @@ PackageRecord(
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `from_index_json` | `from_index_json(path, size=None, sha256=None, md5=None) -> PackageRecord` | Build from an `index.json` file |
+| `from_index_json` | `from_index_json(path, size: int \| None = None, sha256: str \| None = None, md5: str \| None = None) -> PackageRecord` | Build from an `index.json` file. `sha256`/`md5` are hex strings |
 | `sort_topologically` | `sort_topologically(records: list[PackageRecord]) -> list[PackageRecord]` | Sort records in dependency order (deterministic) |
 | `to_graph` | `to_graph(records: list[PackageRecord]) -> nx.DiGraph` | Convert to a directed acyclic graph (requires networkx). Skips virtual packages |
 | `validate` | `validate(records: list[PackageRecord]) -> None` | Validate that records are consistent w.r.t. `depends` and `constrains`. Raises `ValidatePackageRecordsError` |
@@ -60,6 +61,7 @@ PackageRecord(
 | `noarch` | `NoArchType` | NoArch type (`"python"`, `"generic"`, or `None`) |
 | `depends` | `list[str]` | Package dependencies (MatchSpec strings) |
 | `constrains` | `list[str]` | Additional constraints on packages |
+| `extra_depends` | `dict[str, list[str]]` | Conditional/optional dependencies keyed by extra/feature name |
 | `sha256` | `bytes \| None` | SHA256 hash of package archive |
 | `md5` | `bytes \| None` | MD5 hash of package archive |
 | `size` | `int \| None` | Size of package archive in bytes |
@@ -104,6 +106,26 @@ RepoDataRecord(
 | `url` | `str` | Canonical URL to download this package |
 | `channel` | `str` | Channel URL or name |
 | `file_name` | `str` | Filename of the package archive |
+
+---
+
+## WhlPackageRecord
+
+A wheel package record that pairs a `PackageRecord` with a URL. Subclass of `PackageRecord`, used to build repodata from PyPI/wheel metadata without conda archives.
+
+### Constructor
+
+```python
+WhlPackageRecord(package_record: PackageRecord, url: str)
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `url` | `str` | URL (or path) to the wheel |
+
+Inherits all properties and methods from `PackageRecord`.
 
 ---
 

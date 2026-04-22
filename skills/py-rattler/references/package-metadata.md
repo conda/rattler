@@ -2,15 +2,15 @@
 
 Classes for reading package metadata files from conda archives (`info/` directory).
 
-All metadata classes support loading from multiple sources:
+Most metadata classes (`IndexJson`, `AboutJson`, `PathsJson`, `RunExportsJson`) support loading from multiple sources:
 
 | Method | Description |
 |--------|-------------|
 | `from_path(path)` | Parse from a file on disk |
 | `from_package_directory(path)` | Parse from an extracted package directory |
-| `from_package_archive(path)` | Parse directly from a `.conda` or `.tar.bz2` archive |
+| `from_package_archive(path)` | Parse directly from a `.conda` or `.tar.bz2` archive (**not available on `AboutJson`**) |
 | `from_str(string)` | Parse from a JSON string |
-| `await from_remote_url(client, url)` | Fetch from a remote package archive URL (async, sparse range request) |
+| `await from_remote_url(client, url)` | `classmethod` that fetches from a remote package archive URL using a sparse range request |
 | `package_path()` | Returns the relative path inside the archive (e.g., `info/index.json`) |
 
 ---
@@ -53,7 +53,7 @@ Contents of `info/index.json` — core package metadata.
 | Property | Type | Description |
 |----------|------|-------------|
 | `name` | `PackageName` | Package name |
-| `version` | `Version` | Package version |
+| `version` | `VersionWithSource` | Package version |
 | `build` | `str` | Build string |
 | `build_number` | `int` | Build number |
 | `depends` | `list[str]` | Package dependencies |
