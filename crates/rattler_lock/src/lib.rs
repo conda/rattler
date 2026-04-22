@@ -151,24 +151,27 @@ pub struct PackageIndex(usize);
 ///
 /// Produced by the crate whenever a package is registered; external callers
 /// only ever see the value by [`Display`] — typically when it surfaces in an
-/// error message. The underlying string representation is intentionally
-/// hidden so the lockfile format can evolve without exposing its encoding.
+/// error message. The underlying representation is intentionally hidden so
+/// the lockfile format can evolve without exposing its encoding.
 ///
-/// The underlying string matches the selector key used in the serialized
+/// The `id` string matches the selector value used in the serialized
 /// lockfile format:
 /// - Binary conda: the location URL/path
 /// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
 /// - Pypi: the verbatim location (preserving the original string if present)
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) struct SelectorId {
-    full_id: String,
-    short_offset: usize,
+    kind: SelectorKind,
+    id: String,
 }
 
 /// Discriminator for the three kinds of packages that can appear in a
-/// lockfile. Owns the prefix string used to build a [`SelectorId`], so the
-/// prefix choice lives in exactly one place.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+/// lockfile. Owns the prefix string used in `Display`, so the prefix choice
+/// lives in exactly one place.
+///
+/// Variant declaration order is the canonical sort order for packages:
+/// binary conda first, then conda source, then pypi.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) enum SelectorKind {
     CondaBinary,
     CondaSource,
@@ -183,23 +186,13 @@ impl SelectorKind {
             Self::Pypi => "pypi",
         }
     }
-
-    fn from_prefix(prefix: &str) -> Option<Self> {
-        match prefix {
-            "conda" => Some(Self::CondaBinary),
-            "source" => Some(Self::CondaSource),
-            "pypi" => Some(Self::Pypi),
-            _ => None,
-        }
-    }
 }
 
 impl SelectorId {
     pub(crate) fn from_parts(kind: SelectorKind, id: &str) -> Self {
-        let prefix = kind.prefix();
         Self {
-            full_id: format!("{prefix}: {id}"),
-            short_offset: prefix.len() + 2,
+            kind,
+            id: id.to_owned(),
         }
     }
 
@@ -223,49 +216,17 @@ impl SelectorId {
     }
 
     pub(crate) fn as_str(&self) -> &str {
-        &self.full_id[self.short_offset..]
-    }
-
-    pub(crate) fn as_long_str(&self) -> &str {
-        &self.full_id
+        &self.id
     }
 
     pub(crate) fn kind(&self) -> SelectorKind {
-        // The prefix is `self.full_id[..self.short_offset - 2]` (everything
-        // before the trailing ": "). It's always one of the values produced
-        // by `SelectorKind::prefix`.
-        let prefix = &self.full_id[..self.short_offset - 2];
-        SelectorKind::from_prefix(prefix).expect("SelectorId always has a valid prefix")
-    }
-}
-
-impl PartialEq for SelectorId {
-    fn eq(&self, other: &Self) -> bool {
-        self.full_id == other.full_id
-    }
-}
-
-impl Ord for SelectorId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.full_id.cmp(&other.full_id)
-    }
-}
-
-impl PartialOrd for SelectorId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::hash::Hash for SelectorId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.full_id.hash(state);
+        self.kind
     }
 }
 
 impl std::fmt::Display for SelectorId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.full_id)
+        write!(f, "{}: {}", self.kind.prefix(), self.id)
     }
 }
 
@@ -332,8 +293,8 @@ impl PackageHandle {
         if actual_selector_id != self.selector_id {
             return Err(InvalidPackageHandleError::SelectorMismatch {
                 index: self.index.0,
-                expected: self.selector_id.as_long_str().to_string(),
-                actual: actual_selector_id.as_long_str().to_string(),
+                expected: self.selector_id.to_string(),
+                actual: actual_selector_id.to_string(),
             });
         }
         Ok(package)
