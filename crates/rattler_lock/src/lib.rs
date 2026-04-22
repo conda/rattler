@@ -1514,9 +1514,9 @@ packages:
     }
 
     /// Verify that pypi source packages with relative paths (both `./` and
-    /// `../`) roundtrip correctly and that the `SerializablePackageSelector`
-    /// values in the environment section always match the `pypi:` keys in
-    /// the top-level `packages` section.
+    /// `../`) roundtrip correctly and that the `PackageSelector` values in
+    /// the environment section always match the `pypi:` keys in the
+    /// top-level `packages` section.
     #[test]
     fn test_pypi_relative_source_packages_roundtrip() {
         let lock_file_str = "\
@@ -1605,9 +1605,9 @@ packages:
 
         // Parse the rendered YAML and verify that every pypi selector in the
         // environment section has a matching pypi key in the packages section.
-        // This catches mismatches between SerializablePackageSelector (which
-        // serializes the inner UrlOrPath via Display) and the package data
-        // (which serializes via Verbatim, preferring the `given` string).
+        // This catches mismatches between PackageSelector (which serializes
+        // the inner UrlOrPath via Display) and the package data (which
+        // serializes via Verbatim, preferring the `given` string).
         let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
 
         let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
@@ -1645,8 +1645,8 @@ packages:
     /// Verify that `file:///` URLs in pypi package locations produce matching
     /// selectors. `UrlOrPath::from_str("file:///...")` normalizes to a bare
     /// path internally, but `Verbatim` preserves the original `file:///`
-    /// string. `SerializablePackageSelector` serializes the inner `UrlOrPath`
-    /// (bare path) while the package data serializes the `Verbatim` wrapper
+    /// string. `PackageSelector` serializes the inner `UrlOrPath` (bare
+    /// path) while the package data serializes the `Verbatim` wrapper
     /// (`file:///`), causing a mismatch.
     #[test]
     fn test_pypi_file_url_selector_matches_package() {

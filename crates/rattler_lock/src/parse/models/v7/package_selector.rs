@@ -8,7 +8,7 @@ use crate::{SelectorId, SelectorKind};
 /// (`conda`, `conda_source`, or `pypi`) and whose value is the kind-specific
 /// id. This matches how top-level environment package entries are emitted,
 /// so `build_packages` and `host_packages` entries read the same way.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd, Clone, Debug, Hash)]
 #[serde(untagged, rename_all = "snake_case")]
 pub(crate) enum PackageSelector {
     Conda { conda: String },
