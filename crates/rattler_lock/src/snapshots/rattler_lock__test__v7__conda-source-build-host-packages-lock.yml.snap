@@ -23,6 +23,6 @@ packages:
     build: py_0
     subdir: noarch
     build_packages:
-      - "conda: https://conda.anaconda.org/conda-forge/linux-64/build-tool-1.0.0-h0.conda"
+      - conda: "https://conda.anaconda.org/conda-forge/linux-64/build-tool-1.0.0-h0.conda"
     host_packages:
-      - "conda: https://conda.anaconda.org/conda-forge/linux-64/host-lib-2.0.0-h0.conda"
+      - conda: "https://conda.anaconda.org/conda-forge/linux-64/host-lib-2.0.0-h0.conda"

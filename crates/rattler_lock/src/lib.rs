@@ -168,7 +168,7 @@ pub(crate) struct SelectorId {
 /// Discriminator for the three kinds of packages that can appear in a
 /// lockfile. Owns the prefix string used to build a [`SelectorId`], so the
 /// prefix choice lives in exactly one place.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub(crate) enum SelectorKind {
     CondaBinary,
     CondaSource,
@@ -181,6 +181,15 @@ impl SelectorKind {
             Self::CondaBinary => "conda",
             Self::CondaSource => "source",
             Self::Pypi => "pypi",
+        }
+    }
+
+    fn from_prefix(prefix: &str) -> Option<Self> {
+        match prefix {
+            "conda" => Some(Self::CondaBinary),
+            "source" => Some(Self::CondaSource),
+            "pypi" => Some(Self::Pypi),
+            _ => None,
         }
     }
 }
@@ -219,6 +228,14 @@ impl SelectorId {
 
     pub(crate) fn as_long_str(&self) -> &str {
         &self.full_id
+    }
+
+    pub(crate) fn kind(&self) -> SelectorKind {
+        // The prefix is `self.full_id[..self.short_offset - 2]` (everything
+        // before the trailing ": "). It's always one of the values produced
+        // by `SelectorKind::prefix`.
+        let prefix = &self.full_id[..self.short_offset - 2];
+        SelectorKind::from_prefix(prefix).expect("SelectorId always has a valid prefix")
     }
 }
 
@@ -390,25 +407,25 @@ impl EnvironmentPackages {
             .collect()
     }
 
-    /// Builds an `EnvironmentPackages` by resolving a list of selector-id
-    /// strings (as read from the serialized lockfile) to [`PackageHandle`]s
+    /// Builds an `EnvironmentPackages` by resolving a list of selector
+    /// entries (as read from the serialized lockfile) to [`PackageHandle`]s
     /// via the caller-supplied `resolve` closure.
     ///
     /// The closure's `Err` path lets callers produce a context-rich error
-    /// when a selector string does not correspond to a known package.
+    /// when a selector does not correspond to a known package.
     /// `FromSelectorIdsError` wraps either that error or a consistency
     /// violation ([`InconsistentInsertError`]) when two entries reuse an
     /// index or a selector id with a different counterpart.
-    pub(crate) fn from_selector_ids<I, E>(
-        strings: I,
-        mut resolve: impl FnMut(&str) -> Result<PackageHandle, E>,
+    pub(crate) fn from_selector_ids<I, T, E>(
+        items: I,
+        mut resolve: impl FnMut(&T) -> Result<PackageHandle, E>,
     ) -> Result<Self, FromSelectorIdsError<E>>
     where
-        I: IntoIterator<Item = String>,
+        I: IntoIterator<Item = T>,
     {
         let mut environment_packages = Self::default();
-        for selector_id in strings {
-            let handle = resolve(&selector_id).map_err(FromSelectorIdsError::Resolve)?;
+        for item in items {
+            let handle = resolve(&item).map_err(FromSelectorIdsError::Resolve)?;
             environment_packages
                 .insert(handle)
                 .map_err(FromSelectorIdsError::Inconsistent)?;

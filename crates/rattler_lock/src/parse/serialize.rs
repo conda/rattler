@@ -10,15 +10,13 @@ use serde_with::{serde_as, SerializeAs};
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models::v7, V7},
+    parse::{models::v7, models::v7::PackageSelector, V7},
     Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
     PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
 };
 
-fn selector_ids_to_strings(ids: Vec<SelectorId>) -> Vec<String> {
-    ids.into_iter()
-        .map(|id| id.as_long_str().to_string())
-        .collect()
+fn selector_ids_to_package_selectors(ids: Vec<SelectorId>) -> Vec<PackageSelector> {
+    ids.iter().map(PackageSelector::from_selector_id).collect()
 }
 
 #[serde_as]
@@ -115,14 +113,14 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
             }
             LockedPackage::Conda(CondaPackageData::Source(source)) => {
                 let mut model = v7::SourcePackageDataModel::from(source.as_ref());
-                model.build_packages = selector_ids_to_strings(package.build_packages);
-                model.host_packages = selector_ids_to_strings(package.host_packages);
+                model.build_packages = selector_ids_to_package_selectors(package.build_packages);
+                model.host_packages = selector_ids_to_package_selectors(package.host_packages);
                 Self::Source(model)
             }
             LockedPackage::Pypi(p) => {
                 let mut model = v7::PypiPackageDataModel::from(p);
-                model.build_packages = selector_ids_to_strings(package.build_packages);
-                model.host_packages = selector_ids_to_strings(package.host_packages);
+                model.build_packages = selector_ids_to_package_selectors(package.build_packages);
+                model.host_packages = selector_ids_to_package_selectors(package.host_packages);
                 Self::Pypi(model)
             }
         }
