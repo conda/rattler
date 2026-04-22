@@ -58,3 +58,43 @@ When updating, compute the diff between the last py-rattler version and the curr
 - Implementation details of the Rust FFI layer
 - The Rust source code or PyO3 bindings
 - Detailed algorithmic explanations of the solver internals
+
+# rattler CLI Skill Update Instructions
+
+Skill for the `rattler` CLI (the `rattler-bin` crate).
+
+## Source of Truth
+
+Source lives at `crates/rattler-bin/` in the conda/rattler repository. Subcommands are defined in `crates/rattler-bin/src/commands/*.rs`. The CLI is also documented through `rattler --help` and `rattler <subcommand> --help`.
+
+When updating, check out the rattler repo and read the `src/commands/*.rs` sources directly. The Rust source is the authoritative API surface — help text is derived from clap doc comments.
+
+## Structure
+
+- `SKILL.md` - Hub file with a command index, install note, and navigation table
+- `references/environments.md` - `create`, `run`, `list`, `shell-hook`, `install-menu`, `remove-menu`
+- `references/packages.md` - `search`, `inspect`, `fetch-file`, `download`, `extract`, `link`
+- `references/upload.md` - `upload` and all subcommands (prefix, anaconda, quetz, artifactory, cloudsmith, s3)
+- `references/auth.md` - `auth login` / `auth logout`
+- `references/misc.md` - `virtual-packages`, `completion`
+
+## Content Guidelines
+
+- Document every subcommand's purpose, arguments, and options.
+- Use tables for option lists — they're compact and scannable.
+- Include short example invocations (one per subcommand is usually enough).
+- Call out defaults (target prefix `.prefix`, default channel `conda-forge`, etc.).
+- Keep SKILL.md as a hub — detailed command docs go in reference files.
+
+## What to Watch for When Updating
+
+- New subcommands added to `Command` in `src/main.rs`
+- New options on existing subcommands (check `Opt` struct fields)
+- New upload targets under `rattler_upload`
+- Changes to default values (default channel, default prefix)
+- New auth storage / OAuth flow options
+
+## What NOT to Include
+
+- Internal Rust types, `miette` error types, or progress-bar plumbing
+- Implementation details of the solver, repodata gateway, or package cache
