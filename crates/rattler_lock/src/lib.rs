@@ -151,24 +151,27 @@ pub struct PackageIndex(usize);
 ///
 /// Produced by the crate whenever a package is registered; external callers
 /// only ever see the value by [`Display`] — typically when it surfaces in an
-/// error message. The underlying string representation is intentionally
-/// hidden so the lockfile format can evolve without exposing its encoding.
+/// error message. The underlying representation is intentionally hidden so
+/// the lockfile format can evolve without exposing its encoding.
 ///
-/// The underlying string matches the selector key used in the serialized
+/// The `id` string matches the selector value used in the serialized
 /// lockfile format:
 /// - Binary conda: the location URL/path
 /// - Source conda: `"name[hash] @ location"` ([`SourceIdentifier`] format)
 /// - Pypi: the verbatim location (preserving the original string if present)
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) struct SelectorId {
-    full_id: String,
-    short_offset: usize,
+    kind: SelectorKind,
+    id: String,
 }
 
 /// Discriminator for the three kinds of packages that can appear in a
-/// lockfile. Owns the prefix string used to build a [`SelectorId`], so the
-/// prefix choice lives in exactly one place.
-#[derive(Clone, Copy)]
+/// lockfile. Owns the prefix string used in `Display`, so the prefix choice
+/// lives in exactly one place.
+///
+/// Variant declaration order is the canonical sort order for packages:
+/// binary conda first, then conda source, then pypi.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub(crate) enum SelectorKind {
     CondaBinary,
     CondaSource,
@@ -187,10 +190,9 @@ impl SelectorKind {
 
 impl SelectorId {
     pub(crate) fn from_parts(kind: SelectorKind, id: &str) -> Self {
-        let prefix = kind.prefix();
         Self {
-            full_id: format!("{prefix}: {id}"),
-            short_offset: prefix.len() + 2,
+            kind,
+            id: id.to_owned(),
         }
     }
 
@@ -214,41 +216,17 @@ impl SelectorId {
     }
 
     pub(crate) fn as_str(&self) -> &str {
-        &self.full_id[self.short_offset..]
+        &self.id
     }
 
-    pub(crate) fn as_long_str(&self) -> &str {
-        &self.full_id
-    }
-}
-
-impl PartialEq for SelectorId {
-    fn eq(&self, other: &Self) -> bool {
-        self.full_id == other.full_id
-    }
-}
-
-impl Ord for SelectorId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.full_id.cmp(&other.full_id)
-    }
-}
-
-impl PartialOrd for SelectorId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::hash::Hash for SelectorId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.full_id.hash(state);
+    pub(crate) fn kind(&self) -> SelectorKind {
+        self.kind
     }
 }
 
 impl std::fmt::Display for SelectorId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.full_id)
+        write!(f, "{}: {}", self.kind.prefix(), self.id)
     }
 }
 
@@ -315,8 +293,8 @@ impl PackageHandle {
         if actual_selector_id != self.selector_id {
             return Err(InvalidPackageHandleError::SelectorMismatch {
                 index: self.index.0,
-                expected: self.selector_id.as_long_str().to_string(),
-                actual: actual_selector_id.as_long_str().to_string(),
+                expected: self.selector_id.to_string(),
+                actual: actual_selector_id.to_string(),
             });
         }
         Ok(package)
@@ -390,25 +368,25 @@ impl EnvironmentPackages {
             .collect()
     }
 
-    /// Builds an `EnvironmentPackages` by resolving a list of selector-id
-    /// strings (as read from the serialized lockfile) to [`PackageHandle`]s
+    /// Builds an `EnvironmentPackages` by resolving a list of selector
+    /// entries (as read from the serialized lockfile) to [`PackageHandle`]s
     /// via the caller-supplied `resolve` closure.
     ///
     /// The closure's `Err` path lets callers produce a context-rich error
-    /// when a selector string does not correspond to a known package.
+    /// when a selector does not correspond to a known package.
     /// `FromSelectorIdsError` wraps either that error or a consistency
     /// violation ([`InconsistentInsertError`]) when two entries reuse an
     /// index or a selector id with a different counterpart.
-    pub(crate) fn from_selector_ids<I, E>(
-        strings: I,
-        mut resolve: impl FnMut(&str) -> Result<PackageHandle, E>,
+    pub(crate) fn from_selector_ids<I, T, E>(
+        items: I,
+        mut resolve: impl FnMut(&T) -> Result<PackageHandle, E>,
     ) -> Result<Self, FromSelectorIdsError<E>>
     where
-        I: IntoIterator<Item = String>,
+        I: IntoIterator<Item = T>,
     {
         let mut environment_packages = Self::default();
-        for selector_id in strings {
-            let handle = resolve(&selector_id).map_err(FromSelectorIdsError::Resolve)?;
+        for item in items {
+            let handle = resolve(&item).map_err(FromSelectorIdsError::Resolve)?;
             environment_packages
                 .insert(handle)
                 .map_err(FromSelectorIdsError::Inconsistent)?;
@@ -1536,9 +1514,9 @@ packages:
     }
 
     /// Verify that pypi source packages with relative paths (both `./` and
-    /// `../`) roundtrip correctly and that the `SerializablePackageSelector`
-    /// values in the environment section always match the `pypi:` keys in
-    /// the top-level `packages` section.
+    /// `../`) roundtrip correctly and that the `PackageSelector` values in
+    /// the environment section always match the `pypi:` keys in the
+    /// top-level `packages` section.
     #[test]
     fn test_pypi_relative_source_packages_roundtrip() {
         let lock_file_str = "\
@@ -1627,9 +1605,9 @@ packages:
 
         // Parse the rendered YAML and verify that every pypi selector in the
         // environment section has a matching pypi key in the packages section.
-        // This catches mismatches between SerializablePackageSelector (which
-        // serializes the inner UrlOrPath via Display) and the package data
-        // (which serializes via Verbatim, preferring the `given` string).
+        // This catches mismatches between PackageSelector (which serializes
+        // the inner UrlOrPath via Display) and the package data (which
+        // serializes via Verbatim, preferring the `given` string).
         let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
 
         let package_pypi_keys: std::collections::HashSet<&str> = yaml["packages"]
@@ -1667,8 +1645,8 @@ packages:
     /// Verify that `file:///` URLs in pypi package locations produce matching
     /// selectors. `UrlOrPath::from_str("file:///...")` normalizes to a bare
     /// path internally, but `Verbatim` preserves the original `file:///`
-    /// string. `SerializablePackageSelector` serializes the inner `UrlOrPath`
-    /// (bare path) while the package data serializes the `Verbatim` wrapper
+    /// string. `PackageSelector` serializes the inner `UrlOrPath` (bare
+    /// path) while the package data serializes the `Verbatim` wrapper
     /// (`file:///`), causing a mismatch.
     #[test]
     fn test_pypi_file_url_selector_matches_package() {
