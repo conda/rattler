@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{source::SourceLocation, UrlOrPath};
+use crate::{source::SourceLocation, SourceData, UrlOrPath};
 
 /// Represents a conda-build variant value.
 ///
@@ -324,6 +324,10 @@ pub struct CondaSourceData<D = SourceMetadata> {
     /// source.
     pub sources: BTreeMap<String, SourceLocation>,
 
+    /// The build and host environment packages needed to build this source
+    /// package.
+    pub source_data: SourceData,
+
     /// The metadata for this source package.
     pub metadata: D,
 }
@@ -387,6 +391,7 @@ impl CondaSourceData<SourceMetadata> {
                 variants: self.variants,
                 identifier_hash: self.identifier_hash,
                 sources: self.sources,
+                source_data: self.source_data,
                 metadata: *full,
             }),
             SourceMetadata::Partial(_) => None,
@@ -408,6 +413,7 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             identifier_hash,
             sources,
+            source_data: SourceData::default(),
             metadata: SourceMetadata::Full(Box::new(package_record)),
         }
     }
@@ -429,6 +435,7 @@ impl CondaSourceData<SourceMetadata> {
             variants,
             identifier_hash,
             sources,
+            source_data: SourceData::default(),
             metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
         }
     }
@@ -477,6 +484,7 @@ impl From<CondaSourceData<PackageRecord>> for CondaSourceData<SourceMetadata> {
             variants: value.variants,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
+            source_data: value.source_data,
             metadata: SourceMetadata::Full(Box::new(value.metadata)),
         }
     }
@@ -490,6 +498,7 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             variants: value.variants,
             identifier_hash: value.identifier_hash,
             sources: value.sources,
+            source_data: value.source_data,
             metadata: SourceMetadata::Partial(value.metadata),
         }
     }
@@ -510,41 +519,6 @@ pub struct InputHash {
 
     /// The globs that were used to define the input files.
     pub globs: Vec<String>,
-}
-
-impl PartialOrd<Self> for CondaPackageData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for CondaPackageData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Compare by location first
-        self.location()
-            .cmp(other.location())
-            // Then by name
-            .then_with(|| self.name().cmp(other.name()))
-            // Then by additional fields from package records if available
-            .then_with(|| match (self.record(), other.record()) {
-                (Some(pkg_a), Some(pkg_b)) => pkg_a
-                    .version
-                    .cmp(&pkg_b.version)
-                    .then_with(|| pkg_a.build.cmp(&pkg_b.build))
-                    .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir)),
-                (Some(_), None) => Ordering::Less,
-                (None, Some(_)) => Ordering::Greater,
-                (None, None) => Ordering::Equal,
-            })
-            // For source packages, also compare by variants and build source as tiebreakers
-            .then_with(|| match (self.as_source(), other.as_source()) {
-                (Some(src_a), Some(src_b)) => src_a
-                    .variants
-                    .cmp(&src_b.variants)
-                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
-                _ => Ordering::Equal,
-            })
-    }
 }
 
 impl From<RepoDataRecord> for CondaPackageData {

@@ -13,8 +13,8 @@ use crate::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
-    Channel, EnvironmentData, EnvironmentIndex, LockFile, LockFileInner, LockedPackage,
-    PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
+    Channel, EnvironmentData, EnvironmentIndex, EnvironmentPackages, LockFile, LockFileInner,
+    LockedPackage, PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
     PypiPackageData, SolveOptions, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
@@ -110,10 +110,14 @@ pub struct CondaLockedPackageV3 {
 
 fn create_platforms_and_packages(
     mut per_package: ahash::HashMap<rattler_conda_types::Platform, IndexSet<PackageIndex>>,
-) -> (
-    Vec<PlatformData>,
-    ahash::HashMap<PlatformIndex, IndexSet<PackageIndex>>,
-) {
+    packages: &[LockedPackage],
+) -> Result<
+    (
+        Vec<PlatformData>,
+        ahash::HashMap<PlatformIndex, EnvironmentPackages>,
+    ),
+    ParseCondaLockError,
+> {
     let mut unique_platforms = ahash::HashSet::default();
 
     let mut platforms = per_package
@@ -129,21 +133,21 @@ fn create_platforms_and_packages(
 
     platforms.sort_by_key(|p| p.name.to_string());
 
-    let packages = per_package
+    let environment_packages = per_package
         .drain()
-        .map(|(k, v)| {
-            (
+        .map(|(platform, indices)| {
+            Ok((
                 PlatformIndex(
                     platforms
                         .iter()
-                        .position(|p| p.name.as_str() == k.as_str())
+                        .position(|p| p.name.as_str() == platform.as_str())
                         .expect("All Platforms in this hashmap were added before"),
                 ),
-                v,
-            )
+                EnvironmentPackages::from_indices(indices, packages)?,
+            ))
         })
-        .collect();
-    (platforms, packages)
+        .collect::<Result<_, ParseCondaLockError>>()?;
+    Ok((platforms, environment_packages))
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
@@ -275,7 +279,8 @@ pub fn parse_v3_or_lower(
             .insert(pkg);
     }
 
-    let (platforms, environment_packages) = create_platforms_and_packages(per_platform);
+    let packages: Vec<LockedPackage> = packages.into_iter().collect();
+    let (platforms, environment_packages) = create_platforms_and_packages(per_platform, &packages)?;
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
@@ -288,7 +293,7 @@ pub fn parse_v3_or_lower(
         inner: Arc::new(LockFileInner {
             version,
             platforms,
-            packages: packages.into_iter().collect(),
+            packages,
             environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), EnvironmentIndex(0))]
                 .into_iter()
                 .collect(),

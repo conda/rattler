@@ -12,17 +12,17 @@ environments:
       - https://pypi.org/simple
     packages:
       linux-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       osx-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       osx-arm64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
       win-64:
-        - pypi: ./
         - pypi: ../my_subdir
+        - pypi: ./
 packages:
   - pypi: ../my_subdir
     name: my-subdir
