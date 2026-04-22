@@ -7,7 +7,10 @@ use rattler_conda_types::{BuildNumber, NoArchType, PackageRecord, PackageUrl, Ve
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
+use super::{
+    package_selector::PackageSelector,
+    source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
+};
 use crate::{
     conda::{
         CondaSourceData, PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
@@ -93,14 +96,14 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
 
-    /// Selector ids for packages in the build environment.
+    /// Selectors for packages in the build environment.
     /// Populated at lockfile serialization time; empty for standalone package
     /// serialization. Resolved to indices after deserialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub build_packages: Vec<String>,
-    /// Selector ids for packages in the host environment.
+    pub build_packages: Vec<PackageSelector>,
+    /// Selectors for packages in the host environment.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub host_packages: Vec<String>,
+    pub host_packages: Vec<PackageSelector>,
 }
 
 fn is_zero(value: &BuildNumber) -> bool {

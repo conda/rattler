@@ -5,6 +5,7 @@ use pep508_rs::{PackageName, VersionOrUrl};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
+use super::package_selector::PackageSelector;
 use crate::{
     parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
 };
@@ -43,15 +44,15 @@ pub(crate) struct PypiPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
 
-    /// Selector ids for packages in the build environment (pypi source
+    /// Selectors for packages in the build environment (pypi source
     /// packages only — empty for wheel distributions).
     /// Populated at lockfile serialization time; empty for standalone package
     /// serialization. Resolved to indices after deserialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub build_packages: Vec<String>,
-    /// Selector ids for packages in the host environment.
+    pub build_packages: Vec<PackageSelector>,
+    /// Selectors for packages in the host environment.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub host_packages: Vec<String>,
+    pub host_packages: Vec<PackageSelector>,
 }
 
 impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {

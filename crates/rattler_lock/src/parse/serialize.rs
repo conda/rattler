@@ -10,15 +10,13 @@ use serde_with::{serde_as, SerializeAs};
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models::v7, V7},
+    parse::{models::v7, models::v7::PackageSelector, V7},
     Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
     PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
 };
 
-fn selector_ids_to_strings(ids: Vec<SelectorId>) -> Vec<String> {
-    ids.into_iter()
-        .map(|id| id.as_long_str().to_string())
-        .collect()
+fn selector_ids_to_package_selectors(ids: Vec<SelectorId>) -> Vec<PackageSelector> {
+    ids.iter().map(PackageSelector::from_selector_id).collect()
 }
 
 #[serde_as]
@@ -63,7 +61,7 @@ struct SerializableEnvironment<'a> {
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     options: SolveOptions,
-    packages: BTreeMap<String, Vec<SerializablePackageSelector>>,
+    packages: BTreeMap<String, Vec<PackageSelector>>,
 }
 
 impl<'a> SerializableEnvironment<'a> {
@@ -87,7 +85,9 @@ impl<'a> SerializableEnvironment<'a> {
                         packages
                             .iter()
                             .map(|handle| {
-                                SerializablePackageSelector::from_lock_file(inner, handle.index)
+                                PackageSelector::from_selector_id(&SelectorId::new(
+                                    &inner.packages[handle.index.0],
+                                ))
                             })
                             .sorted()
                             .collect(),
@@ -115,74 +115,17 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
             }
             LockedPackage::Conda(CondaPackageData::Source(source)) => {
                 let mut model = v7::SourcePackageDataModel::from(source.as_ref());
-                model.build_packages = selector_ids_to_strings(package.build_packages);
-                model.host_packages = selector_ids_to_strings(package.host_packages);
+                model.build_packages = selector_ids_to_package_selectors(package.build_packages);
+                model.host_packages = selector_ids_to_package_selectors(package.host_packages);
                 Self::Source(model)
             }
             LockedPackage::Pypi(p) => {
                 let mut model = v7::PypiPackageDataModel::from(p);
-                model.build_packages = selector_ids_to_strings(package.build_packages);
-                model.host_packages = selector_ids_to_strings(package.host_packages);
+                model.build_packages = selector_ids_to_package_selectors(package.build_packages);
+                model.host_packages = selector_ids_to_package_selectors(package.host_packages);
                 Self::Pypi(model)
             }
         }
-    }
-}
-
-/// Package selector for V7+ environments.
-///
-/// For V7+, each package variant is uniquely identified by its
-/// [`LockedPackage::selector_id`](crate::LockedPackage::selector_id) string,
-/// stored under the appropriate YAML key (`conda`, `conda_source`, or `pypi`).
-#[derive(Serialize, Eq, PartialEq)]
-#[serde(untagged, rename_all = "snake_case")]
-enum SerializablePackageSelector {
-    Conda { conda: String },
-    CondaSource { conda_source: String },
-    Pypi { pypi: String },
-}
-
-impl SerializablePackageSelector {
-    fn from_lock_file(inner: &LockFileInner, package: PackageIndex) -> Self {
-        let pkg = &inner.packages[package.0];
-        let id = SelectorId::new(pkg).as_str().to_string();
-        match pkg {
-            LockedPackage::Conda(CondaPackageData::Binary(_)) => Self::Conda { conda: id },
-            LockedPackage::Conda(CondaPackageData::Source(_)) => {
-                Self::CondaSource { conda_source: id }
-            }
-            LockedPackage::Pypi(_) => Self::Pypi { pypi: id },
-        }
-    }
-
-    fn id(&self) -> &str {
-        match self {
-            Self::Conda { conda } => conda,
-            Self::CondaSource { conda_source } => conda_source,
-            Self::Pypi { pypi } => pypi,
-        }
-    }
-}
-
-impl PartialOrd for SerializablePackageSelector {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SerializablePackageSelector {
-    fn cmp(&self, other: &Self) -> Ordering {
-        fn type_order(selector: &SerializablePackageSelector) -> u8 {
-            match selector {
-                SerializablePackageSelector::Conda { .. } => 0,
-                SerializablePackageSelector::CondaSource { .. } => 1,
-                SerializablePackageSelector::Pypi { .. } => 2,
-            }
-        }
-
-        type_order(self)
-            .cmp(&type_order(other))
-            .then_with(|| self.id().cmp(other.id()))
     }
 }
 

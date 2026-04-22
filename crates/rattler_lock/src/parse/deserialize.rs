@@ -14,7 +14,7 @@ use serde_yaml::Value;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{
-        models::{self, legacy::LegacyCondaPackageData, v6, v7},
+        models::{self, legacy::LegacyCondaPackageData, v6, v7, v7::PackageSelector},
         V5, V6, V7,
     },
     platform::{ParsePlatformError, PlatformData, PlatformName},
@@ -133,7 +133,7 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
 /// Package data enum used during V7+ deserialization.
 ///
 /// Source variants carry the raw `build_packages` / `host_packages` selector
-/// strings as-read from the YAML; these are resolved to [`PackageIndex`]
+/// entries as-read from the YAML; these are resolved to [`PackageIndex`]
 /// values in a second pass after all packages have been indexed.
 #[allow(clippy::large_enum_variant)]
 enum PackageData {
@@ -142,13 +142,13 @@ enum PackageData {
     /// Source conda package.
     CondaSource {
         data: CondaSourceData,
-        build_packages: Vec<String>,
-        host_packages: Vec<String>,
+        build_packages: Vec<PackageSelector>,
+        host_packages: Vec<PackageSelector>,
     },
     Pypi {
         data: PypiPackageDataRaw,
-        build_packages: Vec<String>,
-        host_packages: Vec<String>,
+        build_packages: Vec<PackageSelector>,
+        host_packages: Vec<PackageSelector>,
     },
 }
 
@@ -802,7 +802,11 @@ fn parse_from_lock<P>(
     let (mut packages, pending_source_data) = {
         let num_packages = raw.packages.len();
         let mut packages = Vec::with_capacity(num_packages);
-        let mut pending_source_data: Vec<(PackageIndex, Vec<String>, Vec<String>)> = Vec::new();
+        let mut pending_source_data: Vec<(
+            PackageIndex,
+            Vec<PackageSelector>,
+            Vec<PackageSelector>,
+        )> = Vec::new();
 
         for (index, package) in raw.packages.into_iter().enumerate() {
             let index = PackageIndex(index);
@@ -848,30 +852,32 @@ fn parse_from_lock<P>(
         .collect();
     selector_index.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Resolve build_packages/host_packages selector strings to PackageIndex
-    // values. The strings in the lockfile are the full (kind-prefixed)
-    // SelectorId form, so we binary-search `selector_index` directly.
-    let resolve_index = |s: &str| -> Result<PackageIndex, ParseCondaLockError> {
+    // Resolve a `PackageSelector` (as read from the lockfile) to a
+    // `PackageIndex` by rebuilding its full `SelectorId` and binary-searching
+    // `selector_index`.
+    let resolve_index = |selector: &PackageSelector| -> Result<PackageIndex, ParseCondaLockError> {
+        let id = selector.to_selector_id();
         selector_index
-            .binary_search_by(|(sel, _)| sel.as_long_str().cmp(s))
+            .binary_search_by(|(sel, _)| sel.cmp(&id))
             .map(|pos| selector_index[pos].1)
             .map_err(|_not_found| ParseCondaLockError::MissingPackage {
                 environment: String::new(),
                 platform: String::new(),
-                location: s.to_owned(),
+                location: selector.id().to_owned(),
             })
     };
 
-    for (pkg_idx, build_strings, host_strings) in pending_source_data {
+    for (pkg_idx, build_selectors, host_selectors) in pending_source_data {
         // Resolve in a scoped block so the immutable borrow of `packages`
         // that the closure takes is dropped before we mutate `packages`.
         let (build_packages, host_packages) = {
-            let resolve = |s: &str| -> Result<PackageHandle, ParseCondaLockError> {
-                let index = resolve_index(s)?;
-                Ok(PackageHandle::new(index, &packages[index.0]))
-            };
-            let build = EnvironmentPackages::from_selector_ids(build_strings, &resolve)?;
-            let host = EnvironmentPackages::from_selector_ids(host_strings, &resolve)?;
+            let resolve =
+                |selector: &PackageSelector| -> Result<PackageHandle, ParseCondaLockError> {
+                    let index = resolve_index(selector)?;
+                    Ok(PackageHandle::new(index, &packages[index.0]))
+                };
+            let build = EnvironmentPackages::from_selector_ids(build_selectors, &resolve)?;
+            let host = EnvironmentPackages::from_selector_ids(host_selectors, &resolve)?;
             (build, host)
         };
 
