@@ -126,7 +126,7 @@ from rattler import Platform
 
 p = Platform.current()
 print(p)           # e.g., "osx-arm64"
-print(p.is_osx)   # True
+print(p.is_osx)    # True
 print(p.arch)      # Arch("aarch64")
 
 for platform in Platform.all():
