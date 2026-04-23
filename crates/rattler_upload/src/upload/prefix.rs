@@ -509,8 +509,6 @@ mod test {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
 
-        let call_count = Arc::new(AtomicUsize::new(0));
-
         async fn handler(
             State(count): State<Arc<AtomicUsize>>,
             _body: axum::body::Bytes,
@@ -523,6 +521,7 @@ mod test {
             }
         }
 
+        let call_count = Arc::new(AtomicUsize::new(0));
         let router = Router::new().fallback(handler).with_state(call_count);
         let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
