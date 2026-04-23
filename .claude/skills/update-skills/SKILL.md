@@ -1,6 +1,6 @@
 ---
 name: update-skills
-description: Update the skills in this repository.
+description: Update the skills in this repository. Use when updating the py-rattler and the rattler-bin skill.
 ---
 
 # py-rattler Skill Update Instructions
