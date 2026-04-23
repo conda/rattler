@@ -3,7 +3,7 @@ name: py-rattler
 description: >-
   Python bindings for the rattler conda library. Use when solving dependencies,
   installing packages, managing conda environments, working with repodata, lock
-  files, or shell activation programmatically from Python.
+  files, conda pakckages or shell activation programmatically from Python.
 license: BSD-3-Clause
 ---
 
