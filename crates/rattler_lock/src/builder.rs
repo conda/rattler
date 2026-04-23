@@ -501,7 +501,7 @@ impl LockFileBuilder {
         let build_packages: Vec<_> = build_packages.into_iter().collect();
         let host_packages: Vec<_> = host_packages.into_iter().collect();
         for handle in build_packages.iter().chain(host_packages.iter()) {
-            handle.get(&self.packages)?;
+            handle.get_from_slice(&self.packages)?;
         }
         Ok(SourceData {
             build_packages: EnvironmentPackages::from_handles(build_packages)?,

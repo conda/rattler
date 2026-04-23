@@ -83,7 +83,7 @@ impl<'a> SerializableEnvironment<'a> {
                     (
                         platform_name,
                         packages
-                            .iter()
+                            .handles()
                             .map(|handle| {
                                 PackageSelector::from_selector_id(&SelectorId::new(
                                     &inner.packages[handle.index.0],
@@ -145,13 +145,35 @@ impl Serialize for LockFile {
     {
         let inner = self.inner.as_ref();
 
-        // Determine the package indexes that are used in the lock-file.
-        let used_packages: HashSet<PackageIndex> = inner
+        // Determine the package indexes that are used in the lock-file,
+        // including those referenced transitively via source-package
+        // `build_packages` / `host_packages`.
+        let mut used_packages: HashSet<PackageIndex> = inner
             .environments
             .iter()
             .flat_map(|env| env.packages.values())
-            .flat_map(|packages| packages.iter().map(|handle| handle.index))
+            .flat_map(|packages| packages.handles().map(|handle| handle.index))
             .collect();
+        let mut worklist: Vec<PackageIndex> = used_packages.iter().copied().collect();
+        while let Some(idx) = worklist.pop() {
+            let source_data = match &inner.packages[idx.0] {
+                LockedPackage::Conda(CondaPackageData::Source(source)) => Some(&source.source_data),
+                LockedPackage::Pypi(pypi) => pypi.as_source().map(|s| &s.source_data),
+                LockedPackage::Conda(_) => None,
+            };
+            let Some(source_data) = source_data else {
+                continue;
+            };
+            for handle in source_data
+                .build_packages
+                .handles()
+                .chain(source_data.host_packages.handles())
+            {
+                if used_packages.insert(handle.index) {
+                    worklist.push(handle.index);
+                }
+            }
+        }
 
         // Collect all environments
         let environments = inner

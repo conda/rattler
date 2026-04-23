@@ -272,14 +272,24 @@ impl PackageHandle {
         }
     }
 
+    /// Looks up the referenced [`LockedPackage`] in the given [`LockFile`].
+    ///
+    /// Returns [`InvalidPackageHandleError`] if the handle does not refer to
+    /// a package in `lock_file` — typically because the handle came from a
+    /// different lockfile than the one being queried.
+    pub fn get<'a>(
+        &self,
+        lock_file: &'a LockFile,
+    ) -> Result<&'a LockedPackage, InvalidPackageHandleError> {
+        self.get_from_slice(&lock_file.inner.packages)
+    }
+
     /// Looks up the referenced [`LockedPackage`] in the given package list.
     ///
     /// Returns [`InvalidPackageHandleError`] when the handle's index is out
     /// of bounds for `packages`, or when the package at that index has a
-    /// different selector id than the handle stores. Both indicate the
-    /// handle is being used against a lockfile other than the one that
-    /// produced it.
-    pub fn get<'a>(
+    /// different selector id than the handle stores.
+    pub(crate) fn get_from_slice<'a>(
         &self,
         packages: &'a [LockedPackage],
     ) -> Result<&'a LockedPackage, InvalidPackageHandleError> {
@@ -462,9 +472,26 @@ impl EnvironmentPackages {
         self.entries.is_empty()
     }
 
-    /// Returns an iterator over the contained [`PackageHandle`]s in
+    /// Returns an iterator over the resolved [`LockedPackage`]s in
     /// sorted-by-selector-id order.
-    pub fn iter(&self) -> std::slice::Iter<'_, PackageHandle> {
+    ///
+    /// Each item is a [`Result`] because `lock_file` may not be the one the
+    /// handles in this set originated from; a mismatch surfaces as
+    /// [`InvalidPackageHandleError`] rather than a panic.
+    pub fn iter<'a>(
+        &'a self,
+        lock_file: &'a LockFile,
+    ) -> impl Iterator<Item = Result<&'a LockedPackage, InvalidPackageHandleError>> + 'a {
+        self.entries
+            .iter()
+            .map(move |h| h.get_from_slice(&lock_file.inner.packages))
+    }
+
+    /// Returns an iterator over the raw [`PackageHandle`]s in the set.
+    ///
+    /// Crate-private because the handle type is primarily a builder-side
+    /// concern; external callers should use [`Self::iter`] with a lockfile.
+    pub(crate) fn handles(&self) -> std::slice::Iter<'_, PackageHandle> {
         self.entries.iter()
     }
 }
@@ -483,15 +510,6 @@ pub enum FromSelectorIdsError<E> {
     /// but are paired with different counterparts.
     #[error(transparent)]
     Inconsistent(#[from] InconsistentInsertError),
-}
-
-impl<'a> IntoIterator for &'a EnvironmentPackages {
-    type Item = &'a PackageHandle;
-    type IntoIter = std::slice::Iter<'a, PackageHandle>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.entries.iter()
-    }
 }
 
 /// The packages needed to build a source package.
@@ -709,8 +727,12 @@ impl<'lock> Environment<'lock> {
             self.data()
                 .packages
                 .get(&platform.index)?
-                .iter()
-                .map(|handle| &self.lock_file.inner.packages[handle.index.0]),
+                .handles()
+                .map(|handle| {
+                    handle
+                        .get(self.lock_file)
+                        .expect("environment handle must be valid for its own lock file")
+                }),
         )
     }
 
@@ -733,8 +755,11 @@ impl<'lock> Environment<'lock> {
             .map(move |(platform, data)| {
                 (
                     platform,
-                    data.iter()
-                        .map(|handle| &self.lock_file.inner.packages[handle.index.0]),
+                    data.handles().map(|handle| {
+                        handle
+                            .get(self.lock_file)
+                            .expect("environment handle must be valid for its own lock file")
+                    }),
                 )
             })
     }
