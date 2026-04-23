@@ -47,6 +47,7 @@ from rattler.lock import (
     PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.package_cache import PackageCache, ValidationMode
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -110,6 +111,8 @@ __all__ = [
     "NoArchLiteral",
     "Link",
     "LinkType",
+    "PackageCache",
+    "ValidationMode",
 ]
 
 # PTY support - only available on Unix platforms

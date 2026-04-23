@@ -35,3 +35,4 @@ create_exception!(exceptions, AuthenticationStorageError, PyException);
 create_exception!(exceptions, ShellError, PyException);
 create_exception!(exceptions, InvalidHeaderNameError, PyException);
 create_exception!(exceptions, InvalidHeaderValueError, PyException);
+create_exception!(exceptions, PackageCacheError, PyException);
