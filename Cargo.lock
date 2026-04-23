@@ -5644,13 +5644,13 @@ dependencies = [
 name = "rattler_upload"
 version = "0.5.7"
 dependencies = [
- "axum",
  "base64 0.22.1",
  "clap",
  "fs-err",
  "futures",
  "indicatif",
  "miette",
+ "mockito",
  "opendal",
  "rattler_conda_types",
  "rattler_config",
@@ -5663,6 +5663,7 @@ dependencies = [
  "reqwest 0.12.28",
  "reqwest-middleware",
  "reqwest-retry",
+ "rstest",
  "serde",
  "serde_json",
  "serde_yaml",

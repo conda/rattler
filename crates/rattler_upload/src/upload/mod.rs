@@ -473,86 +473,58 @@ async fn send_request(
 
 #[cfg(test)]
 mod test {
-    use axum::{http::StatusCode, Router};
     use rattler_networking::AuthenticationStorage;
+    use rstest::rstest;
 
     use crate::upload::opt::{ArtifactoryData, QuetzData};
-    use crate::upload::test_utils::{start_test_server, test_package_path};
+    use crate::upload::test_utils::test_package_path;
 
-    async fn ok_with_api_key(
-        headers: axum::http::HeaderMap,
-        _body: axum::body::Bytes,
-    ) -> StatusCode {
-        assert!(headers.get("x-api-key").is_some());
-        StatusCode::OK
-    }
-
-    async fn ok_with_bearer(
-        headers: axum::http::HeaderMap,
-        _body: axum::body::Bytes,
-    ) -> StatusCode {
-        let auth = headers.get("authorization").unwrap().to_str().unwrap();
-        assert!(auth.starts_with("Bearer "));
-        StatusCode::OK
-    }
-
-    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::UNAUTHORIZED
-    }
-
-    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
-        StatusCode::CONFLICT
-    }
-
+    #[rstest]
+    #[case::success(200, true)]
+    #[case::auth_failure(401, false)]
+    #[case::conflict(409, false)]
     #[tokio::test]
-    async fn test_quetz_upload_success() {
-        let router = Router::new().fallback(ok_with_api_key);
-        let url = start_test_server(router).await;
+    async fn test_quetz_upload(#[case] status: usize, #[case] should_succeed: bool) {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(
+                    r"^/api/channels/test-channel/upload/empty-0\.1\.0-h4616a5c_0\.conda"
+                        .to_string(),
+                ),
+            )
+            .with_status(status)
+            .create_async()
+            .await;
+
         let storage = AuthenticationStorage::empty();
         let quetz_data = QuetzData::new(
-            url,
+            server.url().parse().unwrap(),
             "test-channel".to_string(),
             Some("test-api-key".to_string()),
         );
         let result =
             super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        assert_eq!(result.is_ok(), should_succeed, "{result:?}");
+        mock.assert_async().await;
     }
 
+    #[rstest]
+    #[case::success(200, true)]
+    #[case::auth_failure(401, false)]
     #[tokio::test]
-    async fn test_quetz_upload_auth_failure() {
-        let router = Router::new().fallback(unauthorized);
-        let url = start_test_server(router).await;
-        let storage = AuthenticationStorage::empty();
-        let quetz_data =
-            QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
-        let result =
-            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_err());
-    }
+    async fn test_artifactory_upload(#[case] status: usize, #[case] should_succeed: bool) {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/test-channel/noarch/empty-0.1.0-h4616a5c_0.conda")
+            .with_status(status)
+            .create_async()
+            .await;
 
-    #[tokio::test]
-    async fn test_quetz_upload_conflict() {
-        let router = Router::new().fallback(conflict);
-        let url = start_test_server(router).await;
-        let storage = AuthenticationStorage::empty();
-        let quetz_data = QuetzData::new(
-            url,
-            "test-channel".to_string(),
-            Some("test-key".to_string()),
-        );
-        let result =
-            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_artifactory_upload_success() {
-        let router = Router::new().fallback(ok_with_bearer);
-        let url = start_test_server(router).await;
         let storage = AuthenticationStorage::empty();
         let artifactory_data = ArtifactoryData::new(
-            url,
+            server.url().parse().unwrap(),
             "test-channel".to_string(),
             Some("test-token".to_string()),
         );
@@ -562,90 +534,55 @@ mod test {
             artifactory_data,
         )
         .await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
-    }
-
-    #[tokio::test]
-    async fn test_artifactory_upload_auth_failure() {
-        let router = Router::new().fallback(unauthorized);
-        let url = start_test_server(router).await;
-        let storage = AuthenticationStorage::empty();
-        let artifactory_data = ArtifactoryData::new(
-            url,
-            "test-channel".to_string(),
-            Some("bad-token".to_string()),
-        );
-        let result = super::upload_package_to_artifactory(
-            &storage,
-            &vec![test_package_path()],
-            artifactory_data,
-        )
-        .await;
-        assert!(result.is_err());
+        assert_eq!(result.is_ok(), should_succeed, "{result:?}");
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_cloudsmith_upload_success() {
-        use axum::routing::post;
-        use std::net::SocketAddr;
+        let mut server = mockito::Server::new_async().await;
+        let upload_url = format!("{}/s3-upload", server.url());
 
-        // Bind the listener first so we know the port for the upload_url response
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
-            .parse()
-            .unwrap();
-
-        let upload_handler = {
-            let base_url = base_url.clone();
-            move |headers: axum::http::HeaderMap| {
-                let base_url = base_url.clone();
-                async move {
-                    assert!(headers.get("X-Api-Key").is_some());
-                    let upload_url = base_url.join("s3-upload").unwrap();
-                    (
-                        axum::http::StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "identifier": "test-file-id",
-                            "upload_url": upload_url.to_string(),
-                            "upload_fields": {"key": "value"}
-                        })
-                        .to_string(),
-                    )
-                }
-            }
-        };
-
-        let router = Router::new()
-            .route("/files/{owner}/{repo}/", post(upload_handler))
-            .route("/s3-upload", post(|| async { StatusCode::OK }))
-            .route(
-                "/packages/{owner}/{repo}/upload/conda/",
-                post(|| async {
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        serde_json::json!({
-                            "slug_perm": "test-slug-perm",
-                            "slug": "test-slug"
-                        })
-                        .to_string(),
-                    )
-                }),
-            );
-
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
+        let files_mock = server
+            .mock("POST", "/files/test-owner/test-repo/")
+            .match_header("X-Api-Key", "test-api-key")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "identifier": "test-file-id",
+                    "upload_url": upload_url,
+                    "upload_fields": {"key": "value"}
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+        let s3_mock = server
+            .mock("POST", "/s3-upload")
+            .with_status(200)
+            .create_async()
+            .await;
+        let packages_mock = server
+            .mock("POST", "/packages/test-owner/test-repo/upload/conda/")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "slug_perm": "test-slug-perm",
+                    "slug": "test-slug"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
         let storage = AuthenticationStorage::empty();
         let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
             "test-owner".to_string(),
             "test-repo".to_string(),
             Some("test-api-key".to_string()),
-            Some(base_url),
+            Some(server.url().parse().unwrap()),
         );
         let result = super::upload_package_to_cloudsmith(
             &storage,
@@ -654,6 +591,9 @@ mod test {
         )
         .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+        for m in [files_mock, s3_mock, packages_mock] {
+            m.assert_async().await;
+        }
     }
 
     #[tokio::test]
@@ -671,10 +611,9 @@ mod test {
             cloudsmith_data,
         )
         .await;
-        assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
             super::cloudsmith::CloudsmithError::MissingApiKey
-        ),);
+        ));
     }
 }

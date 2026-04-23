@@ -507,67 +507,63 @@ impl Anaconda {
 
 #[cfg(test)]
 mod test {
-    use std::net::SocketAddr;
-
-    use axum::{
-        http::StatusCode,
-        routing::{get, post},
-        Router,
-    };
+    use rstest::rstest;
     use url::Url;
 
     use super::{Anaconda, AnacondaError};
+    use crate::upload::opt::ForceOverwrite;
     use crate::upload::package::ExtractedPackage;
     use crate::upload::test_utils::test_package_path;
-    use crate::upload::{opt::ForceOverwrite, test_utils};
 
-    #[tokio::test]
-    async fn test_anaconda_create_package() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-        );
-        let url = test_utils::start_test_server(router).await;
+    async fn setup() -> (mockito::ServerGuard, Anaconda, std::path::PathBuf) {
+        let server = mockito::Server::new_async().await;
+        let url: Url = server.url().parse().unwrap();
         let anaconda = Anaconda::new("test-token".to_string(), url.into());
+        (server, anaconda, test_package_path())
+    }
 
-        let package_path = test_package_path();
+    #[rstest]
+    #[case::create_new(404, "POST")]
+    #[case::update_existing(200, "PATCH")]
+    #[tokio::test]
+    async fn test_create_or_update_package(
+        #[case] get_status: usize,
+        #[case] mutation_method: &str,
+    ) {
+        let (mut server, anaconda, package_path) = setup().await;
         let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let get_mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(get_status)
+            .create_async()
+            .await;
+
+        let mutate_mock = server
+            .mock(mutation_method, "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
 
         let result = anaconda
             .create_or_update_package("test-owner", &package)
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
+
+        get_mock.assert_async().await;
+        mutate_mock.assert_async().await;
     }
 
     #[tokio::test]
-    async fn test_anaconda_update_existing_package() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::OK }).patch(|| async { StatusCode::OK }),
-        );
-        let url = test_utils::start_test_server(router).await;
-        let anaconda = Anaconda::new("test-token".to_string(), url.into());
-
-        let package_path = test_package_path();
+    async fn test_create_package_server_error() {
+        let (mut server, anaconda, package_path) = setup().await;
         let package = ExtractedPackage::from_package_file(&package_path).unwrap();
 
-        let result = anaconda
-            .create_or_update_package("test-owner", &package)
+        let mock = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(500)
+            .create_async()
             .await;
-        assert!(result.is_ok(), "{:?}", result.unwrap_err());
-    }
-
-    #[tokio::test]
-    async fn test_anaconda_create_package_server_error() {
-        let router = Router::new().route(
-            "/package/{owner}/{name}",
-            get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
-        );
-        let url = test_utils::start_test_server(router).await;
-        let anaconda = Anaconda::new("test-token".to_string(), url.into());
-
-        let package_path = test_package_path();
-        let package = ExtractedPackage::from_package_file(&package_path).unwrap();
 
         let err = anaconda
             .create_or_update_package("test-owner", &package)
@@ -577,19 +573,20 @@ mod test {
             matches!(err, AnacondaError::UnexpectedStatus { status: 500 }),
             "expected UnexpectedStatus(500), got: {err:?}"
         );
+
+        mock.assert_async().await;
     }
 
     #[tokio::test]
-    async fn test_anaconda_upload_file_conflict_without_force() {
-        let router = Router::new().route(
-            "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
-            post(|| async { StatusCode::CONFLICT }),
-        );
-        let url = test_utils::start_test_server(router).await;
-        let anaconda = Anaconda::new("test-token".to_string(), url.into());
-
-        let package_path = test_package_path();
+    async fn test_upload_file_conflict_without_force() {
+        let (mut server, anaconda, package_path) = setup().await;
         let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/stage/.*".to_string()))
+            .with_status(409)
+            .create_async()
+            .await;
 
         let err = anaconda
             .upload_file(
@@ -604,15 +601,14 @@ mod test {
             matches!(err, AnacondaError::FileAlreadyExists(..)),
             "expected FileAlreadyExists, got: {err:?}"
         );
+
+        mock.assert_async().await;
     }
 
     #[tokio::test]
-    async fn test_anaconda_upload_file_no_channels() {
-        let package_path = test_package_path();
+    async fn test_upload_file_no_channels() {
+        let (_, anaconda, package_path) = setup().await;
         let package = ExtractedPackage::from_package_file(&package_path).unwrap();
-
-        let url: Url = "http://127.0.0.1:1".parse().unwrap();
-        let anaconda = Anaconda::new("test-token".to_string(), url.into());
 
         let err = anaconda
             .upload_file("test-owner", &[], ForceOverwrite(false), &package)
@@ -625,68 +621,62 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_anaconda_upload_file_full_flow() {
-        // Bind the listener first so we know the port for the stage response's post_url
-        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url: Url = format!("http://{}:{}", addr.ip(), addr.port())
-            .parse()
-            .unwrap();
-
-        let stage_handler = {
-            let base_url = base_url.clone();
-            move || {
-                let base_url = base_url.clone();
-                async move {
-                    let post_url = base_url.join("s3-upload").unwrap();
-                    let body = serde_json::json!({
-                        "post_url": post_url.to_string(),
-                        "form_data": {"key": "value"},
-                        "dist_id": "test-dist-id"
-                    });
-                    (
-                        StatusCode::OK,
-                        [("content-type", "application/json")],
-                        body.to_string(),
-                    )
-                }
-            }
-        };
-
-        let router = Router::new()
-            .route(
-                "/package/{owner}/{name}",
-                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-            )
-            .route(
-                "/release/{owner}/{name}/{version}",
-                get(|| async { StatusCode::NOT_FOUND }).post(|| async { StatusCode::OK }),
-            )
-            .route(
-                "/stage/{owner}/{name}/{version}/{subdir}/{filename}",
-                post(stage_handler),
-            )
-            .route("/s3-upload", post(|| async { StatusCode::OK }))
-            .route(
-                "/commit/{owner}/{name}/{version}/{subdir}/{filename}",
-                post(|| async { StatusCode::OK }),
-            );
-
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-
-        let anaconda = Anaconda::new("test-token".to_string(), base_url.into());
-
-        let package_path = test_package_path();
+    async fn test_upload_file_full_flow() {
+        let (mut server, anaconda, package_path) = setup().await;
         let package = ExtractedPackage::from_package_file(&package_path).unwrap();
+
+        let base_url: Url = server.url().parse().unwrap();
+        let post_url = base_url.join("s3-upload").unwrap();
+
+        let pkg_get = server
+            .mock("GET", "/package/test-owner/empty")
+            .with_status(404)
+            .create_async()
+            .await;
+        let pkg_post = server
+            .mock("POST", "/package/test-owner/empty")
+            .with_status(200)
+            .create_async()
+            .await;
+        let rel_get = server
+            .mock("GET", mockito::Matcher::Regex(r"^/release/.*".to_string()))
+            .with_status(404)
+            .create_async()
+            .await;
+        let rel_post = server
+            .mock("POST", mockito::Matcher::Regex(r"^/release/.*".to_string()))
+            .with_status(200)
+            .create_async()
+            .await;
+        let stage = server
+            .mock("POST", mockito::Matcher::Regex(r"^/stage/.*".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "post_url": post_url.to_string(),
+                    "form_data": {"key": "value"},
+                    "dist_id": "test-dist-id"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+        let s3 = server
+            .mock("POST", "/s3-upload")
+            .with_status(200)
+            .create_async()
+            .await;
+        let commit = server
+            .mock("POST", mockito::Matcher::Regex(r"^/commit/.*".to_string()))
+            .with_status(200)
+            .create_async()
+            .await;
 
         anaconda
             .create_or_update_package("test-owner", &package)
             .await
             .expect("create_or_update_package failed");
-
         anaconda
             .create_or_update_release("test-owner", &package)
             .await
@@ -702,5 +692,9 @@ mod test {
             .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
         assert!(result.unwrap(), "upload_file should return true on success");
+
+        for m in [pkg_get, pkg_post, rel_get, rel_post, stage, s3, commit] {
+            m.assert_async().await;
+        }
     }
 }
