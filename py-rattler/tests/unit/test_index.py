@@ -1,4 +1,5 @@
 # type: ignore
+import json
 import os
 import shutil
 import uuid
@@ -9,8 +10,15 @@ from typing import Iterator
 import boto3
 import pytest
 
-from rattler import Platform
-from rattler.index import index_fs, index_s3
+from rattler import (
+    PackageRecord,
+    Platform,
+    PrefixPaths,
+    PrefixRecord,
+    RepoDataRecord,
+    WhlPackageRecord,
+)
+from rattler.index import index_fs, index_s3, write_repodata
 from rattler.index.index import S3Credentials
 
 
@@ -60,6 +68,72 @@ async def test_index_specific_subdir_noarch(package_directory):
     assert "repodata.json" in os.listdir(package_directory / "noarch")
     with open(package_directory / "noarch/repodata.json") as f:
         assert "pytweening-1.0.4-pyhd8ed1ab_0" in f.read()
+
+
+@pytest.mark.asyncio
+async def test_write_repodata_from_record_metadata(tmp_path: Path) -> None:
+    conda_base_record = PackageRecord(
+        name="requests",
+        version="2.28.0",
+        build="py3_none_any_0",
+        build_number=0,
+        subdir="linux-64",
+        extra_depends={"security": ["cryptography >=3.0"]},
+    )
+    prefix_record = PrefixRecord(
+        RepoDataRecord(
+            conda_base_record,
+            file_name="requests-2.28.0-py3_none_any_0.tar.bz2",
+            url="https://example.com/conda/requests-2.28.0-py3_none_any_0.tar.bz2",
+            channel="https://example.com/conda/linux-64",
+        ),
+        PrefixPaths(),
+    )
+    conda_record = RepoDataRecord(
+        PackageRecord(
+            name="urllib3",
+            version="2.0.7",
+            build="py3_none_any_0",
+            build_number=0,
+            subdir="osx-64",
+        ),
+        file_name="urllib3-2.0.7-py3_none_any_0.conda",
+        url="https://example.com/conda/urllib3-2.0.7-py3_none_any_0.conda",
+        channel="https://example.com/conda/osx-64",
+    )
+    whl_record = WhlPackageRecord(
+        PackageRecord(
+            name="packaging",
+            version="24.1",
+            build="py3_none_any_0",
+            build_number=0,
+            subdir="linux-64",
+        ),
+        "https://example.com/wheels/packaging-24.1-py3-none-any.whl",
+    )
+
+    await write_repodata(
+        tmp_path,
+        [prefix_record, conda_record, whl_record],
+        write_zst=False,
+        write_shards=False,
+    )
+
+    noarch_repodata = json.loads((tmp_path / "noarch" / "repodata.json").read_text())
+    linux_repodata = json.loads((tmp_path / "linux-64" / "repodata.json").read_text())
+    osx_repodata = json.loads((tmp_path / "osx-64" / "repodata.json").read_text())
+
+    assert noarch_repodata["info"]["subdir"] == "noarch"
+    assert noarch_repodata["packages"] == {}
+    assert linux_repodata["repodata_version"] == 3
+    assert linux_repodata["packages"]["requests-2.28.0-py3_none_any_0.tar.bz2"]["extra_depends"] == {
+        "security": ["cryptography >=3.0"]
+    }
+    assert (
+        linux_repodata["v3"]["whl"]["packaging-24.1-py3_none_any_0"]["url"]
+        == "https://example.com/wheels/packaging-24.1-py3-none-any.whl"
+    )
+    assert osx_repodata["packages.conda"]["urllib3-2.0.7-py3_none_any_0.conda"]["name"] == "urllib3"
 
 
 # ---------------------------------------- S3 ---------------------------------------- #

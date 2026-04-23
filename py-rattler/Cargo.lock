@@ -3770,6 +3770,7 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "nix 0.30.1",
+ "opendal",
  "openssl",
  "parking_lot",
  "pep508_rs",
