@@ -39,9 +39,11 @@ use url::Url;
 
 pub use super::full_download::{
     fetch_file_from_remote_full_download, fetch_package_file_full_download,
+    list_info_files_from_remote_full_download,
 };
-use super::sparse::fetch_package_file_sparse;
+use super::sparse::{fetch_package_file_sparse, list_info_files_from_remote_sparse};
 use crate::reqwest::sparse::fetch_file_from_remote_sparse;
+use crate::seek::PackageFileEntry;
 use crate::ExtractError;
 
 /// Fetch and parse a specific [`PackageFile`] from a remote package.
@@ -145,6 +147,32 @@ pub async fn fetch_file_from_remote_url(
     fetch_file_from_remote_full_download(&client, &url, target_path).await
 }
 
+/// List files from the `info/` section of a remote package.
+pub async fn list_info_files_from_remote_url(
+    client: ClientWithMiddleware,
+    url: Url,
+) -> Result<Vec<PackageFileEntry>, ExtractError> {
+    match list_info_files_from_remote_sparse(client.clone(), url.clone()).await {
+        Ok(result) => return Ok(result),
+        Err(ExtractError::UnsupportedArchiveType) => {
+            debug!("archive type not supported for range requests, falling back to full download");
+        }
+        Err(ExtractError::AsyncHttpRangeReaderError(
+            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+        )) => {
+            debug!("server does not support range requests, falling back to full download");
+        }
+        Err(ExtractError::AsyncHttpRangeReaderError(AsyncHttpRangeReaderError::HttpError(err)))
+            if err.status() == Some(reqwest::StatusCode::RANGE_NOT_SATISFIABLE) =>
+        {
+            debug!("server returned range not satisfiable, falling back to full download");
+        }
+        Err(e) => return Err(e),
+    }
+
+    list_info_files_from_remote_full_download(&client, &url).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +270,32 @@ mod tests {
             .expect("file should exist in archive");
 
         assert!(!raw.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_info_files_from_remote() {
+        let url = test_server::serve_file(test_file()).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let entries = list_info_files_from_remote_url(client, url).await.unwrap();
+
+        assert!(entries
+            .iter()
+            .any(|entry| entry.path == std::path::Path::new("index.json")));
+        assert!(entries.iter().all(|entry| !entry.path.starts_with("info")));
+    }
+
+    #[tokio::test]
+    async fn test_list_info_files_from_remote_tar_bz2_fallback() {
+        let tar_bz2 = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let url = test_server::serve_file(tar_bz2).await;
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+
+        let entries = list_info_files_from_remote_url(client, url).await.unwrap();
+
+        assert!(entries
+            .iter()
+            .any(|entry| entry.path == std::path::Path::new("index.json")));
     }
 }

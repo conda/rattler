@@ -6,11 +6,16 @@ use std::path::Path;
 use async_compression::tokio::bufread::BzDecoder;
 use async_spooled_tempfile::SpooledTempFile;
 use async_zip::base::read::stream::ZipFileReader;
-use futures_util::StreamExt;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncRead, AsyncSeekExt};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
+#[cfg(feature = "reqwest")]
+use crate::seek::PackageFileEntry;
 use crate::{read::SizeCountingReader, ExtractError, ExtractResult};
+#[cfg(feature = "reqwest")]
+use futures_util::StreamExt;
+#[cfg(feature = "reqwest")]
+use tokio::io::AsyncReadExt;
 
 use super::shared::{extract_tar_zst_entry, unpack_tar_archive, DEFAULT_BUF_SIZE};
 
@@ -263,6 +268,41 @@ pub(crate) async fn get_file_from_tar_archive<R: tokio::io::AsyncRead + Unpin>(
         }
     }
     Ok(None)
+}
+
+/// Async tar archive enumeration helper for streaming readers.
+#[cfg(feature = "reqwest")]
+pub(crate) async fn list_files_in_tar_archive<R: tokio::io::AsyncRead + Unpin>(
+    archive: &mut tokio_tar::Archive<R>,
+    root: Option<&Path>,
+) -> Result<Vec<PackageFileEntry>, ExtractError> {
+    let mut result = Vec::new();
+    let mut entries = archive.entries().map_err(ExtractError::IoError)?;
+    while let Some(entry) = entries.next().await {
+        let entry = entry.map_err(ExtractError::IoError)?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path().map_err(ExtractError::IoError)?.into_owned();
+        let relative_path = match root {
+            Some(root) => match path.strip_prefix(root) {
+                Ok(relative_path) if !relative_path.as_os_str().is_empty() => {
+                    relative_path.to_owned()
+                }
+                _ => continue,
+            },
+            None => path,
+        };
+
+        result.push(PackageFileEntry {
+            path: relative_path,
+            size: entry.header().size().map_err(ExtractError::IoError)?,
+        });
+    }
+
+    result.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(result)
 }
 
 #[cfg(all(test, feature = "reqwest"))]
