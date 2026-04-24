@@ -147,6 +147,14 @@ struct LockFileInner {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PackageIndex(usize);
 
+impl PackageIndex {
+    /// Returns the underlying index as a `usize`, suitable for indexing into
+    /// the slice returned by [`LockFile::packages`].
+    pub fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
 /// Opaque identifier that refers to a single package within a [`LockFile`].
 ///
 /// Produced by the crate whenever a package is registered; external callers
@@ -270,6 +278,11 @@ impl PackageHandle {
             index,
             selector_id: SelectorId::new(package),
         }
+    }
+
+    #[doc(hidden)]
+    pub fn as_usize(&self) -> usize {
+        self.index.as_usize()
     }
 
     /// Looks up the referenced [`LockedPackage`] in the given [`LockFile`].
@@ -646,6 +659,16 @@ impl LockFile {
     /// Returns the version of the lock-file.
     pub fn version(&self) -> FileFormatVersion {
         self.inner.version
+    }
+
+    /// Returns the full, deduplicated list of packages stored in the
+    /// lockfile's package table.
+    ///
+    /// The slice is indexed by [`PackageHandle::as_usize`] and
+    /// [`PackageIndex::as_usize`]; those accessors return positions into
+    /// exactly this slice.
+    pub fn packages(&self) -> &[LockedPackage] {
+        &self.inner.packages
     }
 
     /// Check if there are any packages in the lockfile
