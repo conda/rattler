@@ -507,6 +507,11 @@ impl EnvironmentPackages {
     pub(crate) fn handles(&self) -> std::slice::Iter<'_, PackageHandle> {
         self.entries.iter()
     }
+
+    #[doc(hidden)]
+    pub fn raw_handles(&self) -> std::slice::Iter<'_, PackageHandle> {
+        self.handles()
+    }
 }
 
 /// Error returned when parsing selector-id strings for an
