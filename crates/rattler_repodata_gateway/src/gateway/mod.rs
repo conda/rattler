@@ -395,6 +395,7 @@ mod test {
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
         UnsupportedRepodataRevision,
     };
+    use rattler_conda_types::RepodataRevision;
 
     async fn local_conda_forge() -> Channel {
         tokio::try_join!(
@@ -543,8 +544,8 @@ mod test {
         let messages = reporter.messages.lock().unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].subdir, "noarch");
-        assert_eq!(messages[0].supported_revision, 3);
-        assert_eq!(messages[0].revision.revision, 4);
+        assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
+        assert_eq!(messages[0].revision.revision, RepodataRevision::Unknown(4));
         assert_eq!(messages[0].revision.n_packages, Some(2));
         assert_eq!(messages[1], messages[0]);
     }

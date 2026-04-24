@@ -5,7 +5,7 @@ use futures::{Stream, TryStreamExt};
 #[cfg(feature = "gateway")]
 use rattler_conda_types::Channel;
 #[cfg(feature = "sparse")]
-use rattler_conda_types::RepodataRevisionInfo;
+use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 #[cfg(feature = "gateway")]
 use rattler_redaction::Redact;
 use url::Url;
@@ -18,7 +18,7 @@ use crate::utils::BodyStreamExt;
 /// rattler. Newer revisions are intentionally ignored by older clients, but we
 /// still surface their metadata for user-facing warnings.
 #[cfg(feature = "sparse")]
-pub const SUPPORTED_REPODATA_REVISION: u64 = 3;
+pub const SUPPORTED_REPODATA_REVISION: RepodataRevision = RepodataRevision::V3;
 
 /// A structured message indicating that a channel contains repodata newer than
 /// this client understands.
@@ -32,7 +32,7 @@ pub struct UnsupportedRepodataRevision {
     pub subdir: String,
 
     /// The newest revision supported by this client.
-    pub supported_revision: u64,
+    pub supported_revision: RepodataRevision,
 
     /// Metadata for the unsupported revision advertised by the channel.
     pub revision: RepodataRevisionInfo,
@@ -43,7 +43,7 @@ impl std::fmt::Display for UnsupportedRepodataRevision {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} contains repodata revision v{}, but this client only supports up to v{}",
+            "{} contains repodata revision {}, but this client only supports up to {}",
             self.channel, self.revision.revision, self.supported_revision
         )?;
 

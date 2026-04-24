@@ -67,8 +67,8 @@ pub use repo_data::{
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
     ChannelInfo, ChannelRelations, ConvertSubdirError, ExperimentalV3Packages, PackageRecord,
-    RecordFromPath, RepoData, RepodataRevisionInfo, SubdirRunExportsJson, UrlOrPath,
-    ValidatePackageRecordsError, WhlPackageRecord,
+    RecordFromPath, RepoData, RepodataRevision, RepodataRevisionInfo, SubdirRunExportsJson,
+    UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;

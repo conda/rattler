@@ -11,18 +11,17 @@
 use std::{sync::Arc, time::SystemTime};
 
 use opendal::{raw::Timestamp, Operator};
-use rattler_conda_types::PackageRecord;
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
 
-use crate::RepodataFileMetadata;
+use crate::{IndexedPackageRecord, RepodataFileMetadata};
 
 /// A cached package record with its associated metadata for validation.
 #[derive(Debug, Clone)]
 struct CachedPackage {
     /// The computed package record
-    record: PackageRecord,
+    record: IndexedPackageRecord,
     /// The `ETag` when this record was computed (if available)
     etag: Option<String>,
     /// The last modified time when this record was computed (if available)
@@ -31,9 +30,9 @@ struct CachedPackage {
 
 /// Result of a cache lookup operation from [`PackageRecordCache::get_or_stat`].
 #[derive(Debug)]
-pub enum CacheResult {
+pub(crate) enum CacheResult {
     /// Cache hit - the cached record is still valid (metadata matches).
-    Hit(Box<PackageRecord>),
+    Hit(Box<IndexedPackageRecord>),
 
     /// Cache miss - need to read and parse the file.
     /// Contains current file metadata for conditional reading.
@@ -47,7 +46,7 @@ pub enum CacheResult {
 
 /// Cache for `PackageRecords` keyed by file path.
 ///
-/// Stores computed [`PackageRecord`]s with their file metadata (`ETag` and `last_modified`).
+/// Stores computed package records with their file metadata (`ETag` and `last_modified`).
 /// On lookup via [`get_or_stat`], validates entries by comparing current metadata against
 /// cached metadata (prefers `ETag`, falls back to `last_modified`).
 ///
@@ -70,7 +69,11 @@ impl PackageRecordCache {
     /// Performs a `stat()` to get current metadata, then validates any cached entry.
     /// Returns [`CacheResult::Hit`] if metadata matches, or [`CacheResult::Miss`]
     /// with current metadata otherwise.
-    pub async fn get_or_stat(&self, op: &Operator, path: &str) -> opendal::Result<CacheResult> {
+    pub(crate) async fn get_or_stat(
+        &self,
+        op: &Operator,
+        path: &str,
+    ) -> opendal::Result<CacheResult> {
         // Get current file metadata
         let metadata = match op.stat(path).await {
             Ok(m) => m,
@@ -149,10 +152,10 @@ impl PackageRecordCache {
     ///
     /// Use metadata from the actual read operation (especially important with
     /// [`read_package_with_retry`] which updates metadata during retries).
-    pub async fn insert(
+    pub(crate) async fn insert(
         &self,
         path: &str,
-        record: PackageRecord,
+        record: IndexedPackageRecord,
         etag: Option<String>,
         last_modified: Option<Timestamp>,
     ) {

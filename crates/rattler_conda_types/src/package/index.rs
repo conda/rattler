@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use super::PackageFile;
-use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
+use crate::{NoArchType, PackageName, PackageUrl, RepodataRevision, VersionWithSource};
 
 /// A representation of the `index.json` file found in package archives.
 ///
@@ -77,6 +77,14 @@ pub struct IndexJson {
     /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
     pub python_site_packages_path: Option<String>,
 
+    /// The repodata revision required by this package record.
+    ///
+    /// Indexers use this field to decide whether the record can be written to
+    /// the legacy `packages` / `packages.conda` maps or must be written to a
+    /// newer top-level `vN` map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repodata_revision: Option<RepodataRevision>,
+
     /// The subdirectory that contains this package
     pub subdir: Option<String>,
 
@@ -109,9 +117,61 @@ impl PackageFile for IndexJson {
     }
 }
 
+impl IndexJson {
+    /// Returns the repodata revision required by this package.
+    ///
+    /// If the package does not explicitly declare a revision, infer the oldest
+    /// revision that can represent the currently known fields.
+    pub fn required_repodata_revision(&self) -> RepodataRevision {
+        self.repodata_revision.unwrap_or({
+            if self.experimental_extra_depends.is_empty() {
+                RepodataRevision::Legacy
+            } else {
+                RepodataRevision::V3
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{IndexJson, PackageFile};
+    use crate::RepodataRevision;
+
+    #[test]
+    pub fn test_required_repodata_revision() {
+        let explicit_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "name": "demo",
+                "repodata_revision": 3,
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            explicit_revision.required_repodata_revision(),
+            RepodataRevision::V3
+        );
+
+        let inferred_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "extra_depends": {
+                    "test": ["pytest"]
+                },
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_revision.required_repodata_revision(),
+            RepodataRevision::V3
+        );
+    }
 
     #[test]
     pub fn test_reconstruct_index_json() {
