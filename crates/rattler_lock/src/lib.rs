@@ -147,6 +147,14 @@ struct LockFileInner {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PackageIndex(usize);
 
+impl PackageIndex {
+    /// Returns the underlying index as a `usize`, suitable for indexing into
+    /// the slice returned by [`LockFile::packages`].
+    pub fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
 /// Opaque identifier that refers to a single package within a [`LockFile`].
 ///
 /// Produced by the crate whenever a package is registered; external callers
@@ -270,6 +278,11 @@ impl PackageHandle {
             index,
             selector_id: SelectorId::new(package),
         }
+    }
+
+    #[doc(hidden)]
+    pub fn as_usize(&self) -> usize {
+        self.index.as_usize()
     }
 
     /// Looks up the referenced [`LockedPackage`] in the given [`LockFile`].
@@ -494,6 +507,11 @@ impl EnvironmentPackages {
     pub(crate) fn handles(&self) -> std::slice::Iter<'_, PackageHandle> {
         self.entries.iter()
     }
+
+    #[doc(hidden)]
+    pub fn raw_handles(&self) -> std::slice::Iter<'_, PackageHandle> {
+        self.handles()
+    }
 }
 
 /// Error returned when parsing selector-id strings for an
@@ -648,6 +666,16 @@ impl LockFile {
         self.inner.version
     }
 
+    /// Returns the full, deduplicated list of packages stored in the
+    /// lockfile's package table.
+    ///
+    /// The slice is indexed by [`PackageHandle::as_usize`] and
+    /// [`PackageIndex::as_usize`]; those accessors return positions into
+    /// exactly this slice.
+    pub fn packages(&self) -> &[LockedPackage] {
+        &self.inner.packages
+    }
+
     /// Check if there are any packages in the lockfile
     pub fn is_empty(&self) -> bool {
         self.inner.packages.is_empty()
@@ -712,28 +740,47 @@ impl<'lock> Environment<'lock> {
         &self.data().options
     }
 
+    /// Returns an iterator over the [`PackageHandle`]s stored for the given
+    /// platform in this environment, or `None` if `platform` belongs to a
+    /// different lock file or this environment has no entry for it.
+    fn handles_for_platform(
+        &self,
+        platform: Platform<'lock>,
+    ) -> Option<std::slice::Iter<'lock, PackageHandle>> {
+        if std::ptr::from_ref(self.lock_file.inner.as_ref())
+            != std::ptr::from_ref(platform.lock_file_inner)
+        {
+            return None;
+        }
+        Some(self.data().packages.get(&platform.index)?.handles())
+    }
+
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
         platform: Platform<'lock>,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock LockedPackage> + ExactSizeIterator + '_>
     {
-        if std::ptr::from_ref(self.lock_file.inner.as_ref())
-            != std::ptr::from_ref(platform.lock_file_inner)
-        {
-            return None;
-        }
-        Some(
-            self.data()
-                .packages
-                .get(&platform.index)?
-                .handles()
-                .map(|handle| {
-                    handle
-                        .get(self.lock_file)
-                        .expect("environment handle must be valid for its own lock file")
-                }),
-        )
+        Some(self.handles_for_platform(platform)?.map(|handle| {
+            handle
+                .get(self.lock_file)
+                .expect("environment handle must be valid for its own lock file")
+        }))
+    }
+
+    #[doc(hidden)]
+    pub fn indexed_packages(
+        &self,
+        platform: Platform<'lock>,
+    ) -> Option<
+        impl DoubleEndedIterator<Item = (usize, &'lock LockedPackage)> + ExactSizeIterator + '_,
+    > {
+        Some(self.handles_for_platform(platform)?.map(|handle| {
+            let package = handle
+                .get(self.lock_file)
+                .expect("environment handle must be valid for its own lock file");
+            (handle.as_usize(), package)
+        }))
     }
 
     /// Returns an iterator over all packages and platforms defined for this
