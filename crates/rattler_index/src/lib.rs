@@ -87,7 +87,7 @@ pub enum PackageRevisionAssignment {
 
     /// Assign every package to the newest revision configured for the index.
     ///
-    /// If no revisions are configured, packages are assigned to revision `1`.
+    /// If no revisions are configured, packages are assigned to `Legacy`.
     Latest,
 }
 
@@ -1051,15 +1051,14 @@ fn insert_package_record_by_revision(
 #[derive(Default)]
 struct RevisionStats {
     n_packages: u64,
-    oldest: Option<i64>,
-    newest: Option<i64>,
+    oldest: Option<rattler_conda_types::utils::TimestampMs>,
+    newest: Option<rattler_conda_types::utils::TimestampMs>,
 }
 
 impl RevisionStats {
     fn add(&mut self, record: &PackageRecord) {
         self.n_packages += 1;
         if let Some(timestamp) = record.timestamp {
-            let timestamp = timestamp.timestamp_millis();
             self.oldest = Some(
                 self.oldest
                     .map_or(timestamp, |oldest| oldest.min(timestamp)),

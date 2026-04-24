@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass
 import os
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence, Union
+from typing_extensions import TypeAlias
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
@@ -41,7 +42,7 @@ class RepodataRevisionInfo:
     newest: Optional[int] = None
 
 
-RepodataRevision = RepodataRevisionInfo | Mapping[str, Any]
+RepodataRevision: TypeAlias = Union[RepodataRevisionInfo, Mapping[str, Any]]
 
 
 def _revision_to_wire(revision: Any) -> int:
@@ -52,13 +53,13 @@ def _revision_to_wire(revision: Any) -> int:
 
 def _repodata_revisions_to_dicts(
     revisions: Optional[Sequence[RepodataRevision]],
-) -> Optional[list[dict[str, int | None]]]:
+) -> Optional[list[dict[str, Any]]]:
     if revisions is None:
         return None
 
     result = []
     for revision in revisions:
-        if is_dataclass(revision):
+        if isinstance(revision, RepodataRevisionInfo):
             revision_dict = asdict(revision)
         else:
             revision_dict = dict(revision)

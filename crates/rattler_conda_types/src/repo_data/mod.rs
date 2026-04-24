@@ -32,7 +32,7 @@ use crate::{
         serde::{
             sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
         },
-        UrlWithTrailingSlash,
+        TimestampMs, UrlWithTrailingSlash,
     },
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -126,12 +126,12 @@ pub struct RepodataRevisionInfo {
     /// The Unix timestamp in milliseconds of the oldest record in this
     /// revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oldest: Option<i64>,
+    pub oldest: Option<TimestampMs>,
 
     /// The Unix timestamp in milliseconds of the newest record in this
     /// revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub newest: Option<i64>,
+    pub newest: Option<TimestampMs>,
 }
 
 /// A repodata revision.
@@ -1129,8 +1129,14 @@ mod test {
         let revision = &repodata.info.as_ref().unwrap().repodata_revisions[0];
         assert_eq!(revision.revision, RepodataRevision::Unknown(4));
         assert_eq!(revision.n_packages, Some(2));
-        assert_eq!(revision.oldest, Some(1768249989851));
-        assert_eq!(revision.newest, Some(1773851561010));
+        assert_eq!(
+            revision.oldest.map(|ts| ts.timestamp_millis()),
+            Some(1768249989851)
+        );
+        assert_eq!(
+            revision.newest.map(|ts| ts.timestamp_millis()),
+            Some(1773851561010)
+        );
 
         let json = serde_json::to_string(&repodata).unwrap();
         assert!(json.contains("\"repodata_revisions\""));
