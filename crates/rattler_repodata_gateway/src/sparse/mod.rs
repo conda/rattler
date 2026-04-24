@@ -491,8 +491,7 @@ impl SparseRepoData {
             .borrow_repo_data()
             .info
             .as_ref()
-            .map(|info| info.repodata_revisions.as_slice())
-            .unwrap_or(&[])
+            .map_or(&[], |info| info.repodata_revisions.as_slice())
     }
 }
 
