@@ -1,7 +1,7 @@
 //! Cache for `PackageRecords` to optimize retry attempts during concurrent indexing.
 //!
 //! When indexing is retried due to concurrent modifications, this cache reuses previously
-//! computed [`PackageRecord`]s if the package files haven't changed. Entries are validated
+//! computed [`rattler_conda_types::PackageRecord`]s if the package files haven't changed. Entries are validated
 //! using `ETag` or `last_modified` timestamps.
 //!
 //! Each subdir gets its own cache instance that persists across retry attempts. It works
@@ -47,12 +47,10 @@ pub(crate) enum CacheResult {
 /// Cache for `PackageRecords` keyed by file path.
 ///
 /// Stores computed package records with their file metadata (`ETag` and `last_modified`).
-/// On lookup via [`get_or_stat`], validates entries by comparing current metadata against
+/// On lookup via `get_or_stat`, validates entries by comparing current metadata against
 /// cached metadata (prefers `ETag`, falls back to `last_modified`).
 ///
 /// Thread-safe with `Arc<RwLock<>>` - cheap to clone, all clones share the same storage.
-///
-/// [`get_or_stat`]: PackageRecordCache::get_or_stat
 #[derive(Debug, Clone, Default)]
 pub struct PackageRecordCache {
     inner: Arc<RwLock<ahash::HashMap<String, CachedPackage>>>,
