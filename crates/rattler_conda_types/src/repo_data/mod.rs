@@ -94,10 +94,43 @@ pub struct ChannelInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
 
+    /// Repodata revisions available in this repodata file.
+    ///
+    /// See <https://github.com/conda/ceps/pull/146>.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+
     /// Optional relationships to other channels as defined in
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+}
+
+/// Metadata for a repodata revision advertised in
+/// `info.repodata_revisions`.
+///
+/// Future repodata revisions are encoded in parallel top-level `vN` maps. This
+/// metadata lets older clients tell users that the channel contains newer
+/// records that may be invisible to the current client.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct RepodataRevisionInfo {
+    /// The integer identifying the revision.
+    #[serde(default)]
+    pub revision: u64,
+
+    /// The number of packages available in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_packages: Option<u64>,
+
+    /// The Unix timestamp in milliseconds of the oldest record in this
+    /// revision.
+    #[serde(default, alias = "oldest_ts", skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<i64>,
+
+    /// The Unix timestamp in milliseconds of the newest record in this
+    /// revision.
+    #[serde(default, alias = "newest_ts", skip_serializing_if = "Option::is_none")]
+    pub newest: Option<i64>,
 }
 
 /// Relationships between a channel and other channels as declared in the
@@ -948,6 +981,7 @@ mod test {
             info: Some(ChannelInfo {
                 subdir: Some("linux-64".to_string()),
                 base_url: None,
+                repodata_revisions: Vec::new(),
                 channel_relations: Some(ChannelRelations {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
@@ -972,6 +1006,7 @@ mod test {
                 info: Some(ChannelInfo {
                     subdir: Some("linux-64".to_string()),
                     base_url: None,
+                    repodata_revisions: Vec::new(),
                     channel_relations,
                 }),
                 packages: IndexMap::default(),
@@ -982,6 +1017,37 @@ mod test {
             let json = serde_json::to_string(&repodata).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[test]
+    fn test_repodata_revisions() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "repodata_revisions": [
+                    {
+                        "revision": 4,
+                        "n_packages": 2,
+                        "oldest": 1768249989851,
+                        "newest_ts": 1773851561010
+                    }
+                ]
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let revision = &repodata.info.as_ref().unwrap().repodata_revisions[0];
+        assert_eq!(revision.revision, 4);
+        assert_eq!(revision.n_packages, Some(2));
+        assert_eq!(revision.oldest, Some(1768249989851));
+        assert_eq!(revision.newest, Some(1773851561010));
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert!(json.contains("\"repodata_revisions\""));
+        assert!(json.contains("\"oldest\":1768249989851"));
+        assert!(json.contains("\"newest\":1773851561010"));
     }
 
     #[test]

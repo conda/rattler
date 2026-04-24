@@ -806,6 +806,7 @@ async fn index_subdir_inner(
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: None,
+            repodata_revisions: Vec::new(),
             channel_relations: None,
         }),
         packages,
@@ -947,6 +948,7 @@ pub async fn write_repodata(
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
                 created_at: Some(chrono::Utc::now()),
+                repodata_revisions: Vec::new(),
                 channel_relations: None,
             },
             shards: shards
@@ -1297,6 +1299,7 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         info: Some(ChannelInfo {
             subdir: Some(Platform::NoArch.to_string()),
             base_url: None,
+            repodata_revisions: Vec::new(),
             channel_relations: None,
         }),
         packages: IndexMap::default(),

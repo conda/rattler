@@ -205,6 +205,7 @@ mod tests {
                     base_url: "./".to_string(),
                     shards_base_url: "./shards/".to_string(),
                     created_at: Some(chrono::Utc::now()),
+                    repodata_revisions: Vec::new(),
                     channel_relations: None,
                 },
                 shards,

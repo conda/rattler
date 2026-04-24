@@ -1,7 +1,7 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
 use crate::package::DistArchiveIdentifier;
-use crate::repo_data::{ChannelRelations, ExperimentalV3Packages};
+use crate::repo_data::{ChannelRelations, ExperimentalV3Packages, RepodataRevisionInfo};
 use crate::PackageRecord;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
@@ -45,6 +45,12 @@ pub struct ShardedSubdirInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 
+    /// Repodata revisions available through this sharded index.
+    ///
+    /// See <https://github.com/conda/ceps/pull/146>.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+
     /// Optional relationships to other channels as defined in
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
@@ -80,6 +86,7 @@ mod tests {
                 base_url: "./".to_string(),
                 shards_base_url: "./shards/".to_string(),
                 created_at: None,
+                repodata_revisions: Vec::new(),
                 channel_relations,
             };
             let json = serde_json::to_string(&info).unwrap();

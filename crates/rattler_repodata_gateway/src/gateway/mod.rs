@@ -18,6 +18,7 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
+use crate::reporter::report_unsupported_repodata_revisions;
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
@@ -322,11 +323,15 @@ impl GatewayInner {
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
         let key = (channel.clone(), platform);
-        let channel = channel.clone();
+        let channel_for_create = channel.clone();
+        let reporter_for_create = reporter.clone();
 
-        self.subdirs
+        let subdir = self
+            .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self.create_subdir(&channel, platform, reporter).await?;
+                let subdir = self
+                    .create_subdir(&channel_for_create, platform, reporter_for_create)
+                    .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -336,7 +341,16 @@ impl GatewayInner {
                     "a coalesced request failed".to_string(),
                     std::io::ErrorKind::Other.into(),
                 ),
-            })
+            })?;
+
+        report_unsupported_repodata_revisions(
+            reporter.as_deref(),
+            channel,
+            platform.as_str(),
+            subdir.repodata_revisions(),
+        );
+
+        Ok(subdir)
     }
 
     async fn create_subdir(
@@ -361,7 +375,7 @@ mod test {
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
-        sync::Arc,
+        sync::{Arc, Mutex},
         time::Instant,
     };
 
@@ -379,6 +393,7 @@ mod test {
     use crate::{
         fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
+        UnsupportedRepodataRevision,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -440,6 +455,167 @@ mod test {
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
+    async fn test_unsupported_repodata_revision_reporter() {
+        #[derive(Default)]
+        struct RevisionReporter {
+            messages: Mutex<Vec<UnsupportedRepodataRevision>>,
+        }
+
+        impl Reporter for Arc<RevisionReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_unsupported_repodata_revision(&self, message: &UnsupportedRepodataRevision) {
+                self.messages.lock().unwrap().push(message.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(
+            noarch.join("repodata.json"),
+            r#"{
+                "repodata_version": 1,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": [
+                        {
+                            "revision": 4,
+                            "n_packages": 2,
+                            "oldest": 1768249989851,
+                            "newest": 1773851561010
+                        }
+                    ]
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "md5": "82ecc40f09b9c44483e6b70cad2545d7",
+                        "name": "demo",
+                        "noarch": "generic",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": "noarch",
+                        "timestamp": 1689209309623,
+                        "version": "1.0"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let reporter = Arc::new(RevisionReporter::default());
+        let gateway = Gateway::new();
+        let channel = Channel::from_directory(tempdir.path());
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+
+        // The message is reported from cached subdirs too, so callers can
+        // attach a reporter per query and still surface the warning.
+        let records = gateway
+            .query(
+                vec![channel],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+        let messages = reporter.messages.lock().unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].subdir, "noarch");
+        assert_eq!(messages[0].supported_revision, 3);
+        assert_eq!(messages[0].revision.revision, 4);
+        assert_eq!(messages[0].revision.n_packages, Some(2));
+        assert_eq!(messages[1], messages[0]);
+    }
+
+    #[tokio::test]
+    async fn test_supported_repodata_revision_reporter_ignored() {
+        #[derive(Default)]
+        struct RevisionReporter {
+            messages: Mutex<Vec<UnsupportedRepodataRevision>>,
+        }
+
+        impl Reporter for Arc<RevisionReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_unsupported_repodata_revision(&self, message: &UnsupportedRepodataRevision) {
+                self.messages.lock().unwrap().push(message.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(
+            noarch.join("repodata.json"),
+            r#"{
+                "repodata_version": 1,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": [
+                        {
+                            "revision": 3,
+                            "n_packages": 1
+                        }
+                    ]
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "md5": "82ecc40f09b9c44483e6b70cad2545d7",
+                        "name": "demo",
+                        "noarch": "generic",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": "noarch",
+                        "timestamp": 1689209309623,
+                        "version": "1.0"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let reporter = Arc::new(RevisionReporter::default());
+        let records = Gateway::new()
+            .query(
+                vec![Channel::from_directory(tempdir.path())],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+        let messages = reporter.messages.lock().unwrap();
+        assert!(messages.is_empty());
     }
 
     #[tokio::test]
