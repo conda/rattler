@@ -740,28 +740,47 @@ impl<'lock> Environment<'lock> {
         &self.data().options
     }
 
+    /// Returns an iterator over the [`PackageHandle`]s stored for the given
+    /// platform in this environment, or `None` if `platform` belongs to a
+    /// different lock file or this environment has no entry for it.
+    fn handles_for_platform(
+        &self,
+        platform: Platform<'lock>,
+    ) -> Option<std::slice::Iter<'lock, PackageHandle>> {
+        if std::ptr::from_ref(self.lock_file.inner.as_ref())
+            != std::ptr::from_ref(platform.lock_file_inner)
+        {
+            return None;
+        }
+        Some(self.data().packages.get(&platform.index)?.handles())
+    }
+
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
         platform: Platform<'lock>,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock LockedPackage> + ExactSizeIterator + '_>
     {
-        if std::ptr::from_ref(self.lock_file.inner.as_ref())
-            != std::ptr::from_ref(platform.lock_file_inner)
-        {
-            return None;
-        }
-        Some(
-            self.data()
-                .packages
-                .get(&platform.index)?
-                .handles()
-                .map(|handle| {
-                    handle
-                        .get(self.lock_file)
-                        .expect("environment handle must be valid for its own lock file")
-                }),
-        )
+        Some(self.handles_for_platform(platform)?.map(|handle| {
+            handle
+                .get(self.lock_file)
+                .expect("environment handle must be valid for its own lock file")
+        }))
+    }
+
+    #[doc(hidden)]
+    pub fn indexed_packages(
+        &self,
+        platform: Platform<'lock>,
+    ) -> Option<
+        impl DoubleEndedIterator<Item = (usize, &'lock LockedPackage)> + ExactSizeIterator + '_,
+    > {
+        Some(self.handles_for_platform(platform)?.map(|handle| {
+            let package = handle
+                .get(self.lock_file)
+                .expect("environment handle must be valid for its own lock file");
+            (handle.as_usize(), package)
+        }))
     }
 
     /// Returns an iterator over all packages and platforms defined for this
