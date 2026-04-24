@@ -170,6 +170,9 @@ fn indexed_package_record_from_index_json<T: Read>(
     index_json_reader: &mut T,
 ) -> std::io::Result<IndexedPackageRecord> {
     let index = IndexJson::from_reader(index_json_reader)?;
+    index
+        .validate()
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     let repodata_revision = index.required_repodata_revision();
 
     let sha256_result =
