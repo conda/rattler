@@ -293,6 +293,60 @@ impl ExperimentalV3Packages {
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
     }
+
+    /// Iterates over all package records with their archive identifiers.
+    pub fn records(&self) -> impl Iterator<Item = (DistArchiveIdentifier, &PackageRecord)> + '_ {
+        self.tar_bz2
+            .iter()
+            .map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), CondaArchiveType::TarBz2),
+                    record,
+                )
+            })
+            .chain(self.conda.iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), CondaArchiveType::Conda),
+                    record,
+                )
+            }))
+            .chain(self.whl.iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), WheelArchiveType::Whl),
+                    &record.package_record,
+                )
+            }))
+    }
+
+    /// Consumes this value and iterates over all package records with their
+    /// archive identifiers and optional wheel URL.
+    pub fn into_records_with_url(
+        self,
+    ) -> impl Iterator<Item = (DistArchiveIdentifier, PackageRecord, Option<UrlOrPath>)> {
+        self.tar_bz2
+            .into_iter()
+            .map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
+                    record,
+                    None,
+                )
+            })
+            .chain(self.conda.into_iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, CondaArchiveType::Conda),
+                    record,
+                    None,
+                )
+            }))
+            .chain(self.whl.into_iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, WheelArchiveType::Whl),
+                    record.package_record,
+                    Some(record.url),
+                )
+            }))
+    }
 }
 
 /// Trait to allow for generic deserialization of records from a path.

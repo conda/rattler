@@ -3,7 +3,7 @@ use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::CondaArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
-    VersionSpec,
+    RepodataRevision, VersionSpec,
 };
 use itertools::Itertools;
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -256,6 +256,15 @@ impl Display for MatchSpec {
 }
 
 impl MatchSpec {
+    /// Returns the repodata revision required to represent this matchspec.
+    pub fn required_repodata_revision(&self) -> RepodataRevision {
+        if self.extras.is_some() || self.condition.is_some() {
+            RepodataRevision::V3
+        } else {
+            RepodataRevision::Legacy
+        }
+    }
+
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
     pub fn into_nameless(self) -> (PackageNameMatcher, NamelessMatchSpec) {
         (

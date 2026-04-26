@@ -34,7 +34,7 @@ use rattler_conda_types::{
         RunExportsJson, WheelArchiveType,
     },
     ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
-    Shard, ShardedRepodata, ShardedSubdirInfo,
+    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
 };
 pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 use rattler_digest::Sha256Hash;
@@ -95,6 +95,7 @@ pub enum PackageRevisionAssignment {
 pub(crate) struct IndexedPackageRecord {
     record: PackageRecord,
     repodata_revision: RepodataRevision,
+    wheel_url: Option<UrlOrPath>,
 }
 
 impl PackageRevisionAssignment {
@@ -210,6 +211,7 @@ fn indexed_package_record_from_index_json<T: Read>(
     Ok(IndexedPackageRecord {
         record: package_record,
         repodata_revision,
+        wheel_url: None,
     })
 }
 
@@ -893,7 +895,7 @@ async fn index_subdir_inner(
             &mut conda_packages,
             &mut experimental_v3,
             filename,
-            package.record,
+            package,
             revision,
         )?;
     }
@@ -965,41 +967,24 @@ fn package_records_from_repodata(
                     IndexedPackageRecord {
                         record,
                         repodata_revision: RepodataRevision::Legacy,
+                        wheel_url: None,
                     },
                 )
             }),
     );
 
-    packages.extend(
-        repodata
-            .experimental_v3
-            .tar_bz2
-            .into_iter()
-            .map(|(identifier, record)| {
-                (
-                    DistArchiveIdentifier::new(identifier, CondaArchiveType::TarBz2),
-                    IndexedPackageRecord {
-                        record,
-                        repodata_revision: RepodataRevision::V3,
-                    },
-                )
-            }),
-    );
-    packages.extend(
-        repodata
-            .experimental_v3
-            .conda
-            .into_iter()
-            .map(|(identifier, record)| {
-                (
-                    DistArchiveIdentifier::new(identifier, CondaArchiveType::Conda),
-                    IndexedPackageRecord {
-                        record,
-                        repodata_revision: RepodataRevision::V3,
-                    },
-                )
-            }),
-    );
+    packages.extend(repodata.experimental_v3.into_records_with_url().map(
+        |(identifier, record, wheel_url)| {
+            (
+                identifier,
+                IndexedPackageRecord {
+                    record,
+                    repodata_revision: RepodataRevision::V3,
+                    wheel_url,
+                },
+            )
+        },
+    ));
 
     packages
 }
@@ -1010,16 +995,20 @@ fn insert_package_record_by_revision(
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     experimental_v3: &mut ExperimentalV3Packages,
     filename: DistArchiveIdentifier,
-    package: PackageRecord,
+    package: IndexedPackageRecord,
     revision: RepodataRevision,
 ) -> Result<(), RepodataError> {
+    let IndexedPackageRecord {
+        record, wheel_url, ..
+    } = package;
+
     match revision {
         RepodataRevision::Legacy => match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                packages.insert(filename, package);
+                packages.insert(filename, record);
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                conda_packages.insert(filename, package);
+                conda_packages.insert(filename, record);
             }
             _ => {
                 return Err(RepodataError::Other(anyhow::anyhow!(
@@ -1030,15 +1019,24 @@ fn insert_package_record_by_revision(
         },
         RepodataRevision::V3 => match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                experimental_v3.tar_bz2.insert(filename.identifier, package);
+                experimental_v3.tar_bz2.insert(filename.identifier, record);
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                experimental_v3.conda.insert(filename.identifier, package);
+                experimental_v3.conda.insert(filename.identifier, record);
             }
             DistArchiveType::Wheel(WheelArchiveType::Whl) => {
-                return Err(RepodataError::Other(anyhow::anyhow!(
-                    "indexing wheel packages into v3 repodata is not supported yet"
-                )));
+                let url = wheel_url.ok_or_else(|| {
+                    RepodataError::Other(anyhow::anyhow!(
+                        "indexing new wheel packages into v3 repodata is not supported yet"
+                    ))
+                })?;
+                experimental_v3.whl.insert(
+                    filename.identifier,
+                    WhlPackageRecord {
+                        package_record: record,
+                        url,
+                    },
+                );
             }
         },
         RepodataRevision::Unknown(unsupported) => {
@@ -1085,17 +1083,7 @@ fn repodata_revisions_for_packages(
         .collect::<BTreeMap<_, _>>();
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for record in experimental_v3
-        .tar_bz2
-        .values()
-        .chain(experimental_v3.conda.values())
-        .chain(
-            experimental_v3
-                .whl
-                .values()
-                .map(|record| &record.package_record),
-        )
-    {
+    for (_, record) in experimental_v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
 
@@ -1689,4 +1677,73 @@ pub async fn ensure_channel_initialized_s3(
         .layer(RetryLayer::new())
         .finish();
     ensure_channel_initialized(&op).await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use indexmap::IndexMap;
+    use rattler_conda_types::Version;
+    use rattler_conda_types::{
+        package::ArchiveIdentifier, PackageName, UrlOrPath, WhlPackageRecord,
+    };
+
+    use super::*;
+
+    #[test]
+    fn package_records_from_repodata_preserves_v3_wheels() {
+        let identifier = ArchiveIdentifier::from_str("demo-1.0-py_0").unwrap();
+        let package_record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "py_0".to_string(),
+        );
+        let wheel_url = UrlOrPath::Path("demo-1.0-py_0.whl".to_string());
+
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            experimental_v3: ExperimentalV3Packages::default(),
+            removed: HashSet::default(),
+            version: None,
+        };
+        repodata.experimental_v3.whl.insert(
+            identifier.clone(),
+            WhlPackageRecord {
+                package_record,
+                url: wheel_url.clone(),
+            },
+        );
+
+        let records = package_records_from_repodata(repodata);
+        let dist_identifier = DistArchiveIdentifier::new(identifier.clone(), WheelArchiveType::Whl);
+        let indexed_record = records
+            .get(&dist_identifier)
+            .expect("v3 wheel should be preserved");
+        assert_eq!(indexed_record.repodata_revision, RepodataRevision::V3);
+        assert_eq!(indexed_record.wheel_url, Some(wheel_url));
+
+        let (_, indexed_record) = records
+            .into_iter()
+            .next()
+            .expect("v3 wheel should be present");
+        let mut packages = IndexMap::default();
+        let mut conda_packages = IndexMap::default();
+        let mut experimental_v3 = ExperimentalV3Packages::default();
+        insert_package_record_by_revision(
+            &mut packages,
+            &mut conda_packages,
+            &mut experimental_v3,
+            dist_identifier,
+            indexed_record,
+            RepodataRevision::V3,
+        )
+        .unwrap();
+
+        assert!(packages.is_empty());
+        assert!(conda_packages.is_empty());
+        assert!(experimental_v3.whl.contains_key(&identifier));
+    }
 }

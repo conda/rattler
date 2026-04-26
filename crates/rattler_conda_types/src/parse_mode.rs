@@ -65,6 +65,16 @@ impl ParseMatchSpecOptions {
         Self::new(ParseStrictness::Lenient)
     }
 
+    /// Creates parsing options for repodata v3 match specifications.
+    ///
+    /// Repodata v3 can represent experimental extras and conditional
+    /// dependency syntax.
+    pub fn repodata_v3() -> Self {
+        Self::lenient()
+            .with_experimental_extras(true)
+            .with_experimental_conditionals(true)
+    }
+
     /// Returns the strictness mode.
     pub fn strictness(&self) -> ParseStrictness {
         self.strictness

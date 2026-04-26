@@ -135,12 +135,12 @@ impl IndexJson {
             return RepodataRevision::V3;
         }
 
-        let parse_options = Self::matchspec_parse_options();
+        let parse_options = ParseMatchSpecOptions::repodata_v3();
         if self
             .depends
             .iter()
             .chain(self.constrains.iter())
-            .any(|spec| Self::matchspec_requires_v3(spec, parse_options))
+            .any(|spec| matchspec_requires_v3(spec, parse_options))
         {
             RepodataRevision::V3
         } else {
@@ -158,7 +158,7 @@ impl IndexJson {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
 
-        let parse_options = Self::matchspec_parse_options();
+        let parse_options = ParseMatchSpecOptions::repodata_v3();
 
         for spec in &self.depends {
             Self::validate_matchspec(required_revision, "depends", spec, parse_options)?;
@@ -215,17 +215,11 @@ impl IndexJson {
 
         Ok(())
     }
+}
 
-    fn matchspec_parse_options() -> ParseMatchSpecOptions {
-        ParseMatchSpecOptions::lenient()
-            .with_experimental_conditionals(true)
-            .with_experimental_extras(true)
-    }
-
-    fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bool {
-        MatchSpec::from_str(spec, parse_options)
-            .is_ok_and(|matchspec| matchspec.extras.is_some() || matchspec.condition.is_some())
-    }
+fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bool {
+    MatchSpec::from_str(spec, parse_options)
+        .is_ok_and(|matchspec| matchspec.required_repodata_revision() == RepodataRevision::V3)
 }
 
 /// An error when validating an [`IndexJson`] value.
