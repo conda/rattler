@@ -127,13 +127,25 @@ impl IndexJson {
     /// If the package does not explicitly declare a revision, infer the oldest
     /// revision that can represent the currently known fields.
     pub fn required_repodata_revision(&self) -> RepodataRevision {
-        self.repodata_revision.unwrap_or({
-            if self.experimental_extra_depends.is_empty() {
-                RepodataRevision::Legacy
-            } else {
-                RepodataRevision::V3
-            }
-        })
+        if let Some(revision) = self.repodata_revision {
+            return revision;
+        }
+
+        if !self.experimental_extra_depends.is_empty() {
+            return RepodataRevision::V3;
+        }
+
+        let parse_options = Self::matchspec_parse_options();
+        if self
+            .depends
+            .iter()
+            .chain(self.constrains.iter())
+            .any(|spec| Self::matchspec_requires_v3(spec, parse_options))
+        {
+            RepodataRevision::V3
+        } else {
+            RepodataRevision::Legacy
+        }
     }
 
     /// Validates that the fields in this `index.json` are representable by its
@@ -146,9 +158,7 @@ impl IndexJson {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
 
-        let parse_options = ParseMatchSpecOptions::lenient()
-            .with_experimental_conditionals(true)
-            .with_experimental_extras(true);
+        let parse_options = Self::matchspec_parse_options();
 
         for spec in &self.depends {
             Self::validate_matchspec(required_revision, "depends", spec, parse_options)?;
@@ -204,6 +214,17 @@ impl IndexJson {
         }
 
         Ok(())
+    }
+
+    fn matchspec_parse_options() -> ParseMatchSpecOptions {
+        ParseMatchSpecOptions::lenient()
+            .with_experimental_conditionals(true)
+            .with_experimental_extras(true)
+    }
+
+    fn matchspec_requires_v3(spec: &str, parse_options: ParseMatchSpecOptions) -> bool {
+        MatchSpec::from_str(spec, parse_options)
+            .is_ok_and(|matchspec| matchspec.extras.is_some() || matchspec.condition.is_some())
     }
 }
 
@@ -283,6 +304,36 @@ mod test {
             inferred_revision.required_repodata_revision(),
             RepodataRevision::V3
         );
+
+        let inferred_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "depends": ["foo[extras=[bar]]"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_revision.required_repodata_revision(),
+            RepodataRevision::V3
+        );
+
+        let inferred_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "constrains": ["python-tzdata[when=\"__win\"]"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_revision.required_repodata_revision(),
+            RepodataRevision::V3
+        );
     }
 
     #[test]
@@ -311,6 +362,7 @@ mod test {
                 "build_number": 0,
                 "depends": ["foo[extras=[bar]]"],
                 "name": "demo",
+                "repodata_revision": 0,
                 "version": "1.0"
             }"#,
         )
@@ -326,6 +378,7 @@ mod test {
                 "build_number": 0,
                 "depends": ["foo[when=\"python >=3.10\"]"],
                 "name": "demo",
+                "repodata_revision": 0,
                 "version": "1.0"
             }"#,
         )
@@ -350,11 +403,11 @@ mod test {
                     "test": ["pytest[when=\"python >=3.10\"]"]
                 },
                 "name": "demo",
-                "repodata_revision": 3,
                 "version": "1.0"
             }"#,
         )
         .unwrap();
+        assert_eq!(index.required_repodata_revision(), RepodataRevision::V3);
         index.validate().unwrap();
     }
 
