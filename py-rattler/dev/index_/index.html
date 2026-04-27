@@ -561,6 +561,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionInfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionInfo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.index.S3Credentials" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3020,6 +3031,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.index.RepodataRevisionInfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RepodataRevisionInfo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.index.S3Credentials" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3110,6 +3132,56 @@
 
 
 
+<h2 id="rattler.index.RepodataRevisionInfo" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RepodataRevisionInfo</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rattler.index.RepodataRevisionInfo" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Metadata for a repodata revision advertised in <code>info.repodata_revisions</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h2 id="rattler.index.S3Credentials" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">S3Credentials</span>
 
@@ -3175,9 +3247,11 @@
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">repodata_patch</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">write_zst</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">write_shards</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">max_parallel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">repodata_revisions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">package_revision_assignment</span><span class="o">=</span><span class="s2">&quot;from-index-json&quot;</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">max_parallel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3283,6 +3357,38 @@ conda channels at a minimum must include this subdirectory.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
+                <code>repodata_revisions</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<span title="rattler.index.index.RepodataRevision">RepodataRevision</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Repodata revisions to advertise, including optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>package_revision_assignment</code>
+            </td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;from-index-json&#39;, &#39;latest&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to assign packages to the revision required by their <code>index.json</code>, or to the latest advertised revision.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;from-index-json&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>force</code>
             </td>
             <td>
@@ -3340,10 +3446,12 @@ conda channels at a minimum must include this subdirectory.</p>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">repodata_patch</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">write_zst</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">write_shards</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_parallel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">precondition_checks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">repodata_revisions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">package_revision_assignment</span><span class="o">=</span><span class="s2">&quot;from-index-json&quot;</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">max_parallel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">precondition_checks</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3467,6 +3575,38 @@ conda channels at a minimum must include this subdirectory.</p>
             </td>
             <td>
                   <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>repodata_revisions</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<span title="rattler.index.index.RepodataRevision">RepodataRevision</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Repodata revisions to advertise, including optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>package_revision_assignment</code>
+            </td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;from-index-json&#39;, &#39;latest&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to assign packages to the revision required by their <code>index.json</code>, or to the latest advertised revision.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;from-index-json&#39;</code>
             </td>
           </tr>
           <tr class="doc-section-item">
