@@ -135,7 +135,8 @@ impl IndexJson {
             return RepodataRevision::V3;
         }
 
-        let parse_options = ParseMatchSpecOptions::repodata_v3();
+        let parse_options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
         if self
             .depends
             .iter()
@@ -158,7 +159,8 @@ impl IndexJson {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
 
-        let parse_options = ParseMatchSpecOptions::repodata_v3();
+        let parse_options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3);
 
         for spec in &self.depends {
             Self::validate_matchspec(required_revision, "depends", spec, parse_options)?;

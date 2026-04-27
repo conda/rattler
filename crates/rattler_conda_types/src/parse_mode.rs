@@ -1,3 +1,5 @@
+use crate::RepodataRevision;
+
 /// Defines how strict a parser should behave.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct ParseStrictnessWithNameMatcher {
@@ -65,16 +67,6 @@ impl ParseMatchSpecOptions {
         Self::new(ParseStrictness::Lenient)
     }
 
-    /// Creates parsing options for repodata v3 match specifications.
-    ///
-    /// Repodata v3 can represent experimental extras and conditional
-    /// dependency syntax.
-    pub fn repodata_v3() -> Self {
-        Self::lenient()
-            .with_experimental_extras(true)
-            .with_experimental_conditionals(true)
-    }
-
     /// Returns the strictness mode.
     pub fn strictness(&self) -> ParseStrictness {
         self.strictness
@@ -113,6 +105,18 @@ impl ParseMatchSpecOptions {
         self
     }
 
+    /// Sets the matchspec syntax accepted for a repodata revision.
+    ///
+    /// The parser strictness is left unchanged. This lets callers choose
+    /// whether they want strict or lenient parsing independently from the
+    /// repodata revision syntax surface.
+    pub fn with_repodata_revision(mut self, revision: RepodataRevision) -> Self {
+        let allow_v3_syntax = !matches!(revision, RepodataRevision::Legacy);
+        self.allow_experimental_extras = allow_v3_syntax;
+        self.allow_experimental_conditionals = allow_v3_syntax;
+        self
+    }
+
     /// Sets whether to allow experimental extras syntax (mutable).
     pub fn set_experimental_extras(&mut self, enable: bool) {
         self.allow_experimental_extras = enable;
@@ -144,5 +148,25 @@ impl From<ParseStrictnessWithNameMatcher> for ParseMatchSpecOptions {
             allow_experimental_extras: false,
             allow_experimental_conditionals: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParseMatchSpecOptions, ParseStrictness};
+    use crate::RepodataRevision;
+
+    #[test]
+    fn with_repodata_revision_preserves_strictness() {
+        let options = ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
+        assert_eq!(options.strictness(), ParseStrictness::Strict);
+        assert!(options.allow_experimental_extras());
+        assert!(options.allow_experimental_conditionals());
+
+        let options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::Legacy);
+        assert_eq!(options.strictness(), ParseStrictness::Lenient);
+        assert!(!options.allow_experimental_extras());
+        assert!(!options.allow_experimental_conditionals());
     }
 }
