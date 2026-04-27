@@ -9,7 +9,8 @@ use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
 };
 use rattler_conda_types::{
-    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
+    VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -68,6 +69,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
+    #[serde(default, skip_serializing_if = "<[Flag]>::is_empty")]
+    pub flags: Cow<'a, [Flag]>,
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub track_features: Cow<'a, [String]>,
 
@@ -121,6 +124,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 depends: value.depends.into_owned(),
                 experimental_extra_depends: std::collections::BTreeMap::new(),
                 features: value.features.into_owned(),
+                flags: value.flags.into_owned(),
                 legacy_bz2_md5: value.legacy_bz2_md5,
                 legacy_bz2_size: value.legacy_bz2_size.into_owned(),
                 license: value.license.into_owned(),

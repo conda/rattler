@@ -1469,6 +1469,7 @@ mod test {
             constrains: vec![],
             track_features: vec![],
             features: None,
+            flags: vec![],
             noarch: rattler_conda_types::NoArchType::default(),
             license: None,
             license_family: None,

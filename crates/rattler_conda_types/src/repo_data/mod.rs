@@ -34,8 +34,8 @@ use crate::{
         },
         TimestampMs, UrlWithTrailingSlash,
     },
-    Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
-    ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
+    Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
+    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -401,6 +401,10 @@ pub struct PackageRecord {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// Plain string flags used to select package variants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<Flag>,
+
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
@@ -744,6 +748,7 @@ impl PackageRecord {
             constrains: vec![],
             depends: vec![],
             features: None,
+            flags: vec![],
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: None,
@@ -1007,6 +1012,7 @@ impl PackageRecord {
             constrains: index.constrains,
             depends: index.depends,
             features: index.features,
+            flags: index.flags,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: index.license,

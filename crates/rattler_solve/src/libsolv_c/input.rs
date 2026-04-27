@@ -5,7 +5,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use rattler_conda_types::{
     package::{ArchiveIdentifier, DistArchiveType},
-    GenericVirtualPackage, RepoDataRecord,
+    GenericVirtualPackage, RepoDataRecord, RepodataRevision,
 };
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
@@ -29,6 +29,18 @@ use super::{
     },
 };
 use crate::SolveError;
+
+fn parse_libsolv_match_spec(match_spec_str: &str) -> Result<Option<MatchSpec>, SolveError> {
+    let Ok(match_spec) = MatchSpec::from_str(
+        match_spec_str,
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+    ) else {
+        return Ok(None);
+    };
+
+    super::ensure_matchspec_flags_supported(&match_spec)?;
+    Ok(Some(match_spec))
+}
 
 #[cfg(not(target_family = "unix"))]
 /// Adds solvables to a repo from an in-memory .solv file
@@ -159,11 +171,7 @@ pub fn add_repodata_records<'a>(
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
-            // Parse the match spec to check for conditions
-            if let Ok(match_spec) = MatchSpec::from_str(
-                match_spec_str,
-                ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
-            ) {
+            if let Some(match_spec) = parse_libsolv_match_spec(match_spec_str)? {
                 if let Some(condition) = match_spec.condition.as_ref() {
                     // Create the dependency without the condition
                     let mut dep_spec = match_spec.clone();
@@ -189,6 +197,8 @@ pub fn add_repodata_records<'a>(
 
         // Constraints
         for match_spec in record.constrains.iter() {
+            parse_libsolv_match_spec(match_spec)?;
+
             // Create a reldep id from a matchspec
             let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
 
@@ -203,6 +213,8 @@ pub fn add_repodata_records<'a>(
 
             // Create conditional dependencies: dep[when="package[extra]"]
             for dep_str in deps.iter() {
+                parse_libsolv_match_spec(dep_str)?;
+
                 // Parse the dependency matchspec
                 let dep_id = pool.conda_matchspec(&c_string(dep_str));
 

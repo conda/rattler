@@ -4,9 +4,8 @@ use std::str::FromStr;
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
-    ParseStrictness::Lenient,
-    RepoDataRecord, Version,
+    Channel, ChannelConfig, Flag, MatchSpec, NoArchType, PackageName, PackageRecord,
+    ParseChannelError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, Version,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
@@ -38,6 +37,7 @@ pub struct SolvedPackage {
     pub version: String,
     pub depends: Option<Vec<String>>,
     pub subdir: Option<String>,
+    pub flags: Option<Vec<String>>,
 }
 
 /// Solve a set of specs with the given channels and platforms.
@@ -58,7 +58,12 @@ pub async fn simple_solve(
     // Convert types
     let specs = specs
         .into_iter()
-        .map(|s| MatchSpec::from_str(&s, Lenient))
+        .map(|s| {
+            MatchSpec::from_str(
+                &s,
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let channels = channels
         .into_iter()
@@ -103,6 +108,12 @@ pub async fn simple_solve(
                 constrains: vec![],
                 track_features: vec![],
                 features: None,
+                flags: pkg
+                    .flags
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Flag::new_unchecked)
+                    .collect(),
                 noarch: NoArchType::none(),
                 license: None,
                 license_family: None,
@@ -213,6 +224,13 @@ pub async fn simple_solve(
             size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
+            flags: Some(
+                r.package_record
+                    .flags
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            ),
         })
         .collect())
 }

@@ -67,7 +67,8 @@ impl<'a> SolverCase<'a> {
                     spec,
                     ParseMatchSpecOptions::lenient()
                         .with_experimental_extras(true)
-                        .with_experimental_conditionals(true),
+                        .with_experimental_conditionals(true)
+                        .with_experimental_flags(true),
                 )
                 .unwrap()
             })
@@ -84,7 +85,8 @@ impl<'a> SolverCase<'a> {
                     spec,
                     ParseMatchSpecOptions::lenient()
                         .with_experimental_extras(true)
-                        .with_experimental_conditionals(true),
+                        .with_experimental_conditionals(true)
+                        .with_experimental_flags(true),
                 )
                 .unwrap()
             })

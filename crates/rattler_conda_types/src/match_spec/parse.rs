@@ -23,6 +23,7 @@ use super::{
 use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    flags::is_valid_matchspec_flag,
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::CondaArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
@@ -115,6 +116,10 @@ pub enum ParseMatchSpecError {
     /// Invalid condition in match spec
     #[error("could not parse condition {0}: {1}")]
     InvalidCondition(String, String),
+
+    /// Invalid flag in match spec
+    #[error("invalid flag matcher: {0}")]
+    InvalidFlagMatcher(String),
 
     /// Only exact package name matchers are allowed but a glob was provided
     #[error("\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
@@ -417,6 +422,34 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     }
 }
 
+/// Parses variant flags from either a single string or a comma-separated list.
+pub fn parse_flags(input: &str) -> Result<Vec<StringMatcher>, ParseMatchSpecError> {
+    input
+        .split(',')
+        .map(|raw| {
+            let raw = raw.trim();
+            if raw.is_empty() {
+                return Err(ParseMatchSpecError::InvalidFlagMatcher(raw.to_string()));
+            }
+
+            let flag = raw
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .or_else(|| {
+                    raw.strip_prefix('\'')
+                        .and_then(|value| value.strip_suffix('\''))
+                })
+                .map_or_else(|| Cow::Borrowed(raw), unescape_string);
+
+            if !is_valid_matchspec_flag(&flag) {
+                return Err(ParseMatchSpecError::InvalidFlagMatcher(flag.into_owned()));
+            }
+
+            StringMatcher::from_str(&flag).map_err(ParseMatchSpecError::from)
+        })
+        .collect()
+}
+
 /// Parses a [`BracketVec`] into precise components
 fn parse_bracket_vec_into_components(
     bracket: BracketVec<'_>,
@@ -450,6 +483,13 @@ fn parse_bracket_vec_into_components(
                     match_spec.extras = Some(parse_extras(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
+                }
+            }
+            "flags" => {
+                if options.allow_experimental_flags() {
+                    match_spec.flags = Some(parse_flags(value)?);
+                } else {
+                    return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
                 }
             }
             "sha256" => {
@@ -1722,6 +1762,7 @@ mod tests {
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
             extras: None,
+            flags: None,
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)

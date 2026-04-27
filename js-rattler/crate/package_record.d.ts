@@ -13,6 +13,7 @@ export declare type PackageRecordJson = {
     constrains?: string[];
     depends?: string[];
     features?: string;
+    flags?: string[];
     license?: string;
     license_family?: string;
     md5?: string;

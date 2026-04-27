@@ -15,7 +15,7 @@ use rattler_conda_types::{
     package::{ArchiveIdentifier, DistArchiveType},
     utils::TimestampMs,
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
-    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -735,7 +735,10 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
             // Try to parse the dependency and check for overrides.
-            let dep_str = match MatchSpec::from_str(depends, ParseMatchSpecOptions::lenient()) {
+            let dep_str = match MatchSpec::from_str(
+                depends,
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+            ) {
                 Ok(dep_spec) => self
                     .apply_dependency_override(record, &dep_spec)
                     .unwrap_or_else(|| depends.clone()),
@@ -1065,7 +1068,7 @@ fn parse_match_spec(
     // Enable conditionals parsing to support dependencies with conditions like `numpy[when="python >=3.9"]`
     let match_spec = MatchSpec::from_str(
         spec_str,
-        ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
     )?;
     let condition_id = if let Some(condition) = match_spec.condition.as_ref() {
         let condition_id = parse_condition(condition, pool, parse_match_spec_cache);

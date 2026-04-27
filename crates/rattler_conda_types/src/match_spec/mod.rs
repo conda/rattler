@@ -150,6 +150,8 @@ pub struct MatchSpec {
     pub file_name: Option<String>,
     /// The selected optional features of the package
     pub extras: Option<Vec<String>>,
+    /// Plain string flags used to select package variants.
+    pub flags: Option<Vec<StringMatcher>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -207,6 +209,10 @@ impl Display for MatchSpec {
             keys.push(format!("extras=[{}]", extras.iter().format(", ")));
         }
 
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
         }
@@ -258,7 +264,7 @@ impl Display for MatchSpec {
 impl MatchSpec {
     /// Returns the repodata revision required to represent this matchspec.
     pub fn required_repodata_revision(&self) -> RepodataRevision {
-        if self.extras.is_some() || self.condition.is_some() {
+        if self.extras.is_some() || self.condition.is_some() || self.flags.is_some() {
             RepodataRevision::V3
         } else {
             RepodataRevision::Legacy
@@ -275,6 +281,7 @@ impl MatchSpec {
                 build_number: self.build_number,
                 file_name: self.file_name,
                 extras: self.extras,
+                flags: self.flags,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
@@ -328,6 +335,8 @@ pub struct NamelessMatchSpec {
     pub file_name: Option<String>,
     /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
+    /// Plain string flags used to select package variants.
+    pub flags: Option<Vec<StringMatcher>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -366,6 +375,10 @@ impl Display for NamelessMatchSpec {
 
         let mut keys = Vec::new();
 
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
         }
@@ -399,6 +412,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -423,6 +437,7 @@ impl MatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -520,6 +535,18 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(flags) = self.flags.as_ref() {
+            for flag in flags {
+                if !other
+                    .flags
+                    .iter()
+                    .any(|record_flag| flag.matches(record_flag.as_str()))
+                {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 }
@@ -576,6 +603,18 @@ impl Matches<PackageRecord> for MatchSpec {
         if let Some(track_features) = self.track_features.as_ref() {
             for feature in track_features {
                 if !other.track_features.contains(feature) {
+                    return false;
+                }
+            }
+        }
+
+        if let Some(flags) = self.flags.as_ref() {
+            for flag in flags {
+                if !other
+                    .flags
+                    .iter()
+                    .any(|record_flag| flag.matches(record_flag.as_str()))
+                {
                     return false;
                 }
             }
@@ -719,9 +758,9 @@ mod tests {
 
     use crate::{
         match_spec::Matches, package::DistArchiveIdentifier,
-        parse_mode::ParseStrictnessWithNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
-        PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord, StringMatcher,
-        Version,
+        parse_mode::ParseStrictnessWithNameMatcher, Flag, MatchSpec, NamelessMatchSpec,
+        PackageName, PackageRecord, ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::*,
+        RepoDataRecord, RepodataRevision, StringMatcher, Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -891,6 +930,48 @@ mod tests {
         let spec = MatchSpec::from_str("mamba * [build=*py39*]", Strict).unwrap();
         println!("Build: {:?}", spec.build);
         assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn test_flags_match() {
+        let options = ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
+        let spec = MatchSpec::from_str("mamba[flags=[cuda, blas:*]]", options).unwrap();
+
+        assert_eq!(spec.required_repodata_revision(), RepodataRevision::V3);
+        assert_eq!(
+            spec.flags,
+            Some(vec![
+                StringMatcher::from_str("cuda").unwrap(),
+                StringMatcher::from_str("blas:*").unwrap(),
+            ])
+        );
+        assert_eq!(spec.to_string(), "mamba[flags=[cuda, blas:*]]");
+        assert_eq!(
+            MatchSpec::from_str(&spec.to_string(), options).unwrap(),
+            spec
+        );
+
+        let matching_record = PackageRecord {
+            flags: vec![Flag::new_unchecked("cuda"), Flag::new_unchecked("blas:mkl")],
+            ..PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from("foo_bar_py310_1"),
+            )
+        };
+        assert!(spec.matches(&matching_record));
+
+        let missing_blas_record = PackageRecord {
+            flags: vec![Flag::new_unchecked("cuda")],
+            ..matching_record.clone()
+        };
+        assert!(!spec.matches(&missing_blas_record));
+
+        let legacy_err = MatchSpec::from_str("mamba[flags=[cuda]]", Strict).unwrap_err();
+        assert_eq!(
+            legacy_err,
+            ParseMatchSpecError::InvalidBracketKey("flags".to_string())
+        );
     }
 
     #[test]

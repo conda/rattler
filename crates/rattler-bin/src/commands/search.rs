@@ -60,7 +60,8 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         &opt.matchspec,
         ParseMatchSpecOptions::strict()
             .with_exact_names_only(false)
-            .with_experimental_extras(true),
+            .with_experimental_extras(true)
+            .with_experimental_flags(true),
     )
     .into_diagnostic()
     .context("failed to parse pattern as matchspec")?;

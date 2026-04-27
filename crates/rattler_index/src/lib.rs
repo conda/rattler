@@ -197,6 +197,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
+        flags: index.flags,
         noarch: index.noarch,
         license: index.license,
         license_family: index.license_family,

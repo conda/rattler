@@ -148,7 +148,8 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // parsing matchspecs.
     let match_spec_options = ParseMatchSpecOptions::strict()
         .with_experimental_extras(true)
-        .with_experimental_conditionals(true);
+        .with_experimental_conditionals(true)
+        .with_experimental_flags(true);
 
     let specs = opt
         .specs

@@ -483,6 +483,13 @@ fn merge_package_record<'a>(
         });
     }
 
+    if left.flags.is_empty() && !right.flags.is_empty() {
+        result = Cow::Owned(PackageRecord {
+            flags: right.flags.clone(),
+            ..result.into_owned()
+        });
+    }
+
     result
 }
 

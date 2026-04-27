@@ -10,8 +10,8 @@ use thiserror::Error;
 
 use super::PackageFile;
 use crate::{
-    MatchSpec, NoArchType, PackageName, PackageUrl, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepodataRevision, VersionWithSource,
+    Flag, MatchSpec, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
+    ParseMatchSpecOptions, RepodataRevision, VersionWithSource,
 };
 
 /// A representation of the `index.json` file found in package archives.
@@ -53,6 +53,10 @@ pub struct IndexJson {
     /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     pub features: Option<String>,
+
+    /// Plain string flags used to select package variants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<Flag>,
 
     /// Optionally, the license
     pub license: Option<String>,
@@ -131,7 +135,7 @@ impl IndexJson {
             return revision;
         }
 
-        if !self.experimental_extra_depends.is_empty() {
+        if !self.experimental_extra_depends.is_empty() || !self.flags.is_empty() {
             return RepodataRevision::V3;
         }
 
@@ -157,6 +161,18 @@ impl IndexJson {
             && !self.experimental_extra_depends.is_empty()
         {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
+        }
+
+        if matches!(required_revision, RepodataRevision::Legacy) && !self.flags.is_empty() {
+            return Err(ValidateIndexJsonError::LegacyFlags);
+        }
+
+        for flag in &self.flags {
+            if flag.validate().is_err() {
+                return Err(ValidateIndexJsonError::InvalidFlag {
+                    flag: flag.as_str().to_string(),
+                });
+            }
         }
 
         let parse_options =
@@ -213,6 +229,13 @@ impl IndexJson {
                     spec: spec.to_string(),
                 });
             }
+
+            if matchspec.flags.is_some() {
+                return Err(ValidateIndexJsonError::LegacyMatchSpecFlags {
+                    field,
+                    spec: spec.to_string(),
+                });
+            }
         }
 
         Ok(())
@@ -231,6 +254,10 @@ pub enum ValidateIndexJsonError {
     #[error("legacy repodata cannot represent extra_depends")]
     LegacyExtraDepends,
 
+    /// Legacy repodata cannot represent package flags.
+    #[error("legacy repodata cannot represent flags")]
+    LegacyFlags,
+
     /// Legacy repodata cannot represent matchspec extras.
     #[error("legacy repodata cannot represent matchspec extras in {field}: {spec}")]
     LegacyMatchSpecExtras {
@@ -247,6 +274,22 @@ pub enum ValidateIndexJsonError {
         field: String,
         /// The invalid matchspec.
         spec: String,
+    },
+
+    /// Legacy repodata cannot represent matchspec flags.
+    #[error("legacy repodata cannot represent matchspec flags in {field}: {spec}")]
+    LegacyMatchSpecFlags {
+        /// The `index.json` field that contains the invalid matchspec.
+        field: String,
+        /// The invalid matchspec.
+        spec: String,
+    },
+
+    /// A package flag is invalid.
+    #[error("invalid package flag: {flag}")]
+    InvalidFlag {
+        /// The invalid flag.
+        flag: String,
     },
 
     /// A dependency or constraint matchspec could not be parsed.
@@ -330,6 +373,21 @@ mod test {
             inferred_revision.required_repodata_revision(),
             RepodataRevision::V3
         );
+
+        let inferred_revision: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "flags": ["cuda", "blas:mkl"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            inferred_revision.required_repodata_revision(),
+            RepodataRevision::V3
+        );
     }
 
     #[test]
@@ -383,6 +441,38 @@ mod test {
             conditional_matchspec.validate(),
             Err(ValidateIndexJsonError::LegacyMatchSpecCondition { .. })
         ));
+
+        let flags: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "flags": ["cuda"],
+                "name": "demo",
+                "repodata_revision": 0,
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            flags.validate(),
+            Err(ValidateIndexJsonError::LegacyFlags)
+        ));
+
+        let flags_matchspec: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "depends": ["foo[flags=[cuda]]"],
+                "name": "demo",
+                "repodata_revision": 0,
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            flags_matchspec.validate(),
+            Err(ValidateIndexJsonError::LegacyMatchSpecFlags { .. })
+        ));
     }
 
     #[test]
@@ -393,11 +483,13 @@ mod test {
                 "build_number": 0,
                 "depends": [
                     "foo[extras=[bar]]",
-                    "python-tzdata[when=\"__win\"]"
+                    "python-tzdata[when=\"__win\"]",
+                    "blas-provider[flags=[blas:*]]"
                 ],
                 "extra_depends": {
                     "test": ["pytest[when=\"python >=3.10\"]"]
                 },
+                "flags": ["cuda", "blas:mkl"],
                 "name": "demo",
                 "version": "1.0"
             }"#,
@@ -405,6 +497,21 @@ mod test {
         .unwrap();
         assert_eq!(index.required_repodata_revision(), RepodataRevision::V3);
         index.validate().unwrap();
+
+        let invalid_flags: IndexJson = serde_json::from_str(
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "flags": ["CUDA"],
+                "name": "demo",
+                "version": "1.0"
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            invalid_flags.validate(),
+            Err(ValidateIndexJsonError::InvalidFlag { .. })
+        ));
     }
 
     #[test]
