@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CacheResult"],"fn":["read_package_with_retry"],"struct":["PackageRecordCache"]};
+window.SIDEBAR_ITEMS = {"fn":["read_package_with_retry"],"struct":["PackageRecordCache"]};

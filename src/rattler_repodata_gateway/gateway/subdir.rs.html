@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/</div>subdir.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::sync::Arc;
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{PackageName, RepoDataRecord};
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisionInfo};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">super</span>::GatewayError;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::Reporter;
@@ -62,68 +62,85 @@
 <a href=#60 id=60 data-nosnippet>60</a>            Subdir::NotFound =&gt; <span class="prelude-val">None</span>,
 <a href=#61 id=61 data-nosnippet>61</a>        }
 <a href=#62 id=62 data-nosnippet>62</a>    }
-<a href=#63 id=63 data-nosnippet>63</a>}
-<a href=#64 id=64 data-nosnippet>64</a>
-<a href=#65 id=65 data-nosnippet>65</a><span class="doccomment">/// Fetches and caches repodata records by package name for a specific
-<a href=#66 id=66 data-nosnippet>66</a>/// subdirectory of a channel.
-<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub struct </span>SubdirData {
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="doccomment">/// The client to use to fetch repodata.
-<a href=#69 id=69 data-nosnippet>69</a>    </span>client: Arc&lt;<span class="kw">dyn </span>SubdirClient&gt;,
-<a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="doccomment">/// Previously fetched or currently pending records (with precomputed deps).
-<a href=#72 id=72 data-nosnippet>72</a>    </span>records: CoalescedMap&lt;PackageName, PackageRecords&gt;,
-<a href=#73 id=73 data-nosnippet>73</a>}
-<a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a><span class="kw">impl </span>SubdirData {
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">pub fn </span>from_client&lt;C: SubdirClient + <span class="lifetime">'static</span>&gt;(client: C) -&gt; <span class="self">Self </span>{
-<a href=#77 id=77 data-nosnippet>77</a>        <span class="self">Self </span>{
-<a href=#78 id=78 data-nosnippet>78</a>            client: Arc::new(client),
-<a href=#79 id=79 data-nosnippet>79</a>            records: CoalescedMap::new(),
-<a href=#80 id=80 data-nosnippet>80</a>        }
-<a href=#81 id=81 data-nosnippet>81</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="doccomment">/// Returns repodata revisions advertised by this subdirectory.
+<a href=#65 id=65 data-nosnippet>65</a>    </span><span class="kw">pub fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#66 id=66 data-nosnippet>66</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#67 id=67 data-nosnippet>67</a>            Subdir::Found(subdir) =&gt; subdir.repodata_revisions(),
+<a href=#68 id=68 data-nosnippet>68</a>            Subdir::NotFound =&gt; <span class="kw-2">&amp;</span>[],
+<a href=#69 id=69 data-nosnippet>69</a>        }
+<a href=#70 id=70 data-nosnippet>70</a>    }
+<a href=#71 id=71 data-nosnippet>71</a>}
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a><span class="doccomment">/// Fetches and caches repodata records by package name for a specific
+<a href=#74 id=74 data-nosnippet>74</a>/// subdirectory of a channel.
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub struct </span>SubdirData {
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="doccomment">/// The client to use to fetch repodata.
+<a href=#77 id=77 data-nosnippet>77</a>    </span>client: Arc&lt;<span class="kw">dyn </span>SubdirClient&gt;,
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Previously fetched or currently pending records (with precomputed deps).
+<a href=#80 id=80 data-nosnippet>80</a>    </span>records: CoalescedMap&lt;PackageName, PackageRecords&gt;,
+<a href=#81 id=81 data-nosnippet>81</a>}
 <a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">pub async fn </span>get_or_fetch_package_records(
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#85 id=85 data-nosnippet>85</a>        name: <span class="kw-2">&amp;</span>PackageName,
-<a href=#86 id=86 data-nosnippet>86</a>        reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
-<a href=#87 id=87 data-nosnippet>87</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PackageRecords, GatewayError&gt; {
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>client = <span class="self">self</span>.client.clone();
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>name_clone = name.clone();
+<a href=#83 id=83 data-nosnippet>83</a><span class="kw">impl </span>SubdirData {
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">pub fn </span>from_client&lt;C: SubdirClient + <span class="lifetime">'static</span>&gt;(client: C) -&gt; <span class="self">Self </span>{
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="self">Self </span>{
+<a href=#86 id=86 data-nosnippet>86</a>            client: Arc::new(client),
+<a href=#87 id=87 data-nosnippet>87</a>            records: CoalescedMap::new(),
+<a href=#88 id=88 data-nosnippet>88</a>        }
+<a href=#89 id=89 data-nosnippet>89</a>    }
 <a href=#90 id=90 data-nosnippet>90</a>
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="self">self</span>.records
-<a href=#92 id=92 data-nosnippet>92</a>            .get_or_try_init(name.clone(), || <span class="kw">async move </span>{
-<a href=#93 id=93 data-nosnippet>93</a>                client
-<a href=#94 id=94 data-nosnippet>94</a>                    .fetch_package_records(<span class="kw-2">&amp;</span>name_clone, reporter.as_deref())
-<a href=#95 id=95 data-nosnippet>95</a>                    .<span class="kw">await
-<a href=#96 id=96 data-nosnippet>96</a>            </span>})
-<a href=#97 id=97 data-nosnippet>97</a>            .<span class="kw">await
-<a href=#98 id=98 data-nosnippet>98</a>            </span>.map_err(|e| <span class="kw">match </span>e {
-<a href=#99 id=99 data-nosnippet>99</a>                CoalescedGetError::Init(gateway_err) =&gt; gateway_err,
-<a href=#100 id=100 data-nosnippet>100</a>                CoalescedGetError::CoalescedRequestFailed =&gt; GatewayError::IoError(
-<a href=#101 id=101 data-nosnippet>101</a>                    <span class="string">"a coalesced request failed"</span>.to_string(),
-<a href=#102 id=102 data-nosnippet>102</a>                    std::io::ErrorKind::Other.into(),
-<a href=#103 id=103 data-nosnippet>103</a>                ),
-<a href=#104 id=104 data-nosnippet>104</a>            })
-<a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">pub fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="self">self</span>.client.package_names()
-<a href=#109 id=109 data-nosnippet>109</a>    }
-<a href=#110 id=110 data-nosnippet>110</a>}
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a><span class="doccomment">/// A client that can be used to fetch repodata for a specific subdirectory.
-<a href=#113 id=113 data-nosnippet>113</a></span><span class="attr">#[cfg_attr(not(target_arch = <span class="string">"wasm32"</span>), async_trait::async_trait)]
-<a href=#114 id=114 data-nosnippet>114</a>#[cfg_attr(target_arch = <span class="string">"wasm32"</span>, async_trait::async_trait(<span class="question-mark">?</span>Send))]
-<a href=#115 id=115 data-nosnippet>115</a></span><span class="kw">pub trait </span>SubdirClient: Send + Sync {
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// Fetches all repodata records for the package with the given name in a
-<a href=#117 id=117 data-nosnippet>117</a>    /// channel subdirectory.
-<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">async fn </span>fetch_package_records(
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#120 id=120 data-nosnippet>120</a>        name: <span class="kw-2">&amp;</span>PackageName,
-<a href=#121 id=121 data-nosnippet>121</a>        reporter: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>Reporter&gt;,
-<a href=#122 id=122 data-nosnippet>122</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PackageRecords, GatewayError&gt;;
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">pub async fn </span>get_or_fetch_package_records(
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#93 id=93 data-nosnippet>93</a>        name: <span class="kw-2">&amp;</span>PackageName,
+<a href=#94 id=94 data-nosnippet>94</a>        reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>Reporter&gt;&gt;,
+<a href=#95 id=95 data-nosnippet>95</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PackageRecords, GatewayError&gt; {
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>client = <span class="self">self</span>.client.clone();
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>name_clone = name.clone();
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="self">self</span>.records
+<a href=#100 id=100 data-nosnippet>100</a>            .get_or_try_init(name.clone(), || <span class="kw">async move </span>{
+<a href=#101 id=101 data-nosnippet>101</a>                client
+<a href=#102 id=102 data-nosnippet>102</a>                    .fetch_package_records(<span class="kw-2">&amp;</span>name_clone, reporter.as_deref())
+<a href=#103 id=103 data-nosnippet>103</a>                    .<span class="kw">await
+<a href=#104 id=104 data-nosnippet>104</a>            </span>})
+<a href=#105 id=105 data-nosnippet>105</a>            .<span class="kw">await
+<a href=#106 id=106 data-nosnippet>106</a>            </span>.map_err(|e| <span class="kw">match </span>e {
+<a href=#107 id=107 data-nosnippet>107</a>                CoalescedGetError::Init(gateway_err) =&gt; gateway_err,
+<a href=#108 id=108 data-nosnippet>108</a>                CoalescedGetError::CoalescedRequestFailed =&gt; GatewayError::IoError(
+<a href=#109 id=109 data-nosnippet>109</a>                    <span class="string">"a coalesced request failed"</span>.to_string(),
+<a href=#110 id=110 data-nosnippet>110</a>                    std::io::ErrorKind::Other.into(),
+<a href=#111 id=111 data-nosnippet>111</a>                ),
+<a href=#112 id=112 data-nosnippet>112</a>            })
+<a href=#113 id=113 data-nosnippet>113</a>    }
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">pub fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="self">self</span>.client.package_names()
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">pub fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="self">self</span>.client.repodata_revisions()
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>}
 <a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// Returns the names of all packages in the subdirectory.
-<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt;;
-<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#124 id=124 data-nosnippet>124</a><span class="doccomment">/// A client that can be used to fetch repodata for a specific subdirectory.
+<a href=#125 id=125 data-nosnippet>125</a></span><span class="attr">#[cfg_attr(not(target_arch = <span class="string">"wasm32"</span>), async_trait::async_trait)]
+<a href=#126 id=126 data-nosnippet>126</a>#[cfg_attr(target_arch = <span class="string">"wasm32"</span>, async_trait::async_trait(<span class="question-mark">?</span>Send))]
+<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub trait </span>SubdirClient: Send + Sync {
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Fetches all repodata records for the package with the given name in a
+<a href=#129 id=129 data-nosnippet>129</a>    /// channel subdirectory.
+<a href=#130 id=130 data-nosnippet>130</a>    </span><span class="kw">async fn </span>fetch_package_records(
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#132 id=132 data-nosnippet>132</a>        name: <span class="kw-2">&amp;</span>PackageName,
+<a href=#133 id=133 data-nosnippet>133</a>        reporter: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>Reporter&gt;,
+<a href=#134 id=134 data-nosnippet>134</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PackageRecords, GatewayError&gt;;
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// Returns the names of all packages in the subdirectory.
+<a href=#137 id=137 data-nosnippet>137</a>    </span><span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt;;
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="doccomment">/// Returns repodata revisions advertised by the subdirectory.
+<a href=#140 id=140 data-nosnippet>140</a>    </span><span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw-2">&amp;</span>[]
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>}
 </code></pre></div></section></main></body></html>

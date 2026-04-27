@@ -23,7 +23,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>fs_err::tokio <span class="kw">as </span>tokio_fs;
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>futures::future::OptionFuture;
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, ShardedRepodata};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>rattler_networking::LazyClient;
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>simple_spawn_blocking::tokio::run_blocking_task;
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>url::Url;
@@ -73,7 +73,7 @@
 <a href=#71 id=71 data-nosnippet>71</a>            GatewayError::ReqwestError(e) <span class="kw">if </span>e.status() == <span class="prelude-val">Some</span>(StatusCode::NOT_FOUND) =&gt; {
 <a href=#72 id=72 data-nosnippet>72</a>                GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
 <a href=#73 id=73 data-nosnippet>73</a>                    channel: channel.clone(),
-<a href=#74 id=74 data-nosnippet>74</a>                    subdir,
+<a href=#74 id=74 data-nosnippet>74</a>                    subdir: subdir.clone(),
 <a href=#75 id=75 data-nosnippet>75</a>                    source: e.into(),
 <a href=#76 id=76 data-nosnippet>76</a>                }))
 <a href=#77 id=77 data-nosnippet>77</a>            }
@@ -271,56 +271,60 @@
 <a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="self">self</span>.sharded_repodata.shards.keys().cloned().collect()
 <a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>}
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a><span class="doccomment">/// Atomically writes the shard bytes to the cache.
-<a href=#275 id=275 data-nosnippet>275</a></span><span class="kw">async fn </span>write_shard_to_cache(
-<a href=#276 id=276 data-nosnippet>276</a>    shard_cache_path: PathBuf,
-<a href=#277 id=277 data-nosnippet>277</a>    shard_bytes: Vec&lt;u8&gt;,
-<a href=#278 id=278 data-nosnippet>278</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GatewayError&gt; {
-<a href=#279 id=279 data-nosnippet>279</a>    run_blocking_task(<span class="kw">move </span>|| {
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>shard_cache_parent_path = shard_cache_path
-<a href=#281 id=281 data-nosnippet>281</a>            .parent()
-<a href=#282 id=282 data-nosnippet>282</a>            .expect(<span class="string">"file path must have a parent"</span>);
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span><span class="kw-2">mut </span>temp_file = tempfile::Builder::new()
-<a href=#284 id=284 data-nosnippet>284</a>            .tempfile_in(
-<a href=#285 id=285 data-nosnippet>285</a>                shard_cache_path
-<a href=#286 id=286 data-nosnippet>286</a>                    .parent()
-<a href=#287 id=287 data-nosnippet>287</a>                    .expect(<span class="string">"file path must have a parent"</span>),
-<a href=#288 id=288 data-nosnippet>288</a>            )
-<a href=#289 id=289 data-nosnippet>289</a>            .map_err(|e| {
-<a href=#290 id=290 data-nosnippet>290</a>                GatewayError::IoError(
-<a href=#291 id=291 data-nosnippet>291</a>                    <span class="macro">format!</span>(
-<a href=#292 id=292 data-nosnippet>292</a>                        <span class="string">"failed to create temporary file to write shard in {}"</span>,
-<a href=#293 id=293 data-nosnippet>293</a>                        shard_cache_parent_path.display()
-<a href=#294 id=294 data-nosnippet>294</a>                    ),
-<a href=#295 id=295 data-nosnippet>295</a>                    e,
-<a href=#296 id=296 data-nosnippet>296</a>                )
-<a href=#297 id=297 data-nosnippet>297</a>            })<span class="question-mark">?</span>;
-<a href=#298 id=298 data-nosnippet>298</a>        temp_file.write_all(<span class="kw-2">&amp;</span>shard_bytes).map_err(|e| {
-<a href=#299 id=299 data-nosnippet>299</a>            GatewayError::IoError(
-<a href=#300 id=300 data-nosnippet>300</a>                <span class="macro">format!</span>(
-<a href=#301 id=301 data-nosnippet>301</a>                    <span class="string">"failed to write shard to temporary file in {}"</span>,
-<a href=#302 id=302 data-nosnippet>302</a>                    shard_cache_parent_path.display()
-<a href=#303 id=303 data-nosnippet>303</a>                ),
-<a href=#304 id=304 data-nosnippet>304</a>                e,
-<a href=#305 id=305 data-nosnippet>305</a>            )
-<a href=#306 id=306 data-nosnippet>306</a>        })<span class="question-mark">?</span>;
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">match </span>temp_file.persist(<span class="kw-2">&amp;</span>shard_cache_path) {
-<a href=#308 id=308 data-nosnippet>308</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#309 id=309 data-nosnippet>309</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#310 id=310 data-nosnippet>310</a>                <span class="kw">if </span>shard_cache_path.is_file() {
-<a href=#311 id=311 data-nosnippet>311</a>                    <span class="comment">// The file already exists, we can ignore the error.
-<a href=#312 id=312 data-nosnippet>312</a>                    </span><span class="prelude-val">Ok</span>(())
-<a href=#313 id=313 data-nosnippet>313</a>                } <span class="kw">else </span>{
-<a href=#314 id=314 data-nosnippet>314</a>                    <span class="prelude-val">Err</span>(GatewayError::IoError(
-<a href=#315 id=315 data-nosnippet>315</a>                        <span class="macro">format!</span>(<span class="string">"failed to persist shard to {}"</span>, shard_cache_path.display()),
-<a href=#316 id=316 data-nosnippet>316</a>                        e.error,
-<a href=#317 id=317 data-nosnippet>317</a>                    ))
-<a href=#318 id=318 data-nosnippet>318</a>                }
-<a href=#319 id=319 data-nosnippet>319</a>            }
-<a href=#320 id=320 data-nosnippet>320</a>        }
-<a href=#321 id=321 data-nosnippet>321</a>    })
-<a href=#322 id=322 data-nosnippet>322</a>    .<span class="kw">await
-<a href=#323 id=323 data-nosnippet>323</a></span>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.sharded_repodata.info.repodata_revisions
+<a href=#275 id=275 data-nosnippet>275</a>    }
+<a href=#276 id=276 data-nosnippet>276</a>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a><span class="doccomment">/// Atomically writes the shard bytes to the cache.
+<a href=#279 id=279 data-nosnippet>279</a></span><span class="kw">async fn </span>write_shard_to_cache(
+<a href=#280 id=280 data-nosnippet>280</a>    shard_cache_path: PathBuf,
+<a href=#281 id=281 data-nosnippet>281</a>    shard_bytes: Vec&lt;u8&gt;,
+<a href=#282 id=282 data-nosnippet>282</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GatewayError&gt; {
+<a href=#283 id=283 data-nosnippet>283</a>    run_blocking_task(<span class="kw">move </span>|| {
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">let </span>shard_cache_parent_path = shard_cache_path
+<a href=#285 id=285 data-nosnippet>285</a>            .parent()
+<a href=#286 id=286 data-nosnippet>286</a>            .expect(<span class="string">"file path must have a parent"</span>);
+<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span><span class="kw-2">mut </span>temp_file = tempfile::Builder::new()
+<a href=#288 id=288 data-nosnippet>288</a>            .tempfile_in(
+<a href=#289 id=289 data-nosnippet>289</a>                shard_cache_path
+<a href=#290 id=290 data-nosnippet>290</a>                    .parent()
+<a href=#291 id=291 data-nosnippet>291</a>                    .expect(<span class="string">"file path must have a parent"</span>),
+<a href=#292 id=292 data-nosnippet>292</a>            )
+<a href=#293 id=293 data-nosnippet>293</a>            .map_err(|e| {
+<a href=#294 id=294 data-nosnippet>294</a>                GatewayError::IoError(
+<a href=#295 id=295 data-nosnippet>295</a>                    <span class="macro">format!</span>(
+<a href=#296 id=296 data-nosnippet>296</a>                        <span class="string">"failed to create temporary file to write shard in {}"</span>,
+<a href=#297 id=297 data-nosnippet>297</a>                        shard_cache_parent_path.display()
+<a href=#298 id=298 data-nosnippet>298</a>                    ),
+<a href=#299 id=299 data-nosnippet>299</a>                    e,
+<a href=#300 id=300 data-nosnippet>300</a>                )
+<a href=#301 id=301 data-nosnippet>301</a>            })<span class="question-mark">?</span>;
+<a href=#302 id=302 data-nosnippet>302</a>        temp_file.write_all(<span class="kw-2">&amp;</span>shard_bytes).map_err(|e| {
+<a href=#303 id=303 data-nosnippet>303</a>            GatewayError::IoError(
+<a href=#304 id=304 data-nosnippet>304</a>                <span class="macro">format!</span>(
+<a href=#305 id=305 data-nosnippet>305</a>                    <span class="string">"failed to write shard to temporary file in {}"</span>,
+<a href=#306 id=306 data-nosnippet>306</a>                    shard_cache_parent_path.display()
+<a href=#307 id=307 data-nosnippet>307</a>                ),
+<a href=#308 id=308 data-nosnippet>308</a>                e,
+<a href=#309 id=309 data-nosnippet>309</a>            )
+<a href=#310 id=310 data-nosnippet>310</a>        })<span class="question-mark">?</span>;
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">match </span>temp_file.persist(<span class="kw-2">&amp;</span>shard_cache_path) {
+<a href=#312 id=312 data-nosnippet>312</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>                <span class="kw">if </span>shard_cache_path.is_file() {
+<a href=#315 id=315 data-nosnippet>315</a>                    <span class="comment">// The file already exists, we can ignore the error.
+<a href=#316 id=316 data-nosnippet>316</a>                    </span><span class="prelude-val">Ok</span>(())
+<a href=#317 id=317 data-nosnippet>317</a>                } <span class="kw">else </span>{
+<a href=#318 id=318 data-nosnippet>318</a>                    <span class="prelude-val">Err</span>(GatewayError::IoError(
+<a href=#319 id=319 data-nosnippet>319</a>                        <span class="macro">format!</span>(<span class="string">"failed to persist shard to {}"</span>, shard_cache_path.display()),
+<a href=#320 id=320 data-nosnippet>320</a>                        e.error,
+<a href=#321 id=321 data-nosnippet>321</a>                    ))
+<a href=#322 id=322 data-nosnippet>322</a>                }
+<a href=#323 id=323 data-nosnippet>323</a>            }
+<a href=#324 id=324 data-nosnippet>324</a>        }
+<a href=#325 id=325 data-nosnippet>325</a>    })
+<a href=#326 id=326 data-nosnippet>326</a>    .<span class="kw">await
+<a href=#327 id=327 data-nosnippet>327</a></span>}
 </code></pre></div></section></main></body></html>

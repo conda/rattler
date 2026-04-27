@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/remote_subdir/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span><span class="kw">crate</span>::gateway::subdir::{PackageRecords, SubdirClient};
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use crate</span>::{GatewayError, Reporter};
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::PackageName;
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{PackageName, RepodataRevisionInfo};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="macro">cfg_if::cfg_if!</span> {
 <a href=#6 id=6 data-nosnippet>6</a>    <span class="kw">if </span><span class="attr">#[cfg(target_arch = <span class="string">"wasm32"</span>)] </span>{
@@ -28,5 +28,9 @@
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">fn </span>package_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
 <a href=#27 id=27 data-nosnippet>27</a>        <span class="self">self</span>.sparse.package_names()
 <a href=#28 id=28 data-nosnippet>28</a>    }
-<a href=#29 id=29 data-nosnippet>29</a>}
+<a href=#29 id=29 data-nosnippet>29</a>
+<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#31 id=31 data-nosnippet>31</a>        <span class="self">self</span>.sparse.repodata_revisions()
+<a href=#32 id=32 data-nosnippet>32</a>    }
+<a href=#33 id=33 data-nosnippet>33</a>}
 </code></pre></div></section></main></body></html>
