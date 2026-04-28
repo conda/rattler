@@ -27,6 +27,29 @@ impl<T: Hash> DynHash for T {
 /// can be passed to `Hash::hash`.
 struct HasherMut<'a>(&'a mut dyn Hasher);
 
+/// Hashes an [`EnvironmentPackages`] as its sequence of selector ids in
+/// stored order, *without* allocating.
+///
+/// We explicitly hash selector ids rather than `PackageHandle`s because a
+/// handle also carries a `PackageIndex`, and the index reflects insertion
+/// order in the parent lockfile — not anything semantic about the package.
+/// `EnvironmentPackages::entries` is invariant-sorted by selector id, and
+/// [`EnvironmentPackages::handles`] walks them in that stored order, so the
+/// hash is stable across builders that registered packages in different
+/// orders.
+struct EnvironmentPackagesSelectorIds<'a>(&'a crate::EnvironmentPackages);
+
+impl Hash for EnvironmentPackagesSelectorIds<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Match the standard `Vec<T>::hash` framing (length-prefixed) so this
+        // can't collide with neighbouring fields under concatenation.
+        self.0.len().hash(state);
+        for handle in self.0.handles() {
+            handle.selector_id.hash(state);
+        }
+    }
+}
+
 impl Hasher for HasherMut<'_> {
     fn write(&mut self, bytes: &[u8]) {
         self.0.write(bytes);
@@ -179,21 +202,21 @@ pub enum ParseSourceIdentifierError {
 ///
 /// Fields are hashed in alphabetical order via a `BTreeMap` so that the
 /// ordering invariant is enforced structurally rather than by convention.
-fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
+fn compute_source_hash(data: &CondaSourceData) -> u64 {
     let mut hasher = xxhash_rust::xxh3::Xxh3::default();
 
     let CondaSourceData {
         package_build_source,
         variants,
         metadata,
+        sources,
+        source_data,
 
         // These fields are already recorded in the source identifier, and
         // so they are not used for the hash here.
         location: _,
         identifier_hash: _,
-        sources,
-        source_data: _,
-    } = source_data;
+    } = data;
 
     let mut fields: BTreeMap<&str, &dyn DynHash> = BTreeMap::new();
 
@@ -204,6 +227,26 @@ fn compute_source_hash(source_data: &CondaSourceData) -> u64 {
     fields.insert("variants", variants);
     if !sources.is_empty() {
         fields.insert("sources", &sources);
+    }
+
+    // Build/host packages are referenced by selector id (the stable string
+    // form, e.g. a binary URL or `name[hash] @ location` for source packages),
+    // *not* by their `PackageIndex` — the index is a position in the lockfile's
+    // packages list and so depends on insertion order, which would make the
+    // hash non-deterministic across builders.
+    //
+    // The wrappers are declared (but not initialized) outside the `if`s so
+    // their storage outlives the `BTreeMap` borrow. Each is only borrowed in
+    // the branch that initializes it, so the borrow checker accepts this.
+    let build_packages;
+    let host_packages;
+    if !source_data.build_packages.is_empty() {
+        build_packages = EnvironmentPackagesSelectorIds(&source_data.build_packages);
+        fields.insert("build_packages", &build_packages);
+    }
+    if !source_data.host_packages.is_empty() {
+        host_packages = EnvironmentPackagesSelectorIds(&source_data.host_packages);
+        fields.insert("host_packages", &host_packages);
     }
 
     match metadata {
@@ -752,5 +795,101 @@ mod tests {
         // Same name, but different hashes due to different variants
         assert_eq!(id1.name(), id2.name());
         assert_ne!(id1.hash(), id2.hash());
+    }
+
+    /// Two source packages that differ only in their build/host environments
+    /// must produce different identifier hashes; otherwise distinct source
+    /// packages would collide on the same selector id in the lock file.
+    #[test]
+    fn test_different_build_host_packages_produce_different_hashes() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{package::DistArchiveIdentifier, PackageRecord, Version};
+
+        use crate::{CondaBinaryData, LockFile};
+
+        let make_binary = |name: &str| {
+            let mut record = PackageRecord::new(
+                PackageName::from_str(name).unwrap(),
+                Version::from_str("1.0.0").unwrap(),
+                "build0".to_string(),
+            );
+            record.subdir = "linux-64".to_string();
+            CondaBinaryData {
+                package_record: record,
+                location: url::Url::parse(&format!(
+                    "https://example.com/linux-64/{name}-1.0.0-build0.tar.bz2"
+                ))
+                .unwrap()
+                .into(),
+                file_name: format!("{name}-1.0.0-build0.tar.bz2")
+                    .parse::<DistArchiveIdentifier>()
+                    .unwrap(),
+                channel: None,
+            }
+        };
+
+        let make_source = || {
+            let mut record = PackageRecord::new(
+                PackageName::from_str("my-pkg").unwrap(),
+                Version::from_str("0.1.0").unwrap(),
+                "py_0".to_string(),
+            );
+            record.subdir = "noarch".to_string();
+            CondaSourceData::full(
+                UrlOrPath::Path("./my-pkg".into()),
+                None,
+                BTreeMap::new(),
+                None,
+                record,
+                BTreeMap::new(),
+            )
+        };
+
+        // Same source package, but with different build environments.
+        let mut builder_a = LockFile::builder();
+        let compiler_a = builder_a.register_conda_package(make_binary("compiler-a").into());
+        let handle_a = builder_a
+            .register_conda_source_package(make_source(), [compiler_a], [])
+            .unwrap();
+
+        let mut builder_b = LockFile::builder();
+        let compiler_b = builder_b.register_conda_package(make_binary("compiler-b").into());
+        let handle_b = builder_b
+            .register_conda_source_package(make_source(), [compiler_b], [])
+            .unwrap();
+
+        assert_ne!(
+            handle_a.selector_id, handle_b.selector_id,
+            "different build packages must produce different source identifiers",
+        );
+
+        // Same source package, but with different host environments.
+        let mut builder_c = LockFile::builder();
+        let host_c = builder_c.register_conda_package(make_binary("host-c").into());
+        let handle_c = builder_c
+            .register_conda_source_package(make_source(), [], [host_c])
+            .unwrap();
+
+        let mut builder_d = LockFile::builder();
+        let host_d = builder_d.register_conda_package(make_binary("host-d").into());
+        let handle_d = builder_d
+            .register_conda_source_package(make_source(), [], [host_d])
+            .unwrap();
+
+        assert_ne!(
+            handle_c.selector_id, handle_d.selector_id,
+            "different host packages must produce different source identifiers",
+        );
+
+        // No build/host packages at all must still differ from any of the
+        // above (the empty-source-data hash is its own equivalence class).
+        let mut builder_e = LockFile::builder();
+        let handle_e = builder_e
+            .register_conda_source_package(make_source(), [], [])
+            .unwrap();
+
+        assert_ne!(handle_e.selector_id, handle_a.selector_id);
+        assert_ne!(handle_e.selector_id, handle_c.selector_id);
     }
 }
