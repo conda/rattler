@@ -1,5 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
+use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
@@ -112,10 +113,10 @@ fn is_valid_flag(value: &str, allow_glob: bool) -> bool {
         return false;
     }
 
-    match parts.next() {
-        Some(second) if is_valid_flag_part(second, allow_glob) => parts.next().is_none(),
-        Some(_) => false,
-        None => true,
+    match parts.at_most_one() {
+        Ok(None) => true,
+        Ok(Some(second)) => is_valid_flag_part(second, allow_glob),
+        Err(_) => false,
     }
 }
 
@@ -128,7 +129,9 @@ fn is_valid_flag_part(value: &str, allow_glob: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_valid_matchspec_flag, is_valid_record_flag};
+    use std::str::FromStr;
+
+    use super::{is_valid_matchspec_flag, is_valid_record_flag, Flag, InvalidFlagError};
 
     #[test]
     fn validate_record_flags() {
@@ -149,6 +152,29 @@ mod tests {
 
         for value in ["", "CUDA", "blas:", ":mkl", "blas:mkl:extra", "blas-*"] {
             assert!(!is_valid_matchspec_flag(value));
+        }
+    }
+
+    #[test]
+    fn flag_parse_rejects_invalid_inputs() {
+        let cases = [
+            ("blas:mkl:extra", "multiple colons"),
+            ("", "empty string"),
+            ("blas:", "trailing colon / empty second part"),
+            (":mkl", "leading colon / empty first part"),
+            ("CUDA", "uppercase characters"),
+            ("blas-mkl", "disallowed character"),
+            ("blas:*", "glob not allowed in record flag"),
+            ("*", "bare glob not allowed in record flag"),
+        ];
+
+        for (input, reason) in cases {
+            let err = Flag::from_str(input).expect_err(reason);
+            assert_eq!(
+                err,
+                InvalidFlagError::InvalidFlag(input.into()),
+                "case: {reason}"
+            );
         }
     }
 }
