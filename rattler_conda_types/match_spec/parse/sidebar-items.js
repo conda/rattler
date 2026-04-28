@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ParseMatchSpecError"],"fn":["parse_extras","parse_url_like"]};
+window.SIDEBAR_ITEMS = {"enum":["ParseMatchSpecError"],"fn":["parse_extras","parse_flags","parse_url_like"]};
