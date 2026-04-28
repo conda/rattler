@@ -1010,21 +1010,44 @@ mod test {
         let pypi_builder = builder.register_conda_package(make_binary("pypi-build-tool").into());
         let pypi_runtime = builder.register_conda_package(make_binary("pypi-runtime").into());
 
-        // Register the two source packages, each with its own build/host pair.
-        let conda_source_handle = builder
-            .register_conda_source_package(
-                make_conda_source("my-conda-pkg"),
-                [conda_compiler.clone()],
-                [conda_runtime.clone()],
-            )
-            .unwrap();
-        let pypi_source_handle = builder
-            .register_pypi_source_package(
-                make_pypi_source("my-pypi-pkg"),
-                [pypi_builder.clone()],
-                [pypi_runtime.clone()],
-            )
-            .unwrap();
+        // Pre-build the source packages with their build/host environments
+        // attached. Sharing the same `CondaSourceData` / `PypiSourceData`
+        // instance between `register_*_source_package` and the later
+        // `add_*_package` call ensures both registrations compute the same
+        // `SourceIdentifier` (which now incorporates build/host packages)
+        // and dedup to a single entry.
+        let conda_source_with_env = {
+            let mut data = make_conda_source("my-conda-pkg");
+            data.source_data = crate::SourceData {
+                build_packages: crate::EnvironmentPackages::from_handles([conda_compiler.clone()])
+                    .unwrap(),
+                host_packages: crate::EnvironmentPackages::from_handles([conda_runtime.clone()])
+                    .unwrap(),
+            };
+            data
+        };
+        let pypi_source_with_env = {
+            let mut data = make_pypi_source("my-pypi-pkg");
+            data.source_data = crate::SourceData {
+                build_packages: crate::EnvironmentPackages::from_handles([pypi_builder.clone()])
+                    .unwrap(),
+                host_packages: crate::EnvironmentPackages::from_handles([pypi_runtime.clone()])
+                    .unwrap(),
+            };
+            data
+        };
+
+        // Register the two source packages. Use `register_conda_package`
+        // / `register_pypi_package` directly: the convenience wrappers
+        // (`register_*_source_package`) overwrite `source_data` with the
+        // build/host packages they receive as arguments, which would erase
+        // the pre-populated `source_data` we just built.
+        let conda_source_handle = builder.register_conda_package(CondaPackageData::Source(
+            Box::new(conda_source_with_env.clone()),
+        ));
+        let pypi_source_handle = builder.register_pypi_package(PypiPackageData::Source(Box::new(
+            pypi_source_with_env.clone(),
+        )));
 
         // An extra package that nothing references — neither added to an
         // environment, nor used as a build/host/runtime dependency. It must
@@ -1032,7 +1055,9 @@ mod test {
         let orphan = builder.register_conda_package(make_binary("orphan").into());
 
         // Make every registered package reachable from the environment so it
-        // actually appears in the serialized packages list.
+        // actually appears in the serialized packages list. The source
+        // packages reuse the exact same `*_source_with_env` value used above
+        // so they dedup against the already-registered entry.
         builder
             .add_conda_package("default", "linux-64", make_binary("conda-compiler").into())
             .unwrap()
@@ -1045,13 +1070,13 @@ mod test {
             .add_conda_package(
                 "default",
                 "linux-64",
-                CondaPackageData::Source(Box::new(make_conda_source("my-conda-pkg"))),
+                CondaPackageData::Source(Box::new(conda_source_with_env)),
             )
             .unwrap()
             .add_pypi_package(
                 "default",
                 "linux-64",
-                PypiPackageData::Source(Box::new(make_pypi_source("my-pypi-pkg"))),
+                PypiPackageData::Source(Box::new(pypi_source_with_env)),
             )
             .unwrap();
 
