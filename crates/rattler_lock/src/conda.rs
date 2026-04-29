@@ -256,6 +256,9 @@ pub struct PartialSourceMetadata {
 
     /// Dependencies on other packages (run-time requirements).
     pub depends: Vec<String>,
+
+    /// Run-constraints on other packages.
+    pub constrains: Vec<String>,
 }
 
 /// Metadata for a source package, either partial (name-only) or full
@@ -381,6 +384,15 @@ impl CondaSourceData<SourceMetadata> {
         }
     }
 
+    /// Returns the run-constraints. Empty for partial metadata without
+    /// constrains.
+    pub fn constrains(&self) -> &[String] {
+        match &self.metadata {
+            SourceMetadata::Full(f) => &f.constrains,
+            SourceMetadata::Partial(p) => &p.constrains,
+        }
+    }
+
     /// Attempts to convert into a `CondaSourceData<PackageRecord>`.
     /// Returns `None` if the metadata is partial.
     pub fn into_full(self) -> Option<CondaSourceData<PackageRecord>> {
@@ -427,6 +439,7 @@ impl CondaSourceData<SourceMetadata> {
         identifier_hash: Option<String>,
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
+        constrains: Vec<String>,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
         Self {
@@ -436,7 +449,11 @@ impl CondaSourceData<SourceMetadata> {
             identifier_hash,
             sources,
             source_data: SourceData::default(),
-            metadata: SourceMetadata::Partial(PartialSourceMetadata { name, depends }),
+            metadata: SourceMetadata::Partial(PartialSourceMetadata {
+                name,
+                depends,
+                constrains,
+            }),
         }
     }
 }
@@ -458,6 +475,11 @@ impl CondaSourceData<PackageRecord> {
     pub fn depends(&self) -> &[String] {
         &self.metadata.depends
     }
+
+    /// Returns the run-constraints.
+    pub fn constrains(&self) -> &[String] {
+        &self.metadata.constrains
+    }
 }
 
 // --- Methods for CondaSourceData<PartialSourceMetadata> ---
@@ -471,6 +493,11 @@ impl CondaSourceData<PartialSourceMetadata> {
     /// Returns the dependencies.
     pub fn depends(&self) -> &[String] {
         &self.metadata.depends
+    }
+
+    /// Returns the run-constraints.
+    pub fn constrains(&self) -> &[String] {
+        &self.metadata.constrains
     }
 }
 
