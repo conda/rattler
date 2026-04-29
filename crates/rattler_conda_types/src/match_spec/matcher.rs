@@ -90,8 +90,7 @@ impl StringMatcher {
                 other,
                 glob::MatchOptions {
                     case_sensitive: false,
-                    require_literal_separator: false,
-                    require_literal_leading_dot: false,
+                    ..glob::MatchOptions::default()
                 },
             ),
             // `fancy_regex` can fail on pathological backtracking cases.
