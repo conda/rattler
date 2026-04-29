@@ -4,8 +4,10 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::DistArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, Flag, NoArchType,
-    PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    package::{DistArchiveIdentifier, RunExportsJson},
+    utils::TimestampMs,
+    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
+    VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -111,6 +113,12 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Cow<'a, Option<BTreeSet<PackageUrl>>>,
 
+    /// Run-exports of the package. `None` means the run-exports are unknown;
+    /// `Some(empty)` means we know the package has no run-exports and is
+    /// serialized as `run_exports: {}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_exports: Option<Cow<'a, RunExportsJson>>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -186,7 +194,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
                 .map(Cow::into_owned)
                 .or(derived.version)
                 .ok_or_else(|| ConversionError::Missing("version".to_string()))?,
-            run_exports: None,
+            run_exports: value.run_exports.map(Cow::into_owned),
             python_site_packages_path: value.python_site_packages_path.into_owned(),
         };
 
@@ -285,6 +293,7 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
+            run_exports: package_record.run_exports.as_ref().map(Cow::Borrowed),
             variants: None,
         }
     }

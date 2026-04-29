@@ -4,7 +4,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
+    package::RunExportsJson, BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl,
+    VersionWithSource,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -86,6 +87,12 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Cow<'a, Option<BTreeSet<PackageUrl>>>,
 
+    /// Run-exports of the package. Source packages always know their
+    /// run-exports once evaluated, so this field is non-optional. An absent
+    /// or empty value in the lockfile means there are no run-exports.
+    #[serde(default, skip_serializing_if = "RunExportsJson::is_empty")]
+    pub run_exports: Cow<'a, RunExportsJson>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
 
@@ -155,7 +162,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 size: self.size.into_owned(),
                 timestamp: None,
                 track_features: self.track_features.into_owned(),
-                run_exports: None,
+                run_exports: Some(self.run_exports.into_owned()),
                 python_site_packages_path: self.python_site_packages_path.into_owned(),
             }))
         } else {
@@ -203,6 +210,11 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 noarch: full.noarch,
                 variants,
                 purls: Cow::Borrowed(&full.purls),
+                run_exports: full
+                    .run_exports
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default(),
                 depends: Cow::Borrowed(&full.depends),
                 constrains: Cow::Borrowed(&full.constrains),
                 experimental_extra_depends: Cow::Borrowed(&full.experimental_extra_depends),
@@ -227,6 +239,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 noarch: NoArchType::default(),
                 variants,
                 purls: Cow::Owned(None),
+                run_exports: Cow::Owned(RunExportsJson::default()),
                 depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&[]),
                 experimental_extra_depends: Cow::Owned(BTreeMap::new()),
