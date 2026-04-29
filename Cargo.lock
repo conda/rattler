@@ -5238,6 +5238,7 @@ dependencies = [
  "serde_yaml",
  "similar-asserts",
  "thiserror 2.0.18",
+ "tracing",
  "typed-path",
  "url",
  "xxhash-rust",

@@ -677,6 +677,13 @@ fn merge_package_record<'a>(
             run_exports: right.run_exports.clone(),
             ..result.into_owned()
         });
+    } else if let (Some(l), Some(r)) = (&left.run_exports, &right.run_exports) {
+        if l != r {
+            tracing::debug!(
+                package = %left.name.as_normalized(),
+                "merging two records with conflicting run_exports; keeping the existing one"
+            );
+        }
     }
 
     // Merge hashes if the left package doesn't contain them.
