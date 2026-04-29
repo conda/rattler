@@ -47,7 +47,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs
@@ -117,7 +117,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs
@@ -154,7 +154,7 @@ jobs:
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: git checkout "tags/$INPUT_TAG"
 
-      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs

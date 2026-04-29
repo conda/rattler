@@ -2,12 +2,14 @@ use std::path::PathBuf;
 
 #[cfg(all(feature = "s3", feature = "rattler_config"))]
 use anyhow::Context;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 #[cfg(feature = "rattler_config")]
 use rattler_config::config::concurrency::default_max_concurrent_solves;
-use rattler_index::{index_fs, IndexFsConfig};
+use rattler_index::{
+    index_fs, IndexFsConfig, PackageRevisionAssignment, RepodataRevision, RepodataRevisionInfo,
+};
 #[cfg(feature = "s3")]
 use rattler_index::{index_s3, IndexS3Config, PreconditionChecks};
 #[cfg(feature = "s3")]
@@ -47,6 +49,14 @@ struct Cli {
     #[arg(long, default_value = "true", global = true)]
     write_shards: Option<bool>,
 
+    /// Repodata revisions to advertise, e.g. `--repodata-revision v3`.
+    #[arg(long, global = true)]
+    repodata_revision: Vec<RepodataRevision>,
+
+    /// How packages are assigned to repodata revisions.
+    #[arg(long, value_enum, default_value = "from-index-json", global = true)]
+    package_revision_assignment: CliPackageRevisionAssignment,
+
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the
     /// existing one.
@@ -80,6 +90,35 @@ struct Cli {
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
     #[arg(long)]
     config: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+enum CliPackageRevisionAssignment {
+    FromIndexJson,
+    Latest,
+}
+
+impl From<CliPackageRevisionAssignment> for PackageRevisionAssignment {
+    fn from(value: CliPackageRevisionAssignment) -> Self {
+        match value {
+            CliPackageRevisionAssignment::FromIndexJson => PackageRevisionAssignment::FromIndexJson,
+            CliPackageRevisionAssignment::Latest => PackageRevisionAssignment::Latest,
+        }
+    }
+}
+
+fn repodata_revisions(revisions: &[RepodataRevision]) -> Vec<RepodataRevisionInfo> {
+    revisions
+        .iter()
+        .copied()
+        .map(|revision| RepodataRevisionInfo {
+            revision,
+            n_packages: None,
+            oldest: None,
+            newest: None,
+        })
+        .collect()
 }
 
 /// The subcommands for the `rattler-index` CLI.
@@ -152,6 +191,8 @@ async fn main() -> anyhow::Result<()> {
                 repodata_patch: cli.repodata_patch,
                 write_zst: cli.write_zst.unwrap_or(true),
                 write_shards: cli.write_shards.unwrap_or(true),
+                repodata_revisions: repodata_revisions(&cli.repodata_revision),
+                package_revision_assignment: cli.package_revision_assignment.into(),
                 force: cli.force,
                 max_parallel,
                 multi_progress: Some(multi_progress),
@@ -196,6 +237,8 @@ async fn main() -> anyhow::Result<()> {
                 repodata_patch: cli.repodata_patch,
                 write_zst: cli.write_zst.unwrap_or(true),
                 write_shards: cli.write_shards.unwrap_or(true),
+                repodata_revisions: repodata_revisions(&cli.repodata_revision),
+                package_revision_assignment: cli.package_revision_assignment.into(),
                 force: cli.force,
                 max_parallel,
                 multi_progress: Some(multi_progress),

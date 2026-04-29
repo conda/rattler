@@ -15,7 +15,7 @@ use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
 };
 use rattler_conda_types::{
-    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, Flag, NoArchType,
     PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
@@ -94,6 +94,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
+    #[serde(default, skip_serializing_if = "<[Flag]>::is_empty")]
+    pub flags: Cow<'a, [Flag]>,
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub track_features: Cow<'a, [String]>,
 
@@ -176,6 +178,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             depends: value.depends.into_owned(),
             experimental_extra_depends: value.experimental_extra_depends.into_owned(),
             features: value.features.into_owned(),
+            flags: value.flags.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
             license: value.license.into_owned(),
@@ -307,6 +310,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
             timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
             features: Cow::Borrowed(&package_record.features),
+            flags: Cow::Borrowed(&package_record.flags),
             track_features: Cow::Borrowed(&package_record.track_features),
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),

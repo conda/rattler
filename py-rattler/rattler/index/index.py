@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import os
-from typing import Optional, Literal
+from typing import Any, Literal, Mapping, Optional, Sequence, Union
+from typing_extensions import TypeAlias
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
@@ -31,12 +32,50 @@ class S3Credentials:
     addressing_style: Literal["path", "virtual-host"] = "virtual-host"
 
 
+@dataclass
+class RepodataRevisionInfo:
+    """Metadata for a repodata revision advertised in `info.repodata_revisions`."""
+
+    revision: Literal["v3"]
+    n_packages: Optional[int] = None
+    oldest: Optional[int] = None
+    newest: Optional[int] = None
+
+
+RepodataRevision: TypeAlias = Union[RepodataRevisionInfo, Mapping[str, Any]]
+
+
+def _revision_to_wire(revision: Any) -> int:
+    if revision == "v3":
+        return 3
+    raise ValueError(f"unsupported repodata revision {revision!r}, expected 'v3'")
+
+
+def _repodata_revisions_to_dicts(
+    revisions: Optional[Sequence[RepodataRevision]],
+) -> Optional[list[dict[str, Any]]]:
+    if revisions is None:
+        return None
+
+    result = []
+    for revision in revisions:
+        if isinstance(revision, RepodataRevisionInfo):
+            revision_dict = asdict(revision)
+        else:
+            revision_dict = dict(revision)
+        revision_dict["revision"] = _revision_to_wire(revision_dict.get("revision"))
+        result.append(revision_dict)
+    return result
+
+
 async def index_fs(
     channel_directory: os.PathLike[str],
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
     write_shards: bool = True,
+    repodata_revisions: Optional[Sequence[RepodataRevision]] = None,
+    package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
     force: bool = False,
     max_parallel: int | None = None,
 ) -> None:
@@ -54,6 +93,8 @@ async def index_fs(
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
         write_shards: Whether to write sharded repodata.
+        repodata_revisions: Repodata revisions to advertise, including optional `n_packages`, `oldest`, and `newest` metadata.
+        package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
@@ -63,6 +104,8 @@ async def index_fs(
         repodata_patch,
         write_zst,
         write_shards,
+        _repodata_revisions_to_dicts(repodata_revisions),
+        package_revision_assignment,
         force,
         max_parallel,
     )
@@ -75,6 +118,8 @@ async def index_s3(
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
     write_shards: bool = True,
+    repodata_revisions: Optional[Sequence[RepodataRevision]] = None,
+    package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
     force: bool = False,
     max_parallel: int | None = None,
     precondition_checks: bool = True,
@@ -95,6 +140,8 @@ async def index_s3(
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
         write_shards: Whether to write sharded repodata.
+        repodata_revisions: Repodata revisions to advertise, including optional `n_packages`, `oldest`, and `newest` metadata.
+        package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
         precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
@@ -106,6 +153,8 @@ async def index_s3(
         repodata_patch,
         write_zst,
         write_shards,
+        _repodata_revisions_to_dicts(repodata_revisions),
+        package_revision_assignment,
         force,
         max_parallel,
         precondition_checks,

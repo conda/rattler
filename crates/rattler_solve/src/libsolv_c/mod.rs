@@ -11,8 +11,8 @@ use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_con
 pub use libc_byte_slice::LibcByteSlice;
 use output::{get_required_packages, SolverOutput};
 use rattler_conda_types::{
-    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec,
-    RepoDataRecord, SolverResult,
+    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, MatchSpecCondition,
+    NamelessMatchSpec, RepoDataRecord, SolverResult,
 };
 use wrapper::{
     flags::SolverFlag,
@@ -83,6 +83,35 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
+fn unsupported_matchspec_flags() -> SolveError {
+    SolveError::UnsupportedOperations(vec!["matchspec flags".to_string()])
+}
+
+fn match_spec_condition_has_flags(condition: &MatchSpecCondition) -> bool {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => match_spec_has_flags(match_spec),
+        MatchSpecCondition::And(left, right) | MatchSpecCondition::Or(left, right) => {
+            match_spec_condition_has_flags(left) || match_spec_condition_has_flags(right)
+        }
+    }
+}
+
+fn match_spec_has_flags(match_spec: &MatchSpec) -> bool {
+    match_spec.flags.is_some()
+        || match_spec
+            .condition
+            .as_ref()
+            .is_some_and(match_spec_condition_has_flags)
+}
+
+fn ensure_matchspec_flags_supported(match_spec: &MatchSpec) -> Result<(), SolveError> {
+    if match_spec_has_flags(match_spec) {
+        Err(unsupported_matchspec_flags())
+    } else {
+        Ok(())
+    }
+}
+
 /// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
 pub struct Solver;
@@ -108,6 +137,10 @@ impl super::SolverImpl for Solver {
             return Err(SolveError::UnsupportedOperations(vec![
                 "strategy".to_string()
             ]));
+        }
+
+        for spec in task.specs.iter().chain(task.constraints.iter()) {
+            ensure_matchspec_flags_supported(spec)?;
         }
 
         // Construct a default libsolv pool

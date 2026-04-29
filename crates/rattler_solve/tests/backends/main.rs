@@ -18,6 +18,7 @@ mod helpers;
 mod min_age_tests;
 mod solver_case_tests;
 mod strategy_tests;
+mod variant_flags_tests;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -127,6 +128,7 @@ impl PackageBuilder {
                     constrains: Vec::new(),
                     track_features: Vec::new(),
                     features: None,
+                    flags: Vec::new(),
                     noarch: NoArchType::default(),
                     license: None,
                     license_family: None,
@@ -671,6 +673,27 @@ mod libsolv_c {
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
     #[test]
+    fn test_root_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_root_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_dependency_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_dependency_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_condition_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_condition_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
@@ -713,6 +736,7 @@ mod libsolv_c {
                 exclude_newer: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             })
             .unwrap()
             .records;
@@ -776,6 +800,20 @@ mod resolvo {
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    #[test]
+    fn test_flags_select_matching_variant() {
+        crate::variant_flags_tests::solve_flags_select_matching_variant::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_dependency_flags_select_matching_variant() {
+        crate::variant_flags_tests::solve_dependency_flags_select_matching_variant::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 
     #[test]
     fn test_solve_locked() {
@@ -905,6 +943,27 @@ mod resolvo {
         let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
 
         assert!(matches!(solve_error, SolveError::Unsolvable(_)));
+    }
+
+    /// Verifies that a [`CancellationToken`] that is already cancelled causes
+    /// the solver to return [`SolveError::Cancelled`] immediately.
+    #[test]
+    fn test_cancellation_token_pre_cancelled() {
+        use rattler_solve::CancellationToken;
+
+        let cancellation_token = CancellationToken::new();
+        cancellation_token.cancel();
+
+        let specs: Vec<MatchSpec> = vec!["foo".parse().unwrap()];
+
+        let task = SolverTask {
+            specs,
+            cancellation_token: Some(cancellation_token),
+            ..SolverTask::from_iter([&[] as &[RepoDataRecord]])
+        };
+
+        let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        assert!(matches!(solve_error, SolveError::Cancelled));
     }
 
     #[test]

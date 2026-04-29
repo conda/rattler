@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rattler_conda_types::{PackageName, RepoDataRecord};
+use rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisionInfo};
 
 use super::GatewayError;
 use crate::Reporter;
@@ -60,6 +60,14 @@ impl Subdir {
             Subdir::NotFound => None,
         }
     }
+
+    /// Returns repodata revisions advertised by this subdirectory.
+    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        match self {
+            Subdir::Found(subdir) => subdir.repodata_revisions(),
+            Subdir::NotFound => &[],
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -107,6 +115,10 @@ impl SubdirData {
     pub fn package_names(&self) -> Vec<String> {
         self.client.package_names()
     }
+
+    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        self.client.repodata_revisions()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -123,4 +135,9 @@ pub trait SubdirClient: Send + Sync {
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Vec<String>;
+
+    /// Returns repodata revisions advertised by the subdirectory.
+    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        &[]
+    }
 }

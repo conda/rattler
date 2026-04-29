@@ -1,3 +1,5 @@
+use crate::RepodataRevision;
+
 /// Defines how strict a parser should behave.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct ParseStrictnessWithNameMatcher {
@@ -40,6 +42,9 @@ pub struct ParseMatchSpecOptions {
 
     /// Whether to allow experimental conditionals syntax (e.g., `foo; if python >=3.6`).
     allow_experimental_conditionals: bool,
+
+    /// Whether to allow experimental flags syntax (e.g., `foo[flags=[cuda]]`).
+    allow_experimental_flags: bool,
 }
 
 impl ParseMatchSpecOptions {
@@ -50,6 +55,7 @@ impl ParseMatchSpecOptions {
             exact_names_only: true,
             allow_experimental_extras: false,
             allow_experimental_conditionals: false,
+            allow_experimental_flags: false,
         }
     }
 
@@ -85,6 +91,11 @@ impl ParseMatchSpecOptions {
         self.allow_experimental_conditionals
     }
 
+    /// Returns whether experimental flags parsing is allowed.
+    pub fn allow_experimental_flags(&self) -> bool {
+        self.allow_experimental_flags
+    }
+
     /// Sets whether to allow only exact package names.
     pub fn with_exact_names_only(mut self, enable: bool) -> Self {
         self.exact_names_only = enable;
@@ -103,6 +114,25 @@ impl ParseMatchSpecOptions {
         self
     }
 
+    /// Sets whether to allow experimental flags syntax.
+    pub fn with_experimental_flags(mut self, enable: bool) -> Self {
+        self.allow_experimental_flags = enable;
+        self
+    }
+
+    /// Sets the matchspec syntax accepted for a repodata revision.
+    ///
+    /// The parser strictness is left unchanged. This lets callers choose
+    /// whether they want strict or lenient parsing independently from the
+    /// repodata revision syntax surface.
+    pub fn with_repodata_revision(mut self, revision: RepodataRevision) -> Self {
+        let allow_v3_syntax = !matches!(revision, RepodataRevision::Legacy);
+        self.allow_experimental_extras = allow_v3_syntax;
+        self.allow_experimental_conditionals = allow_v3_syntax;
+        self.allow_experimental_flags = allow_v3_syntax;
+        self
+    }
+
     /// Sets whether to allow experimental extras syntax (mutable).
     pub fn set_experimental_extras(&mut self, enable: bool) {
         self.allow_experimental_extras = enable;
@@ -111,6 +141,11 @@ impl ParseMatchSpecOptions {
     /// Sets whether to allow experimental conditionals syntax (mutable).
     pub fn set_experimental_conditionals(&mut self, enable: bool) {
         self.allow_experimental_conditionals = enable;
+    }
+
+    /// Sets whether to allow experimental flags syntax (mutable).
+    pub fn set_experimental_flags(&mut self, enable: bool) {
+        self.allow_experimental_flags = enable;
     }
 }
 
@@ -133,6 +168,29 @@ impl From<ParseStrictnessWithNameMatcher> for ParseMatchSpecOptions {
             exact_names_only: value.exact_names_only,
             allow_experimental_extras: false,
             allow_experimental_conditionals: false,
+            allow_experimental_flags: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParseMatchSpecOptions, ParseStrictness};
+    use crate::RepodataRevision;
+
+    #[test]
+    fn with_repodata_revision_preserves_strictness() {
+        let options = ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
+        assert_eq!(options.strictness(), ParseStrictness::Strict);
+        assert!(options.allow_experimental_extras());
+        assert!(options.allow_experimental_conditionals());
+        assert!(options.allow_experimental_flags());
+
+        let options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::Legacy);
+        assert_eq!(options.strictness(), ParseStrictness::Lenient);
+        assert!(!options.allow_experimental_extras());
+        assert!(!options.allow_experimental_conditionals());
+        assert!(!options.allow_experimental_flags());
     }
 }

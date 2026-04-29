@@ -34,6 +34,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     &[],
                     std::slice::from_ref(&match_spec),
                     None,
+                    None,
                     ChannelPriority::default(),
                     None,
                     rattler_solve::SolveStrategy::Highest,

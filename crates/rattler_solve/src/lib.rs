@@ -11,6 +11,10 @@ pub mod resolvo;
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
@@ -79,6 +83,68 @@ impl fmt::Display for SolveError {
                 write!(f, "encountered duplicate records for {filename}")
             }
         }
+    }
+}
+
+/// A token that can be used to signal cancellation of an in-flight solve.
+///
+/// The token is cheap to clone and can be shared across threads. Calling
+/// [`CancellationToken::cancel`] on any clone will signal all associated
+/// solves to stop as soon as possible, in which case the solve returns
+/// [`SolveError::Cancelled`].
+///
+/// # Backend support
+///
+/// Cancellation is currently only observed by the `resolvo` backend. Other
+/// backends (such as `libsolv_c`) silently ignore the token and will run to
+/// completion.
+///
+/// # Example
+///
+/// ```
+/// use rattler_solve::CancellationToken;
+///
+/// let token = CancellationToken::new();
+/// let token_clone = token.clone();
+///
+/// // From another thread / task, request cancellation:
+/// std::thread::spawn(move || {
+///     token_clone.cancel();
+/// });
+///
+/// assert!(!token.is_cancelled() || token.is_cancelled());
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl PartialEq for CancellationToken {
+    /// Two tokens are considered equal when they share the same underlying
+    /// cancellation state (i.e. one is a clone of the other).
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.cancelled, &other.cancelled)
+    }
+}
+
+impl Eq for CancellationToken {}
+
+impl CancellationToken {
+    /// Creates a new, un-cancelled token.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Signals cancellation. All clones of this token will observe the
+    /// cancelled state.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
+    /// Returns `true` if cancellation has been requested on this token (or any
+    /// of its clones).
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
     }
 }
 
@@ -277,7 +343,7 @@ impl From<std::time::Duration> for ExcludeNewer {
 }
 
 /// Represents the channel priority option to use during solves.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum ChannelPriority {
@@ -354,6 +420,16 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Dependency overrides that replace dependencies of matching packages.
     pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
+
+    /// An optional token that can be used to cancel an in-flight solve.
+    ///
+    /// When the token's [`CancellationToken::cancel`] method is invoked from
+    /// another thread, the solver stops as soon as possible and returns
+    /// [`SolveError::Cancelled`].
+    ///
+    /// Only the `resolvo` backend observes this token. Other backends
+    /// ignore it.
+    pub cancellation_token: Option<CancellationToken>,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -372,12 +448,13 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             exclude_newer: None,
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
+            cancellation_token: None,
         }
     }
 }
 
 /// Represents the strategy to use when solving dependencies
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum SolveStrategy {

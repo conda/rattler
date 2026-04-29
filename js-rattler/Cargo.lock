@@ -298,9 +298,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.42"
+version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
+checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
  "js-sys",
@@ -606,7 +606,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file_url"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
@@ -1881,7 +1881,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.15"
+version = "0.6.21"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1912,7 +1912,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.44.0"
+version = "0.44.6"
 dependencies = [
  "ahash",
  "chrono",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "blake2",
  "digest",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.3"
+version = "0.26.9"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.3"
+version = "0.24.9"
 dependencies = [
  "astral-tokio-tar",
  "astral_async_zip",
@@ -2047,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.27.0"
+version = "0.27.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "5.0.0"
+version = "5.2.2"
 dependencies = [
  "chrono",
  "futures",
@@ -3855,9 +3855,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.2.0"
+version = "8.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b680f2a0cd479b4cff6e1233c483fdead418106eae419dc60200ae9850f6d004"
+checksum = "dcab981e19633ebcf0b001ddd37dd802996098bc1864f90b7c5d970ce76c1d59"
 dependencies = [
  "crc32fast",
  "flate2",

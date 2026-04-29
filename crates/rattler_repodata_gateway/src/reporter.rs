@@ -2,9 +2,58 @@ use std::future::Future;
 
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
+#[cfg(feature = "gateway")]
+use rattler_conda_types::Channel;
+#[cfg(feature = "sparse")]
+use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
+#[cfg(feature = "gateway")]
+use rattler_redaction::Redact;
 use url::Url;
 
 use crate::utils::BodyStreamExt;
+
+/// The newest repodata revision understood by this version of rattler.
+///
+/// Revision `3` is the current experimental top-level `v3` map implemented by
+/// rattler. Newer revisions are intentionally ignored by older clients, but we
+/// still surface their metadata for user-facing warnings.
+#[cfg(feature = "sparse")]
+pub const SUPPORTED_REPODATA_REVISION: RepodataRevision = RepodataRevision::V3;
+
+/// A structured message indicating that a channel contains repodata newer than
+/// this client understands.
+#[cfg(feature = "sparse")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedRepodataRevision {
+    /// Redacted channel base URL.
+    pub channel: String,
+
+    /// Channel subdirectory, for example `linux-64` or `noarch`.
+    pub subdir: String,
+
+    /// The newest revision supported by this client.
+    pub supported_revision: RepodataRevision,
+
+    /// Metadata for the unsupported revision advertised by the channel.
+    pub revision: RepodataRevisionInfo,
+}
+
+#[cfg(feature = "sparse")]
+impl std::fmt::Display for UnsupportedRepodataRevision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} contains repodata revision {}, but this client only supports up to {}",
+            self.channel, self.revision.revision, self.supported_revision
+        )?;
+
+        if let Some(n_packages) = self.revision.n_packages {
+            write!(f, " ({n_packages} packages may be unavailable)")?;
+        }
+
+        Ok(())
+    }
+}
 
 /// A trait that enables being notified of download progress.
 pub trait DownloadReporter: Send + Sync {
@@ -41,6 +90,35 @@ pub trait DownloadReporter: Send + Sync {
 pub trait Reporter: Send + Sync {
     /// Returns a reporter for downloading files.
     fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
+
+    /// Called when a channel advertises a repodata revision newer than this
+    /// client supports.
+    #[cfg(feature = "sparse")]
+    fn on_unsupported_repodata_revision(&self, _message: &UnsupportedRepodataRevision) {}
+}
+
+#[cfg(feature = "gateway")]
+pub(crate) fn report_unsupported_repodata_revisions<'a>(
+    reporter: Option<&dyn Reporter>,
+    channel: &Channel,
+    subdir: &str,
+    revisions: impl IntoIterator<Item = &'a RepodataRevisionInfo>,
+) {
+    let Some(reporter) = reporter else {
+        return;
+    };
+
+    let channel = channel.base_url.url().clone().redact().to_string();
+    for revision in revisions {
+        if revision.revision > SUPPORTED_REPODATA_REVISION {
+            reporter.on_unsupported_repodata_revision(&UnsupportedRepodataRevision {
+                channel: channel.clone(),
+                subdir: subdir.to_string(),
+                supported_revision: SUPPORTED_REPODATA_REVISION,
+                revision: revision.clone(),
+            });
+        }
+    }
 }
 
 #[allow(dead_code)]

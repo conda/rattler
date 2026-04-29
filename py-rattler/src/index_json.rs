@@ -7,7 +7,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
-    VersionWithSource,
+    Flag, VersionWithSource,
 };
 use rattler_package_streaming::seek::read_package_file;
 use url::Url;
@@ -180,6 +180,17 @@ impl PyIndexJson {
     #[setter]
     pub fn set_features(&mut self, features: Option<String>) {
         self.inner.features = features;
+    }
+
+    /// Plain string flags used to select package variants.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.inner.flags.iter().map(ToString::to_string).collect()
+    }
+
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.inner.flags = flags.into_iter().map(Flag::new_unchecked).collect();
     }
 
     /// Optionally, the license

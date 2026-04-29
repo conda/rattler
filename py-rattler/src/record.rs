@@ -15,7 +15,7 @@ use rattler_conda_types::{
     package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
+    Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -205,6 +205,7 @@ impl PyRecord {
                 depends: Vec::new(),
                 experimental_extra_depends: BTreeMap::new(),
                 features: None,
+                flags: Vec::new(),
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: None,
@@ -449,6 +450,21 @@ impl PyRecord {
     #[setter]
     pub fn set_features(&mut self, features: Option<String>) {
         self.as_package_record_mut().features = features;
+    }
+
+    /// Plain string flags used to select package variants.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.as_package_record()
+            .flags
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.as_package_record_mut().flags = flags.into_iter().map(Flag::new_unchecked).collect();
     }
 
     /// A deprecated md5 hash.

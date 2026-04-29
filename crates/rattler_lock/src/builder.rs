@@ -422,11 +422,12 @@ mod test {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
+        package::DistArchiveIdentifier, MatchSpec, PackageName, PackageRecord,
+        ParseMatchSpecOptions, ParseStrictness::Strict, Platform, RepodataRevision, Version,
     };
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
+    use crate::{CondaBinaryData, CondaPackageData, LockFile, PypiPrereleaseMode};
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -502,6 +503,42 @@ mod test {
             )
             .finish();
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
+    #[test]
+    fn test_empty_flags_do_not_affect_existing_lock_files() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("foobar"),
+                Version::from_str("1.0.0").unwrap(),
+                "build".into(),
+            )
+        };
+        let package = CondaPackageData::from(CondaBinaryData {
+            package_record: record,
+            location: Url::parse("https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2")
+                .unwrap()
+                .into(),
+            file_name: "foobar-1.0.0-build.tar.bz2"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            channel: None,
+        });
+
+        let lock_file = LockFile::builder()
+            .with_conda_package("default", Platform::Linux64, package.clone())
+            .finish();
+        let rendered = lock_file.render_to_string().unwrap();
+        assert!(!rendered.contains("flags:"));
+
+        let ordinary_spec = MatchSpec::from_str("foobar >=1", Strict).unwrap();
+        assert!(package.satisfies(&ordinary_spec));
+
+        let v3_options =
+            ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
+        let flag_spec = MatchSpec::from_str("foobar[flags=[cuda]]", v3_options).unwrap();
+        assert!(!package.satisfies(&flag_spec));
     }
 
     #[test]

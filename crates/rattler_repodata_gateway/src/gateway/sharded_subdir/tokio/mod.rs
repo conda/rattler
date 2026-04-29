@@ -21,7 +21,7 @@ use crate::{
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{Channel, PackageName, ShardedRepodata};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
@@ -71,7 +71,7 @@ impl ShardedSubdir {
             GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
-                    subdir,
+                    subdir: subdir.clone(),
                     source: e.into(),
                 }))
             }
@@ -268,6 +268,10 @@ impl SubdirClient for ShardedSubdir {
 
     fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
+    }
+
+    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        &self.sharded_repodata.info.repodata_revisions
     }
 }
 

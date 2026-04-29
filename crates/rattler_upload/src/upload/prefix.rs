@@ -395,7 +395,7 @@ pub async fn upload_package_to_prefix(
                     if prefix_data.skip_existing.is_enabled() {
                         progress_bar.finish();
                         info!("Skip existing package: {}", filename);
-                        return Ok(());
+                        break;
                     } else {
                         return Err(PrefixUploadError::Conflict { body });
                     }
@@ -499,6 +499,39 @@ mod test {
         let prefix_data = make_prefix_data(url, true);
         let result =
             upload_package_to_prefix(&storage, &vec![test_package_path()], prefix_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_prefix_upload_skip_existing_continues_remaining() {
+        // First package returns 409, second returns 200 — both should succeed overall
+        use axum::extract::State;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        async fn handler(
+            State(count): State<Arc<AtomicUsize>>,
+            _body: axum::body::Bytes,
+        ) -> StatusCode {
+            let n = count.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::OK
+            }
+        }
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let router = Router::new().fallback(handler).with_state(call_count);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let prefix_data = make_prefix_data(url, true);
+        let result = upload_package_to_prefix(
+            &storage,
+            &vec![test_package_path(), test_package_path()],
+            prefix_data,
+        )
+        .await;
         assert!(result.is_ok(), "{:?}", result.unwrap_err());
     }
 

@@ -20,7 +20,7 @@ use rattler_conda_types::{
         WheelArchiveType,
     },
     Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    UrlOrPath, WhlPackageRecord,
+    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -483,6 +483,15 @@ impl SparseRepoData {
     /// Returns the subdirectory from which this repodata was loaded
     pub fn subdir(&self) -> &str {
         &self.subdir
+    }
+
+    /// Returns the repodata revisions advertised by this repodata file.
+    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()
+            .map_or(&[], |info| info.repodata_revisions.as_slice())
     }
 }
 
