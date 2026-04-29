@@ -669,6 +669,268 @@ mod test {
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
     }
 
+    fn make_run_exports() -> rattler_conda_types::package::RunExportsJson {
+        rattler_conda_types::package::RunExportsJson {
+            strong: vec!["libfoo >=1.0,<2".into()],
+            weak: vec!["libbar >=2".into()],
+            ..Default::default()
+        }
+    }
+
+    fn make_binary_record() -> PackageRecord {
+        PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("foobar"),
+                Version::from_str("1.0.0").unwrap(),
+                "build".into(),
+            )
+        }
+    }
+
+    fn make_binary(record: PackageRecord) -> CondaBinaryData {
+        CondaBinaryData {
+            package_record: record,
+            location: Url::parse("https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2")
+                .unwrap()
+                .into(),
+            file_name: "foobar-1.0.0-build.tar.bz2"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            channel: None,
+        }
+    }
+
+    fn binary_run_exports(
+        lock_file: &LockFile,
+    ) -> Option<rattler_conda_types::package::RunExportsJson> {
+        lock_file
+            .inner
+            .packages
+            .iter()
+            .find_map(crate::LockedPackage::as_binary_conda)
+            .expect("a binary package")
+            .package_record
+            .run_exports
+            .clone()
+    }
+
+    fn linux_64_platform() -> PlatformData {
+        PlatformData {
+            name: PlatformName::try_from("linux-64").unwrap(),
+            subdir: rattler_conda_types::Platform::Linux64,
+            virtual_packages: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_merge_run_exports_unknown_then_known() {
+        // Left record has run_exports = None, right record carries Some(non-empty).
+        // Merge should adopt the right side's run_exports.
+        let unknown = make_binary_record();
+        let known = PackageRecord {
+            run_exports: Some(make_run_exports()),
+            ..make_binary_record()
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(unknown).into())
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(known).into())
+            .unwrap()
+            .finish();
+
+        assert_eq!(binary_run_exports(&lock_file), Some(make_run_exports()));
+    }
+
+    #[test]
+    fn test_merge_run_exports_known_empty_blocks_merge() {
+        // Left record asserts `Some(empty)` (we know there are no run_exports).
+        // A subsequent record carrying Some(non-empty) for the same identifier
+        // must NOT override that — first-writer-wins, and `Some(empty)` is a
+        // valid claim, distinct from `None`.
+        let known_empty = PackageRecord {
+            run_exports: Some(rattler_conda_types::package::RunExportsJson::default()),
+            ..make_binary_record()
+        };
+        let known_nonempty = PackageRecord {
+            run_exports: Some(make_run_exports()),
+            ..make_binary_record()
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(known_empty).into())
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(known_nonempty).into())
+            .unwrap()
+            .finish();
+
+        assert_eq!(
+            binary_run_exports(&lock_file),
+            Some(rattler_conda_types::package::RunExportsJson::default())
+        );
+    }
+
+    #[test]
+    fn test_run_exports_roundtrip_binary() {
+        // Roundtrip a binary record carrying non-empty run_exports through
+        // YAML serialization and parsing.
+        let record = PackageRecord {
+            run_exports: Some(make_run_exports()),
+            ..make_binary_record()
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(record).into())
+            .unwrap()
+            .finish();
+
+        let yaml = lock_file.render_to_string().unwrap();
+        let reparsed = LockFile::from_str_with_base_directory(&yaml, None).unwrap();
+
+        assert_eq!(binary_run_exports(&reparsed), Some(make_run_exports()));
+    }
+
+    #[test]
+    fn test_run_exports_roundtrip_binary_known_empty() {
+        // `Some(empty)` must remain `Some(empty)` after a roundtrip — distinct
+        // from `None` (= unknown). The lockfile encodes it as `run_exports: {}`.
+        let record = PackageRecord {
+            run_exports: Some(rattler_conda_types::package::RunExportsJson::default()),
+            ..make_binary_record()
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(record).into())
+            .unwrap()
+            .finish();
+
+        let yaml = lock_file.render_to_string().unwrap();
+        assert!(
+            yaml.contains("run_exports: {}"),
+            "expected explicit empty run_exports in YAML:\n{yaml}"
+        );
+
+        let reparsed = LockFile::from_str_with_base_directory(&yaml, None).unwrap();
+        assert_eq!(
+            binary_run_exports(&reparsed),
+            Some(rattler_conda_types::package::RunExportsJson::default())
+        );
+    }
+
+    #[test]
+    fn test_run_exports_roundtrip_source() {
+        use std::collections::BTreeMap;
+
+        use typed_path::Utf8TypedPathBuf;
+
+        use crate::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("my-pkg"),
+            Version::from_str("0.1.0").unwrap(),
+            "py_0".into(),
+        );
+        record.subdir = "noarch".into();
+        record.run_exports = Some(make_run_exports());
+
+        let source = CondaSourceData {
+            location: UrlOrPath::Path(Utf8TypedPathBuf::from("./my-pkg")),
+            package_build_source: None,
+            variants: BTreeMap::new(),
+            identifier_hash: None,
+            sources: BTreeMap::new(),
+            source_data: crate::SourceData::default(),
+            metadata: SourceMetadata::Full(Box::new(record)),
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package(
+                "default",
+                "linux-64",
+                CondaPackageData::Source(Box::new(source)),
+            )
+            .unwrap()
+            .finish();
+
+        let yaml = lock_file.render_to_string().unwrap();
+        let reparsed = LockFile::from_str_with_base_directory(&yaml, None).unwrap();
+
+        let parsed_source = reparsed
+            .inner
+            .packages
+            .iter()
+            .find_map(crate::LockedPackage::as_source_conda)
+            .expect("a source package");
+        let SourceMetadata::Full(record) = &parsed_source.metadata else {
+            panic!("expected Full source metadata");
+        };
+        assert_eq!(record.run_exports.as_ref(), Some(&make_run_exports()));
+    }
+
+    #[test]
+    fn test_run_exports_snapshot() {
+        // Visual snapshot of how run_exports renders in the lockfile, for both
+        // a binary record with a non-empty value and a source record with the
+        // same.
+        use std::collections::BTreeMap;
+
+        use typed_path::Utf8TypedPathBuf;
+
+        use crate::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
+
+        let binary_record = PackageRecord {
+            run_exports: Some(make_run_exports()),
+            ..make_binary_record()
+        };
+
+        let mut source_record = PackageRecord::new(
+            PackageName::new_unchecked("my-pkg"),
+            Version::from_str("0.1.0").unwrap(),
+            "py_0".into(),
+        );
+        source_record.subdir = "noarch".into();
+        source_record.run_exports = Some(rattler_conda_types::package::RunExportsJson {
+            strong: vec!["libsource >=3".into()],
+            ..Default::default()
+        });
+
+        let source = CondaSourceData {
+            location: UrlOrPath::Path(Utf8TypedPathBuf::from("./my-pkg")),
+            package_build_source: None,
+            variants: BTreeMap::new(),
+            identifier_hash: None,
+            sources: BTreeMap::new(),
+            source_data: crate::SourceData::default(),
+            metadata: SourceMetadata::Full(Box::new(source_record)),
+        };
+
+        let lock_file = LockFile::builder()
+            .with_platforms(vec![linux_64_platform()])
+            .unwrap()
+            .with_conda_package("default", "linux-64", make_binary(binary_record).into())
+            .unwrap()
+            .with_conda_package(
+                "default",
+                "linux-64",
+                CondaPackageData::Source(Box::new(source)),
+            )
+            .unwrap()
+            .finish();
+
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
     #[test]
     fn test_pypi_prerelease_mode() {
         let record = PackageRecord {

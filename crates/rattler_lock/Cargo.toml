@@ -28,6 +28,7 @@ serde-untagged = { workspace = true }
 serde_repr = { workspace = true }
 serde-value = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 typed-path = { workspace = true }
 xxhash-rust = { workspace = true, features = ["xxh3"] }
