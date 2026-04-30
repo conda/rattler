@@ -170,6 +170,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 name,
                 depends: self.depends.into_owned(),
                 constrains: self.constrains.into_owned(),
+                purls: self.purls.into_owned(),
             })
         };
 
@@ -239,7 +240,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 build_number: 0,
                 noarch: NoArchType::default(),
                 variants,
-                purls: Cow::Owned(None),
+                purls: Cow::Borrowed(&partial.purls),
                 run_exports: Cow::Owned(RunExportsJson::default()),
                 depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&partial.constrains),

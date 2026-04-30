@@ -1,8 +1,14 @@
 use rattler_conda_types::package::DistArchiveIdentifier;
-use std::{borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt::Display, hash::Hash};
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    hash::Hash,
+};
 
 use rattler_conda_types::{
-    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, PackageUrl, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
@@ -259,6 +265,9 @@ pub struct PartialSourceMetadata {
 
     /// Run-constraints on other packages.
     pub constrains: Vec<String>,
+
+    /// PURLs (Package URLs) describing this package in other ecosystems.
+    pub purls: Option<BTreeSet<PackageUrl>>,
 }
 
 /// Metadata for a source package, either partial (name-only) or full
@@ -440,6 +449,7 @@ impl CondaSourceData<SourceMetadata> {
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
         constrains: Vec<String>,
+        purls: Option<BTreeSet<PackageUrl>>,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
         Self {
@@ -453,6 +463,7 @@ impl CondaSourceData<SourceMetadata> {
                 name,
                 depends,
                 constrains,
+                purls,
             }),
         }
     }

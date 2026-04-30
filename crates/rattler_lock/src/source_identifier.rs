@@ -316,6 +316,10 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
             if !partial.constrains.is_empty() {
                 fields.insert("constrains", &partial.constrains);
             }
+
+            if let Some(purls) = partial.purls.as_ref().filter(|p| !p.is_empty()) {
+                fields.insert("purls", purls);
+            }
         }
     }
 
@@ -695,6 +699,7 @@ mod tests {
             name,
             vec![],
             vec![],
+            None,
             BTreeMap::new(),
         );
         assert!(partial.into_full().is_none());
@@ -744,6 +749,7 @@ mod tests {
             name,
             vec!["dep-a".to_string()],
             vec![],
+            None,
             BTreeMap::new(),
         );
 
