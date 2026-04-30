@@ -240,7 +240,38 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
 /// Uses our custom `ExtendedCoreProviderMetadata` type so that the
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
 /// deserialized from the discovery document in a single request.
+///
+/// RFC 8414 §2 forbids trailing slashes on issuer identifiers, but some
+/// identity providers (notably some Ory Hydra deployments) advertise an
+/// issuer with a trailing slash anyway. When that happens, the strict
+/// issuer check inside the `openidconnect` crate fails with an "unexpected
+/// issuer URI" error. To be lenient about this single, well-known
+/// misconfiguration we retry exactly once with the trailing slash toggled.
+/// All other validation failures (signature, network, unrelated mismatches)
+/// propagate unchanged so the security guarantee against issuer spoofing
+/// is preserved.
 async fn discover_endpoints(
+    http_client: &reqwest::Client,
+    issuer_url: &str,
+) -> Result<DiscoveredEndpoints, OAuthError> {
+    match try_discover_endpoints(http_client, issuer_url).await {
+        Ok(endpoints) => Ok(endpoints),
+        Err(OAuthError::Discovery(msg)) if msg.contains("unexpected issuer URI") => {
+            let alternate = toggle_trailing_slash(issuer_url);
+            tracing::debug!(
+                "OIDC discovery against `{issuer_url}` failed with an issuer-mismatch \
+                 (likely a trailing-slash misconfiguration on the provider). \
+                 Retrying once with `{alternate}`."
+            );
+            try_discover_endpoints(http_client, &alternate).await
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Single OIDC discovery attempt against the given issuer URL. Used by
+/// `discover_endpoints`, which adds a trailing-slash retry on top.
+async fn try_discover_endpoints(
     http_client: &reqwest::Client,
     issuer_url: &str,
 ) -> Result<DiscoveredEndpoints, OAuthError> {
@@ -268,6 +299,16 @@ async fn discover_endpoints(
         revocation_endpoint,
         device_authorization_endpoint,
     })
+}
+
+/// Return `url` with its trailing `/` flipped: append one if absent, strip
+/// one if present.
+fn toggle_trailing_slash(url: &str) -> String {
+    if let Some(stripped) = url.strip_suffix('/') {
+        stripped.to_string()
+    } else {
+        format!("{url}/")
+    }
 }
 
 /// Authorization code flow with PKCE.
@@ -634,5 +675,26 @@ pub async fn revoke_tokens(
         Err(e) => {
             tracing::warn!("Failed to revoke access token: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toggle_trailing_slash_appends_when_absent() {
+        assert_eq!(
+            toggle_trailing_slash("https://prefix.dev"),
+            "https://prefix.dev/"
+        );
+    }
+
+    #[test]
+    fn toggle_trailing_slash_strips_when_present() {
+        assert_eq!(
+            toggle_trailing_slash("https://prefix.dev/"),
+            "https://prefix.dev"
+        );
     }
 }
