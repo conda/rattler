@@ -185,6 +185,23 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
+/// Build an OIDC issuer URL from a user-supplied `host` argument.
+///
+/// Accepts both bare hostnames (`prefix.dev`) and full URLs
+/// (`https://prefix.dev`, `http://localhost:4444`). When no scheme is
+/// present, `https://` is prepended; when one is present, the input is
+/// passed through unchanged. This avoids the `https://https/...` shape
+/// that results from blindly concatenating `https://` onto an input that
+/// already has a scheme.
+#[cfg(feature = "oauth")]
+fn host_to_issuer_url(host: &str) -> String {
+    if host.contains("://") {
+        host.to_string()
+    } else {
+        format!("https://{host}")
+    }
+}
+
 /// Result of prefix.dev token validation
 #[derive(Debug, PartialEq)]
 pub enum ValidationResult {
@@ -208,7 +225,7 @@ async fn login(
     if args.oauth {
         let issuer_url = args
             .oauth_issuer_url
-            .unwrap_or_else(|| format!("https://{}", args.host));
+            .unwrap_or_else(|| host_to_issuer_url(&args.host));
         let client_id = args
             .oauth_client_id
             .unwrap_or_else(|| "rattler".to_string());
@@ -636,5 +653,29 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn host_to_issuer_url_prepends_https_for_bare_host() {
+        assert_eq!(host_to_issuer_url("prefix.dev"), "https://prefix.dev");
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn host_to_issuer_url_keeps_existing_https_scheme() {
+        assert_eq!(
+            host_to_issuer_url("https://prefix.dev"),
+            "https://prefix.dev"
+        );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn host_to_issuer_url_keeps_existing_http_scheme() {
+        assert_eq!(
+            host_to_issuer_url("http://localhost:4444"),
+            "http://localhost:4444"
+        );
     }
 }
