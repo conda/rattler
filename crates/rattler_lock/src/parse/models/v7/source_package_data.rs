@@ -171,6 +171,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 depends: self.depends.into_owned(),
                 constrains: self.constrains.into_owned(),
                 experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                flags: self.flags.into_owned(),
                 purls: self.purls.into_owned(),
             })
         };
@@ -248,7 +249,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 experimental_extra_depends: Cow::Borrowed(&partial.experimental_extra_depends),
                 size: Cow::Owned(None),
                 features: Cow::Owned(None),
-                flags: Cow::Borrowed(&[]),
+                flags: Cow::Borrowed(&partial.flags),
                 track_features: Cow::Borrowed(&[]),
                 license: Cow::Owned(None),
                 license_family: Cow::Owned(None),

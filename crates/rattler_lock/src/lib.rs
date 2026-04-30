@@ -1003,6 +1003,7 @@ mod test {
     #[case::v7_pypi_custom_index("v7/pypi_custom_index.yml")]
     #[case::v7_partial_source_purls("v7/partial-source-purls-lock.yml")]
     #[case::v7_partial_source_extra_depends("v7/partial-source-extra-depends-lock.yml")]
+    #[case::v7_partial_source_flags("v7/partial-source-flags-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

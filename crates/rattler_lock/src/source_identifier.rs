@@ -321,6 +321,10 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 fields.insert("extra_depends", &partial.experimental_extra_depends);
             }
 
+            if !partial.flags.is_empty() {
+                fields.insert("flags", &partial.flags);
+            }
+
             if let Some(purls) = partial.purls.as_ref().filter(|p| !p.is_empty()) {
                 fields.insert("purls", purls);
             }
@@ -704,6 +708,7 @@ mod tests {
             vec![],
             vec![],
             BTreeMap::new(),
+            vec![],
             None,
             BTreeMap::new(),
         );
@@ -755,6 +760,7 @@ mod tests {
             vec!["dep-a".to_string()],
             vec![],
             BTreeMap::new(),
+            vec![],
             None,
             BTreeMap::new(),
         );

@@ -8,7 +8,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, PackageUrl, RepoDataRecord,
+    ChannelUrl, Flag, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, PackageUrl,
+    RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
@@ -269,6 +270,9 @@ pub struct PartialSourceMetadata {
     /// Additional dependencies grouped by an extra/feature key.
     pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
 
+    /// Variant-selection flags declared by the recipe.
+    pub flags: Vec<Flag>,
+
     /// PURLs (Package URLs) describing this package in other ecosystems.
     pub purls: Option<BTreeSet<PackageUrl>>,
 }
@@ -453,6 +457,7 @@ impl CondaSourceData<SourceMetadata> {
         depends: Vec<String>,
         constrains: Vec<String>,
         experimental_extra_depends: BTreeMap<String, Vec<String>>,
+        flags: Vec<Flag>,
         purls: Option<BTreeSet<PackageUrl>>,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
@@ -468,6 +473,7 @@ impl CondaSourceData<SourceMetadata> {
                 depends,
                 constrains,
                 experimental_extra_depends,
+                flags,
                 purls,
             }),
         }
