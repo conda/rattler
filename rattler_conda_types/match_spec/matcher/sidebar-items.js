@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["StringMatcher","StringMatcherParseError"]};
+window.SIDEBAR_ITEMS = {"enum":["StringMatcher","StringMatcherParseError"],"struct":["RegexMatcher"]};
