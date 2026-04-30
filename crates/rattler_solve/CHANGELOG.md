@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0](https://github.com/conda/rattler/compare/rattler_solve-v5.2.2...rattler_solve-v6.0.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- Add `Hash` derive to `SolveStrategy` enum ([#2377](https://github.com/conda/rattler/pull/2377))
+- Add `Hash` derive to `ChannelPriority` enum ([#2373](https://github.com/conda/rattler/pull/2373))
+- *(solve)* add cancellation token for in-flight solves ([#2369](https://github.com/conda/rattler/pull/2369))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [5.2.2](https://github.com/conda/rattler/compare/rattler_solve-v5.2.1...rattler_solve-v5.2.2) - 2026-04-13
 
 ### Other

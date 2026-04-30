@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.13...rattler_redaction-v0.1.14) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.1.13](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.12...rattler_redaction-v0.1.13) - 2025-12-18
 
 ### Other

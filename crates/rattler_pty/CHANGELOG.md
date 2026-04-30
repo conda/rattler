@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10](https://github.com/conda/rattler/compare/rattler_pty-v0.2.9...rattler_pty-v0.2.10) - 2026-04-30
+
+### Fixed
+
+- simplify netbsd platform handling ([#2350](https://github.com/conda/rattler/pull/2350))
+- Allow compilation on NetBSD ([#2343](https://github.com/conda/rattler/pull/2343))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.2.9](https://github.com/conda/rattler/compare/rattler_pty-v0.2.8...rattler_pty-v0.2.9) - 2026-01-22
 
 ### Fixed

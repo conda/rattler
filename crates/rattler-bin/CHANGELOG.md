@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/conda/rattler/compare/rattler-bin-v0.1.5...rattler-bin-v0.1.6) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.1.5](https://github.com/conda/rattler/compare/rattler-bin-v0.1.4...rattler-bin-v0.1.5) - 2026-04-13
 
 ### Fixed

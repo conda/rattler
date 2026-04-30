@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.6...rattler_conda_types-v0.45.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+- add support for CEP-42 channel relations in repodata ([#2370](https://github.com/conda/rattler/pull/2370))
+
+### Fixed
+
+- skip serializing v3 packages in shards if empty ([#2388](https://github.com/conda/rattler/pull/2388))
+- make build string matching case-insensitive (CEP-29) ([#2386](https://github.com/conda/rattler/pull/2386))
+- ordering of dev and post components ([#2299](https://github.com/conda/rattler/pull/2299))
+
+### Other
+
+- revert lockfile-v7 ([#2339](https://github.com/conda/rattler/pull/2339))
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.44.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.44.5...rattler_conda_types-v0.44.6) - 2026-04-13
 
 ### Other
