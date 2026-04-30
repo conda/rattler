@@ -170,6 +170,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 name,
                 depends: self.depends.into_owned(),
                 constrains: self.constrains.into_owned(),
+                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
                 purls: self.purls.into_owned(),
             })
         };
@@ -244,7 +245,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 run_exports: Cow::Owned(RunExportsJson::default()),
                 depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&partial.constrains),
-                experimental_extra_depends: Cow::Owned(BTreeMap::new()),
+                experimental_extra_depends: Cow::Borrowed(&partial.experimental_extra_depends),
                 size: Cow::Owned(None),
                 features: Cow::Owned(None),
                 flags: Cow::Borrowed(&[]),

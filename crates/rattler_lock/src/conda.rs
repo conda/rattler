@@ -266,6 +266,9 @@ pub struct PartialSourceMetadata {
     /// Run-constraints on other packages.
     pub constrains: Vec<String>,
 
+    /// Additional dependencies grouped by an extra/feature key.
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+
     /// PURLs (Package URLs) describing this package in other ecosystems.
     pub purls: Option<BTreeSet<PackageUrl>>,
 }
@@ -449,6 +452,7 @@ impl CondaSourceData<SourceMetadata> {
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
         constrains: Vec<String>,
+        experimental_extra_depends: BTreeMap<String, Vec<String>>,
         purls: Option<BTreeSet<PackageUrl>>,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
@@ -463,6 +467,7 @@ impl CondaSourceData<SourceMetadata> {
                 name,
                 depends,
                 constrains,
+                experimental_extra_depends,
                 purls,
             }),
         }
