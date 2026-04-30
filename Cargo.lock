@@ -414,11 +414,10 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
+checksum = "b24fc9a58e46d228f83fb140b04c5645d19b455a61c300954711ebabfc11c0bd"
 dependencies = [
- "bisection",
  "futures",
  "http-content-range",
  "itertools 0.13.0",
@@ -1075,12 +1074,6 @@ dependencies = [
  "rustix 0.38.44",
  "seccompiler",
 ]
-
-[[package]]
-name = "bisection"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "021e079a1bab0ecce6cf4b4b74c0c37afa4a697136eb3b127875c84a8f04a8c3"
 
 [[package]]
 name = "bit-set"
@@ -5319,7 +5312,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "ahash",
  "chrono",
