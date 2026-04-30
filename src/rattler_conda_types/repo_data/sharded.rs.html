@@ -108,11 +108,15 @@
 <a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>conda_packages: IndexMap&lt;DistArchiveIdentifier, PackageRecord, ahash::RandomState&gt;,
 <a href=#107 id=107 data-nosnippet>107</a>
 <a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Packages stored under the `v3` top-level key.
-<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="attr">#[serde(default, rename = <span class="string">"v3"</span>)]
-<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">pub </span>experimental_v3: ExperimentalV3Packages,
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="doccomment">/// The file names of all removed for this shard
-<a href=#113 id=113 data-nosnippet>113</a>    </span><span class="attr">#[serde(default)]
-<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub </span>removed: ahash::HashSet&lt;DistArchiveIdentifier&gt;,
-<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="attr">#[serde(
+<a href=#110 id=110 data-nosnippet>110</a>        default,
+<a href=#111 id=111 data-nosnippet>111</a>        rename = <span class="string">"v3"</span>,
+<a href=#112 id=112 data-nosnippet>112</a>        skip_serializing_if = <span class="string">"ExperimentalV3Packages::is_empty"
+<a href=#113 id=113 data-nosnippet>113</a>    </span>)]
+<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub </span>experimental_v3: ExperimentalV3Packages,
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// The file names of all removed for this shard
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="attr">#[serde(default)]
+<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">pub </span>removed: ahash::HashSet&lt;DistArchiveIdentifier&gt;,
+<a href=#119 id=119 data-nosnippet>119</a>}
 </code></pre></div></section></main></body></html>
