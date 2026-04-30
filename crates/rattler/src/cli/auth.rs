@@ -185,16 +185,15 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
-/// Build an OIDC issuer URL from a user-supplied `host` argument.
+/// Ensure a user-supplied `host` is a fully-qualified URL by prepending
+/// `https://` when it has no scheme. If a scheme is already present, the
+/// input is returned unchanged.
 ///
 /// Accepts both bare hostnames (`prefix.dev`) and full URLs
-/// (`https://prefix.dev`, `http://localhost:4444`). When no scheme is
-/// present, `https://` is prepended; when one is present, the input is
-/// passed through unchanged. This avoids the `https://https/...` shape
-/// that results from blindly concatenating `https://` onto an input that
-/// already has a scheme.
-#[cfg(feature = "oauth")]
-fn host_to_issuer_url(host: &str) -> String {
+/// (`https://prefix.dev`, `http://localhost:4444`). Centralising this
+/// handling avoids the `https://https/...` shape that results from
+/// blindly concatenating `https://` onto an input that already has one.
+fn ensure_url_scheme(host: &str) -> String {
     if host.contains("://") {
         host.to_string()
     } else {
@@ -225,7 +224,7 @@ async fn login(
     if args.oauth {
         let issuer_url = args
             .oauth_issuer_url
-            .unwrap_or_else(|| host_to_issuer_url(&args.host));
+            .unwrap_or_else(|| ensure_url_scheme(&args.host));
         let client_id = args
             .oauth_client_id
             .unwrap_or_else(|| "rattler".to_string());
@@ -334,12 +333,7 @@ async fn validate_prefix_dev_token(
         // Strip wildcard if given
         let host = host.replace("*.", "");
 
-        // Convert the host URL to a full URL if it doesn't contain a scheme
-        let host_url = if host.contains("://") {
-            Url::parse(&host)?
-        } else {
-            Url::parse(&format!("https://{host}"))?
-        };
+        let host_url = Url::parse(&ensure_url_scheme(&host))?;
 
         let host_url = host_url.host_str().unwrap_or("prefix.dev");
         // Strip "repo." prefix if present
@@ -655,26 +649,23 @@ mod tests {
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
     }
 
-    #[cfg(feature = "oauth")]
     #[test]
-    fn host_to_issuer_url_prepends_https_for_bare_host() {
-        assert_eq!(host_to_issuer_url("prefix.dev"), "https://prefix.dev");
+    fn ensure_url_scheme_prepends_https_for_bare_host() {
+        assert_eq!(ensure_url_scheme("prefix.dev"), "https://prefix.dev");
     }
 
-    #[cfg(feature = "oauth")]
     #[test]
-    fn host_to_issuer_url_keeps_existing_https_scheme() {
+    fn ensure_url_scheme_keeps_existing_https_scheme() {
         assert_eq!(
-            host_to_issuer_url("https://prefix.dev"),
+            ensure_url_scheme("https://prefix.dev"),
             "https://prefix.dev"
         );
     }
 
-    #[cfg(feature = "oauth")]
     #[test]
-    fn host_to_issuer_url_keeps_existing_http_scheme() {
+    fn ensure_url_scheme_keeps_existing_http_scheme() {
         assert_eq!(
-            host_to_issuer_url("http://localhost:4444"),
+            ensure_url_scheme("http://localhost:4444"),
             "http://localhost:4444"
         );
     }
