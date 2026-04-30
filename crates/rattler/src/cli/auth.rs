@@ -186,13 +186,7 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 /// Ensure a user-supplied `host` is a fully-qualified URL by prepending
-/// `https://` when it has no scheme. If a scheme is already present, the
-/// input is returned unchanged.
-///
-/// Accepts both bare hostnames (`prefix.dev`) and full URLs
-/// (`https://prefix.dev`, `http://localhost:4444`). Centralising this
-/// handling avoids the `https://https/...` shape that results from
-/// blindly concatenating `https://` onto an input that already has one.
+/// `https://` when it has no scheme.
 fn ensure_url_scheme(host: &str) -> String {
     if host.contains("://") {
         host.to_string()
