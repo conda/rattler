@@ -59,11 +59,7 @@ struct Cli {
     package_revision_assignment: Option<CliPackageRevisionAssignment>,
 
     /// TOML file with channel metadata and index options.
-    #[arg(
-        long = "channel-options",
-        visible_alias = "index-options",
-        global = true
-    )]
+    #[arg(long = "channel-options", global = true)]
     channel_options: Option<PathBuf>,
 
     /// Whether to force the re-indexing of all packages.
