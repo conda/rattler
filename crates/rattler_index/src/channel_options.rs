@@ -1,4 +1,26 @@
 //! TOML configuration for channel indexing options.
+//!
+//! [`ChannelOptions`] is the file format consumed by
+//! `rattler-index --channel-options`. It lets users keep channel metadata and
+//! repodata revision settings in a small TOML file instead of spelling out every
+//! option on the command line.
+//!
+//! Command line flags take precedence over values from the TOML file. Omitted
+//! fields fall back to the normal `rattler-index` defaults.
+//!
+//! # Example
+//!
+//! ```toml
+//! write-zst = true
+//! write-shards = true
+//! repodata-revisions = ["v3"]
+//! package-revision-assignment = "latest"
+//! base-url = "../packages/"
+//!
+//! [channel-relations]
+//! base = "../conda-forge"
+//! overrides = "../fallback"
+//! ```
 
 use std::{fmt, path::Path, str::FromStr};
 
@@ -24,9 +46,20 @@ pub struct ChannelMetadata {
 
 /// TOML channel options consumed by the indexer.
 ///
-/// The format uses kebab-case keys, for example:
+/// The format uses kebab-case keys. Snake-case aliases are accepted for
+/// compatibility with the Rust field names, but new files should use
+/// kebab-case.
+///
+/// `base-url` and `channel-relations` are written to the `info` object in each
+/// generated `repodata.json` file and to the sharded repodata metadata when
+/// shards are enabled. `channel-relations.base` and
+/// `channel-relations.overrides` are each a single channel reference, matching
+/// CEP-42.
+///
+/// For example:
 ///
 /// ```toml
+/// write-zst = true
 /// write-shards = true
 /// repodata-revisions = ["v3"]
 /// package-revision-assignment = "latest"
