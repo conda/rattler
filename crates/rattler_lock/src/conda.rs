@@ -8,8 +8,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelUrl, Flag, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, PackageUrl,
-    RepoDataRecord,
+    package::RunExportsJson, ChannelUrl, Flag, MatchSpec, Matches, NamelessMatchSpec,
+    PackageRecord, PackageUrl, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
@@ -275,6 +275,9 @@ pub struct PartialSourceMetadata {
 
     /// PURLs (Package URLs) describing this package in other ecosystems.
     pub purls: Option<BTreeSet<PackageUrl>>,
+
+    /// Run-exports declared by the recipe.
+    pub run_exports: Option<RunExportsJson>,
 }
 
 /// Metadata for a source package, either partial (name-only) or full
@@ -282,7 +285,7 @@ pub struct PartialSourceMetadata {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SourceMetadata {
     /// Only the package name is known.
-    Partial(PartialSourceMetadata),
+    Partial(Box<PartialSourceMetadata>),
     /// The package has been fully evaluated.
     Full(Box<PackageRecord>),
 }
@@ -459,6 +462,7 @@ impl CondaSourceData<SourceMetadata> {
         experimental_extra_depends: BTreeMap<String, Vec<String>>,
         flags: Vec<Flag>,
         purls: Option<BTreeSet<PackageUrl>>,
+        run_exports: Option<RunExportsJson>,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
         Self {
@@ -468,14 +472,15 @@ impl CondaSourceData<SourceMetadata> {
             identifier_hash,
             sources,
             source_data: SourceData::default(),
-            metadata: SourceMetadata::Partial(PartialSourceMetadata {
+            metadata: SourceMetadata::Partial(Box::new(PartialSourceMetadata {
                 name,
                 depends,
                 constrains,
                 experimental_extra_depends,
                 flags,
                 purls,
-            }),
+                run_exports,
+            })),
         }
     }
 }
@@ -548,7 +553,7 @@ impl From<CondaSourceData<PartialSourceMetadata>> for CondaSourceData<SourceMeta
             identifier_hash: value.identifier_hash,
             sources: value.sources,
             source_data: value.source_data,
-            metadata: SourceMetadata::Partial(value.metadata),
+            metadata: SourceMetadata::Partial(Box::new(value.metadata)),
         }
     }
 }

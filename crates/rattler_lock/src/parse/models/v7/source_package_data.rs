@@ -166,14 +166,15 @@ impl<'a> SourcePackageDataModel<'a> {
                 python_site_packages_path: self.python_site_packages_path.into_owned(),
             }))
         } else {
-            SourceMetadata::Partial(PartialSourceMetadata {
+            SourceMetadata::Partial(Box::new(PartialSourceMetadata {
                 name,
                 depends: self.depends.into_owned(),
                 constrains: self.constrains.into_owned(),
                 experimental_extra_depends: self.experimental_extra_depends.into_owned(),
                 flags: self.flags.into_owned(),
                 purls: self.purls.into_owned(),
-            })
+                run_exports: Some(self.run_exports.into_owned()),
+            }))
         };
 
         let source_data = CondaSourceData {
@@ -243,7 +244,11 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 noarch: NoArchType::default(),
                 variants,
                 purls: Cow::Borrowed(&partial.purls),
-                run_exports: Cow::Owned(RunExportsJson::default()),
+                run_exports: partial
+                    .run_exports
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default(),
                 depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&partial.constrains),
                 experimental_extra_depends: Cow::Borrowed(&partial.experimental_extra_depends),

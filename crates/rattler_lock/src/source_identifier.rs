@@ -710,6 +710,7 @@ mod tests {
             BTreeMap::new(),
             vec![],
             None,
+            None,
             BTreeMap::new(),
         );
         assert!(partial.into_full().is_none());
@@ -761,6 +762,7 @@ mod tests {
             vec![],
             BTreeMap::new(),
             vec![],
+            None,
             None,
             BTreeMap::new(),
         );

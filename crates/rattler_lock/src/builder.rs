@@ -955,7 +955,14 @@ mod test {
         });
 
         let lock_file = LockFile::builder()
-            .with_conda_package("default", Platform::Linux64, package.clone())
+            .with_platforms(vec![PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
+            .with_conda_package("default", "linux-64", package.clone())
+            .unwrap()
             .finish();
         let rendered = lock_file.render_to_string().unwrap();
         assert!(!rendered.contains("flags:"));
