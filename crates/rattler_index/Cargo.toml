@@ -40,7 +40,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
@@ -64,11 +64,12 @@ reqwest = { workspace = true, default-features = false, features = [
   "charset",
 ] }
 rmp-serde = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }

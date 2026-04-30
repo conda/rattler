@@ -8,10 +8,11 @@ use rattler_conda_types::Platform;
 #[cfg(feature = "rattler_config")]
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
-    index_fs, IndexFsConfig, PackageRevisionAssignment, RepodataRevision, RepodataRevisionInfo,
+    index_fs_with_channel_metadata, ChannelOptions, IndexFsConfig, PackageRevisionAssignment,
+    RepodataRevision, RepodataRevisionInfo,
 };
 #[cfg(feature = "s3")]
-use rattler_index::{index_s3, IndexS3Config, PreconditionChecks};
+use rattler_index::{index_s3_with_channel_metadata, IndexS3Config, PreconditionChecks};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
@@ -42,11 +43,11 @@ struct Cli {
     verbosity: Verbosity,
 
     /// Whether to write repodata.json.zst.
-    #[arg(long, default_value = "true", global = true)]
+    #[arg(long, global = true)]
     write_zst: Option<bool>,
 
     /// Whether to write sharded repodata.
-    #[arg(long, default_value = "true", global = true)]
+    #[arg(long, global = true)]
     write_shards: Option<bool>,
 
     /// Repodata revisions to advertise, e.g. `--repodata-revision v3`.
@@ -54,8 +55,16 @@ struct Cli {
     repodata_revision: Vec<RepodataRevision>,
 
     /// How packages are assigned to repodata revisions.
-    #[arg(long, value_enum, default_value = "from-index-json", global = true)]
-    package_revision_assignment: CliPackageRevisionAssignment,
+    #[arg(long, value_enum, global = true)]
+    package_revision_assignment: Option<CliPackageRevisionAssignment>,
+
+    /// TOML file with channel metadata and index options.
+    #[arg(
+        long = "channel-options",
+        visible_alias = "index-options",
+        global = true
+    )]
+    channel_options: Option<PathBuf>,
 
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the
@@ -176,6 +185,28 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(not(feature = "rattler_config"))]
     let max_parallel = cli.max_parallel.unwrap_or(10);
 
+    let channel_options = if let Some(path) = &cli.channel_options {
+        ChannelOptions::from_path(path)?
+    } else {
+        ChannelOptions::default()
+    };
+    let write_zst = cli.write_zst.or(channel_options.write_zst).unwrap_or(true);
+    let write_shards = cli
+        .write_shards
+        .or(channel_options.write_shards)
+        .unwrap_or(true);
+    let repodata_revisions = if cli.repodata_revision.is_empty() {
+        channel_options.repodata_revisions.clone()
+    } else {
+        repodata_revisions(&cli.repodata_revision)
+    };
+    let package_revision_assignment = cli
+        .package_revision_assignment
+        .map(PackageRevisionAssignment::from)
+        .or(channel_options.package_revision_assignment)
+        .unwrap_or_default();
+    let channel_metadata = channel_options.channel_metadata();
+
     #[cfg(feature = "s3")]
     let precondition_checks = if cli.disable_precondition_checks {
         PreconditionChecks::Disabled
@@ -185,18 +216,21 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            index_fs(IndexFsConfig {
-                channel,
-                target_platform: cli.target_platform,
-                repodata_patch: cli.repodata_patch,
-                write_zst: cli.write_zst.unwrap_or(true),
-                write_shards: cli.write_shards.unwrap_or(true),
-                repodata_revisions: repodata_revisions(&cli.repodata_revision),
-                package_revision_assignment: cli.package_revision_assignment.into(),
-                force: cli.force,
-                max_parallel,
-                multi_progress: Some(multi_progress),
-            })
+            index_fs_with_channel_metadata(
+                IndexFsConfig {
+                    channel,
+                    target_platform: cli.target_platform,
+                    repodata_patch: cli.repodata_patch,
+                    write_zst,
+                    write_shards,
+                    repodata_revisions,
+                    package_revision_assignment,
+                    force: cli.force,
+                    max_parallel,
+                    multi_progress: Some(multi_progress),
+                },
+                channel_metadata,
+            )
             .await
         }
         #[cfg(feature = "s3")]
@@ -230,20 +264,23 @@ async fn main() -> anyhow::Result<()> {
                 None => rattler_s3::ResolvedS3Credentials::from_sdk().await?,
             };
 
-            index_s3(IndexS3Config {
-                channel,
-                credentials,
-                target_platform: cli.target_platform,
-                repodata_patch: cli.repodata_patch,
-                write_zst: cli.write_zst.unwrap_or(true),
-                write_shards: cli.write_shards.unwrap_or(true),
-                repodata_revisions: repodata_revisions(&cli.repodata_revision),
-                package_revision_assignment: cli.package_revision_assignment.into(),
-                force: cli.force,
-                max_parallel,
-                multi_progress: Some(multi_progress),
-                precondition_checks,
-            })
+            index_s3_with_channel_metadata(
+                IndexS3Config {
+                    channel,
+                    credentials,
+                    target_platform: cli.target_platform,
+                    repodata_patch: cli.repodata_patch,
+                    write_zst,
+                    write_shards,
+                    repodata_revisions,
+                    package_revision_assignment,
+                    force: cli.force,
+                    max_parallel,
+                    multi_progress: Some(multi_progress),
+                    precondition_checks,
+                },
+                channel_metadata,
+            )
             .await
         }
     }?;
