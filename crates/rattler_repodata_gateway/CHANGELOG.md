@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.7...rattler_repodata_gateway-v0.28.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
 ## [0.27.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.6...rattler_repodata_gateway-v0.27.7) - 2026-04-30
 
 ### Added
