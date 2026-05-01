@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.10...rattler_package_streaming-v0.25.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
 ## [0.24.10](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.9...rattler_package_streaming-v0.24.10) - 2026-04-30
 
 ### Added
