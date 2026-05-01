@@ -3,10 +3,10 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_lock/parse/models/v5/</div>pypi_package_data.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>pep440_rs::VersionSpecifiers;
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>pep508_rs::{PackageName, Requirement};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>pep508_rs::PackageName;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use crate</span>::{PackageHashes, PypiPackageData, UrlOrPath};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use crate</span>::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// This struct is similar to [`crate::parse::models::v6::PypiPackageDataModel`] but used for
 <a href=#10 id=10 data-nosnippet>10</a>/// the V5 version of the lock file format.
@@ -18,24 +18,24 @@
 <a href=#16 id=16 data-nosnippet>16</a>    </span><span class="kw">pub </span>location: UrlOrPath,
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>, flatten)]
 <a href=#18 id=18 data-nosnippet>18</a>    </span><span class="kw">pub </span>hash: Cow&lt;<span class="lifetime">'a</span>, <span class="prelude-ty">Option</span>&lt;PackageHashes&gt;&gt;,
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"&lt;[Requirement]&gt;::is_empty"</span>)]
-<a href=#20 id=20 data-nosnippet>20</a>    </span><span class="kw">pub </span>requires_dist: Cow&lt;<span class="lifetime">'a</span>, [Requirement]&gt;,
+<a href=#19 id=19 data-nosnippet>19</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"&lt;[String]&gt;::is_empty"</span>)]
+<a href=#20 id=20 data-nosnippet>20</a>    </span><span class="kw">pub </span>requires_dist: Cow&lt;<span class="lifetime">'a</span>, [String]&gt;,
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
 <a href=#22 id=22 data-nosnippet>22</a>    </span><span class="kw">pub </span>requires_python: Cow&lt;<span class="lifetime">'a</span>, <span class="prelude-ty">Option</span>&lt;VersionSpecifiers&gt;&gt;,
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="attr">#[serde(default)]
 <a href=#24 id=24 data-nosnippet>24</a>    </span><span class="kw">pub </span>editable: bool,
 <a href=#25 id=25 data-nosnippet>25</a>}
 <a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; From&lt;PypiPackageDataModel&lt;<span class="lifetime">'a</span>&gt;&gt; <span class="kw">for </span>PypiPackageData {
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; From&lt;PypiPackageDataModel&lt;<span class="lifetime">'a</span>&gt;&gt; <span class="kw">for </span>PypiPackageDataRaw {
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">fn </span>from(value: PypiPackageDataModel&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="self">Self </span>{
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="self">Self </span>{
 <a href=#30 id=30 data-nosnippet>30</a>            name: value.name.into_owned(),
-<a href=#31 id=31 data-nosnippet>31</a>            version: value.version.into_owned(),
-<a href=#32 id=32 data-nosnippet>32</a>            location: value.location,
+<a href=#31 id=31 data-nosnippet>31</a>            version: <span class="prelude-val">Some</span>(value.version.into_owned()),
+<a href=#32 id=32 data-nosnippet>32</a>            location: Verbatim::new(value.location),
 <a href=#33 id=33 data-nosnippet>33</a>            hash: value.hash.into_owned(),
-<a href=#34 id=34 data-nosnippet>34</a>            requires_dist: value.requires_dist.into_owned(),
-<a href=#35 id=35 data-nosnippet>35</a>            requires_python: value.requires_python.into_owned(),
-<a href=#36 id=36 data-nosnippet>36</a>            editable: value.editable,
+<a href=#34 id=34 data-nosnippet>34</a>            index_url: <span class="prelude-val">None</span>,
+<a href=#35 id=35 data-nosnippet>35</a>            requires_dist: value.requires_dist.into_owned(),
+<a href=#36 id=36 data-nosnippet>36</a>            requires_python: value.requires_python.into_owned(),
 <a href=#37 id=37 data-nosnippet>37</a>        }
 <a href=#38 id=38 data-nosnippet>38</a>    }
 <a href=#39 id=39 data-nosnippet>39</a>}
