@@ -616,6 +616,15 @@ impl From<Cuda> for VirtualPackage {
 /// across all detected CUDA devices on the system. The compute capability determines
 /// which instruction sets and features are available on a GPU.
 ///
+/// ## CEP Specification
+///
+/// According to the official CEP specification:
+///
+/// * The version is formatted as `{major}.{minor}` (e.g., 8.6, 9.0)
+/// * Represents the **minimum** compute capability across all detected devices
+/// * Subarchitecture letters (e.g., 'a', 'f') are excluded
+/// * The build string is always `"0"` (fixed value per CEP standard)
+///
 /// ## Rationale
 ///
 /// CUDA compute capability is critical for package compatibility because:
@@ -625,6 +634,12 @@ impl From<Cuda> for VirtualPackage {
 ///   capability or higher
 /// * The minimum capability ensures packages work on all GPUs in a multi-GPU system
 ///
+/// ## Why Device Names Are Excluded
+///
+/// The CEP explicitly rejects including device product names in the build string
+/// because doing so would encourage problematic dependency constraints based on
+/// specific GPU models rather than compute capability.
+///
 /// ## Use Cases
 ///
 /// The `__cuda_arch` virtual package enables:
@@ -632,11 +647,6 @@ impl From<Cuda> for VirtualPackage {
 /// * **Hardware-specific constraints**: Packages can specify minimum compute capability requirements
 /// * **Multi-variant builds**: Build different optimized variants for different architectures
 /// * **Forward compatibility**: Properly configured packages can run on newer GPUs
-///
-/// ## Build String
-///
-/// The build string contains the device name (e.g., "NVIDIA `GeForce` RTX 3090") to help
-/// users identify which GPU determined the minimum compute capability.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct CudaArch {
     /// The compute capability version (e.g., 8.6 for RTX 3090).
@@ -644,12 +654,6 @@ pub struct CudaArch {
     /// This is formatted as `{major}.{minor}` and represents the minimum
     /// compute capability across all detected CUDA devices.
     pub version: Version,
-
-    /// The name of the device that has the minimum compute capability.
-    ///
-    /// This is used as the build string to help identify which GPU
-    /// determined the virtual package version.
-    pub device_name: String,
 }
 
 impl CudaArch {
@@ -664,58 +668,30 @@ impl CudaArch {
         cuda::cuda_arch().map(|arch_info| Self {
             version: Version::from_str(&format!("{}.{}", arch_info.major, arch_info.minor))
                 .unwrap_or_else(|_| Version::major(u64::from(arch_info.major))),
-            device_name: arch_info.device_name,
         })
     }
 }
 
 impl EnvOverride for CudaArch {
     fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        // Parse format: "version" or "version=build"
-        // e.g., "8.6" or "8.6=NVIDIA GeForce RTX 3090"
-        let (version_str, device_name_input) = env_var_value
-            .split_once('=')
-            .map_or((env_var_value, None), |(v, b)| (v, Some(b)));
+        // Parse format: "major.minor" (e.g., "8.6")
+        // Per CEP specification, only the version is needed
 
         // Validate version format: must be "major.minor" where both are digits
-        if !cuda::is_valid_cuda_version_format(version_str) {
+        if !cuda::is_valid_cuda_version_format(env_var_value) {
             tracing::warn!(
                 "Invalid CUDA compute capability format '{}'. Expected format: 'major.minor' (e.g., '8.6'). \
-                 The default capability of '0.0=None' will be used instead.",
-                version_str
+                 The default capability of '0.0' will be used instead.",
+                env_var_value
             );
             return Ok(Self {
                 version: Version::from_str("0.0")?,
-                device_name: "None".to_string(),
             });
         }
 
-        let version = Version::from_str(version_str)?;
+        let version = Version::from_str(env_var_value)?;
 
-        // Validate and sanitize device name if provided
-        let device_name = if let Some(name) = device_name_input {
-            let sanitized = cuda::sanitize_device_name(name);
-            if sanitized.is_empty() || sanitized != name {
-                tracing::warn!(
-                    "Invalid device name '{}' contains characters not allowed in build strings. \
-                     Sanitized to '{}'.",
-                    name,
-                    sanitized
-                );
-            }
-            if sanitized.is_empty() {
-                "override".to_string()
-            } else {
-                sanitized
-            }
-        } else {
-            "override".to_string()
-        };
-
-        Ok(Self {
-            version,
-            device_name,
-        })
+        Ok(Self { version })
     }
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -730,9 +706,8 @@ impl From<CudaArch> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__cuda_arch"),
             version: cuda_arch.version,
-            // Use the device name as the build string to help identify which GPU
-            // determined the minimum compute capability
-            build_string: cuda_arch.device_name,
+            // Build string is always "0" per CEP specification
+            build_string: "0".into(),
         }
     }
 }
@@ -1189,47 +1164,33 @@ mod test {
 
     #[test]
     fn test_parse_cuda_arch() {
-        // Test parsing version only
+        // Test parsing valid version format
         let cuda_arch = CudaArch::parse_version("8.6").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
-        assert_eq!(cuda_arch.device_name, "override");
 
-        // Test parsing version with build string (sanitized)
-        let cuda_arch = CudaArch::parse_version("8.6=NVIDIA GeForce RTX 3090").unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
-        assert_eq!(cuda_arch.device_name, "GeForceRTX3090");
-
-        // Test with device name that needs sanitization (hyphen filtered out)
-        let cuda_arch = CudaArch::parse_version("7.5=Tesla V100-SXM2").unwrap();
+        let cuda_arch = CudaArch::parse_version("7.5").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
-        assert_eq!(cuda_arch.device_name, "TeslaV100SXM2");
 
-        // Test invalid version format (falls back to 0.0=None)
+        let cuda_arch = CudaArch::parse_version("9.0").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("9.0").unwrap());
+
+        // Test invalid version format (falls back to 0.0)
         let cuda_arch = CudaArch::parse_version("invalid").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
-        assert_eq!(cuda_arch.device_name, "None");
 
         let cuda_arch = CudaArch::parse_version("8").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
-        assert_eq!(cuda_arch.device_name, "None");
 
         let cuda_arch = CudaArch::parse_version("8.6.1").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
-        assert_eq!(cuda_arch.device_name, "None");
-
-        // Test device name with all invalid chars (falls back to "override")
-        let cuda_arch = CudaArch::parse_version("8.6=!!!").unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
-        assert_eq!(cuda_arch.device_name, "override");
 
         // Test override via environment variable
         let env_var_name = format!("{}_{}", CudaArch::DEFAULT_ENV_NAME, "test123");
-        env::set_var(&env_var_name, "7.5=Tesla V100");
+        env::set_var(&env_var_name, "7.5");
         let result = CudaArch::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap();
         assert!(result.is_some());
         let cuda_arch = result.unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
-        assert_eq!(cuda_arch.device_name, "TeslaV100");
         env::remove_var(&env_var_name);
     }
 }

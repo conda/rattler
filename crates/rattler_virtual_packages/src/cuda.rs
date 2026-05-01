@@ -20,73 +20,10 @@ use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
 use std::process::Command;
 use std::{
-    ffi::CStr,
     mem::MaybeUninit,
     os::raw::{c_int, c_uint, c_ulong},
     str::FromStr,
 };
-
-/// Maximum length for device names in build strings to comply with CEP-26.
-const MAX_BUILD_STRING_LEN: usize = 64;
-
-/// Checks if a character is valid in a conda build string according to CEP-26.
-///
-/// Valid characters are: alphanumeric only (a-z, A-Z, 0-9).
-fn is_valid_build_string_char(c: char) -> bool {
-    c.is_ascii_alphanumeric()
-}
-
-/// Sanitizes a device name to comply with CEP-26 build string requirements.
-///
-/// This function:
-/// 1. Filters out any characters not allowed in build strings (keeps only alphanumeric)
-/// 2. Removes "NVIDIA" anywhere in the string (case-insensitive) to save space
-/// 3. Truncates to maximum 64 characters
-///
-/// Returns the sanitized device name.
-pub(crate) fn sanitize_device_name(name: &str) -> String {
-    // First, filter to keep only alphanumeric characters
-    let alphanumeric_only: String = name
-        .chars()
-        .filter(|c| is_valid_build_string_char(*c))
-        .collect();
-
-    // Remove "NVIDIA" anywhere in the string (case-insensitive)
-    let without_nvidia = remove_nvidia_ci(&alphanumeric_only);
-
-    // Truncate to maximum length
-    without_nvidia.chars().take(MAX_BUILD_STRING_LEN).collect()
-}
-
-/// Removes all case-insensitive occurrences of "NVIDIA" from a string.
-fn remove_nvidia_ci(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        // Check if we're at the start of "NVIDIA" (case-insensitive)
-        if ch.eq_ignore_ascii_case(&'N') {
-            // Peek ahead to see if "VIDIA" follows
-            let upcoming: Vec<char> = chars.clone().take(5).collect();
-            if upcoming.len() == 5
-                && upcoming[0].eq_ignore_ascii_case(&'V')
-                && upcoming[1].eq_ignore_ascii_case(&'I')
-                && upcoming[2].eq_ignore_ascii_case(&'D')
-                && upcoming[3].eq_ignore_ascii_case(&'I')
-                && upcoming[4].eq_ignore_ascii_case(&'A')
-            {
-                // Skip the next 5 characters ("VIDIA")
-                for _ in 0..5 {
-                    chars.next();
-                }
-                continue;
-            }
-        }
-        result.push(ch);
-    }
-
-    result
-}
 
 /// Validates that a string is in the format "major.minor" where both parts are digits.
 ///
@@ -104,19 +41,20 @@ pub(crate) fn is_valid_cuda_version_format(s: &str) -> bool {
     }
 }
 
-/// Information about CUDA compute capability for a specific device.
+/// Information about CUDA compute capability.
 ///
 /// The compute capability (also called SM version) defines the set of features and
 /// instructions supported by a CUDA device. Higher compute capabilities generally
 /// support more features and newer instruction sets.
+///
+/// According to the CEP specification, this represents the minimum compute capability
+/// across all detected CUDA devices, formatted as `{major}.{minor}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CudaArchInfo {
     /// Major version of the compute capability (e.g., 8 for compute capability 8.6)
     pub major: u32,
     /// Minor version of the compute capability (e.g., 6 for compute capability 8.6)
     pub minor: u32,
-    /// Human-readable name of the device (e.g., "NVIDIA `GeForce` RTX 3090")
-    pub device_name: String,
 }
 
 /// Combined CUDA information detected from the system.
@@ -294,9 +232,6 @@ fn detect_cuda_arch_from_library(cuda_library: &Library) -> Option<CudaArchInfo>
     const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
     const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
 
-    // Maximum device name length in CUDA
-    const MAX_DEVICE_NAME_LEN: usize = 256;
-
     // Get required function pointers from the library
     let cu_device_get_count: Symbol<'_, unsafe extern "C" fn(*mut c_int) -> c_ulong> =
         unsafe { cuda_library.get(b"cuDeviceGetCount\0") }.ok()?;
@@ -308,9 +243,6 @@ fn detect_cuda_arch_from_library(cuda_library: &Library) -> Option<CudaArchInfo>
         '_,
         unsafe extern "C" fn(*mut c_int, c_int, c_int) -> c_ulong,
     > = unsafe { cuda_library.get(b"cuDeviceGetAttribute\0") }.ok()?;
-
-    let cu_device_get_name: Symbol<'_, unsafe extern "C" fn(*mut u8, c_int, c_int) -> c_ulong> =
-        unsafe { cuda_library.get(b"cuDeviceGetName\0") }.ok()?;
 
     // Get the number of CUDA devices
     let mut device_count = MaybeUninit::uninit();
@@ -369,27 +301,10 @@ fn detect_cuda_arch_from_library(cuda_library: &Library) -> Option<CudaArchInfo>
         });
 
         if is_new_minimum {
-            // Get device name
-            let mut name_buffer = [0u8; MAX_DEVICE_NAME_LEN];
-            if unsafe {
-                cu_device_get_name(
-                    name_buffer.as_mut_ptr(),
-                    MAX_DEVICE_NAME_LEN as c_int,
-                    device,
-                )
-            } == 0
-            {
-                // Convert C string to Rust string and sanitize
-                if let Ok(cstr) = CStr::from_bytes_until_nul(&name_buffer) {
-                    if let Ok(device_name) = cstr.to_str() {
-                        min_arch = Some(CudaArchInfo {
-                            major: cc_major,
-                            minor: cc_minor,
-                            device_name: sanitize_device_name(device_name),
-                        });
-                    }
-                }
-            }
+            min_arch = Some(CudaArchInfo {
+                major: cc_major,
+                minor: cc_minor,
+            });
         }
     }
 
@@ -645,10 +560,7 @@ mod test {
         let info = cuda_info();
         println!("CUDA Info: {info:?}");
         if let Some(ref arch) = info.arch_info {
-            println!(
-                "  Device: {} (compute {}.{})",
-                arch.device_name, arch.major, arch.minor
-            );
+            println!("  Compute capability: {}.{}", arch.major, arch.minor);
         }
     }
 
@@ -683,112 +595,5 @@ mod test {
         assert!(!is_valid_cuda_version_format("eight.six"));
         assert!(!is_valid_cuda_version_format("8-6"));
         assert!(!is_valid_cuda_version_format("8_6"));
-    }
-
-    #[test]
-    fn test_is_valid_build_string_char() {
-        // Valid characters - alphanumeric only
-        assert!(is_valid_build_string_char('a'));
-        assert!(is_valid_build_string_char('Z'));
-        assert!(is_valid_build_string_char('0'));
-        assert!(is_valid_build_string_char('9'));
-
-        // Invalid characters - everything else
-        assert!(!is_valid_build_string_char(' '));
-        assert!(!is_valid_build_string_char('-'));
-        assert!(!is_valid_build_string_char('/'));
-        assert!(!is_valid_build_string_char('!'));
-        assert!(!is_valid_build_string_char('@'));
-        assert!(!is_valid_build_string_char('#'));
-        assert!(!is_valid_build_string_char('_'));
-        assert!(!is_valid_build_string_char('.'));
-        assert!(!is_valid_build_string_char('+'));
-    }
-
-    #[test]
-    fn test_remove_nvidia_ci() {
-        // Remove NVIDIA at the start
-        assert_eq!(remove_nvidia_ci("NVIDIAGeForce"), "GeForce");
-        assert_eq!(remove_nvidia_ci("nvidiaRTX"), "RTX");
-
-        // Remove NVIDIA in the middle
-        assert_eq!(remove_nvidia_ci("GeForceNVIDIARTX"), "GeForceRTX");
-        assert_eq!(remove_nvidia_ci("TestNVIDIAGPU"), "TestGPU");
-
-        // Remove NVIDIA at the end
-        assert_eq!(remove_nvidia_ci("TeslaNVIDIA"), "Tesla");
-        assert_eq!(remove_nvidia_ci("GPUnvidia"), "GPU");
-
-        // Multiple occurrences
-        assert_eq!(remove_nvidia_ci("NVIDIATestNVIDIA"), "Test");
-        assert_eq!(remove_nvidia_ci("nvidianvidianvidia"), "");
-
-        // Case variations
-        assert_eq!(remove_nvidia_ci("NvIdIaTest"), "Test");
-        assert_eq!(remove_nvidia_ci("TestNVidia"), "Test");
-
-        // No NVIDIA
-        assert_eq!(remove_nvidia_ci("AMDRadeon"), "AMDRadeon");
-        assert_eq!(remove_nvidia_ci("Intel"), "Intel");
-
-        // Edge cases
-        assert_eq!(remove_nvidia_ci(""), "");
-        assert_eq!(remove_nvidia_ci("NVIDIA"), "");
-        assert_eq!(remove_nvidia_ci("nvidia"), "");
-
-        // Partial matches should not be removed
-        assert_eq!(remove_nvidia_ci("NVID"), "NVID");
-        assert_eq!(remove_nvidia_ci("NVIDI"), "NVIDI");
-        assert_eq!(remove_nvidia_ci("VIDIA"), "VIDIA");
-    }
-
-    #[test]
-    fn test_sanitize_device_name() {
-        // Valid name with NVIDIA prefix - alphanumeric only, NVIDIA removed
-        assert_eq!(
-            sanitize_device_name("NVIDIA GeForce RTX 3090"),
-            "GeForceRTX3090"
-        );
-
-        // Different NVIDIA case variations
-        assert_eq!(sanitize_device_name("nvidia GeForce"), "GeForce");
-        assert_eq!(sanitize_device_name("Nvidia Tesla"), "Tesla");
-        assert_eq!(sanitize_device_name("NVIDIA RTX"), "RTX");
-
-        // NVIDIA appearing in the middle or end (not just prefix)
-        assert_eq!(sanitize_device_name("GeForce NVIDIA RTX"), "GeForceRTX");
-        assert_eq!(sanitize_device_name("Tesla NVIDIA"), "Tesla");
-        assert_eq!(sanitize_device_name("nVidia Test nvidia GPU"), "TestGPU");
-
-        // No NVIDIA prefix
-        assert_eq!(
-            sanitize_device_name("AMD Radeon RX 6800"),
-            "AMDRadeonRX6800"
-        );
-        assert_eq!(sanitize_device_name("Tesla V100"), "TeslaV100");
-
-        // Special characters and spaces - only alphanumeric allowed
-        assert_eq!(
-            sanitize_device_name("Device-Name_Test.1+2"),
-            "DeviceNameTest12"
-        );
-        assert_eq!(sanitize_device_name("Test @ Device #1!"), "TestDevice1");
-
-        // Length truncation (64 char limit)
-        let long_name = "A".repeat(100);
-        assert_eq!(sanitize_device_name(&long_name).len(), 64);
-
-        let long_with_nvidia = format!("NVIDIA {}", "A".repeat(100));
-        assert_eq!(sanitize_device_name(&long_with_nvidia).len(), 64);
-
-        // Edge cases
-        assert_eq!(sanitize_device_name(""), "");
-        assert_eq!(sanitize_device_name("NVIDIA"), "");
-        assert_eq!(sanitize_device_name("nvidia "), "");
-        assert_eq!(sanitize_device_name("   "), "");
-        assert_eq!(sanitize_device_name("!@#$%"), "");
-
-        // Only alphanumeric chars allowed now
-        assert_eq!(sanitize_device_name("ABC_123.test+v2"), "ABC123testv2");
     }
 }
