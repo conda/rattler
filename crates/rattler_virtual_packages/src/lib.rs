@@ -612,47 +612,25 @@ impl From<Cuda> for VirtualPackage {
 
 /// CUDA compute capability virtual package description.
 ///
-/// This virtual package represents the minimum CUDA compute capability (SM version)
-/// across all detected CUDA devices on the system. The compute capability determines
-/// which instruction sets and features are available on a GPU.
+/// Represents the minimum CUDA compute capability (SM version) across all detected
+/// devices. The compute capability determines which instruction sets and features
+/// are available on a GPU.
 ///
-/// ## CEP Specification
+/// ## Format
 ///
-/// According to the official CEP specification:
+/// * Version: `{major}.{minor}` (e.g., 8.6, 9.0) - minimum across all devices
+/// * Build string: always `"0"` per CEP specification
+/// * Subarchitecture letters excluded (e.g., 'a', 'f')
 ///
-/// * The version is formatted as `{major}.{minor}` (e.g., 8.6, 9.0)
-/// * Represents the **minimum** compute capability across all detected devices
-/// * Subarchitecture letters (e.g., 'a', 'f') are excluded
-/// * The build string is always `"0"` (fixed value per CEP standard)
-///
-/// ## Rationale
-///
-/// CUDA compute capability is critical for package compatibility because:
-///
-/// * Different GPU models support different compute capabilities (e.g., 5.0, 7.0, 8.0, 9.0)
-/// * Packages compiled for a specific compute capability only run on GPUs with that
-///   capability or higher
-/// * The minimum capability ensures packages work on all GPUs in a multi-GPU system
-///
-/// ## Why Device Names Are Excluded
-///
-/// The CEP explicitly rejects including device product names in the build string
-/// because doing so would encourage problematic dependency constraints based on
-/// specific GPU models rather than compute capability.
-///
-/// ## Use Cases
-///
-/// The `__cuda_arch` virtual package enables:
-///
-/// * **Hardware-specific constraints**: Packages can specify minimum compute capability requirements
-/// * **Multi-variant builds**: Build different optimized variants for different architectures
-/// * **Forward compatibility**: Properly configured packages can run on newer GPUs
+/// Packages compiled for a specific compute capability require that capability or
+/// higher to run. Using the minimum ensures compatibility with all GPUs in multi-GPU
+/// systems.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct CudaArch {
-    /// The compute capability version (e.g., 8.6 for RTX 3090).
+    /// The compute capability version (e.g., 8.6).
     ///
-    /// This is formatted as `{major}.{minor}` and represents the minimum
-    /// compute capability across all detected CUDA devices.
+    /// Formatted as `{major}.{minor}`, represents the minimum compute capability
+    /// across all detected CUDA devices.
     pub version: Version,
 }
 
