@@ -1126,11 +1126,11 @@ fn solve<T: SolverImpl + Default>(
         .collect();
 
     let task = SolverTask {
-        locked_packages: task.installed_packages,
+        locked_packages: task.installed_packages.iter().collect(),
         virtual_packages: task.virtual_packages,
         specs,
         constraints,
-        pinned_packages: task.pinned_packages,
+        pinned_packages: task.pinned_packages.iter().collect(),
         exclude_newer: task.exclude_newer.clone(),
         strategy: task.strategy,
         ..SolverTask::from_iter(&repo_data)
