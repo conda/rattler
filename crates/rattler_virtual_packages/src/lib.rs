@@ -618,7 +618,7 @@ impl From<Cuda> for VirtualPackage {
 ///
 /// ## Format
 ///
-/// * Version: `{major}.{minor}` (e.g., 8.6, 9.0) - minimum across all devices
+/// * Version: `{major}.{minor}` (e.g., 8.6, 9.0), representing minimum across all devices
 /// * Build string: always `"0"` per CEP specification
 /// * Subarchitecture letters excluded (e.g., 'a', 'f')
 ///

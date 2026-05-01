@@ -7,8 +7,8 @@
 //! The CUDA driver version represents the maximum CUDA version supported by the installed
 //! NVIDIA drivers. This is detected via:
 //!
-//! * CUDA driver library (libcuda) - Standard method
-//! * nvidia-smi command - Fallback on musl systems where dynamic library loading is not supported
+//! * CUDA driver library (libcuda): Standard method
+//! * nvidia-smi command: Fallback on musl systems where dynamic library loading is not supported
 //!
 //! ## CUDA Compute Capability (`__cuda_arch`)
 //!
