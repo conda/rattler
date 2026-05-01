@@ -3130,6 +3130,8 @@
     <div class="doc doc-contents ">
 
         <p>Returns the metadata of the package as recorded in the lock-file.</p>
+<p>For binary packages, this always returns a value. For source packages,
+the record may not be present if the metadata hasn't been evaluated yet.</p>
 
     </div>
 
@@ -3154,14 +3156,16 @@
     <div class="doc doc-contents ">
 
         <p>Returns the version of the package as recorded in the lock-file.</p>
+<p>For source packages without evaluated metadata, this may return None.</p>
 <h4 id="rattler.lock.CondaLockedPackage.version--examples">Examples<a class="headerlink" href="#rattler.lock.CondaLockedPackage.version--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">Platform</span><span class="p">,</span> <span class="n">LockFile</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_package</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_package</span><span class="o">.</span><span class="n">version</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">Version</span><span class="p">(</span><span class="s2">&quot;2024a&quot;</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">platforms</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">platforms</span><span class="p">()</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_package</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="n">platforms</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_package</span><span class="o">.</span><span class="n">version</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">Version</span><span class="p">(</span><span class="s2">&quot;2024a&quot;</span><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
     </div>
@@ -3186,13 +3190,14 @@
 
         <p>Returns true if this package satisfies the given <code>spec</code>.</p>
 <h4 id="rattler.lock.CondaLockedPackage.satisfies--examples">Examples<a class="headerlink" href="#rattler.lock.CondaLockedPackage.satisfies--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">))</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">packages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">satisfies</span><span class="p">(</span><span class="s2">&quot;tzdata &gt;=2024a&quot;</span><span class="p">)</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="kc">True</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="o">&gt;&gt;&gt;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">platforms</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">platforms</span><span class="p">()</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">packages</span><span class="p">(</span><span class="n">platforms</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">packages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">satisfies</span><span class="p">(</span><span class="s2">&quot;tzdata &gt;=2024a&quot;</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kc">True</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
 </span></code></pre></div>
 
 

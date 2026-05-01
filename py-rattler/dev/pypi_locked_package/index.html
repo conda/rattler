@@ -927,28 +927,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.lock.PypiLockedPackage.extras" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        extras
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.PypiLockedPackage.is_editable" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_editable
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#rattler.lock.PypiLockedPackage.requires_dist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3053,28 +3031,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.lock.PypiLockedPackage.extras" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        extras
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rattler.lock.PypiLockedPackage.is_editable" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_editable
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#rattler.lock.PypiLockedPackage.requires_dist" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3181,75 +3137,6 @@
 
 
 
-<h2 id="rattler.lock.PypiLockedPackage.extras" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">extras</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.lock.PypiLockedPackage.extras" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">extras</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>The extras enabled for the package.
-Note that the order doesn't matter.</p>
-<h4 id="rattler.lock.PypiLockedPackage.extras--examples">Examples<a class="headerlink" href="#rattler.lock.PypiLockedPackage.extras--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">pypi_packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">pypi_packages</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env_data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env_data</span><span class="o">.</span><span class="n">extras</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nb">set</span><span class="p">()</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h2 id="rattler.lock.PypiLockedPackage.is_editable" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_editable</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rattler.lock.PypiLockedPackage.is_editable" class="headerlink" title="Permanent link">#</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_editable</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Whether the package should be installed in editable mode or not.</p>
-<h4 id="rattler.lock.PypiLockedPackage.is_editable--examples">Examples<a class="headerlink" href="#rattler.lock.PypiLockedPackage.is_editable--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">pypi_packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">pypi_packages</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span><span class="o">.</span><span class="n">is_editable</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kc">False</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
-</span></code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
 <h2 id="rattler.lock.PypiLockedPackage.requires_dist" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">requires_dist</span>
 
@@ -3266,11 +3153,11 @@ Note that the order doesn't matter.</p>
 
         <p>A list of dependencies on other packages.</p>
 <h4 id="rattler.lock.PypiLockedPackage.requires_dist--examples">Examples<a class="headerlink" href="#rattler.lock.PypiLockedPackage.requires_dist--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">pypi_packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">pypi_packages</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span><span class="o">.</span><span class="n">requires_dist</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">[]</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
@@ -3300,11 +3187,11 @@ Note that the order doesn't matter.</p>
 
         <p>The python version that this package requires.</p>
 <h4 id="rattler.lock.PypiLockedPackage.requires_python--examples">Examples<a class="headerlink" href="#rattler.lock.PypiLockedPackage.requires_python--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">pypi_packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">pypi_packages</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span><span class="o">.</span><span class="n">requires_python</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="s1">&#39;&gt;=3.7.0&#39;</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
@@ -3356,11 +3243,11 @@ Note that the order doesn't matter.</p>
 
         <p>Returns true if this package satisfies the given <code>spec</code>.</p>
 <h4 id="rattler.lock.PypiLockedPackage.satisfies--examples">Examples<a class="headerlink" href="#rattler.lock.PypiLockedPackage.satisfies--examples" title="Permanent link">#</a></h4>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span><span class="p">,</span> <span class="n">Platform</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">rattler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LockFile</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">lock_file</span> <span class="o">=</span> <span class="n">LockFile</span><span class="o">.</span><span class="n">from_path</span><span class="p">(</span><span class="s2">&quot;../test-data/test.lock&quot;</span><span class="p">)</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">env</span> <span class="o">=</span> <span class="n">lock_file</span><span class="o">.</span><span class="n">default_environment</span><span class="p">()</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">pypi_packages</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">pypi_packages</span><span class="p">()</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="n">Platform</span><span class="p">(</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">pypi_packages</span><span class="p">[</span><span class="s2">&quot;osx-arm64&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span><span class="o">.</span><span class="n">satisfies</span><span class="p">(</span><span class="s2">&quot;charset-normalizer&quot;</span><span class="p">)</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kc">True</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="o">&gt;&gt;&gt;</span>
