@@ -97,8 +97,7 @@ pub async fn fetch_file_from_remote_sparse(
         .find(|(_, e)| {
             e.filename()
                 .as_str()
-                .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
-                .unwrap_or(false)
+                .is_ok_and(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
         })
         .ok_or(ExtractError::MissingComponent)?;
 

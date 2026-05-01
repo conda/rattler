@@ -1331,10 +1331,8 @@ mod test {
             writable_dirs.push(tempdir().unwrap());
         }
 
-        let all_layers_paths: Vec<TempDir> = readonly_dirs
-            .into_iter()
-            .chain(writable_dirs.into_iter())
-            .collect();
+        let all_layers_paths: Vec<TempDir> =
+            readonly_dirs.into_iter().chain(writable_dirs).collect();
 
         let cache = PackageCache::new_layered(
             all_layers_paths.iter().map(|dir| dir.path().to_path_buf()),
