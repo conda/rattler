@@ -3,7 +3,10 @@ use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 use super::{ShardedRepodata, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
 use crate::{
     fetch::CacheAction,
-    gateway::{error::SubdirNotFoundError, sharded_subdir::decode_zst_bytes_async},
+    gateway::{
+        error::SubdirNotFoundError,
+        sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
+    },
     reporter::{DownloadReporter, ResponseReporterExt},
     utils::url_to_cache_filename,
     GatewayError, Reporter,
@@ -12,7 +15,7 @@ use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
 use futures::{future::OptionFuture, TryFutureExt};
-use http::{HeaderMap, Method, StatusCode, Uri};
+use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use rattler_conda_types::Channel;
 use rattler_networking::LazyClient;
@@ -25,13 +28,6 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
 };
 use url::Url;
-
-/// Returns `true` if the HTTP status indicates that the server does not expose
-/// sharded repodata. We treat 404 (Not Found) and 501 (Not Implemented) the
-/// same: the resource is unavailable and we should fall back to repodata.json.
-fn is_missing_sharded_repodata_status(status: StatusCode) -> bool {
-    status == StatusCode::NOT_FOUND || status == StatusCode::NOT_IMPLEMENTED
-}
 
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
@@ -170,9 +166,12 @@ pub async fn fetch_index(
     // Try reading the cached file
     if cache_action != CacheAction::NoCache {
         if let Ok(cache_header) = read_cached_index(&mut cache_reader).await {
-            // Check if the cache indicates the resource was not found (404)
+            // Check if the cache indicates the resource was unavailable
+            // (404 or 501)
             if cache_header.not_found {
-                tracing::debug!("cached 404 for sharded index at {channel_base_url}");
+                tracing::debug!(
+                    "cached not-available response for sharded index at {channel_base_url}"
+                );
                 return Err(create_subdir_not_found_error(channel_base_url));
             }
 
@@ -450,7 +449,7 @@ pub async fn write_shard_index_cache(
     .await
 }
 
-/// Writes a 404 (not found) marker to the cache file.
+/// Writes a not-available marker (404 or 501) to the cache file.
 async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> std::io::Result<()> {
     write_cache(
         cache_file,
@@ -487,7 +486,8 @@ pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct CacheHeader {
     pub policy: CachePolicy,
-    /// Indicates whether the resource was not found (404) on the remote.
+    /// Indicates whether the resource was reported as unavailable (404 Not
+    /// Found or 501 Not Implemented) by the remote.
     #[serde(default)]
     pub not_found: bool,
 }

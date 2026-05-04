@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use cfg_if::cfg_if;
+use http::StatusCode;
 use rattler_conda_types::{
     package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
     ChannelUrl, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
@@ -14,6 +15,13 @@ use crate::{
     gateway::subdir::{extract_unique_deps, PackageRecords},
     GatewayError,
 };
+
+/// Returns `true` if the HTTP status indicates that the server does not expose
+/// sharded repodata. We treat 404 (Not Found) and 501 (Not Implemented) the
+/// same: the resource is unavailable and we should fall back to repodata.json.
+pub(super) fn is_missing_sharded_repodata_status(status: StatusCode) -> bool {
+    status == StatusCode::NOT_FOUND || status == StatusCode::NOT_IMPLEMENTED
+}
 
 cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -164,6 +172,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
 #[cfg(test)]
 mod tests {
     use crate::fetch::CacheAction;
+    use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
     use axum::{
         body::Body,
@@ -311,6 +320,74 @@ mod tests {
             .to_string();
 
         insta::assert_snapshot!("empty_shard_response_error", err_string);
+    }
+
+    /// A mock server that returns a configurable HTTP status for the sharded
+    /// repodata index URL. Used to exercise the fallback paths for servers
+    /// that report the index as unavailable.
+    async fn start_index_status_server(status: StatusCode) -> (SocketAddr, oneshot::Sender<()>) {
+        let app = Router::new().route(
+            "/linux-64/repodata_shards.msgpack.zst",
+            get(move || async move {
+                Response::builder()
+                    .status(status)
+                    .body(Body::empty())
+                    .unwrap()
+            }),
+        );
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let (tx, rx) = oneshot::channel();
+        let server = axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                rx.await.ok();
+            })
+            .into_future();
+
+        tokio::spawn(server);
+
+        (local_addr, tx)
+    }
+
+    async fn assert_index_status_triggers_subdir_not_found(status: StatusCode) {
+        let (local_addr, _shutdown) = start_index_status_server(status).await;
+        let channel = Channel::from_url(
+            Url::parse(&format!("http://localhost:{}", local_addr.port())).unwrap(),
+        );
+        let cache_dir = tempfile::tempdir().unwrap();
+        let client = rattler_networking::LazyClient::default();
+
+        let err = ShardedSubdir::new(
+            channel,
+            "linux-64".to_string(),
+            client,
+            cache_dir.path().to_path_buf(),
+            CacheAction::NoCache,
+            None,
+            None,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("expected an error for status {status}"));
+
+        assert!(
+            matches!(err, GatewayError::SubdirNotFoundError(_)),
+            "expected SubdirNotFoundError for status {status}, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_index_404_triggers_subdir_not_found() {
+        assert_index_status_triggers_subdir_not_found(StatusCode::NOT_FOUND).await;
+    }
+
+    #[tokio::test]
+    async fn test_index_501_triggers_subdir_not_found() {
+        // JFrog Artifactory can produce 501s here
+        assert_index_status_triggers_subdir_not_found(StatusCode::NOT_IMPLEMENTED).await;
     }
 
     #[tokio::test]

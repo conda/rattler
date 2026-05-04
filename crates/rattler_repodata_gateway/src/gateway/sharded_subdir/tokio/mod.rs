@@ -8,7 +8,9 @@ use std::{
 
 use rattler_conda_types::Platform;
 
-use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
+use super::{
+    add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+};
 use crate::{
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{
@@ -20,7 +22,7 @@ use crate::{
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
+use http::{header::CACHE_CONTROL, HeaderValue};
 use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
@@ -69,10 +71,7 @@ impl ShardedSubdir {
         .await
         .map_err(|e| match e {
             GatewayError::ReqwestError(e)
-                if matches!(
-                    e.status(),
-                    Some(StatusCode::NOT_FOUND | StatusCode::NOT_IMPLEMENTED)
-                ) =>
+                if e.status().is_some_and(is_missing_sharded_repodata_status) =>
             {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
