@@ -5,11 +5,11 @@
     destination: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/std/io/trait.Write.html" title="trait std::io::Write">Write</a>,
     prefix_placeholder: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.str.html">str</a>,
     target_prefix: &amp;<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.str.html">str</a>,
-    target_platform: &amp;Platform,
-    file_mode: FileMode,
+    target_platform: &amp;<a class="enum" href="../../../rattler_conda_types/platform/enum.Platform.html" title="enum rattler_conda_types::platform::Platform">Platform</a>,
+    file_mode: <a class="enum" href="../../../rattler_conda_types/package/paths/enum.FileMode.html" title="enum rattler_conda_types::package::paths::FileMode">FileMode</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.1/std/primitive.unit.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/1.93.1/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Given the contents of a file copy it to the <code>destination</code> and in the process replace the
 <code>prefix_placeholder</code> text with the <code>target_prefix</code> text.</p>
 <p>This switches to more specialized functions that handle the replacement of either
-textual and binary placeholders, the [<code>FileMode</code>] enum switches between the two functions.
+textual and binary placeholders, the <a href="../../../rattler_conda_types/package/paths/enum.FileMode.html" title="enum rattler_conda_types::package::paths::FileMode"><code>FileMode</code></a> enum switches between the two functions.
 See both <a href="fn.copy_and_replace_cstring_placeholder.html" title="fn rattler::install::link::copy_and_replace_cstring_placeholder"><code>copy_and_replace_cstring_placeholder</code></a> and <a href="fn.copy_and_replace_textual_placeholder.html" title="fn rattler::install::link::copy_and_replace_textual_placeholder"><code>copy_and_replace_textual_placeholder</code></a></p>
 </div></details></section></div></main></body></html>
