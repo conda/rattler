@@ -54,7 +54,12 @@ impl ShardedSubdir {
         )
         .await
         .map_err(|e| match e {
-            GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
+            GatewayError::ReqwestError(e)
+                if matches!(
+                    e.status(),
+                    Some(StatusCode::NOT_FOUND) | Some(StatusCode::NOT_IMPLEMENTED)
+                ) =>
+            {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
                     subdir: subdir.clone(),

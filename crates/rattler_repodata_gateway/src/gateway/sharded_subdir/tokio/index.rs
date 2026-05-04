@@ -26,6 +26,13 @@ use tokio::{
 };
 use url::Url;
 
+/// Returns `true` if the HTTP status indicates that the server does not expose
+/// sharded repodata. We treat 404 (Not Found) and 501 (Not Implemented) the
+/// same: the resource is unavailable and we should fall back to repodata.json.
+fn is_missing_sharded_repodata_status(status: StatusCode) -> bool {
+    status == StatusCode::NOT_FOUND || status == StatusCode::NOT_IMPLEMENTED
+}
+
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
     GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
@@ -227,20 +234,24 @@ pub async fn fetch_index(
                             .map(|r| (r, r.on_download_start(&shards_url)));
                         let response = client.client().execute(request).await?;
 
-                        // Check if the resource was not found (404)
-                        if response.status() == StatusCode::NOT_FOUND {
+                        // Check if the resource was not found (404) or not
+                        // implemented (501). Treat 501 the same as 404 so we
+                        // fall back to repodata.json when a server does not
+                        // support sharded repodata.
+                        if is_missing_sharded_repodata_status(response.status()) {
                             tracing::debug!(
-                                "sharded index not found (404) at {channel_base_url}, caching this result"
+                                "sharded index unavailable ({}) at {channel_base_url}, caching this result",
+                                response.status()
                             );
 
-                            // Cache the 404 response
+                            // Cache the not-available response
                             let policy = CachePolicy::new(&canonical_request, &response);
                             write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
                                 .await
                                 .map_err(|e| {
                                     GatewayError::IoError(
                                         format!(
-                                            "failed to write 404 cache for shard index to {}",
+                                            "failed to write not-found cache for shard index to {}",
                                             cache_path.display()
                                         ),
                                         e,
@@ -345,18 +356,23 @@ pub async fn fetch_index(
         )
         .await?;
 
-    // Check if the resource was not found (404)
-    if response.status() == StatusCode::NOT_FOUND {
-        tracing::debug!("sharded index not found (404) at {channel_base_url}, caching this result");
+    // Check if the resource was not found (404) or not implemented (501).
+    // Treat 501 the same as 404 so we fall back to repodata.json when a
+    // server does not support sharded repodata.
+    if is_missing_sharded_repodata_status(response.status()) {
+        tracing::debug!(
+            "sharded index unavailable ({}) at {channel_base_url}, caching this result",
+            response.status()
+        );
 
-        // Cache the 404 response
+        // Cache the not-available response
         let policy = CachePolicy::new(&canonical_request, &response);
         write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
             .await
             .map_err(|e| {
                 GatewayError::IoError(
                     format!(
-                        "failed to write 404 cache for shard index to {}",
+                        "failed to write not-found cache for shard index to {}",
                         cache_path.display()
                     ),
                     e,
