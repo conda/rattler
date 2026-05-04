@@ -54,6 +54,9 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
+/// Default OAuth scopes used when the caller passes none.
+pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access", "channel:read"];
+
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
     /// The OIDC issuer URL.
@@ -149,6 +152,14 @@ struct CallbackResult {
 /// Perform an OAuth/OIDC login and return the resulting
 /// `Authentication::OAuth`.
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
+    let mut config = config;
+    if config.scopes.is_empty() {
+        config.scopes = DEFAULT_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect();
+    }
+
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()

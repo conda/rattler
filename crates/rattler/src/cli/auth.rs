@@ -167,6 +167,31 @@ pub enum AuthenticationCLIError {
     OAuthError(#[from] oauth::OAuthError),
 }
 
+/// Returns true when the host should default to OAuth login if the user did
+/// not pass any other authentication method.
+#[cfg(feature = "oauth")]
+fn host_supports_default_oauth(host: &str) -> bool {
+    let host = host.trim_start_matches("*.");
+    let host = if let Ok(url) = url::Url::parse(host) {
+        url.host_str().map(str::to_string).unwrap_or_default()
+    } else {
+        host.to_string()
+    };
+    host == "prefix.dev" || host.ends_with(".prefix.dev")
+}
+
+/// Returns true when the user passed no explicit auth method, so we should
+/// fall back to OAuth for OAuth-capable hosts.
+#[cfg(feature = "oauth")]
+fn should_default_to_oauth(args: &LoginArgs) -> bool {
+    let no_explicit_method = args.token.is_none()
+        && args.username.is_none()
+        && args.password.is_none()
+        && args.conda_token.is_none()
+        && args.s3_access_key_id.is_none();
+    no_explicit_method && host_supports_default_oauth(&args.host)
+}
+
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
     let host = if url.contains("://") {
@@ -203,9 +228,16 @@ async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
-    // OAuth flow (when --oauth is set)
+    // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
-    if args.oauth {
+    if args.oauth || should_default_to_oauth(&args) {
+        if !args.oauth {
+            eprintln!(
+                "No credentials provided; using OAuth browser login for {}.",
+                args.host
+            );
+        }
+
         let issuer_url = args
             .oauth_issuer_url
             .unwrap_or_else(|| format!("https://{}", args.host));
@@ -636,5 +668,35 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_host_supports_default_oauth() {
+        assert!(host_supports_default_oauth("prefix.dev"));
+        assert!(host_supports_default_oauth("repo.prefix.dev"));
+        assert!(host_supports_default_oauth("https://prefix.dev"));
+        assert!(host_supports_default_oauth("*.prefix.dev"));
+
+        assert!(!host_supports_default_oauth("example.com"));
+        // Suffix-injection guard: hostname containing "prefix.dev" must not match.
+        assert!(!host_supports_default_oauth("evil-prefix.dev.attacker.com"));
+        assert!(!host_supports_default_oauth("notprefix.dev"));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_should_default_to_oauth() {
+        // No explicit method on prefix.dev → OAuth
+        assert!(should_default_to_oauth(&create_login_args("prefix.dev")));
+
+        // Explicit method blocks the OAuth default, even on prefix.dev.
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("t".into());
+        assert!(!should_default_to_oauth(&args));
+
+        // No explicit method on a non-OAuth host → still falls through to existing
+        // NoAuthenticationMethod error.
+        assert!(!should_default_to_oauth(&create_login_args("example.com")));
     }
 }
