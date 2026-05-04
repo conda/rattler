@@ -71,7 +71,7 @@ impl ShardedSubdir {
             GatewayError::ReqwestError(e)
                 if matches!(
                     e.status(),
-                    Some(StatusCode::NOT_FOUND) | Some(StatusCode::NOT_IMPLEMENTED)
+                    Some(StatusCode::NOT_FOUND | StatusCode::NOT_IMPLEMENTED)
                 ) =>
             {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
