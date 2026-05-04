@@ -221,7 +221,7 @@ rattler_package_streaming = { path = "crates/rattler_package_streaming", version
 rattler_prefix_guard = { path = "crates/rattler_prefix_guard", version = "=0.1.0", default-features = false }
 rattler_pty = { path = "crates/rattler_pty", version = "=0.2.10", default-features = false }
 rattler_redaction = { path = "crates/rattler_redaction", version = "=0.1.14", default-features = false }
-rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.28.0", default-features = false }
+rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.28.1", default-features = false }
 rattler_s3 = { path = "crates/rattler_s3", version = "=0.1.34", default-features = false }
 rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.16", default-features = false }
 rattler_shell = { path = "crates/rattler_shell", version = "=0.26.11", default-features = false }
