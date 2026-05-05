@@ -54,8 +54,56 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
-/// Default OAuth scopes used when the caller passes none.
-pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access", "channel:read"];
+/// Default OAuth scopes used when the caller passes none and the host
+/// has no specific profile registered in [`HOST_SCOPE_PROFILES`].
+pub const DEFAULT_OAUTH_SCOPES: &[&str] = &[
+    "openid",
+    "profile",
+    "offline_access",
+    "channel:read",
+    "channel:upload",
+];
+
+/// Default scopes for Anaconda hosts. The OAuth access token here is
+/// only used to mint an Anaconda API key (the long-lived credential
+/// stored as a `CondaToken`), so we only need identity. Anaconda's IDP
+/// does not recognize prefix.dev-style `channel:*` scopes.
+pub const DEFAULT_ANACONDA_OAUTH_SCOPES: &[&str] = &["openid"];
+
+/// A predefined OAuth scope profile keyed off a substring of the login
+/// host. Used to choose sensible defaults when the user does not pass
+/// `--oauth-scope` flags explicitly.
+struct HostScopeProfile {
+    /// Substring matched against the login host (e.g. `"anaconda.org"`).
+    host_pattern: &'static str,
+    /// Scopes requested when the user provides none for this host.
+    scopes: &'static [&'static str],
+}
+
+/// Per-host scope profiles, checked in order. The first match wins.
+/// Hosts that do not match any entry fall back to
+/// [`DEFAULT_OAUTH_SCOPES`].
+const HOST_SCOPE_PROFILES: &[HostScopeProfile] = &[
+    HostScopeProfile {
+        host_pattern: "anaconda.org",
+        scopes: DEFAULT_ANACONDA_OAUTH_SCOPES,
+    },
+    HostScopeProfile {
+        host_pattern: "anaconda.com",
+        scopes: DEFAULT_ANACONDA_OAUTH_SCOPES,
+    },
+];
+
+/// Look up the default OAuth scopes for the given host.
+///
+/// Returns the host-specific profile if one is registered (e.g.
+/// Anaconda), otherwise [`DEFAULT_OAUTH_SCOPES`].
+pub fn default_scopes_for_host(host: &str) -> &'static [&'static str] {
+    HOST_SCOPE_PROFILES
+        .iter()
+        .find(|profile| host.contains(profile.host_pattern))
+        .map_or(DEFAULT_OAUTH_SCOPES, |profile| profile.scopes)
+}
 
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
@@ -154,7 +202,15 @@ struct CallbackResult {
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
     let mut config = config;
     if config.scopes.is_empty() {
-        config.scopes = DEFAULT_OAUTH_SCOPES
+        // Derive the host from the issuer URL so the fallback picks the
+        // right per-host profile (e.g. Anaconda → just `openid`). Falls
+        // back to the empty string on parse failure, which won't match
+        // any profile and so lands on `DEFAULT_OAUTH_SCOPES`.
+        let host = Url::parse(&config.issuer_url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_default();
+        config.scopes = default_scopes_for_host(&host)
             .iter()
             .map(|&s| s.to_string())
             .collect();
@@ -645,5 +701,56 @@ pub async fn revoke_tokens(
         Err(e) => {
             tracing::warn!("Failed to revoke access token: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn anaconda_hosts_get_minimal_scopes() {
+        assert_eq!(
+            default_scopes_for_host("anaconda.org"),
+            DEFAULT_ANACONDA_OAUTH_SCOPES
+        );
+        assert_eq!(
+            default_scopes_for_host("api.anaconda.com"),
+            DEFAULT_ANACONDA_OAUTH_SCOPES
+        );
+    }
+
+    #[test]
+    fn unknown_hosts_get_default_scopes() {
+        assert_eq!(default_scopes_for_host("prefix.dev"), DEFAULT_OAUTH_SCOPES);
+        assert_eq!(
+            default_scopes_for_host("repo.example.com"),
+            DEFAULT_OAUTH_SCOPES
+        );
+    }
+
+    /// The issuer-URL-derived fallback inside `perform_oauth_login` should
+    /// route Anaconda issuer URLs to the Anaconda profile.
+    #[test]
+    fn issuer_url_host_extraction_matches_anaconda() {
+        let host = Url::parse("https://auth.anaconda.com/api/auth")
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_default();
+        assert_eq!(
+            default_scopes_for_host(&host),
+            DEFAULT_ANACONDA_OAUTH_SCOPES
+        );
+    }
+
+    /// A malformed issuer URL should fall through to the catch-all defaults
+    /// rather than panic.
+    #[test]
+    fn malformed_issuer_url_falls_back_to_default() {
+        let host = Url::parse("not a url")
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_default();
+        assert_eq!(default_scopes_for_host(&host), DEFAULT_OAUTH_SCOPES);
     }
 }

@@ -62,7 +62,7 @@ pub enum PrefixUploadError {
     AttestationWithApiKey,
 
     /// The server returned an authentication error (HTTP 401 or 403).
-    #[error("authentication failed (HTTP {status})")]
+    #[error("authentication failed (HTTP {status}): {body}")]
     AuthenticationFailed {
         /// The HTTP status code.
         status: u16,
@@ -163,21 +163,33 @@ async fn create_upload_form(
     Ok(form)
 }
 
+/// Look up a bearer-style token for `url` from `storage`, automatically
+/// refreshing OAuth tokens whose access token is close to expiring.
+///
+/// Returns the raw token string suitable for use in an `Authorization:
+/// Bearer ...` header. Both `BearerToken` and the access token portion of
+/// an `OAuth` credential are accepted.
+async fn fetch_token_from_storage(
+    storage: &AuthenticationStorage,
+    url: &Url,
+) -> Result<String, PrefixUploadError> {
+    match storage.get_by_url_refreshed(url.clone()).await {
+        Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
+        Ok((_, Some(Authentication::OAuth { access_token, .. }))) => Ok(access_token),
+        Ok((_, Some(_))) => Err(PrefixUploadError::WrongAuthenticationType),
+        Ok((_, None)) => Err(PrefixUploadError::MissingApiKey),
+        Err(e) => Err(PrefixUploadError::KeychainError {
+            message: e.to_string(),
+        }),
+    }
+}
+
 /// Uploads package files to a prefix.dev server.
 pub async fn upload_package_to_prefix(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
     prefix_data: PrefixData,
 ) -> Result<(), PrefixUploadError> {
-    let check_storage = || match storage.get_by_url(Url::from(prefix_data.url.clone())) {
-        Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
-        Ok((_, Some(_))) => Err(PrefixUploadError::WrongAuthenticationType),
-        Ok((_, None)) => Err(PrefixUploadError::MissingApiKey),
-        Err(e) => Err(PrefixUploadError::KeychainError {
-            message: e.to_string(),
-        }),
-    };
-
     let client = get_client_with_retry().into_diagnostic()?;
 
     let wants_attestation = !matches!(prefix_data.attestation, AttestationSource::NoAttestation);
@@ -211,14 +223,20 @@ pub async fn upload_package_to_prefix(
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                (check_storage()?, false)
+                (
+                    fetch_token_from_storage(storage, &prefix_data.url).await?,
+                    false,
+                )
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                (check_storage()?, false)
+                (
+                    fetch_token_from_storage(storage, &prefix_data.url).await?,
+                    false,
+                )
             }
         },
     };
@@ -232,14 +250,14 @@ pub async fn upload_package_to_prefix(
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                check_storage()?
+                fetch_token_from_storage(storage, &prefix_data.url).await?
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                check_storage()?
+                fetch_token_from_storage(storage, &prefix_data.url).await?
             }
         },
     };

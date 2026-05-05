@@ -243,6 +243,24 @@ impl AuthenticationStorage {
         Ok((url, auth.map(|(_, credentials)| credentials)))
     }
 
+    /// Like [`get_by_url`](Self::get_by_url), but additionally refreshes
+    /// expired OAuth access tokens via the provider's token endpoint
+    /// before returning. Refreshed credentials are written back to the
+    /// storage so subsequent calls see the new token.
+    pub async fn get_by_url_refreshed<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth_with_key) = self.get_by_url_with_host(url)?;
+        let auth = match auth_with_key {
+            Some((matched_key, auth)) => {
+                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
+            }
+            None => None,
+        };
+        Ok((url, auth))
+    }
+
     /// Delete the authentication information for the given host
     pub fn delete(&self, host: &str) -> Result<()> {
         {
