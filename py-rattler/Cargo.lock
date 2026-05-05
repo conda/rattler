@@ -345,11 +345,10 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
+checksum = "b24fc9a58e46d228f83fb140b04c5645d19b455a61c300954711ebabfc11c0bd"
 dependencies = [
- "bisection",
  "futures",
  "http-content-range",
  "itertools 0.13.0",
@@ -875,12 +874,6 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
-
-[[package]]
-name = "bisection"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "021e079a1bab0ecce6cf4b4b74c0c37afa4a697136eb3b127875c84a8f04a8c3"
 
 [[package]]
 name = "bit-set"
@@ -1833,7 +1826,7 @@ dependencies = [
 
 [[package]]
 name = "file_url"
-version = "0.2.8"
+version = "0.3.0"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
@@ -3320,15 +3313,14 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.75"
+version = "0.10.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
+checksum = "bf0b434746ee2832f4f0baf10137e1cabb18cbe6912c69e2e33263c45250f542"
 dependencies = [
  "bitflags",
  "cfg-if",
  "foreign-types",
  "libc",
- "once_cell",
  "openssl-macros",
  "openssl-sys",
 ]
@@ -3367,9 +3359,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.111"
+version = "0.9.115"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
+checksum = "158fe5b292746440aa6e7a7e690e55aeb72d41505e2804c23c6973ad0e9c9781"
 dependencies = [
  "cc",
  "libc",
@@ -3473,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "path_resolver"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "ahash",
  "fs-err",
@@ -3772,6 +3764,7 @@ dependencies = [
  "nix 0.30.1",
  "openssl",
  "parking_lot",
+ "pep440_rs",
  "pep508_rs",
  "pyo3",
  "pyo3-async-runtimes",
@@ -4077,7 +4070,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.40.6"
+version = "0.41.0"
 dependencies = [
  "anyhow",
  "console",
@@ -4121,7 +4114,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.21"
+version = "0.7.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4152,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.44.6"
+version = "0.46.0"
 dependencies = [
  "ahash",
  "chrono",
@@ -4192,7 +4185,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.3.9"
+version = "0.3.11"
 dependencies = [
  "console",
  "fs-err",
@@ -4208,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "blake2",
  "digest",
@@ -4225,7 +4218,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.23"
+version = "0.28.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4262,7 +4255,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.27.7"
+version = "0.29.0"
 dependencies = [
  "ahash",
  "chrono",
@@ -4275,18 +4268,21 @@ dependencies = [
  "rattler_digest",
  "rattler_solve",
  "serde",
+ "serde-untagged",
  "serde-value",
  "serde_repr",
  "serde_with",
  "serde_yaml",
  "thiserror 2.0.18",
+ "tracing",
  "typed-path",
  "url",
+ "xxhash-rust",
 ]
 
 [[package]]
 name = "rattler_macros"
-version = "1.0.12"
+version = "1.0.13"
 dependencies = [
  "quote",
  "syn",
@@ -4294,7 +4290,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.56"
+version = "0.2.58"
 dependencies = [
  "chrono",
  "configparser",
@@ -4323,7 +4319,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.9"
+version = "0.26.11"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4354,7 +4350,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.9"
+version = "0.25.0"
 dependencies = [
  "astral-tokio-tar",
  "astral_async_zip",
@@ -4391,7 +4387,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -4401,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "reqwest 0.12.28",
  "reqwest-middleware",
@@ -4410,7 +4406,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.27.6"
+version = "0.28.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4472,7 +4468,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.32"
+version = "0.1.34"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4488,7 +4484,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.26.9"
+version = "0.26.11"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4507,7 +4503,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "5.2.2"
+version = "6.0.1"
 dependencies = [
  "chrono",
  "futures",
@@ -4524,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.18"
+version = "2.3.20"
 dependencies = [
  "archspec",
  "libloading",
@@ -7118,6 +7114,12 @@ name = "xmlparser"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yoke"
