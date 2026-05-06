@@ -164,7 +164,7 @@ impl RunExportExtractor {
             if _record.url.scheme() != "file" {
                 return None;
             }
-            return _record.url.to_file_path().ok();
+            _record.url.to_file_path().ok()
         }
         #[cfg(target_arch = "wasm32")]
         None
