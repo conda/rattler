@@ -189,21 +189,27 @@ fn normalize_login_host(host: &str) -> String {
         .unwrap_or_else(|| host.trim_end_matches('/').to_string())
 }
 
-/// prefix.dev's "Full access" channel-access scopes plus standard identity
-/// and refresh-token scopes.
+/// prefix.dev's default channel scopes for an out-of-the-box `rattler auth
+/// login`.
+///
+/// Limited to the two non-destructive channel operations a typical user
+/// actually performs from the CLI: browsing channels (`channel:read`) and
+/// pushing packages (`channel:upload`). Destructive scopes (yank, delete,
+/// settings, member management, lifecycle) are intentionally **not**
+/// included — least-privilege default — and are available on demand via
+/// `--oauth-scope channel:yank`, etc.
+///
+/// Identity scopes (`openid`, `profile`) and `offline_access` (refresh
+/// tokens) are kept because they enable orthogonal features: ID-token
+/// claims drive the "Authenticated as: ..." line on login, and
+/// `offline_access` is what makes the refresh-on-use machinery work at all.
 #[cfg(feature = "oauth")]
 const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "openid",
     "profile",
     "offline_access",
-    "channel:create",
     "channel:read",
     "channel:upload",
-    "channel:yank",
-    "channel:delete-package",
-    "channel:settings",
-    "channel:members",
-    "channel:lifecycle",
 ];
 
 /// anaconda.org's default OIDC scopes.
