@@ -294,6 +294,8 @@ pub fn link_file(
             target_dir.path(),
             external_symlink_policy,
         )?
+    } else if path_json_entry.path_type == PathType::SoftLink {
+        copy_symlink_target_to_destination(&source_path, &destination_path)?
     } else {
         copy_to_destination(&source_path, &destination_path)?
     };
@@ -541,7 +543,7 @@ fn symlink_to_destination(
                     "failed to symlink {}: {e}, falling back to copying.",
                     destination_path.display()
                 );
-                return copy_to_destination(source_path, destination_path);
+                return copy_symlink_target_to_destination(source_path, destination_path);
             }
         }
     }
@@ -574,6 +576,17 @@ fn copy_to_destination(
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
+}
+
+/// Copy the file a cached symlink points to. `fs::copy` on the symlink itself
+/// fails when its target is only valid in the install prefix, so we resolve
+/// through the cache first.
+fn copy_symlink_target_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
+    let resolved = fs::canonicalize(source_path).map_err(LinkFileError::FailedToReadSymlink)?;
+    copy_to_destination(&resolved, destination_path)
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
@@ -1333,5 +1346,43 @@ mod test {
             ExternalSymlinkPolicy::Deny,
         );
         assert!(result.is_ok());
+    }
+
+    #[cfg_attr(
+        windows,
+        ignore = "creating symlinks on Windows requires elevated privileges"
+    )]
+    #[test]
+    fn test_copy_symlink_target_to_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("cache");
+        let dest_dir = tmp.path().join("dest");
+        fs::create_dir_all(cache.join("bin")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+        fs::create_dir_all(&dest_dir).unwrap();
+
+        let real_file = cache.join("bin/real_file");
+        fs::write(&real_file, b"hello world").unwrap();
+
+        let symlink_path = cache.join("lib/link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../bin/real_file", &symlink_path).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file("..\\bin\\real_file", &symlink_path).unwrap();
+
+        let dest_path = dest_dir.join("link");
+        let method = super::copy_symlink_target_to_destination(&symlink_path, &dest_path)
+            .expect("copying through a symlink source should succeed");
+
+        assert_eq!(method, super::LinkMethod::Copy);
+        assert!(
+            !dest_path
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "destination should be a regular file, not a symlink"
+        );
+        assert_eq!(fs::read(&dest_path).unwrap(), b"hello world");
     }
 }
