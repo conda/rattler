@@ -59,8 +59,8 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
 /// Mirrors the server's "Full access" channel-access preset so an
 /// out-of-the-box `rattler auth login` grants the full set of channel
 /// capabilities (create, read, upload, yank, delete, settings, member
-/// management, lifecycle) plus identity (openid/profile) and refresh
-/// tokens (offline_access).
+/// management, lifecycle) plus identity (`openid`/`profile`) and refresh
+/// tokens (`offline_access`).
 pub const DEFAULT_OAUTH_SCOPES: &[&str] = &[
     "openid",
     "profile",

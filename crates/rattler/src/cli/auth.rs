@@ -168,12 +168,6 @@ pub enum AuthenticationCLIError {
 }
 
 /// Normalize a user-supplied host into its canonical hostname form.
-///
-/// Strips a leading `*.` wildcard, scheme, path, port, and trailing
-/// slashes — so `prefix.dev`, `prefix.dev/`, `https://prefix.dev/`,
-/// and `*.prefix.dev` all collapse to `prefix.dev`. Used both for the
-/// OAuth host allow-list check and as the storage key when writing
-/// OAuth credentials, so that login and lookup agree on the key.
 fn normalize_login_host(host: &str) -> String {
     let host = host.trim_start_matches("*.");
 
@@ -196,24 +190,53 @@ fn normalize_login_host(host: &str) -> String {
         .unwrap_or_else(|| host.trim_end_matches('/').to_string())
 }
 
-/// Returns true when the host should default to OAuth login if the user did
-/// not pass any other authentication method.
+/// Built-in OAuth defaults for a known host.
 ///
-/// Loopback addresses (`localhost`, `127.0.0.1`, `[::1]`) are included so
-/// developers running prefix.dev or a compatible OIDC-capable backend
-/// locally don't have to pass `--oauth` explicitly.
+/// Returned by [`default_oauth_config_for_host`] for hosts where rattler
+/// ships an out-of-the-box OAuth configuration. Carries everything needed
+/// to start a login flow without the user passing any flags.
 #[cfg(feature = "oauth")]
-fn host_supports_default_oauth(host: &str) -> bool {
-    let host = normalize_login_host(host);
-    host == "prefix.dev"
-        || host.ends_with(".prefix.dev")
-        || host == "localhost"
-        || host == "127.0.0.1"
-        || host == "[::1]"
+struct DefaultOAuthConfig {
+    issuer_url: String,
+    client_id: String,
+    scopes: Vec<String>,
+}
+
+/// Returns the built-in OAuth configuration for a host, if rattler ships one.
+///
+/// Currently recognizes the prefix.dev family (over `https`) and loopback
+/// addresses (over `http`, since local dev servers rarely terminate TLS).
+/// Returns `None` for any other host.
+///
+/// The presence of a returned config is also the signal for whether rattler
+/// should default to OAuth when the user provides no auth method at all —
+/// see [`should_default_to_oauth`].
+#[cfg(feature = "oauth")]
+fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
+    let normalized = normalize_login_host(host);
+
+    let is_prefix_dev = normalized == "prefix.dev" || normalized.ends_with(".prefix.dev");
+    let is_loopback =
+        normalized == "localhost" || normalized == "127.0.0.1" || normalized == "[::1]";
+
+    if !is_prefix_dev && !is_loopback {
+        return None;
+    }
+
+    let scheme = if is_loopback { "http" } else { "https" };
+
+    Some(DefaultOAuthConfig {
+        issuer_url: format!("{scheme}://{host}"),
+        client_id: "rattler".to_string(),
+        scopes: oauth::DEFAULT_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect(),
+    })
 }
 
 /// Returns true when the user passed no explicit auth method, so we should
-/// fall back to OAuth for OAuth-capable hosts.
+/// fall back to OAuth for hosts that ship a built-in OAuth config.
 #[cfg(feature = "oauth")]
 fn should_default_to_oauth(args: &LoginArgs) -> bool {
     let no_explicit_method = args.token.is_none()
@@ -221,7 +244,7 @@ fn should_default_to_oauth(args: &LoginArgs) -> bool {
         && args.password.is_none()
         && args.conda_token.is_none()
         && args.s3_access_key_id.is_none();
-    no_explicit_method && host_supports_default_oauth(&args.host)
+    no_explicit_method && default_oauth_config_for_host(&args.host).is_some()
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -270,39 +293,34 @@ async fn login(
             );
         }
 
-        // Default issuer URL: `https://<host>` for normal hosts, but `http://`
-        // for loopback addresses since local dev servers rarely have TLS set
-        // up. The `--oauth-issuer-url` flag still takes precedence for any
-        // host where the user wants to override (e.g. point at Hydra on a
-        // different port).
-        let issuer_url = args.oauth_issuer_url.unwrap_or_else(|| {
-            let normalized = normalize_login_host(&args.host);
-            let scheme = if normalized == "localhost"
-                || normalized == "127.0.0.1"
-                || normalized == "[::1]"
-            {
-                "http"
-            } else {
-                "https"
-            };
-            format!("{scheme}://{}", args.host)
-        });
+        // Look up the host's built-in OAuth defaults, if any.
+        let host_default = default_oauth_config_for_host(&args.host);
+
+        let issuer_url = args
+            .oauth_issuer_url
+            .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
+            .unwrap_or_else(|| format!("https://{}", args.host));
+
         let client_id = args
             .oauth_client_id
+            .or_else(|| host_default.as_ref().map(|c| c.client_id.clone()))
             .unwrap_or_else(|| "rattler".to_string());
+
         let flow = match args.oauth_flow.as_deref() {
             Some("auth-code") => oauth::OAuthFlow::AuthCode,
             Some("device-code") => oauth::OAuthFlow::DeviceCode,
             _ => oauth::OAuthFlow::Auto,
         };
 
-        let scopes: std::collections::HashSet<String> = if args.oauth_scopes.is_empty() {
+        let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
+            args.oauth_scopes.into_iter().collect()
+        } else if let Some(default) = host_default {
+            default.scopes.into_iter().collect()
+        } else {
             oauth::DEFAULT_OAUTH_SCOPES
                 .iter()
                 .map(|&s| s.to_string())
                 .collect()
-        } else {
-            args.oauth_scopes.into_iter().collect()
         };
 
         let config = oauth::OAuthConfig {
@@ -314,11 +332,8 @@ async fn login(
         };
 
         let auth = oauth::perform_oauth_login(config).await?;
-        // OAuth credentials are issuer-specific, skip wildcard conversion.
         // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
-        // any `https://...` form) write to the same storage key — without
-        // this, login and the upload-side `storage.get_by_url(...)` lookup
-        // disagree about the canonical key.
+        // any `https://...` form) write to the same storage key
         let host = normalize_login_host(&args.host);
         storage.store(&host, &auth)?;
         eprintln!("Credentials stored for {host}.");
@@ -731,33 +746,44 @@ mod tests {
 
     #[cfg(feature = "oauth")]
     #[test]
-    fn test_host_supports_default_oauth() {
-        assert!(host_supports_default_oauth("prefix.dev"));
-        assert!(host_supports_default_oauth("repo.prefix.dev"));
-        assert!(host_supports_default_oauth("https://prefix.dev"));
-        assert!(host_supports_default_oauth("*.prefix.dev"));
+    fn test_default_oauth_config_for_host() {
+        let has_default = |h: &str| default_oauth_config_for_host(h).is_some();
+
+        assert!(has_default("prefix.dev"));
+        assert!(has_default("repo.prefix.dev"));
+        assert!(has_default("https://prefix.dev"));
+        assert!(has_default("*.prefix.dev"));
 
         // Normalization: trailing slash and full URLs should still match.
-        assert!(host_supports_default_oauth("prefix.dev/"));
-        assert!(host_supports_default_oauth("https://prefix.dev/"));
-        assert!(host_supports_default_oauth("https://repo.prefix.dev/"));
+        assert!(has_default("prefix.dev/"));
+        assert!(has_default("https://prefix.dev/"));
+        assert!(has_default("https://repo.prefix.dev/"));
 
         // Loopback addresses for local development. The normalization step
         // strips the port so `localhost:8080` collapses to `localhost`.
-        assert!(host_supports_default_oauth("localhost"));
-        assert!(host_supports_default_oauth("localhost:8080"));
-        assert!(host_supports_default_oauth("http://localhost:8080"));
-        assert!(host_supports_default_oauth("127.0.0.1"));
-        assert!(host_supports_default_oauth("127.0.0.1:8080"));
-        assert!(host_supports_default_oauth("http://127.0.0.1:8080/"));
+        assert!(has_default("localhost"));
+        assert!(has_default("localhost:8080"));
+        assert!(has_default("http://localhost:8080"));
+        assert!(has_default("127.0.0.1"));
+        assert!(has_default("127.0.0.1:8080"));
+        assert!(has_default("http://127.0.0.1:8080/"));
 
-        assert!(!host_supports_default_oauth("example.com"));
+        assert!(!has_default("example.com"));
         // Suffix-injection guard: hostname containing "prefix.dev" must not match.
-        assert!(!host_supports_default_oauth("evil-prefix.dev.attacker.com"));
-        assert!(!host_supports_default_oauth("notprefix.dev"));
+        assert!(!has_default("evil-prefix.dev.attacker.com"));
+        assert!(!has_default("notprefix.dev"));
         // Loopback-spoofing guard: hostnames *containing* "localhost" must not match.
-        assert!(!host_supports_default_oauth("localhost.attacker.com"));
-        assert!(!host_supports_default_oauth("notlocalhost"));
+        assert!(!has_default("localhost.attacker.com"));
+        assert!(!has_default("notlocalhost"));
+
+        // Returned config carries the right scheme + client_id for each family.
+        let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
+        assert_eq!(prefix.issuer_url, "https://prefix.dev");
+        assert_eq!(prefix.client_id, "rattler");
+        assert!(!prefix.scopes.is_empty());
+
+        let local = default_oauth_config_for_host("localhost:8080").unwrap();
+        assert_eq!(local.issuer_url, "http://localhost:8080");
     }
 
     #[cfg(feature = "oauth")]

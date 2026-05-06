@@ -62,7 +62,7 @@ pub enum PrefixUploadError {
     AttestationWithApiKey,
 
     /// The server returned an authentication error (HTTP 401 or 403).
-    #[error("authentication failed (HTTP {status}): {body}")]
+    #[error("authentication failed (HTTP {status})")]
     AuthenticationFailed {
         /// The HTTP status code.
         status: u16,
@@ -165,10 +165,6 @@ async fn create_upload_form(
 
 /// Look up a bearer-style token for `url` from `storage`, automatically
 /// refreshing OAuth tokens whose access token is close to expiring.
-///
-/// Returns the raw token string suitable for use in an `Authorization:
-/// Bearer ...` header. Both `BearerToken` and the access token portion of
-/// an `OAuth` credential are accepted.
 async fn fetch_token_from_storage(
     storage: &AuthenticationStorage,
     url: &Url,

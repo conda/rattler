@@ -1,14 +1,10 @@
 //! Refresh logic for `Authentication::OAuth` credentials.
-//!
-//! This module is independent of the `reqwest` middleware so that callers
-//! that don't go through the middleware (such as upload code paths) can
-//! still get auto-refreshed OAuth tokens.
 
 use serde::Deserialize;
 
 use crate::{Authentication, AuthenticationStorage};
 
-/// Standard OAuth 2.0 token response (RFC 6749 §5.1).
+/// Standard OAuth 2.0 token response.
 #[derive(Deserialize)]
 struct TokenRefreshResponse {
     access_token: String,
@@ -17,19 +13,11 @@ struct TokenRefreshResponse {
 }
 
 /// Number of seconds before `expires_at` at which a token is considered
-/// "about to expire" — gives some headroom for clock skew and request
-/// in-flight time.
+/// "about to expire"
 const EXPIRY_SKEW_SECONDS: i64 = 300;
 
 /// Refresh an OAuth token if it is expired (or close to expiring) and
 /// store the refreshed credential back to `storage`.
-///
-/// Returns the (possibly refreshed) authentication. If refresh fails,
-/// returns the original auth so the caller can proceed with the existing
-/// (possibly expired) token — the server's 401 is clearer than a
-/// middleware error.
-///
-/// For non-OAuth credentials this is a pass-through.
 pub async fn maybe_refresh_oauth(
     storage: &AuthenticationStorage,
     auth: Authentication,
