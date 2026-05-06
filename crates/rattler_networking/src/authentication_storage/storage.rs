@@ -299,3 +299,46 @@ impl AuthenticationStorage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::authentication_storage::backends::memory::MemoryStorage;
+
+    fn storage_with(host: &str, auth: Authentication) -> AuthenticationStorage {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(host, &auth).unwrap();
+        storage
+    }
+
+    /// Non-OAuth credentials must pass through `get_by_url_refreshed`
+    /// unchanged — the refresh path only applies to OAuth.
+    #[tokio::test]
+    async fn get_by_url_refreshed_passes_through_non_oauth() {
+        let cases = [
+            Authentication::BearerToken("bearer".into()),
+            Authentication::CondaToken("conda".into()),
+            Authentication::BasicHTTP {
+                username: "u".into(),
+                password: "p".into(),
+            },
+            Authentication::S3Credentials {
+                access_key_id: "k".into(),
+                secret_access_key: "s".into(),
+                session_token: None,
+            },
+        ];
+
+        for auth in cases {
+            let storage = storage_with("example.com", auth.clone());
+            let (_, retrieved) = storage
+                .get_by_url_refreshed("https://example.com/foo")
+                .await
+                .unwrap();
+            assert_eq!(retrieved, Some(auth));
+        }
+    }
+}
