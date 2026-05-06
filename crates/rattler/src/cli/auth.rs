@@ -296,11 +296,8 @@ async fn login(
             _ => oauth::OAuthFlow::Auto,
         };
 
-        // If the user didn't pass any `--oauth-scope` flags, pick a
-        // host-appropriate default set (e.g. `["openid"]` for Anaconda,
-        // the prefix.dev-flavored set everywhere else).
         let scopes: std::collections::HashSet<String> = if args.oauth_scopes.is_empty() {
-            oauth::default_scopes_for_host(&args.host)
+            oauth::DEFAULT_OAUTH_SCOPES
                 .iter()
                 .map(|&s| s.to_string())
                 .collect()
