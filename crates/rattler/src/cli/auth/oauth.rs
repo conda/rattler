@@ -54,26 +54,13 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
-/// Default OAuth scopes used when the caller passes none.
+/// Generic OIDC scopes used when no host-specific defaults apply.
 ///
-/// Mirrors the server's "Full access" channel-access preset so an
-/// out-of-the-box `rattler auth login` grants the full set of channel
-/// capabilities (create, read, upload, yank, delete, settings, member
-/// management, lifecycle) plus identity (`openid`/`profile`) and refresh
-/// tokens (`offline_access`).
-pub const DEFAULT_OAUTH_SCOPES: &[&str] = &[
-    "openid",
-    "profile",
-    "offline_access",
-    "channel:create",
-    "channel:read",
-    "channel:upload",
-    "channel:yank",
-    "channel:delete-package",
-    "channel:settings",
-    "channel:members",
-    "channel:lifecycle",
-];
+/// Limited to the standard identity scopes (`openid`/`profile`) and
+/// `offline_access` for refresh tokens. Provider-specific scopes
+/// (e.g. prefix.dev's `channel:*` or anaconda.org's `email`) live in the
+/// per-host config tables in `auth.rs`.
+pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
 
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {

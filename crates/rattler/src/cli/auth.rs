@@ -172,9 +172,8 @@ fn normalize_login_host(host: &str) -> String {
     let host = host.trim_start_matches("*.");
 
     // Try parsing as-is first (handles inputs like `https://prefix.dev`).
-    // We only accept the result if it actually yielded a hostname — `Url`
-    // happily parses `localhost:8080` as a `localhost`-scheme URL with no
-    // host, so we have to check `host_str()` rather than just parse success.
+    // Only accept the result if it actually yielded a hostname — not every
+    // parse-successful string contains a host component.
     if let Some(h) = url::Url::parse(host)
         .ok()
         .and_then(|u| u.host_str().map(str::to_string))
@@ -190,6 +189,27 @@ fn normalize_login_host(host: &str) -> String {
         .unwrap_or_else(|| host.trim_end_matches('/').to_string())
 }
 
+/// prefix.dev's "Full access" channel-access scopes plus standard identity
+/// and refresh-token scopes.
+#[cfg(feature = "oauth")]
+const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
+    "openid",
+    "profile",
+    "offline_access",
+    "channel:create",
+    "channel:read",
+    "channel:upload",
+    "channel:yank",
+    "channel:delete-package",
+    "channel:settings",
+    "channel:members",
+    "channel:lifecycle",
+];
+
+/// anaconda.org's default OIDC scopes.
+#[cfg(feature = "oauth")]
+const ANACONDA_OAUTH_SCOPES: &[&str] = &["openid", "email", "profile", "offline_access"];
+
 /// Built-in OAuth defaults for a known host.
 ///
 /// Returned by [`default_oauth_config_for_host`] for hosts where rattler
@@ -204,47 +224,56 @@ struct DefaultOAuthConfig {
 
 /// Returns the built-in OAuth configuration for a host, if rattler ships one.
 ///
-/// Currently recognizes the prefix.dev family (over `https`) and loopback
-/// addresses (over `http`, since local dev servers rarely terminate TLS).
-/// Returns `None` for any other host.
+/// Currently recognizes:
+/// * the prefix.dev family (over `https`) — full channel-access scopes
+/// * the anaconda.org family (over `https`) — standard OIDC + `email`
+/// * loopback addresses (over `http`, since local dev servers rarely
+///   terminate TLS) — treated as a local prefix.dev-style server
 ///
-/// The presence of a returned config is also the signal for whether rattler
-/// should default to OAuth when the user provides no auth method at all —
-/// see [`should_default_to_oauth`].
+/// Returns `None` for any other host.
 #[cfg(feature = "oauth")]
 fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
     let normalized = normalize_login_host(host);
 
     let is_prefix_dev = normalized == "prefix.dev" || normalized.ends_with(".prefix.dev");
+    let is_anaconda = normalized == "anaconda.org" || normalized.ends_with(".anaconda.org");
     let is_loopback =
         normalized == "localhost" || normalized == "127.0.0.1" || normalized == "[::1]";
 
-    if !is_prefix_dev && !is_loopback {
+    let scopes: &[&str] = if is_anaconda {
+        ANACONDA_OAUTH_SCOPES
+    } else if is_prefix_dev || is_loopback {
+        PREFIX_DEV_OAUTH_SCOPES
+    } else {
         return None;
-    }
+    };
 
     let scheme = if is_loopback { "http" } else { "https" };
 
     Some(DefaultOAuthConfig {
         issuer_url: format!("{scheme}://{host}"),
         client_id: "rattler".to_string(),
-        scopes: oauth::DEFAULT_OAUTH_SCOPES
-            .iter()
-            .map(|&s| s.to_string())
-            .collect(),
+        scopes: scopes.iter().map(|&s| s.to_string()).collect(),
     })
 }
 
-/// Returns true when the user passed no explicit auth method, so we should
-/// fall back to OAuth for hosts that ship a built-in OAuth config.
+/// Returns the built-in OAuth config for an implicit (flag-less) login —
+/// i.e. when the user passed no explicit auth method and the host ships
+/// an out-of-the-box OAuth configuration. The presence of `Some` is the
+/// signal that `login()` should fall back to OAuth.
 #[cfg(feature = "oauth")]
-fn should_default_to_oauth(args: &LoginArgs) -> bool {
+fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
     let no_explicit_method = args.token.is_none()
         && args.username.is_none()
         && args.password.is_none()
         && args.conda_token.is_none()
         && args.s3_access_key_id.is_none();
-    no_explicit_method && default_oauth_config_for_host(&args.host).is_some()
+
+    if !no_explicit_method {
+        return None;
+    }
+
+    default_oauth_config_for_host(&args.host)
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -285,59 +314,63 @@ async fn login(
 ) -> Result<(), AuthenticationCLIError> {
     // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
-    if args.oauth || should_default_to_oauth(&args) {
-        if !args.oauth {
-            eprintln!(
-                "No credentials provided; using OAuth browser login for {}.",
-                args.host
-            );
+    {
+        let auto_default = default_oauth_for_login(&args);
+        if args.oauth || auto_default.is_some() {
+            if !args.oauth {
+                eprintln!(
+                    "No credentials provided; using OAuth browser login for {}.",
+                    args.host
+                );
+            }
+
+            // Reuse the implicit-default config when present; otherwise
+            // (`--oauth` was set explicitly) fall back to a fresh lookup.
+            let host_default = auto_default.or_else(|| default_oauth_config_for_host(&args.host));
+
+            let issuer_url = args
+                .oauth_issuer_url
+                .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
+                .unwrap_or_else(|| format!("https://{}", args.host));
+
+            let client_id = args
+                .oauth_client_id
+                .or_else(|| host_default.as_ref().map(|c| c.client_id.clone()))
+                .unwrap_or_else(|| "rattler".to_string());
+
+            let flow = match args.oauth_flow.as_deref() {
+                Some("auth-code") => oauth::OAuthFlow::AuthCode,
+                Some("device-code") => oauth::OAuthFlow::DeviceCode,
+                _ => oauth::OAuthFlow::Auto,
+            };
+
+            let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
+                args.oauth_scopes.into_iter().collect()
+            } else if let Some(default) = host_default {
+                default.scopes.into_iter().collect()
+            } else {
+                oauth::DEFAULT_OAUTH_SCOPES
+                    .iter()
+                    .map(|&s| s.to_string())
+                    .collect()
+            };
+
+            let config = oauth::OAuthConfig {
+                issuer_url,
+                client_id,
+                client_secret: args.oauth_client_secret,
+                flow,
+                scopes,
+            };
+
+            let auth = oauth::perform_oauth_login(config).await?;
+            // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
+            // any `https://...` form) write to the same storage key
+            let host = normalize_login_host(&args.host);
+            storage.store(&host, &auth)?;
+            eprintln!("Credentials stored for {host}.");
+            return Ok(());
         }
-
-        // Look up the host's built-in OAuth defaults, if any.
-        let host_default = default_oauth_config_for_host(&args.host);
-
-        let issuer_url = args
-            .oauth_issuer_url
-            .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
-            .unwrap_or_else(|| format!("https://{}", args.host));
-
-        let client_id = args
-            .oauth_client_id
-            .or_else(|| host_default.as_ref().map(|c| c.client_id.clone()))
-            .unwrap_or_else(|| "rattler".to_string());
-
-        let flow = match args.oauth_flow.as_deref() {
-            Some("auth-code") => oauth::OAuthFlow::AuthCode,
-            Some("device-code") => oauth::OAuthFlow::DeviceCode,
-            _ => oauth::OAuthFlow::Auto,
-        };
-
-        let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
-            args.oauth_scopes.into_iter().collect()
-        } else if let Some(default) = host_default {
-            default.scopes.into_iter().collect()
-        } else {
-            oauth::DEFAULT_OAUTH_SCOPES
-                .iter()
-                .map(|&s| s.to_string())
-                .collect()
-        };
-
-        let config = oauth::OAuthConfig {
-            issuer_url,
-            client_id,
-            client_secret: args.oauth_client_secret,
-            flow,
-            scopes,
-        };
-
-        let auth = oauth::perform_oauth_login(config).await?;
-        // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
-        // any `https://...` form) write to the same storage key
-        let host = normalize_login_host(&args.host);
-        storage.store(&host, &auth)?;
-        eprintln!("Credentials stored for {host}.");
-        return Ok(());
     }
 
     let auth = if let Some(conda_token) = args.conda_token {
@@ -776,11 +809,23 @@ mod tests {
         assert!(!has_default("localhost.attacker.com"));
         assert!(!has_default("notlocalhost"));
 
+        // anaconda.org family is recognized too.
+        assert!(has_default("anaconda.org"));
+        assert!(has_default("repo.anaconda.org"));
+        assert!(has_default("https://anaconda.org/"));
+        // Suffix-injection guard.
+        assert!(!has_default("notanaconda.org"));
+
         // Returned config carries the right scheme + client_id for each family.
         let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
-        assert!(!prefix.scopes.is_empty());
+        assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+
+        let anaconda = default_oauth_config_for_host("anaconda.org").unwrap();
+        assert_eq!(anaconda.issuer_url, "https://anaconda.org");
+        assert!(anaconda.scopes.iter().any(|s| s == "email"));
+        assert!(!anaconda.scopes.iter().any(|s| s.starts_with("channel:")));
 
         let local = default_oauth_config_for_host("localhost:8080").unwrap();
         assert_eq!(local.issuer_url, "http://localhost:8080");
@@ -788,17 +833,20 @@ mod tests {
 
     #[cfg(feature = "oauth")]
     #[test]
-    fn test_should_default_to_oauth() {
-        // No explicit method on prefix.dev → OAuth
-        assert!(should_default_to_oauth(&create_login_args("prefix.dev")));
+    fn test_default_oauth_for_login() {
+        // No explicit method on prefix.dev → OAuth default kicks in
+        assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
+
+        // anaconda.org now also has built-in defaults.
+        assert!(default_oauth_for_login(&create_login_args("anaconda.org")).is_some());
 
         // Explicit method blocks the OAuth default, even on prefix.dev.
         let mut args = create_login_args("prefix.dev");
         args.token = Some("t".into());
-        assert!(!should_default_to_oauth(&args));
+        assert!(default_oauth_for_login(&args).is_none());
 
         // No explicit method on a non-OAuth host → still falls through to existing
         // NoAuthenticationMethod error.
-        assert!(!should_default_to_oauth(&create_login_args("example.com")));
+        assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
     }
 }

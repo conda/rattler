@@ -247,12 +247,17 @@ impl AuthenticationStorage {
     /// expired OAuth access tokens via the provider's token endpoint
     /// before returning. Refreshed credentials are written back to the
     /// storage so subsequent calls see the new token.
+    ///
+    /// Non-OAuth credentials (bearer tokens, basic auth, S3, etc.) are
+    /// returned unchanged.
     pub async fn get_by_url_refreshed<U: IntoUrl>(
         &self,
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let (url, auth_with_key) = self.get_by_url_with_host(url)?;
         let auth = match auth_with_key {
+            // `maybe_refresh_oauth` is a no-op for non-OAuth variants and
+            // returns them as-is, so this branch covers every auth type.
             Some((matched_key, auth)) => {
                 crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
             }
