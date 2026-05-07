@@ -34,7 +34,7 @@ async-compression = { version = "0.4", features = [
   "zstd",
 ] }
 async-fd-lock = "0.2.0"
-async_http_range_reader = "0.10.0"
+async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.9.1" }
 fs4 = "0.13.1"
 async-once-cell = "0.5.4"
 async-trait = "0.1.88"
@@ -138,8 +138,8 @@ rayon = "1.10.0"
 reflink-copy = "0.1.26"
 regex = "1.11.1"
 reqwest = { version = "0.12.15", default-features = false }
-reqwest-middleware = "0.4.2"
-reqwest-retry = "0.8.0"
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.4.2" }
+reqwest-retry = { package = "astral-reqwest-retry", version = "0.8.0" }
 resolvo = { version = "0.10.0" }
 # hold back at 0.4.0 until `reqwest-retry` is updated
 retry-policies = { version = "0.5.0", default-features = false }
