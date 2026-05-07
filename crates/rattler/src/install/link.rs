@@ -163,7 +163,7 @@ pub fn link_file(
     apple_codesign_behavior: AppleCodeSignBehavior,
     modification_time: filetime::FileTime,
     external_symlink_policy: ExternalSymlinkPolicy,
-) -> Result<LinkedFile, LinkFileError> {
+) -> Result<Option<LinkedFile>, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
     let destination_path = target_dir.path().join(&destination_relative_path);
@@ -287,15 +287,34 @@ pub fn link_file(
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?
-    } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        symlink_to_destination(
-            &source_path,
-            &destination_path,
-            target_dir.path(),
-            external_symlink_policy,
-        )?
     } else if path_json_entry.path_type == PathType::SoftLink {
-        copy_symlink_target_to_destination(&source_path, &destination_path)?
+        // The source for a SoftLink may be missing if extraction skipped it (this
+        // happens on Windows when the user lacks the privileges required to create
+        // symlinks; see `rattler_package_streaming::tokio::shared`). Convert the
+        // resulting NotFound into a skip rather than failing the whole install.
+        let dispatch = if allow_symbolic_links {
+            symlink_to_destination(
+                &source_path,
+                &destination_path,
+                target_dir.path(),
+                external_symlink_policy,
+            )
+        } else {
+            copy_symlink_target_to_destination(&source_path, &destination_path)
+        };
+        match dispatch {
+            Ok(method) => method,
+            Err(LinkFileError::FailedToReadSymlink(io) | LinkFileError::FailedToLink(_, io))
+                if io.kind() == ErrorKind::NotFound =>
+            {
+                tracing::warn!(
+                    "skipping symlink entry '{}': source missing in package cache (likely skipped during extraction)",
+                    path_json_entry.relative_path.display()
+                );
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        }
     } else {
         copy_to_destination(&source_path, &destination_path)?
     };
@@ -343,14 +362,14 @@ pub fn link_file(
         .as_ref()
         .map(|p| p.placeholder.clone());
 
-    Ok(LinkedFile {
+    Ok(Some(LinkedFile {
         clobbered: false,
         sha256,
         file_size,
         relative_path: destination_relative_path,
         method: link_method,
         prefix_placeholder,
-    })
+    }))
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -966,6 +985,7 @@ mod test {
             modification_time,
             ExternalSymlinkPolicy::Deny,
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(result.method, super::LinkMethod::Patched(FileMode::Text));
@@ -1026,6 +1046,7 @@ mod test {
             modification_time,
             ExternalSymlinkPolicy::Deny,
         )
+        .unwrap()
         .unwrap();
 
         assert_ne!(
@@ -1042,6 +1063,60 @@ mod test {
         assert_eq!(
             dest_mtime, source_time,
             "unpatched file should keep source mtime ({source_time}), not modification_time ({modification_time})",
+        );
+    }
+
+    /// A `SoftLink` entry whose source is missing on disk (because extraction
+    /// skipped it, e.g. on Windows without symlink privileges) should be
+    /// skipped with `Ok(None)` instead of failing the whole install.
+    #[test]
+    fn test_missing_symlink_source_is_skipped() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        // Intentionally do NOT create `missing-link` in package_dir.
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("missing-link"),
+            no_link: false,
+            path_type: PathType::SoftLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("missing-link"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap();
+
+        assert!(
+            result.is_none(),
+            "expected Ok(None) for missing symlink source"
+        );
+        assert!(
+            !target_dir.path().join("missing-link").exists(),
+            "no destination file should have been created"
         );
     }
 
