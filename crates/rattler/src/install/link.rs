@@ -664,6 +664,7 @@ pub fn copy_and_replace_placeholders(
 /// This switches to more specialized functions that handle the replacement of either
 /// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
+#[allow(clippy::too_many_arguments)]
 pub fn copy_and_replace_placeholders_with_offsets(
     source_bytes: &[u8],
     mut destination: impl Write,
