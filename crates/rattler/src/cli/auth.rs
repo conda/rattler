@@ -95,9 +95,7 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_redirect_uri: Option<String>,
 
-    /// User-Agent header sent to remote endpoints during this auth invocation
-    /// (OAuth provider, prefix.dev validation, token revocation). Defaults to
-    /// `rattler/<version>`.
+    /// User-Agent header used for requests
     #[clap(long)]
     user_agent: Option<String>,
 }
