@@ -158,7 +158,14 @@ impl RunExportExtractor {
     /// Returns the path to the package file if the URL is a file URL.
     fn path_to_package(_record: &RepoDataRecord) -> Option<PathBuf> {
         #[cfg(not(target_arch = "wasm32"))]
-        return _record.url.to_file_path().ok();
+        {
+            // `Url::to_file_path` is documented to *not* check the URL's
+            // scheme so we must do it ourselves
+            if _record.url.scheme() != "file" {
+                return None;
+            }
+            _record.url.to_file_path().ok()
+        }
         #[cfg(target_arch = "wasm32")]
         None
     }
