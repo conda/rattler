@@ -999,6 +999,7 @@ pub fn copy_and_replace_cstring_placeholder(
 /// The length of the input will match the output.
 ///
 /// This function replaces binary c-style strings using pre-computed offsets for better performance.
+#[allow(clippy::too_many_arguments)]
 pub fn copy_and_replace_cstring_placeholder_offsets(
     source_bytes: &[u8],
     mut destination: impl Write,
