@@ -51,7 +51,8 @@ use archspec::cpu::Microarchitecture;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use rattler_conda_types::{
-    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
+    GenericVirtualPackage, PackageName, ParseVersionError, ParseVersionErrorKind, Platform,
+    Version,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -662,11 +663,10 @@ impl EnvOverride for CudaArch {
     fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
         // CEP requires exactly "major.minor" format where both are digits
         if !cuda::is_valid_cuda_version_format(env_var_value) {
-            // Invalid format - return a ParseVersionError
-            // We use an empty string to generate a proper error
-            return Version::from_str("").map(|_| Self {
-                version: Version::major(0),
-            });
+            return Err(ParseVersionError::new(
+                env_var_value,
+                ParseVersionErrorKind::ExpectedComponent,
+            ));
         }
 
         let version = Version::from_str(env_var_value)?;
