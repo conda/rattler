@@ -273,6 +273,9 @@ pub struct PartialSourceMetadata {
     /// Variant-selection flags declared by the recipe.
     pub flags: Vec<Flag>,
 
+    /// License of the package (SPDX expression or free-form string).
+    pub license: Option<String>,
+
     /// PURLs (Package URLs) describing this package in other ecosystems.
     pub purls: Option<BTreeSet<PackageUrl>>,
 
@@ -461,6 +464,7 @@ impl CondaSourceData<SourceMetadata> {
         constrains: Vec<String>,
         experimental_extra_depends: BTreeMap<String, Vec<String>>,
         flags: Vec<Flag>,
+        license: Option<String>,
         purls: Option<BTreeSet<PackageUrl>>,
         run_exports: Option<RunExportsJson>,
         sources: BTreeMap<String, SourceLocation>,
@@ -478,6 +482,7 @@ impl CondaSourceData<SourceMetadata> {
                 constrains,
                 experimental_extra_depends,
                 flags,
+                license,
                 purls,
                 run_exports,
             })),

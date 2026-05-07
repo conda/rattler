@@ -172,6 +172,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 constrains: self.constrains.into_owned(),
                 experimental_extra_depends: self.experimental_extra_depends.into_owned(),
                 flags: self.flags.into_owned(),
+                license: self.license.into_owned(),
                 purls: self.purls.into_owned(),
                 run_exports: Some(self.run_exports.into_owned()),
             }))
@@ -256,7 +257,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 features: Cow::Owned(None),
                 flags: Cow::Borrowed(&partial.flags),
                 track_features: Cow::Borrowed(&[]),
-                license: Cow::Owned(None),
+                license: Cow::Borrowed(&partial.license),
                 license_family: Cow::Owned(None),
                 python_site_packages_path: Cow::Owned(None),
                 source: value.package_build_source.clone(),
