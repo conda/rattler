@@ -400,7 +400,7 @@ impl PyPrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
                 offsets,
-                null_offsets
+                null_offsets,
             },
         })
     }
