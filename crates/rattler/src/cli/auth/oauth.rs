@@ -17,8 +17,8 @@ use openidconnect::{
         CoreResponseType, CoreSubjectIdentifierType,
     },
     AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse,
-    PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope, TokenResponse,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -274,21 +274,9 @@ async fn discover_endpoints(
     let oidc_issuer =
         IssuerUrl::new(issuer_url.to_string()).map_err(|e| OAuthError::Discovery(e.to_string()))?;
 
-    // Anaconda's identity provider serves a discovery doc that omits the
-    // OIDC-required `subject_types_supported` and
-    // `id_token_signing_alg_values_supported` fields, so the strict
-    // `openidconnect` deserializer rejects it. We've manually verified
-    // the correct values for Anaconda and skip straight to the lenient
-    // fetcher for that host. Every other host goes through the strict
-    // deserializer — a parse failure there is a real bug we don't want
-    // to paper over.
-    let provider_metadata = if oidc_issuer.url().host_str() == Some("auth.anaconda.com") {
-        fetch_provider_metadata_lenient(http_client, &oidc_issuer).await?
-    } else {
-        ExtendedCoreProviderMetadata::discover_async(oidc_issuer.clone(), http_client)
-            .await
-            .map_err(|e| OAuthError::Discovery(e.to_string()))?
-    };
+    let provider_metadata = ExtendedCoreProviderMetadata::discover_async(oidc_issuer, http_client)
+        .await
+        .map_err(|e| OAuthError::Discovery(e.to_string()))?;
 
     let token_endpoint = provider_metadata
         .token_endpoint()
@@ -307,59 +295,6 @@ async fn discover_endpoints(
         revocation_endpoint,
         device_authorization_endpoint,
     })
-}
-
-/// Targeted fallback for Anaconda's identity provider, whose discovery
-/// doc omits OIDC-required fields. Fetches the JSON, fills in
-/// `subject_types_supported = ["public"]` and
-/// `id_token_signing_alg_values_supported = ["RS256"]` when absent
-/// (verified-correct values for Anaconda), then deserializes.
-///
-/// Only invoked from the `auth.anaconda.com` arm of `discover_endpoints`
-/// — do not call for arbitrary hosts.
-async fn fetch_provider_metadata_lenient(
-    http_client: &reqwest::Client,
-    issuer: &IssuerUrl,
-) -> Result<ExtendedCoreProviderMetadata, OAuthError> {
-    let discovery_url = format!(
-        "{}/.well-known/openid-configuration",
-        issuer.url().as_str().trim_end_matches('/'),
-    );
-
-    let bytes = http_client
-        .get(&discovery_url)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
-
-    let mut value: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|e| OAuthError::Discovery(format!("invalid discovery JSON: {e}")))?;
-
-    if let Some(obj) = value.as_object_mut() {
-        obj.entry("subject_types_supported")
-            .or_insert_with(|| serde_json::json!(["public"]));
-        obj.entry("id_token_signing_alg_values_supported")
-            .or_insert_with(|| serde_json::json!(["RS256"]));
-    }
-
-    let metadata: ExtendedCoreProviderMetadata = serde_json::from_value(value)
-        .map_err(|e| OAuthError::Discovery(format!("invalid discovery document: {e}")))?;
-
-    // Mirror the strict path's issuer-claim check: the discovery
-    // document's `issuer` field must match the URL we discovered from.
-    // Without this, a malicious server could impersonate someone else's
-    // issuer through a non-compliant discovery doc.
-    if metadata.issuer() != issuer {
-        return Err(OAuthError::Discovery(format!(
-            "issuer claim {} does not match requested issuer {}",
-            metadata.issuer().as_str(),
-            issuer.as_str(),
-        )));
-    }
-
-    Ok(metadata)
 }
 
 /// Authorization code flow with PKCE.

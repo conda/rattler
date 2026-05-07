@@ -212,10 +212,6 @@ const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "channel:upload",
 ];
 
-/// anaconda.org's default OIDC scopes.
-#[cfg(feature = "oauth")]
-const ANACONDA_OAUTH_SCOPES: &[&str] = &["openid", "email", "profile", "offline_access"];
-
 /// Built-in OAuth defaults for a known host.
 ///
 /// Returned by [`default_oauth_config_for_host`] for hosts where rattler
@@ -234,34 +230,17 @@ struct DefaultOAuthConfig {
 fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
     let normalized = normalize_login_host(host);
 
-    // anaconda.com use a different identity provider at a
-    // different subdomain (`auth.anaconda.com`) and registers a specific
-    // client + redirect URI on the IdP side, so all four fields are
-    // hard-coded rather than derived from the input host.
-    if normalized == "anaconda.com" || normalized.ends_with(".anaconda.com") {
-        return Some(DefaultOAuthConfig {
-            issuer_url: "https://auth.anaconda.com/api/auth".to_string(),
-            client_id: "b4ad7f1d-c784-46b5-a9fe-106e50441f5a".to_string(),
-            scopes: ANACONDA_OAUTH_SCOPES
-                .iter()
-                .map(|&s| s.to_string())
-                .collect(),
-            redirect_uri: Some("http://127.0.0.1:8000/auth/oidc".to_string()),
-        });
-    }
-
-    let scopes: &[&str] = if normalized == "anaconda.org" || normalized.ends_with(".anaconda.org") {
-        ANACONDA_OAUTH_SCOPES
-    } else if normalized == "prefix.dev" || normalized.ends_with(".prefix.dev") {
-        PREFIX_DEV_OAUTH_SCOPES
-    } else {
+    if !(normalized == "prefix.dev" || normalized.ends_with(".prefix.dev")) {
         return None;
-    };
+    }
 
     Some(DefaultOAuthConfig {
         issuer_url: format!("https://{host}"),
         client_id: "rattler".to_string(),
-        scopes: scopes.iter().map(|&s| s.to_string()).collect(),
+        scopes: PREFIX_DEV_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect(),
         redirect_uri: None,
     })
 }
@@ -823,40 +802,11 @@ mod tests {
         assert!(!has_default("evil-prefix.dev.attacker.com"));
         assert!(!has_default("notprefix.dev"));
 
-        // anaconda.org family is recognized too.
-        assert!(has_default("anaconda.org"));
-        assert!(has_default("repo.anaconda.org"));
-        assert!(has_default("https://anaconda.org/"));
-        // Suffix-injection guard.
-        assert!(!has_default("notanaconda.org"));
-
-        // Returned config carries the right scheme + client_id for each family.
+        // Returned config carries the right scheme + client_id for prefix.dev.
         let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
         assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
-
-        let anaconda = default_oauth_config_for_host("anaconda.org").unwrap();
-        assert_eq!(anaconda.issuer_url, "https://anaconda.org");
-        assert!(anaconda.scopes.iter().any(|s| s == "email"));
-        assert!(!anaconda.scopes.iter().any(|s| s.starts_with("channel:")));
-
-        // anaconda.com routes to the auth.anaconda.com identity provider
-        // and uses a specific registered client + redirect URI.
-        assert!(has_default("anaconda.com"));
-        assert!(has_default("repo.anaconda.com"));
-        assert!(!has_default("notanaconda.com"));
-
-        let anaconda_com = default_oauth_config_for_host("anaconda.com").unwrap();
-        assert_eq!(
-            anaconda_com.issuer_url,
-            "https://auth.anaconda.com/api/auth"
-        );
-        assert_eq!(
-            anaconda_com.redirect_uri.as_deref(),
-            Some("http://127.0.0.1:8000/auth/oidc")
-        );
-        assert_ne!(anaconda_com.client_id, "rattler");
     }
 
     #[cfg(feature = "oauth")]
@@ -864,9 +814,6 @@ mod tests {
     fn test_default_oauth_for_login() {
         // No explicit method on prefix.dev → OAuth default kicks in
         assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
-
-        // anaconda.org now also has built-in defaults.
-        assert!(default_oauth_for_login(&create_login_args("anaconda.org")).is_some());
 
         // Explicit method blocks the OAuth default, even on prefix.dev.
         let mut args = create_login_args("prefix.dev");
