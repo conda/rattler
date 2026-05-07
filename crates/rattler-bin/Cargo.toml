@@ -16,7 +16,7 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls-tls", "s3", "gcs"]
+default = ["rustls-tls", "s3", "gcs", "oauth"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",

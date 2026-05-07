@@ -57,6 +57,11 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
 /// Generic OIDC scopes used when no host-specific defaults apply.
 pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
 
+/// Default `User-Agent` header sent to OAuth/OIDC endpoints when the caller
+/// does not provide one. Library consumers (pixi etc.) typically pass their
+/// own value via [`OAuthConfig::user_agent`] or [`revoke_tokens`].
+pub const DEFAULT_OAUTH_USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
+
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
     /// The OIDC issuer URL.
@@ -170,7 +175,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     let user_agent = config
         .user_agent
         .as_deref()
-        .unwrap_or(concat!("rattler/", env!("CARGO_PKG_VERSION")));
+        .unwrap_or(DEFAULT_OAUTH_USER_AGENT);
 
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -637,8 +642,18 @@ pub async fn revoke_tokens(
     access_token: &str,
     refresh_token: Option<&str>,
     client_id: &str,
+    user_agent: Option<&str>,
 ) {
-    let client = reqwest::Client::new();
+    let client = match reqwest::Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_OAUTH_USER_AGENT))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to build HTTP client for token revocation: {e}");
+            return;
+        }
+    };
 
     // Revoke refresh token first (higher priority)
     if let Some(refresh_token) = refresh_token {

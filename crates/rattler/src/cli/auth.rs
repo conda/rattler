@@ -519,6 +519,7 @@ async fn logout(
             access_token,
             refresh_token.as_deref(),
             client_id,
+            None,
         )
         .await;
     }
