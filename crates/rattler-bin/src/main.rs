@@ -41,7 +41,7 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    Auth(commands::auth::Opt),
+    Auth(Box<commands::auth::Opt>),
     Completion(commands::completion::Opt),
     Create(commands::create::Opt),
     Download(commands::download::Opt),
