@@ -26,7 +26,7 @@ pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
 ///
 /// On unix this is pretty trivial through the use of an executable shell script that invokes the
 /// python compiler which in turn invokes the correct Python function. On windows however, this
-/// mechanism doesnt exists. Instead a special executable is copied that starts a Python interpreter
+/// mechanism doesn't exists. Instead a special executable is copied that starts a Python interpreter
 /// which executes a file that is named the same as the executable but with the `.py` file
 /// extension. So if there is an entry point file called `foo.py` an executable is created called
 /// `foo.exe` that will automatically invoke `foo.py`.

@@ -4,7 +4,8 @@ pub(crate) mod utils;
 use miette::IntoDiagnostic;
 use rattler_conda_types::package::DistArchiveType;
 use upload::opt::{
-    AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts,
+    AnacondaData, ArtifactoryData, CloudsmithData, CondaForgeData, PrefixData, QuetzData,
+    ServerType, UploadOpts,
 };
 
 use crate::utils::tool_configuration;
@@ -43,11 +44,21 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         ServerType::Prefix(prefix_opts) => {
             let prefix_data = PrefixData::from(prefix_opts);
-            upload::upload_package_to_prefix(&store, &args.package_files, prefix_data).await
+            Ok(upload::upload_package_to_prefix(&store, &args.package_files, prefix_data).await?)
         }
         ServerType::Anaconda(anaconda_opts) => {
             let anaconda_data = AnacondaData::from(anaconda_opts);
-            upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data).await
+            Ok(
+                upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data)
+                    .await?,
+            )
+        }
+        ServerType::Cloudsmith(cloudsmith_opts) => {
+            let cloudsmith_data = CloudsmithData::from(cloudsmith_opts);
+            Ok(
+                upload::upload_package_to_cloudsmith(&store, &args.package_files, cloudsmith_data)
+                    .await?,
+            )
         }
         #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {

@@ -5,7 +5,6 @@ expression: repodata
 info: ~
 packages: {}
 packages.conda: {}
-packages.whl: {}
 removed:
   - aux-1-py.tar.bz2
   - bar-1-py.conda

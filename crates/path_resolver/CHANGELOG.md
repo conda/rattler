@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/path_resolver-v0.2.7...path_resolver-v0.2.8) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.2.7](https://github.com/conda/rattler/compare/path_resolver-v0.2.6...path_resolver-v0.2.7) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.6](https://github.com/conda/rattler/compare/path_resolver-v0.2.5...path_resolver-v0.2.6) - 2026-03-16
+
+### Other
+
+- Improve path_resolver robustness with expanded test suite ([#2192](https://github.com/conda/rattler/pull/2192))
+
+## [0.2.5](https://github.com/conda/rattler/compare/path_resolver-v0.2.4...path_resolver-v0.2.5) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.2.4](https://github.com/conda/rattler/compare/path_resolver-v0.2.3...path_resolver-v0.2.4) - 2025-12-18
 
 ### Other

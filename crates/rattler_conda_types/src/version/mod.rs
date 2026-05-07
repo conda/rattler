@@ -70,10 +70,10 @@ pub use with_source::VersionWithSource;
 ///   there is no '+', the local version is empty.
 /// * The version part is then split into components at '.' and '_'.
 /// * Each component is split again into runs of numerals and non-numerals
-/// * Subcomponents containing only numerals are converted to integers.
+/// * Sub-components containing only numerals are converted to integers.
 /// * Strings are converted to lower case, with special treatment for 'dev' and
 ///   'post'.
-/// * When a component starts with a letter, the fillvalue 0 is inserted to keep
+/// * When a component starts with a letter, the fill value 0 is inserted to keep
 ///   numbers and strings in phase, resulting in '1.1.a1' == 1.1.0a1'.
 /// * The same is repeated for the local version part.
 ///
@@ -83,14 +83,14 @@ pub use with_source::VersionWithSource;
 /// `1!2.15.1_ALPHA`  =>  `[[1], [2], [15], [1, '_alpha']]`
 ///
 /// The resulting lists are compared lexicographically, where the following
-/// rules are applied to each pair of corresponding subcomponents:
+/// rules are applied to each pair of corresponding sub-components:
 ///
 /// * integers are compared numerically
 /// * strings are compared lexicographically, case-insensitive
 /// * strings are smaller than integers, except
 /// * 'dev' versions are smaller than all corresponding versions of other types
 /// * 'post' versions are greater than all corresponding versions of other types
-/// * if a subcomponent has no correspondent, the missing correspondent is
+/// * if a sub-component has no correspondent, the missing correspondent is
 ///   treated as integer 0 to ensure '1.1' == '1.1.0'.
 ///
 /// The resulting order is:
@@ -291,7 +291,7 @@ impl Version {
     }
 
     /// Tries to extract the major and minor versions from the version. Returns
-    /// None if this instance doesnt appear to contain a major and minor
+    /// None if this instance doesn't appear to contain a major and minor
     /// version.
     pub fn as_major_minor(&self) -> Option<(u64, u64)> {
         let mut segments = self.segments();
@@ -322,6 +322,16 @@ impl Version {
         self.segments()
             .flat_map(|segment| segment.components())
             .any(Component::is_dev)
+    }
+
+    /// Returns true if this is considered a post version.
+    ///
+    /// If a version has a single component named "post" it is considered to be
+    /// a post version.
+    pub fn is_post(&self) -> bool {
+        self.segments()
+            .flat_map(|segment| segment.components())
+            .any(Component::is_post)
     }
 
     /// Check if this version version and local strings start with the same as
@@ -840,7 +850,7 @@ impl Ord for Component {
                 Ordering::Less
             }
 
-            // Compare numbers and identifiers normally amongst themselves.
+            // Compare numbers and identifiers normally among themselves.
             (Component::Numeral(a), Component::Numeral(b)) => a.cmp(b),
             (Component::Iden(a), Component::Iden(b)) => a.cmp(b),
             (Component::Post, Component::Post) => Ordering::Equal,
@@ -1034,7 +1044,7 @@ impl<'v> SegmentIter<'v> {
 /// this is not equal. Useful in ranges where we are talking
 /// about equality over version ranges instead of specific
 /// version instances
-#[derive(Clone, PartialOrd, Ord, Eq, Debug, Deserialize)]
+#[derive(Clone, Eq, Debug, Deserialize)]
 pub struct StrictVersion(pub Version);
 
 impl PartialEq for StrictVersion {
@@ -1066,6 +1076,22 @@ impl Hash for StrictVersion {
         self.0.epoch().hash(state);
         hash_segments(state, self.0.segments());
         hash_segments(state, self.0.local_segments());
+    }
+}
+
+impl Ord for StrictVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Use Version's semantic ordering as the primary key, then break ties
+        // using the raw component count.
+        self.0
+            .cmp(&other.0)
+            .then_with(|| self.0.components.len().cmp(&other.0.components.len()))
+    }
+}
+
+impl PartialOrd for StrictVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -1204,6 +1230,25 @@ mod test {
     }
 
     #[test]
+    fn dev_is_only_special_for_exact_runs() {
+        // Because 1.2.devdev is not considered a dev version, it must sort after 1.2dev
+        assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2.devdev").unwrap());
+        assert!(Version::from_str("1.2dev").unwrap() < Version::from_str("1.2devdev").unwrap());
+        // Same with post
+        assert!(Version::from_str("1.2postpost").unwrap() < Version::from_str("1.2post").unwrap());
+
+        // 1.2dev is a dev version, but 1.2devdev is not.
+        assert!(Version::from_str("1.2dev").unwrap().is_dev());
+        assert!(!Version::from_str("1.2devdev").unwrap().is_dev());
+        assert!(!Version::from_str("1.2.devdev").unwrap().is_dev());
+
+        // 1.2post is a post version, but 1.2postpost is not.
+        assert!(Version::from_str("1.2post").unwrap().is_post());
+        assert!(!Version::from_str("1.2postpost").unwrap().is_post());
+        assert!(!Version::from_str("1.2.postpost").unwrap().is_post());
+    }
+
+    #[test]
     fn test_pep440() {
         // this list must be in sorted order (slightly modified from the PEP 440 test
         // suite https://github.com/pypa/packaging/blob/master/tests/test_version.py)
@@ -1273,18 +1318,75 @@ mod test {
 
     #[test]
     fn strict_version_test() {
-        let v_1_0 = StrictVersion::from_str("1.0.0").unwrap();
+        let v_1_0_0 = StrictVersion::from_str("1.0.0").unwrap();
         // Should be equal to itself
-        assert_eq!(v_1_0, v_1_0);
-        let v_1_0_0 = StrictVersion::from_str("1.0").unwrap();
-        // Strict version should not discard zero's
-        assert_ne!(v_1_0, v_1_0_0);
-        // Ordering should stay the same as version
-        assert_eq!(v_1_0.cmp(&v_1_0_0), Ordering::Equal);
+        assert_eq!(v_1_0_0, v_1_0_0);
+        let v_1_0 = StrictVersion::from_str("1.0").unwrap();
+        // Strict version should not discard trailing zeros
+        assert_ne!(v_1_0_0, v_1_0);
 
-        // Hashing should consider v_1_0 and v_1_0_0 as unequal
-        assert_eq!(get_hash(&v_1_0), get_hash(&v_1_0));
-        assert_ne!(get_hash(&v_1_0), get_hash(&v_1_0_0));
+        // Hashing should consider v_1_0_0 and v_1_0 as unequal
+        assert_eq!(get_hash(&v_1_0_0), get_hash(&v_1_0_0));
+        assert_ne!(get_hash(&v_1_0_0), get_hash(&v_1_0));
+    }
+
+    /// Regression test: `StrictVersion::cmp` must not return `Equal` for
+    /// versions that `StrictVersion::eq` considers different.
+    #[test]
+    fn strict_version_ord_contract() {
+        let v100 = StrictVersion::from_str("1.0.0").unwrap();
+        let v10 = StrictVersion::from_str("1.0").unwrap();
+
+        // PartialEq: distinct strict versions
+        assert_ne!(v100, v10);
+
+        // Ord: must not return Equal for unequal values
+        assert_ne!(v100.cmp(&v10), Ordering::Equal);
+        assert_ne!(v10.cmp(&v100), Ordering::Equal);
+
+        // Ordering must be antisymmetric
+        assert_eq!(v10.cmp(&v100), Ordering::Less);
+        assert_eq!(v100.cmp(&v10), Ordering::Greater);
+
+        // Reflexivity
+        assert_eq!(v100.cmp(&v100), Ordering::Equal);
+        assert_eq!(v10.cmp(&v10), Ordering::Equal);
+
+        // BTreeSet must hold both as distinct entries
+        let mut set = std::collections::BTreeSet::new();
+        set.insert(v10.clone());
+        set.insert(v100.clone());
+        assert_eq!(set.len(), 2, "BTreeSet lost one entry due to Ord violation");
+
+        // Sort and dedup must preserve both entries
+        let mut vec = vec![v100.clone(), v10.clone(), v100.clone()];
+        vec.sort();
+        vec.dedup();
+        assert_eq!(vec.len(), 2, "dedup collapsed distinct strict versions");
+
+        // Semantic comparison via the inner Version is still Equal
+        assert_eq!(v100.0.cmp(&v10.0), Ordering::Equal);
+    }
+
+    #[test]
+    fn strict_version_ord_with_genuine_differences() {
+        // Versions that are genuinely less/greater should order correctly
+        let cases: &[(&str, &str)] = &[
+            ("1.0", "2.0"),
+            ("1.0.0", "2.0.0"),
+            ("1.0", "1.1"),
+            ("1.0.0", "1.0.1"),
+        ];
+        for (lesser, greater) in cases {
+            let a = StrictVersion::from_str(lesser).unwrap();
+            let b = StrictVersion::from_str(greater).unwrap();
+            assert_eq!(
+                a.cmp(&b),
+                Ordering::Less,
+                "{lesser} should be Less than {greater}"
+            );
+            assert_eq!(b.cmp(&a), Ordering::Greater);
+        }
     }
 
     #[test]

@@ -189,7 +189,10 @@ pub async fn unlink_package(
             Ok(_) => {}
             Err(e) => match e.kind() {
                 // Simply ignore if the file is already gone.
-                ErrorKind::NotFound => {}
+                ErrorKind::NotFound => {
+                    // Another process may have already deleted the file. It
+                    // doesn't matter, gone is gone.
+                }
                 ErrorKind::PermissionDenied => move_to_trash(target_prefix, &p).await?,
                 _ => {
                     return Err(UnlinkError::FailedToDeleteFile(
@@ -206,9 +209,19 @@ pub async fn unlink_package(
         .join("conda-meta")
         .join(prefix_record.file_name());
 
-    tokio_fs::remove_file(&conda_meta_path).await.map_err(|e| {
-        UnlinkError::FailedToDeleteFile(conda_meta_path.to_string_lossy().to_string(), e)
-    })?;
+    match tokio_fs::remove_file(&conda_meta_path).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            // Another process may have already deleted the file. It
+            // doesn't matter, gone is gone.
+        }
+        Err(e) => {
+            return Err(UnlinkError::FailedToDeleteFile(
+                conda_meta_path.to_string_lossy().to_string(),
+                e,
+            ));
+        }
+    }
 
     Ok(())
 }

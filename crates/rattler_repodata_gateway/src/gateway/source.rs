@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 
-use super::{subdir::SubdirClient, GatewayError};
+use super::{
+    subdir::{extract_unique_deps, PackageRecords, SubdirClient},
+    GatewayError,
+};
 use crate::Reporter;
 
 /// A source of repodata records for a specific subdirectory.
@@ -24,7 +27,7 @@ pub trait RepoDataSource: Send + Sync {
         &self,
         platform: Platform,
         name: &PackageName,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError>;
 
     /// Return all available package names for the given platform.
     ///
@@ -82,8 +85,16 @@ impl SubdirClient for CustomSourceClient {
         &self,
         name: &PackageName,
         _reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
-        self.source.fetch_package_records(self.platform, name).await
+    ) -> Result<PackageRecords, GatewayError> {
+        let records = self
+            .source
+            .fetch_package_records(self.platform, name)
+            .await?;
+        let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
+        Ok(PackageRecords {
+            records,
+            unique_deps,
+        })
     }
 
     fn package_names(&self) -> Vec<String> {

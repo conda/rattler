@@ -43,6 +43,10 @@ impl PackageFile for RunExportsJson {
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
         serde_json::from_str(str).map_err(Into::into)
     }
+
+    fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
+        serde_json::from_slice(slice).map_err(Into::into)
+    }
 }
 
 impl RunExportsJson {

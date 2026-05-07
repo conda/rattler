@@ -9,7 +9,7 @@ mod utils;
 
 use crate::error::RepodataError;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
     path::{Path, PathBuf},
     str::FromStr,
@@ -19,7 +19,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
-use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
@@ -34,9 +33,10 @@ use rattler_conda_types::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
-    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
-    ShardedSubdirInfo,
+    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
+    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
 };
+pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
     read,
@@ -72,6 +72,42 @@ impl PreconditionChecks {
     /// Returns true if precondition checks are enabled
     pub fn is_enabled(self) -> bool {
         matches!(self, PreconditionChecks::Enabled)
+    }
+}
+
+/// How packages are assigned to repodata revisions while indexing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PackageRevisionAssignment {
+    /// Assign each package to the revision required by its `info/index.json`.
+    ///
+    /// Packages without an explicit `repodata_revision` are assigned to the
+    /// oldest known revision that can represent their fields.
+    #[default]
+    FromIndexJson,
+
+    /// Assign every package to the newest revision configured for the index.
+    ///
+    /// If no revisions are configured, packages are assigned to `Legacy`.
+    Latest,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IndexedPackageRecord {
+    record: PackageRecord,
+    repodata_revision: RepodataRevision,
+    wheel_url: Option<UrlOrPath>,
+}
+
+impl PackageRevisionAssignment {
+    fn assign(
+        self,
+        package_revision: RepodataRevision,
+        latest_revision: RepodataRevision,
+    ) -> RepodataRevision {
+        match self {
+            PackageRevisionAssignment::FromIndexJson => package_revision,
+            PackageRevisionAssignment::Latest => latest_revision,
+        }
     }
 }
 
@@ -125,7 +161,20 @@ pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
+    indexed_package_record_from_index_json(package_as_bytes, index_json_reader)
+        .map(|indexed| indexed.record)
+}
+
+/// Extract an indexed package record from an `index.json` file.
+fn indexed_package_record_from_index_json<T: Read>(
+    package_as_bytes: impl AsRef<[u8]>,
+    index_json_reader: &mut T,
+) -> std::io::Result<IndexedPackageRecord> {
     let index = IndexJson::from_reader(index_json_reader)?;
+    index
+        .validate()
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    let repodata_revision = index.required_repodata_revision();
 
     let sha256_result =
         rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&package_as_bytes);
@@ -148,6 +197,7 @@ pub fn package_record_from_index_json<T: Read>(
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
+        flags: index.flags,
         noarch: index.noarch,
         license: index.license,
         license_family: index.license_family,
@@ -159,7 +209,11 @@ pub fn package_record_from_index_json<T: Read>(
         run_exports: None,
     };
 
-    Ok(package_record)
+    Ok(IndexedPackageRecord {
+        record: package_record,
+        repodata_revision,
+        wheel_url: None,
+    })
 }
 
 fn repodata_patch_from_conda_package_stream<'a>(
@@ -235,28 +289,35 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     package_record_from_conda_reader(BufReader::new(reader))
 }
 
-fn read_index_json_from_archive(
+fn read_indexed_json_from_archive(
     bytes: &Vec<u8>,
     archive: &mut tar::Archive<impl Read>,
-) -> std::io::Result<PackageRecord> {
+) -> std::io::Result<IndexedPackageRecord> {
     let mut index_json = None;
     let mut run_exports_json = None;
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            index_json = Some(package_record_from_index_json(bytes, &mut entry)?);
+            index_json = Some(indexed_package_record_from_index_json(bytes, &mut entry)?);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
         }
     }
 
     if let Some(mut index_json) = index_json {
-        index_json.run_exports = run_exports_json;
+        index_json.record.run_exports = run_exports_json;
         return Ok(index_json);
     }
 
     Err(std::io::Error::other("No index.json found"))
+}
+
+fn read_index_json_from_archive(
+    bytes: &Vec<u8>,
+    archive: &mut tar::Archive<impl Read>,
+) -> std::io::Result<PackageRecord> {
+    read_indexed_json_from_archive(bytes, archive).map(|indexed| indexed.record)
 }
 
 /// Extract the package record from a `.conda` package file content.
@@ -269,6 +330,31 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
+fn indexed_package_record_from_tar_bz2_reader(
+    reader: impl BufRead,
+) -> std::io::Result<IndexedPackageRecord> {
+    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let reader = Cursor::new(&bytes);
+    let mut archive = read::stream_tar_bz2(reader);
+    for entry in archive.entries()?.flatten() {
+        let mut entry = entry;
+        let path = entry.path()?;
+        if path.as_os_str().eq("info/index.json") {
+            return indexed_package_record_from_index_json(&bytes, &mut entry);
+        }
+    }
+    Err(std::io::Error::other("No index.json found"))
+}
+
+fn indexed_package_record_from_conda_reader(
+    reader: impl BufRead,
+) -> std::io::Result<IndexedPackageRecord> {
+    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let reader = Cursor::new(&bytes);
+    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
+    read_indexed_json_from_archive(&bytes, &mut archive)
+}
+
 /// Parse a package file buffer based on its filename extension.
 ///
 /// # Arguments
@@ -279,14 +365,19 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// # Returns
 ///
 /// Returns the parsed `PackageRecord`.
-fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
+fn parse_package_buffer(
+    buffer: opendal::Buffer,
+    filename: &str,
+) -> std::io::Result<IndexedPackageRecord> {
     let reader = buffer.reader();
     let archive_type = DistArchiveType::try_from(filename).unwrap();
     match archive_type {
         DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-            package_record_from_tar_bz2_reader(reader)
+            indexed_package_record_from_tar_bz2_reader(reader)
         }
-        DistArchiveType::Conda(CondaArchiveType::Conda) => package_record_from_conda_reader(reader),
+        DistArchiveType::Conda(CondaArchiveType::Conda) => {
+            indexed_package_record_from_conda_reader(reader)
+        }
         DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
             "Package type \".whl\" not yet supported.",
         )),
@@ -310,13 +401,13 @@ fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Res
 ///
 /// # Returns
 ///
-/// Returns the parsed `PackageRecord` on success.
+/// Returns the parsed package record on success.
 async fn read_and_parse_package(
     op: &Operator,
     cache: &cache::PackageRecordCache,
     subdir: Platform,
     filename: &str,
-) -> std::io::Result<PackageRecord> {
+) -> std::io::Result<IndexedPackageRecord> {
     let file_path = format!("{subdir}/{filename}");
 
     // Try cache or get current metadata
@@ -378,7 +469,7 @@ pub struct RepodataFileMetadata {
     /// The `ETag` of the file, if available
     pub etag: Option<String>,
     /// The last modified timestamp of the file, if available
-    pub last_modified: Option<DateTime<Utc>>,
+    pub last_modified: Option<opendal::raw::Timestamp>,
     /// Whether the file existed when metadata was collected
     pub file_existed: bool,
     /// The precondition checks configuration when this metadata was collected
@@ -506,6 +597,8 @@ async fn index_subdir(
     force: bool,
     write_zst: bool,
     write_shards: bool,
+    repodata_revisions: Vec<RepodataRevisionInfo>,
+    package_revision_assignment: PackageRevisionAssignment,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
@@ -526,6 +619,8 @@ async fn index_subdir(
             force,
             write_zst,
             write_shards,
+            repodata_revisions.clone(),
+            package_revision_assignment,
             repodata_patch.clone(),
             progress.clone(),
             semaphore.clone(),
@@ -598,6 +693,8 @@ async fn index_subdir_inner(
     force: bool,
     write_zst: bool,
     write_shards: bool,
+    repodata_revisions: Vec<RepodataRevisionInfo>,
+    package_revision_assignment: PackageRevisionAssignment,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
@@ -618,37 +715,34 @@ async fn index_subdir_inner(
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
     // can reuse.
-    let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecord> = if force {
-        HashMap::default()
-    } else {
-        let (repodata_path, read_metadata) = if repodata_patch.is_some() {
-            (
-                format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
-                metadata.repodata_from_packages.as_ref().unwrap(),
-            )
+    let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord> =
+        if force {
+            HashMap::default()
         } else {
-            (format!("{subdir}/{REPODATA}"), &metadata.repodata)
-        };
+            let (repodata_path, read_metadata) = if repodata_patch.is_some() {
+                (
+                    format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
+                    metadata.repodata_from_packages.as_ref().unwrap(),
+                )
+            } else {
+                (format!("{subdir}/{REPODATA}"), &metadata.repodata)
+            };
 
-        match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
-            Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
-                Ok(repodata) => repodata
-                    .packages
-                    .into_iter()
-                    .chain(repodata.conda_packages)
-                    .collect(),
-                Err(err) => {
-                    tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+            match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
+                Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
+                    Ok(repodata) => package_records_from_repodata(repodata),
+                    Err(err) => {
+                        tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+                        HashMap::default()
+                    }
+                },
+                Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
+                    tracing::info!("Could not find {repodata_path}. Creating new one.");
                     HashMap::default()
                 }
-            },
-            Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
-                tracing::info!("Could not find {repodata_path}. Creating new one.");
-                HashMap::default()
+                Err(err) => return Err(err.into()),
             }
-            Err(err) => return Err(err.into()),
-        }
-    };
+        };
 
     // List all the packages in the subdirectory.
     let uploaded_packages: HashSet<DistArchiveIdentifier> = op
@@ -687,6 +781,10 @@ async fn index_subdir_inner(
         packages_to_delete.len(),
         subdir
     );
+
+    for filename in &packages_to_delete {
+        registered_packages.remove(filename);
+    }
 
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
@@ -735,7 +833,9 @@ async fn index_subdir_inner(
                     read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
 
                 pb.inc(1);
-                Ok::<(DistArchiveIdentifier, PackageRecord), std::io::Error>((filename, record))
+                Ok::<(DistArchiveIdentifier, IndexedPackageRecord), std::io::Error>((
+                    filename, record,
+                ))
             }
         };
         tasks.push(tokio::spawn(task));
@@ -786,16 +886,19 @@ async fn index_subdir_inner(
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
+    let mut experimental_v3 = ExperimentalV3Packages::default();
+    let latest_revision = latest_repodata_revision(&repodata_revisions);
     for (filename, package) in registered_packages {
-        match filename.archive_type {
-            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                packages.insert(filename, package);
-            }
-            DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                conda_packages.insert(filename, package);
-            }
-            _ => panic!("Unknown archive type"),
-        }
+        let revision =
+            package_revision_assignment.assign(package.repodata_revision, latest_revision);
+        insert_package_record_by_revision(
+            &mut packages,
+            &mut conda_packages,
+            &mut experimental_v3,
+            filename,
+            package,
+            revision,
+        )?;
     }
 
     // TODO: don't serialize run_exports and purls but in their own files
@@ -803,10 +906,15 @@ async fn index_subdir_inner(
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: None,
+            repodata_revisions: repodata_revisions_for_packages(
+                &repodata_revisions,
+                &experimental_v3,
+            ),
+            channel_relations: None,
         }),
         packages,
         conda_packages,
-        experimental_whl_packages: IndexMap::default(),
+        experimental_v3,
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -834,6 +942,182 @@ where
     let msgpack = rmp_serde::to_vec_named(val)?;
     let encoded = zstd::stream::encode_all(&msgpack[..], 0)?;
     Ok(encoded)
+}
+
+fn latest_repodata_revision(revisions: &[RepodataRevisionInfo]) -> RepodataRevision {
+    revisions
+        .iter()
+        .map(|revision| revision.revision)
+        .max()
+        .unwrap_or(RepodataRevision::Legacy)
+}
+
+fn package_records_from_repodata(
+    repodata: RepoData,
+) -> ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord> {
+    let mut packages = ahash::HashMap::default();
+
+    packages.extend(
+        repodata
+            .packages
+            .into_iter()
+            .chain(repodata.conda_packages)
+            .map(|(identifier, record)| {
+                (
+                    identifier,
+                    IndexedPackageRecord {
+                        record,
+                        repodata_revision: RepodataRevision::Legacy,
+                        wheel_url: None,
+                    },
+                )
+            }),
+    );
+
+    packages.extend(repodata.experimental_v3.into_records_with_url().map(
+        |(identifier, record, wheel_url)| {
+            (
+                identifier,
+                IndexedPackageRecord {
+                    record,
+                    repodata_revision: RepodataRevision::V3,
+                    wheel_url,
+                },
+            )
+        },
+    ));
+
+    packages
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_package_record_by_revision(
+    packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    experimental_v3: &mut ExperimentalV3Packages,
+    filename: DistArchiveIdentifier,
+    package: IndexedPackageRecord,
+    revision: RepodataRevision,
+) -> Result<(), RepodataError> {
+    let IndexedPackageRecord {
+        record, wheel_url, ..
+    } = package;
+
+    match revision {
+        RepodataRevision::Legacy => match filename.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+                packages.insert(filename, record);
+            }
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
+                conda_packages.insert(filename, record);
+            }
+            _ => {
+                return Err(RepodataError::Other(anyhow::anyhow!(
+                    "archive type '{:?}' is not supported in legacy repodata maps",
+                    filename.archive_type
+                )));
+            }
+        },
+        RepodataRevision::V3 => match filename.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+                experimental_v3.tar_bz2.insert(filename.identifier, record);
+            }
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
+                experimental_v3.conda.insert(filename.identifier, record);
+            }
+            DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+                let url = wheel_url.ok_or_else(|| {
+                    RepodataError::Other(anyhow::anyhow!(
+                        "indexing new wheel packages into v3 repodata is not supported yet"
+                    ))
+                })?;
+                experimental_v3.whl.insert(
+                    filename.identifier,
+                    WhlPackageRecord {
+                        package_record: record,
+                        url,
+                    },
+                );
+            }
+        },
+        RepodataRevision::Unknown(unsupported) => {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "repodata revision v{unsupported} is not supported by this indexer"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Default)]
+struct RevisionStats {
+    n_packages: u64,
+    oldest: Option<rattler_conda_types::utils::TimestampMs>,
+    newest: Option<rattler_conda_types::utils::TimestampMs>,
+}
+
+impl RevisionStats {
+    fn add(&mut self, record: &PackageRecord) {
+        self.n_packages += 1;
+        if let Some(timestamp) = record.timestamp {
+            self.oldest = Some(
+                self.oldest
+                    .map_or(timestamp, |oldest| oldest.min(timestamp)),
+            );
+            self.newest = Some(
+                self.newest
+                    .map_or(timestamp, |newest| newest.max(timestamp)),
+            );
+        }
+    }
+}
+
+fn repodata_revisions_for_packages(
+    configured: &[RepodataRevisionInfo],
+    experimental_v3: &ExperimentalV3Packages,
+) -> Vec<RepodataRevisionInfo> {
+    let mut revisions = configured
+        .iter()
+        .filter(|revision| revision.revision != RepodataRevision::Legacy)
+        .map(|revision| (revision.revision, revision.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
+    for (_, record) in experimental_v3.records() {
+        stats.entry(RepodataRevision::V3).or_default().add(record);
+    }
+
+    for (revision, revision_stats) in stats {
+        let info = revisions
+            .entry(revision)
+            .or_insert_with(|| RepodataRevisionInfo {
+                revision,
+                n_packages: None,
+                oldest: None,
+                newest: None,
+            });
+        if info.n_packages.is_none() {
+            info.n_packages = Some(revision_stats.n_packages);
+        }
+        if info.oldest.is_none() {
+            info.oldest = revision_stats.oldest;
+        }
+        if info.newest.is_none() {
+            info.newest = revision_stats.newest;
+        }
+    }
+
+    // Currently only v3 package maps are supported, but keep configured
+    // revisions with zero packages so clients can still surface channel
+    // capability information.
+    for revision in revisions.values_mut() {
+        if revision.n_packages.is_none() {
+            revision.n_packages = Some(0);
+        }
+    }
+
+    revisions.into_values().collect()
 }
 
 /// Write a `repodata.json` for all packages in the given configurator's root.
@@ -904,6 +1188,11 @@ pub async fn write_repodata(
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
+        let sharded_repodata_revisions = repodata
+            .info
+            .as_ref()
+            .map(|info| info.repodata_revisions.clone())
+            .unwrap_or_default();
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
@@ -917,6 +1206,27 @@ pub async fn write_repodata(
                 .entry(package_name.into())
                 .or_default();
             shard.packages.insert(k, package_record);
+        }
+        for (k, package_record) in repodata.experimental_v3.conda {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_default();
+            shard.experimental_v3.conda.insert(k, package_record);
+        }
+        for (k, package_record) in repodata.experimental_v3.tar_bz2 {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_default();
+            shard.experimental_v3.tar_bz2.insert(k, package_record);
+        }
+        for (k, package_record) in repodata.experimental_v3.whl {
+            let package_name = package_record.package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_default();
+            shard.experimental_v3.whl.insert(k, package_record);
         }
         for package in repodata.removed {
             let package_name = package.identifier.name.clone();
@@ -943,6 +1253,8 @@ pub async fn write_repodata(
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
                 created_at: Some(chrono::Utc::now()),
+                repodata_revisions: sharded_repodata_revisions,
+                channel_relations: None,
             },
             shards: shards
                 .iter()
@@ -1011,6 +1323,10 @@ pub struct IndexFsConfig {
     pub write_zst: bool,
     /// Whether to write the repodata shards.
     pub write_shards: bool,
+    /// Repodata revisions to advertise in generated repodata.
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// How packages are assigned to repodata revisions.
+    pub package_revision_assignment: PackageRevisionAssignment,
     /// Whether to force the index to be written.
     pub force: bool,
     /// The maximum number of parallel tasks to run.
@@ -1028,6 +1344,8 @@ pub async fn index_fs(
         repodata_patch,
         write_zst,
         write_shards,
+        repodata_revisions,
+        package_revision_assignment,
         force,
         max_parallel,
         multi_progress,
@@ -1043,6 +1361,8 @@ pub async fn index_fs(
         repodata_patch,
         write_zst,
         write_shards,
+        repodata_revisions,
+        package_revision_assignment,
         force,
         max_parallel,
         multi_progress,
@@ -1067,6 +1387,10 @@ pub struct IndexS3Config {
     pub write_zst: bool,
     /// Whether to write the repodata shards.
     pub write_shards: bool,
+    /// Repodata revisions to advertise in generated repodata.
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// How packages are assigned to repodata revisions.
+    pub package_revision_assignment: PackageRevisionAssignment,
     /// Whether to force the index to be written.
     pub force: bool,
     /// The maximum number of parallel tasks to run.
@@ -1110,6 +1434,8 @@ pub async fn index_s3(
         repodata_patch,
         write_zst,
         write_shards,
+        repodata_revisions,
+        package_revision_assignment,
         force,
         max_parallel,
         multi_progress,
@@ -1127,6 +1453,8 @@ pub async fn index_s3(
         repodata_patch,
         write_zst,
         write_shards,
+        repodata_revisions,
+        package_revision_assignment,
         force,
         max_parallel,
         multi_progress,
@@ -1159,6 +1487,8 @@ pub async fn index(
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
+    repodata_revisions: Vec<RepodataRevisionInfo>,
+    package_revision_assignment: PackageRevisionAssignment,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -1238,6 +1568,8 @@ pub async fn index(
             force,
             write_zst,
             write_shards,
+            repodata_revisions.clone(),
+            package_revision_assignment,
             repodata_patch
                 .as_ref()
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
@@ -1292,10 +1624,12 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         info: Some(ChannelInfo {
             subdir: Some(Platform::NoArch.to_string()),
             base_url: None,
+            repodata_revisions: Vec::new(),
+            channel_relations: None,
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        experimental_whl_packages: IndexMap::default(),
+        experimental_v3: ExperimentalV3Packages::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1344,4 +1678,73 @@ pub async fn ensure_channel_initialized_s3(
         .layer(RetryLayer::new())
         .finish();
     ensure_channel_initialized(&op).await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use indexmap::IndexMap;
+    use rattler_conda_types::Version;
+    use rattler_conda_types::{
+        package::ArchiveIdentifier, PackageName, UrlOrPath, WhlPackageRecord,
+    };
+
+    use super::*;
+
+    #[test]
+    fn package_records_from_repodata_preserves_v3_wheels() {
+        let identifier = ArchiveIdentifier::from_str("demo-1.0-py_0").unwrap();
+        let package_record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            Version::from_str("1.0").unwrap(),
+            "py_0".to_string(),
+        );
+        let wheel_url = UrlOrPath::Path("demo-1.0-py_0.whl".to_string());
+
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            experimental_v3: ExperimentalV3Packages::default(),
+            removed: HashSet::default(),
+            version: None,
+        };
+        repodata.experimental_v3.whl.insert(
+            identifier.clone(),
+            WhlPackageRecord {
+                package_record,
+                url: wheel_url.clone(),
+            },
+        );
+
+        let records = package_records_from_repodata(repodata);
+        let dist_identifier = DistArchiveIdentifier::new(identifier.clone(), WheelArchiveType::Whl);
+        let indexed_record = records
+            .get(&dist_identifier)
+            .expect("v3 wheel should be preserved");
+        assert_eq!(indexed_record.repodata_revision, RepodataRevision::V3);
+        assert_eq!(indexed_record.wheel_url, Some(wheel_url));
+
+        let (_, indexed_record) = records
+            .into_iter()
+            .next()
+            .expect("v3 wheel should be present");
+        let mut packages = IndexMap::default();
+        let mut conda_packages = IndexMap::default();
+        let mut experimental_v3 = ExperimentalV3Packages::default();
+        insert_package_record_by_revision(
+            &mut packages,
+            &mut conda_packages,
+            &mut experimental_v3,
+            dist_identifier,
+            indexed_record,
+            RepodataRevision::V3,
+        )
+        .unwrap();
+
+        assert!(packages.is_empty());
+        assert!(conda_packages.is_empty());
+        assert!(experimental_v3.whl.contains_key(&identifier));
+    }
 }

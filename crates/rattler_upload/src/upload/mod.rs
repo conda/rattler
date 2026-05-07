@@ -1,6 +1,8 @@
 //! The upload module provides the package upload functionality.
 
-use crate::{tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, QuetzData};
+use crate::{
+    tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, CloudsmithData, QuetzData,
+};
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use indicatif::{style::TemplateError, HumanBytes, ProgressState};
@@ -21,9 +23,13 @@ use url::Url;
 
 use crate::upload::package::{sha256_sum, ExtractedPackage};
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 mod anaconda;
 #[cfg(feature = "sigstore-sign")]
 pub mod attestation;
+mod cloudsmith;
 pub mod conda_forge;
 pub mod opt;
 mod package;
@@ -34,11 +40,11 @@ mod trusted_publishing;
 #[cfg(feature = "s3")]
 pub use s3::upload_package_to_s3;
 
-pub use prefix::upload_package_to_prefix;
+pub use anaconda::AnacondaError;
+pub use cloudsmith::CloudsmithError;
+pub use prefix::{upload_package_to_prefix, PrefixUploadError};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Returns the style to use for a progressbar that is currently in progress.
+/// Returns the style to use for a progress bar that is currently in progress.
 fn default_bytes_style() -> Result<indicatif::ProgressStyle, TemplateError> {
     Ok(indicatif::ProgressStyle::default_bar()
             .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {bytes:>8} @ {smoothed_bytes_per_sec:8}")?
@@ -213,27 +219,21 @@ pub async fn upload_package_to_anaconda(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
     anaconda_data: AnacondaData,
-) -> miette::Result<()> {
+) -> Result<(), anaconda::AnacondaError> {
     let token = match anaconda_data.api_key {
         Some(token) => token,
-        None => match storage.get("anaconda.org") {
-            Ok(Some(Authentication::CondaToken(token))) => token,
-            Ok(Some(_)) => {
-                return Err(miette::miette!(
-                    "A Conda token is required for authentication with anaconda.org.
-                        Authentication information found in the keychain / auth file, but it was not a Conda token.
-                        Please create a token on anaconda.org"
-                ));
+        None => match storage.get_by_url(Url::from(anaconda_data.url.clone())) {
+            Ok((_, Some(Authentication::CondaToken(token)))) => token,
+            Ok((_, Some(_))) => {
+                return Err(anaconda::AnacondaError::WrongAuthenticationType);
             }
-            Ok(None) => {
-                return Err(miette::miette!(
-                    "No anaconda.org api key was given and no token were found in the keychain / auth file. Please create a token on anaconda.org"
-                ));
+            Ok((_, None)) => {
+                return Err(anaconda::AnacondaError::MissingApiKey);
             }
             Err(e) => {
-                return Err(miette::miette!(
-                    "Failed to get authentication information form keychain: {e}"
-                ));
+                return Err(anaconda::AnacondaError::KeychainError {
+                    message: e.to_string(),
+                });
             }
         },
     };
@@ -269,6 +269,81 @@ pub async fn upload_package_to_anaconda(
             }
         }
     }
+    Ok(())
+}
+
+/// Uploads package files to a Cloudsmith repository.
+pub async fn upload_package_to_cloudsmith(
+    storage: &AuthenticationStorage,
+    package_files: &Vec<PathBuf>,
+    cloudsmith_data: CloudsmithData,
+) -> Result<(), cloudsmith::CloudsmithError> {
+    let token = match cloudsmith_data.api_key {
+        Some(token) => token,
+        None => match storage.get_by_url(Url::from(cloudsmith_data.url.clone())) {
+            Ok((
+                _,
+                Some(Authentication::CondaToken(token) | Authentication::BearerToken(token)),
+            )) => token,
+            Ok((_, Some(_))) => {
+                return Err(cloudsmith::CloudsmithError::WrongAuthenticationType);
+            }
+            Ok((_, None)) => {
+                return Err(cloudsmith::CloudsmithError::MissingApiKey);
+            }
+            Err(e) => {
+                return Err(cloudsmith::CloudsmithError::KeychainError {
+                    message: e.to_string(),
+                });
+            }
+        },
+    };
+
+    let client = cloudsmith::Cloudsmith::new(
+        token,
+        cloudsmith_data.url,
+        cloudsmith_data.owner,
+        cloudsmith_data.repo,
+    );
+
+    for package_file in package_files {
+        let package = package::ExtractedPackage::from_package_file(package_file)?;
+        let filename = package.filename().ok_or_else(|| {
+            miette::miette!("Package file {} has no filename", package_file.display())
+        })?;
+
+        let md5 = package.md5_hex().into_diagnostic()?;
+        let file_size = package.file_size().into_diagnostic()?;
+        let is_multipart = file_size >= cloudsmith::CHUNK_SIZE as u64;
+
+        let upload_response = client.request_upload(filename, &md5, is_multipart).await?;
+
+        if is_multipart {
+            client
+                .upload_file_multipart(
+                    &upload_response.upload_url,
+                    &upload_response.identifier,
+                    package_file,
+                )
+                .await?;
+        } else {
+            client
+                .upload_file_single(
+                    &upload_response.upload_url,
+                    &upload_response.upload_fields,
+                    package_file,
+                )
+                .await?;
+        }
+
+        let pkg_response = client.create_package(&upload_response.identifier).await?;
+        info!(
+            "Package created: slug_perm={}, slug={}",
+            pkg_response.slug_perm, pkg_response.slug
+        );
+    }
+
+    info!("Packages successfully uploaded to Cloudsmith");
     Ok(())
 }
 
@@ -394,4 +469,212 @@ async fn send_request(
     );
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod test {
+    use axum::{http::StatusCode, Router};
+    use rattler_networking::AuthenticationStorage;
+
+    use crate::upload::opt::{ArtifactoryData, QuetzData};
+    use crate::upload::test_utils::{start_test_server, test_package_path};
+
+    async fn ok_with_api_key(
+        headers: axum::http::HeaderMap,
+        _body: axum::body::Bytes,
+    ) -> StatusCode {
+        assert!(headers.get("x-api-key").is_some());
+        StatusCode::OK
+    }
+
+    async fn ok_with_bearer(
+        headers: axum::http::HeaderMap,
+        _body: axum::body::Bytes,
+    ) -> StatusCode {
+        let auth = headers.get("authorization").unwrap().to_str().unwrap();
+        assert!(auth.starts_with("Bearer "));
+        StatusCode::OK
+    }
+
+    async fn unauthorized(_body: axum::body::Bytes) -> StatusCode {
+        StatusCode::UNAUTHORIZED
+    }
+
+    async fn conflict(_body: axum::body::Bytes) -> StatusCode {
+        StatusCode::CONFLICT
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_success() {
+        let router = Router::new().fallback(ok_with_api_key);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-api-key".to_string()),
+        );
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_auth_failure() {
+        let router = Router::new().fallback(unauthorized);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data =
+            QuetzData::new(url, "test-channel".to_string(), Some("bad-key".to_string()));
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_quetz_upload_conflict() {
+        let router = Router::new().fallback(conflict);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let quetz_data = QuetzData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-key".to_string()),
+        );
+        let result =
+            super::upload_package_to_quetz(&storage, &vec![test_package_path()], quetz_data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_success() {
+        let router = Router::new().fallback(ok_with_bearer);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(
+            url,
+            "test-channel".to_string(),
+            Some("test-token".to_string()),
+        );
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_artifactory_upload_auth_failure() {
+        let router = Router::new().fallback(unauthorized);
+        let url = start_test_server(router).await;
+        let storage = AuthenticationStorage::empty();
+        let artifactory_data = ArtifactoryData::new(
+            url,
+            "test-channel".to_string(),
+            Some("bad-token".to_string()),
+        );
+        let result = super::upload_package_to_artifactory(
+            &storage,
+            &vec![test_package_path()],
+            artifactory_data,
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_upload_success() {
+        use axum::routing::post;
+        use std::net::SocketAddr;
+
+        // Bind the listener first so we know the port for the upload_url response
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url: url::Url = format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let upload_handler = {
+            let base_url = base_url.clone();
+            move |headers: axum::http::HeaderMap| {
+                let base_url = base_url.clone();
+                async move {
+                    assert!(headers.get("X-Api-Key").is_some());
+                    let upload_url = base_url.join("s3-upload").unwrap();
+                    (
+                        axum::http::StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "identifier": "test-file-id",
+                            "upload_url": upload_url.to_string(),
+                            "upload_fields": {"key": "value"}
+                        })
+                        .to_string(),
+                    )
+                }
+            }
+        };
+
+        let router = Router::new()
+            .route("/files/{owner}/{repo}/", post(upload_handler))
+            .route("/s3-upload", post(|| async { StatusCode::OK }))
+            .route(
+                "/packages/{owner}/{repo}/upload/conda/",
+                post(|| async {
+                    (
+                        StatusCode::OK,
+                        [("content-type", "application/json")],
+                        serde_json::json!({
+                            "slug_perm": "test-slug-perm",
+                            "slug": "test-slug"
+                        })
+                        .to_string(),
+                    )
+                }),
+            );
+
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+
+        let storage = AuthenticationStorage::empty();
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            Some("test-api-key".to_string()),
+            Some(base_url),
+        );
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+        assert!(result.is_ok(), "{:?}", result.unwrap_err());
+    }
+
+    #[tokio::test]
+    async fn test_cloudsmith_upload_missing_api_key() {
+        let storage = AuthenticationStorage::empty();
+        let cloudsmith_data = crate::upload::opt::CloudsmithData::new(
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            None,
+            Some("http://127.0.0.1:1".parse().unwrap()),
+        );
+        let result = super::upload_package_to_cloudsmith(
+            &storage,
+            &vec![test_package_path()],
+            cloudsmith_data,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            super::cloudsmith::CloudsmithError::MissingApiKey
+        ),);
+    }
 }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List, Optional, Literal
+from typing import TYPE_CHECKING, List, Optional, Literal
 from rattler.rattler import (
     PyPathsJson,
     PyPathsEntry,
@@ -9,6 +9,9 @@ from rattler.rattler import (
     PyPrefixPlaceholder,
     PyFileMode,
 )
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class PathsJson:
@@ -80,6 +83,13 @@ class PathsJson:
         format, this function returns an error.
         """
         return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
+
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> PathsJson:
+        """
+        Fetches `info/paths.json` from a remote package archive URL.
+        """
+        return cls._from_py_paths_json(await PyPathsJson.from_remote_url(client._client, url))
 
     @staticmethod
     def package_path() -> Path:

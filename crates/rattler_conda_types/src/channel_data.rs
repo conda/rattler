@@ -1,4 +1,4 @@
-//! Datastructures that are present in a `channeldata.json` file. Some channels on anaconda.org
+//! Data-structures that are present in a `channeldata.json` file. Some channels on anaconda.org
 //! contain a `channeldata.json` file which describes the subdirs the channel contains, the packages
 //! stored in the channel and additional data about them like their latest version.
 //!

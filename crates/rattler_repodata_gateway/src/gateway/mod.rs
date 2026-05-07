@@ -18,6 +18,7 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
+use crate::reporter::report_unsupported_repodata_revisions;
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
@@ -322,11 +323,15 @@ impl GatewayInner {
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
         let key = (channel.clone(), platform);
-        let channel = channel.clone();
+        let channel_for_create = channel.clone();
+        let reporter_for_create = reporter.clone();
 
-        self.subdirs
+        let subdir = self
+            .subdirs
             .get_or_try_init(key, || async move {
-                let subdir = self.create_subdir(&channel, platform, reporter).await?;
+                let subdir = self
+                    .create_subdir(&channel_for_create, platform, reporter_for_create)
+                    .await?;
                 Ok(Arc::new(subdir))
             })
             .await
@@ -336,7 +341,16 @@ impl GatewayInner {
                     "a coalesced request failed".to_string(),
                     std::io::ErrorKind::Other.into(),
                 ),
-            })
+            })?;
+
+        report_unsupported_repodata_revisions(
+            reporter.as_deref(),
+            channel,
+            platform.as_str(),
+            subdir.repodata_revisions(),
+        );
+
+        Ok(subdir)
     }
 
     async fn create_subdir(
@@ -361,7 +375,7 @@ mod test {
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
-        sync::Arc,
+        sync::{Arc, Mutex},
         time::Instant,
     };
 
@@ -379,7 +393,9 @@ mod test {
     use crate::{
         fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
+        UnsupportedRepodataRevision,
     };
+    use rattler_conda_types::RepodataRevision;
 
     async fn local_conda_forge() -> Channel {
         tokio::try_join!(
@@ -440,6 +456,167 @@ mod test {
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
+    async fn test_unsupported_repodata_revision_reporter() {
+        #[derive(Default)]
+        struct RevisionReporter {
+            messages: Mutex<Vec<UnsupportedRepodataRevision>>,
+        }
+
+        impl Reporter for Arc<RevisionReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_unsupported_repodata_revision(&self, message: &UnsupportedRepodataRevision) {
+                self.messages.lock().unwrap().push(message.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(
+            noarch.join("repodata.json"),
+            r#"{
+                "repodata_version": 1,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": [
+                        {
+                            "revision": 4,
+                            "n_packages": 2,
+                            "oldest": 1768249989851,
+                            "newest": 1773851561010
+                        }
+                    ]
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "md5": "82ecc40f09b9c44483e6b70cad2545d7",
+                        "name": "demo",
+                        "noarch": "generic",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": "noarch",
+                        "timestamp": 1689209309623,
+                        "version": "1.0"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let reporter = Arc::new(RevisionReporter::default());
+        let gateway = Gateway::new();
+        let channel = Channel::from_directory(tempdir.path());
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+
+        // The message is reported from cached subdirs too, so callers can
+        // attach a reporter per query and still surface the warning.
+        let records = gateway
+            .query(
+                vec![channel],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+        let messages = reporter.messages.lock().unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].subdir, "noarch");
+        assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
+        assert_eq!(messages[0].revision.revision, RepodataRevision::Unknown(4));
+        assert_eq!(messages[0].revision.n_packages, Some(2));
+        assert_eq!(messages[1], messages[0]);
+    }
+
+    #[tokio::test]
+    async fn test_supported_repodata_revision_reporter_ignored() {
+        #[derive(Default)]
+        struct RevisionReporter {
+            messages: Mutex<Vec<UnsupportedRepodataRevision>>,
+        }
+
+        impl Reporter for Arc<RevisionReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_unsupported_repodata_revision(&self, message: &UnsupportedRepodataRevision) {
+                self.messages.lock().unwrap().push(message.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(
+            noarch.join("repodata.json"),
+            r#"{
+                "repodata_version": 1,
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": [
+                        {
+                            "revision": 3,
+                            "n_packages": 1
+                        }
+                    ]
+                },
+                "packages": {},
+                "packages.conda": {
+                    "demo-1.0-0.conda": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "md5": "82ecc40f09b9c44483e6b70cad2545d7",
+                        "name": "demo",
+                        "noarch": "generic",
+                        "sha256": "eb65e866067865793b981c2ba74485f75bef441842b5998badc4ec66717685c7",
+                        "size": 1234,
+                        "subdir": "noarch",
+                        "timestamp": 1689209309623,
+                        "version": "1.0"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let reporter = Arc::new(RevisionReporter::default());
+        let records = Gateway::new()
+            .query(
+                vec![Channel::from_directory(tempdir.path())],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
+        let messages = reporter.messages.lock().unwrap();
+        assert!(messages.is_empty());
     }
 
     #[tokio::test]
@@ -552,7 +729,7 @@ mod test {
 
         // Test if the first repodata subdir contains only the direct url package.
         let first_subdir = records.first().unwrap();
-        assert_eq!(first_subdir.len, 1);
+        assert_eq!(first_subdir.len(), 1);
         let openssl_record = first_subdir
             .iter()
             .find(|record| record.package_record.name.as_normalized() == "openssl")
@@ -661,7 +838,7 @@ mod test {
             Strict,
         )
         .unwrap();
-        matchspec.name = None;
+        matchspec.name = "*".parse().expect("wildcard always parses");
 
         let gateway_error = gateway
             .query(
@@ -1254,13 +1431,13 @@ mod test {
             &self,
             platform: Platform,
             name: &PackageName,
-        ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+        ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             let records = self
                 .records
                 .get(&(platform, name.clone()))
                 .cloned()
                 .unwrap_or_default();
-            Ok(Arc::from(records))
+            Ok(records.into_iter().map(Arc::new).collect())
         }
 
         fn package_names(&self, platform: Platform) -> Vec<String> {
@@ -1292,6 +1469,7 @@ mod test {
             constrains: vec![],
             track_features: vec![],
             features: None,
+            flags: vec![],
             noarch: rattler_conda_types::NoArchType::default(),
             license: None,
             license_family: None,
@@ -1439,13 +1617,13 @@ mod test {
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
 
-    /// Test that ensures run_exports fallback works when run_exports.json exists
+    /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
     /// but doesn't contain all packages (out-of-sync scenario).
     ///
-    /// This test creates a channel that has an empty run_exports.json file,
-    /// simulating the case where the run_exports.json file is out of sync with
+    /// This test creates a channel that has an empty `run_exports.json` file,
+    /// simulating the case where the `run_exports.json` file is out of sync with
     /// the actual packages. The test verifies that the system correctly falls
-    /// back to extracting run_exports from the actual package files.
+    /// back to extracting `run_exports` from the actual package files.
     #[tokio::test]
     async fn test_ensure_run_exports_fallback_when_out_of_sync() {
         // Use a minimal repodata with just one openssl package, and add a base_url
@@ -1494,6 +1672,226 @@ mod test {
         assert!(
             run_exports_in_place(&repodata_records),
             "run_exports should be populated via package extraction fallback when run_exports.json is out of sync"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern "openssl*" - should match packages starting with
+        // "openssl"
+        let matchspec = MatchSpec::from_str(
+            "openssl*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "glob pattern should match some packages"
+        );
+
+        // Verify all results start with "openssl"
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("openssl"),
+                "all matched packages should start with 'openssl', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_regex_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with regex pattern - match packages starting with "python-"
+        // Regex patterns are enclosed in ^...$ or use regex syntax
+        let matchspec = MatchSpec::from_str(
+            "^python-.*$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "regex pattern should match some packages"
+        );
+
+        // Verify all results match the pattern (start with "python-")
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("python-"),
+                "all matched packages should start with 'python-', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query_no_matches() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern that matches nothing
+        let matchspec = MatchSpec::from_str(
+            "zzznonexistent*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(
+            total_records, 0,
+            "glob pattern with no matches should return empty results"
+        );
+    }
+
+    /// Verify that glob pattern queries discover matching packages across
+    /// multiple channels *and* multiple subdirs, even when each source
+    /// carries a disjoint set of package names.
+    #[tokio::test]
+    async fn test_glob_pattern_across_multiple_channels_and_subdirs() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        // --- Source A: has lib-foo on linux-64 and lib-bar on noarch ----------
+        let mut source_a = MockRepoDataSource::new();
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("lib-foo", "1.0.0", "linux-64"),
+        );
+        source_a.add_record(
+            Platform::NoArch,
+            make_test_record("lib-bar", "2.0.0", "noarch"),
+        );
+        // A non-matching package that should be excluded.
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("unrelated", "1.0.0", "linux-64"),
+        );
+
+        // --- Source B: has lib-baz on linux-64 and lib-qux on noarch ---------
+        let mut source_b = MockRepoDataSource::new();
+        source_b.add_record(
+            Platform::Linux64,
+            make_test_record("lib-baz", "3.0.0", "linux-64"),
+        );
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("lib-qux", "4.0.0", "noarch"),
+        );
+        // Another non-matching package.
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("other-pkg", "1.0.0", "noarch"),
+        );
+
+        let src_a: Arc<dyn super::RepoDataSource> = Arc::new(source_a);
+        let src_b: Arc<dyn super::RepoDataSource> = Arc::new(source_b);
+
+        // Glob that matches every "lib-*" package.
+        let matchspec = MatchSpec::from_str(
+            "lib-*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(src_a), super::Source::Custom(src_b)],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let mut all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        all_records.sort();
+
+        // Collect matched names.
+        let matched_names: std::collections::BTreeSet<_> = all_records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized().to_string())
+            .collect();
+
+        assert_eq!(
+            matched_names,
+            ["lib-bar", "lib-baz", "lib-foo", "lib-qux"]
+                .into_iter()
+                .map(String::from)
+                .collect::<std::collections::BTreeSet<_>>(),
+            "glob should find all lib-* packages across both sources and both subdirs"
         );
     }
 }

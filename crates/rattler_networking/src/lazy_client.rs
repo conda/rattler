@@ -14,6 +14,12 @@ pub struct LazyClient {
     >,
 }
 
+impl std::fmt::Debug for LazyClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LazyClient").finish_non_exhaustive()
+    }
+}
+
 impl Default for LazyClient {
     fn default() -> Self {
         reqwest_middleware::ClientWithMiddleware::default().into()

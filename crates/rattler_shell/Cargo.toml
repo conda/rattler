@@ -1,6 +1,6 @@
 [package]
 name = "rattler_shell"
-version = "0.25.19"
+version = "0.26.11"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "A crate to help with activation and deactivation of a conda environment"
@@ -24,7 +24,7 @@ sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "rt", "process"] }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

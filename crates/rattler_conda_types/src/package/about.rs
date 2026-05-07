@@ -80,6 +80,10 @@ impl PackageFile for AboutJson {
     fn from_str(str: &str) -> Result<Self, Error> {
         serde_json::from_str(str).map_err(Into::into)
     }
+
+    fn from_slice(slice: &[u8]) -> Result<Self, Error> {
+        serde_json::from_slice(slice).map_err(Into::into)
+    }
 }
 
 #[cfg(test)]

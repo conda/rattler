@@ -1,12 +1,5 @@
 use configparser::ini::Ini;
 use std::path::{Path, PathBuf};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum MimeConfigError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
 
 #[derive(Debug)]
 pub struct MimeConfig {
@@ -165,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_and_save() -> Result<(), MimeConfigError> {
+    fn test_load_and_save() -> std::io::Result<()> {
         let (mut config, file) = create_temp_config();
 
         config.register_mime_type("text/plain", "notepad.desktop");

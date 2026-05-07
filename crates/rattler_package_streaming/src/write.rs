@@ -87,7 +87,7 @@ fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, V
 fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
     paths
         .iter()
-        .map(|p| base_path.join(p).metadata().map(|m| m.len()).unwrap_or(0))
+        .map(|p| base_path.join(p).metadata().map_or(0, |m| m.len()))
         .sum()
 }
 

@@ -1,6 +1,15 @@
 pub mod auth;
+pub mod client;
+pub mod completion;
 pub mod create;
+pub mod download;
 pub mod extract;
+pub mod fetch_file;
+pub mod inspect;
 pub mod link;
+pub mod list;
 pub mod menu;
+pub mod run;
+pub mod search;
+pub mod shell_hook;
 pub mod virtual_packages;

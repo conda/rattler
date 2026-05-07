@@ -22,8 +22,8 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    prefix_record::{Link, LinkType},
-    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
+    prefix_record::Link, MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord,
+    RepoDataRecord,
 };
 use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
 use rayon::prelude::*;
@@ -32,7 +32,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+    unlink_package, AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions,
+    Prefix, Transaction,
 };
 use crate::{
     default_cache_dir,
@@ -75,8 +76,8 @@ pub struct Installer {
     reinstall_packages: Option<HashSet<PackageName>>,
     ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
-    // TODO: Determine upfront if these are possible.
     link_options: LinkOptions,
+    external_symlink_policy: ExternalSymlinkPolicy,
 }
 
 #[derive(Debug)]
@@ -336,6 +337,30 @@ impl Installer {
         self
     }
 
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
+    ///
+    /// Some packages (e.g. driver packages) legitimately ship symlinks to
+    /// paths outside the environment. The default policy is
+    /// [`ExternalSymlinkPolicy::Warn`].
+    #[must_use]
+    pub fn with_external_symlink_policy(self, policy: ExternalSymlinkPolicy) -> Self {
+        Self {
+            external_symlink_policy: policy,
+            ..self
+        }
+    }
+
+    /// Sets the policy for handling symlinks that point outside the target
+    /// prefix.
+    ///
+    /// This function is similar to [`Self::with_external_symlink_policy`],
+    /// but modifies an existing instance.
+    pub fn set_external_symlink_policy(&mut self, policy: ExternalSymlinkPolicy) -> &mut Self {
+        self.external_symlink_policy = policy;
+        self
+    }
+
     /// Sets the requested specs for the installer. These will be used to
     /// populate the `requested_spec` field in generated `PrefixRecord`
     /// instances.
@@ -517,6 +542,7 @@ impl Installer {
             allow_symbolic_links: self.link_options.allow_symbolic_links,
             allow_hard_links: self.link_options.allow_hard_links,
             allow_ref_links: self.link_options.allow_ref_links,
+            external_symlink_policy: self.external_symlink_policy,
             ..InstallOptions::default()
         };
 
@@ -682,7 +708,7 @@ impl Installer {
                 transaction.unchanged_packages(),
                 &prefix,
             )
-            .unwrap();
+            .map_err(|e| InstallerError::UnlinkError("remove_empty_directories".to_string(), e))?;
 
         // Wait for all transaction operations to finish
         while let Some(result) = pending_link_futures.next().await {
@@ -730,7 +756,7 @@ async fn link_package(
     rayon::spawn_fifo(move || {
         let inner = move || {
             // Link the contents of the package into the prefix.
-            let paths = crate::install::link_package_sync(
+            let (paths, link_type) = crate::install::link_package_sync(
                 &cached_package_dir,
                 &target_prefix,
                 clobber_registry,
@@ -743,9 +769,7 @@ async fn link_package(
                 extracted_package_dir: Some(cached_package_dir.clone()),
                 link: Some(Link {
                     source: cached_package_dir,
-                    // TODO: compute the right value here based on the options and `can_hard_link`
-                    // ...
-                    link_type: Some(LinkType::HardLink),
+                    link_type: Some(link_type),
                 }),
                 requested_specs,
                 ..PrefixRecord::from_repodata_record(record.clone(), paths)
@@ -827,7 +851,7 @@ async fn populate_cache(
 /// `MinimalPrefixRecord`, which doesn't contain most of the fields.
 /// Therefore direct writing could overwrite data we want to preserve.
 ///
-/// Currently we're loading full json, but we could do that inplace without
+/// Currently we're loading full json, but we could do that in place without
 /// parsing whole file.
 fn update_requested_specs_in_json(
     path: &Path,
@@ -883,7 +907,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
     let mut mapping = std::collections::HashMap::new();
 
     for spec in specs {
-        if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
+        if let PackageNameMatcher::Exact(name) = &spec.name {
             mapping
                 .entry(name.clone())
                 .or_insert_with(Vec::new)
@@ -1087,11 +1111,11 @@ mod tests {
         let specs = vec![
             MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
             // Create a nameless spec by removing the name
-            MatchSpec {
-                name: None,
-                version: Some(">=1.0".parse().unwrap()),
-                ..Default::default()
-            },
+            MatchSpec::from_nameless(
+                rattler_conda_types::NamelessMatchSpec::default(),
+                "*".parse::<rattler_conda_types::PackageNameMatcher>()
+                    .unwrap(),
+            ),
         ];
 
         let mapping = create_spec_mapping(&specs);
@@ -1464,6 +1488,56 @@ mod tests {
             result.is_ok(),
             "Installation should succeed when installing noarch packages with noarch platform: {:?}",
             result.err()
+        );
+    }
+
+    /// Test that the recorded `link_type` in the conda-meta `PrefixRecord`
+    /// matches the filesystem capabilities
+    #[tokio::test]
+    async fn test_link_type_recorded_correctly() {
+        use rattler_conda_types::prefix_record::LinkType;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Install with hard links explicitly disabled
+        let installer = Installer::new().with_link_options(LinkOptions {
+            allow_hard_links: Some(false),
+            ..LinkOptions::default()
+        });
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_path = get_meta_file_path(&target_prefix, &repo_record);
+        let prefix_record = read_prefix_record(&meta_path);
+        assert_eq!(
+            prefix_record.link.as_ref().and_then(|l| l.link_type),
+            Some(LinkType::Copy),
+            "link_type should be Copy when hard links are disabled"
+        );
+    }
+
+    /// Test that when hard links are explicitly forced on
+    #[tokio::test]
+    async fn test_link_type_hardlink_when_forced() {
+        use rattler_conda_types::prefix_record::LinkType;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Force hard links on prefix and cache are on the same device in
+        // this test so hard linking should actually succeed.
+        let installer = Installer::new().with_link_options(LinkOptions {
+            allow_hard_links: Some(true),
+            ..LinkOptions::default()
+        });
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_path = get_meta_file_path(&target_prefix, &repo_record);
+        let prefix_record = read_prefix_record(&meta_path);
+        assert_eq!(
+            prefix_record.link.as_ref().and_then(|l| l.link_type),
+            Some(LinkType::HardLink),
+            "link_type should be HardLink when hard links are explicitly enabled"
         );
     }
 }

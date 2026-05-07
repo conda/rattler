@@ -7,7 +7,11 @@ pub(super) fn solve_conditional_dependencies<T: SolverImpl + Default>() {
 
     let conditional_pkg = PackageBuilder::new("conditional-pkg")
         .version("1.0.0")
-        .depends(["python >=3.8", "numpy; if python >=3.9", "scipy; if __unix"])
+        .depends([
+            "python >=3.8",
+            r#"numpy[when="python >=3.9"]"#,
+            r#"scipy[when="__unix"]"#,
+        ])
         .build();
 
     let python39_pkg = PackageBuilder::new("python").version("3.9.0").build();
@@ -61,16 +65,19 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
 
     let complex_pkg_and = base_complex_pkg
         .clone()
-        .depends(["python", "pkg-a; if python>=3.8 and python<3.9.5"])
+        .depends(["python", r#"pkg-a[when="python>=3.8 and python<3.9.5"]"#])
         .build();
 
     let complex_pkg_or = base_complex_pkg
         .clone()
-        .depends(["python", "pkg-b; if python>=3.9 or python<3.7"])
+        .depends(["python", r#"pkg-b[when="python>=3.9 or python<3.7"]"#])
         .build();
 
     let complex_pkg_nested = base_complex_pkg
-        .depends(["python", "pkg-c; if (python>=3.9 or python<3.7) and __unix"])
+        .depends([
+            "python",
+            r#"pkg-c[when="(python>=3.9 or python<3.7) and __unix"]"#,
+        ])
         .build();
 
     let unix_virtual = GenericVirtualPackage {
@@ -155,7 +162,7 @@ pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Defau
 
     SolverCase::new("conditional root spec includes package when condition satisfied")
         .repository([python.clone()])
-        .specs(["python; if __unix"])
+        .specs([r#"python[when="__unix"]"#])
         .virtual_packages(vec![unix_virtual])
         .expect_present([("python", "3.9.0")])
         .run::<T>();
@@ -176,7 +183,7 @@ pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + D
 
     SolverCase::new("conditional root spec excludes package when condition not satisfied")
         .repository([python.clone()])
-        .specs(["python; if __win"])
+        .specs([r#"python[when="__win"]"#])
         .virtual_packages(vec![unix_virtual])
         .expect_absent(["python"])
         .run::<T>();
@@ -203,7 +210,7 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
         "conditional root spec with AND logic includes package when both conditions satisfied",
     )
     .repository([python.clone()])
-    .specs(["python; if __unix and __linux"])
+    .specs([r#"python[when="__unix and __linux"]"#])
     .virtual_packages(vec![unix_virtual, linux_virtual])
     .expect_present([("python", "3.9.0")])
     .run::<T>();
@@ -219,9 +226,9 @@ pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>(
     let platform_pkg = PackageBuilder::new("package")
         .version("1.0.0")
         .depends([
-            "osx-dependency; if __osx",
-            "linux-dependency; if __linux",
-            "win-dependency; if __win",
+            r#"osx-dependency[when="__osx"]"#,
+            r#"linux-dependency[when="__linux"]"#,
+            r#"win-dependency[when="__win"]"#,
         ])
         .build();
 
@@ -294,20 +301,20 @@ pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>(
 pub(super) fn rattler_issue_1917_version_conditionals<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
-    // conditional-dependency declares: "package; if side-dependency=0.2"
+    // conditional-dependency declares: package[when="side-dependency=0.2"]
     // package itself has platform-conditional dependencies
     let conditional_dep_pkg = PackageBuilder::new("conditional-dependency")
         .version("1.0.0")
-        .depends(["package; if side-dependency=0.2"])
+        .depends([r#"package[when="side-dependency=0.2"]"#])
         .build();
 
     // package has its own conditional dependencies (chained conditionals)
     let package = PackageBuilder::new("package")
         .version("1.0.0")
         .depends([
-            "osx-dependency; if __osx",
-            "linux-dependency; if __linux",
-            "win-dependency; if __win",
+            r#"osx-dependency[when="__osx"]"#,
+            r#"linux-dependency[when="__linux"]"#,
+            r#"win-dependency[when="__win"]"#,
         ])
         .build();
 

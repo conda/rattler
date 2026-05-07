@@ -8,7 +8,6 @@ use std::{
     marker::PhantomData,
 };
 
-use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
@@ -16,7 +15,7 @@ use rattler_conda_types::{
     package::{ArchiveIdentifier, DistArchiveType},
     utils::TimestampMs,
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
-    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -27,13 +26,38 @@ use resolvo::{
 };
 
 use crate::{
-    resolvo::conda_sorting::CompareStrategy, ChannelPriority, IntoRepoData, MinimumAgeConfig,
-    SolveError, SolveStrategy, SolverRepoData, SolverTask,
+    resolvo::conda_sorting::CompareStrategy, CancellationToken, ChannelPriority, ExcludeNewer,
+    IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask,
 };
 
 mod conda_sorting;
 
 type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
+
+fn exclude_newer_reason(
+    config: &ExcludeNewer,
+    package: &PackageName,
+    channel: Option<&str>,
+    timestamp: Option<&rattler_conda_types::utils::TimestampMs>,
+) -> Option<String> {
+    let cutoff = config.cutoff_for_package(package, channel);
+    match timestamp {
+        Some(timestamp) if *timestamp > cutoff => Some(format!(
+            "the package is uploaded after the cutoff date of {cutoff}"
+        )),
+        None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
+        _ => None,
+    }
+}
+
+/// A dependency override rule.
+#[derive(Clone)]
+pub struct DependencyOverride {
+    /// Matches packages whose dependencies should be overridden.
+    pub package_matcher: MatchSpec,
+    /// Replaces matching dependencies.
+    pub override_spec: MatchSpec,
+}
 
 /// Represents the information required to load available packages into libsolv
 /// for a single channel and platform combination
@@ -272,9 +296,13 @@ pub struct CondaDependencyProvider<'a> {
 
     stop_time: Option<std::time::SystemTime>,
 
+    cancellation_token: Option<CancellationToken>,
+
     strategy: SolveStrategy,
 
     direct_dependencies: HashSet<NameId>,
+
+    dependency_overrides: HashMap<PackageName, Vec<DependencyOverride>>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -287,17 +315,14 @@ impl<'a> CondaDependencyProvider<'a> {
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
+        cancellation_token: Option<CancellationToken>,
         channel_priority: ChannelPriority,
-        exclude_newer: Option<DateTime<Utc>>,
-        min_age: Option<&MinimumAgeConfig>,
+        exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
+        dependency_overrides: Vec<DependencyOverride>,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
-
-        // Compute the cutoff time for min_age.
-        // Packages published after this time will be excluded (unless exempt).
-        let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
@@ -310,9 +335,8 @@ impl<'a> CondaDependencyProvider<'a> {
         // Compute the direct dependencies
         let direct_dependencies = match_specs
             .iter()
-            .filter_map(|spec| spec.name.as_ref())
-            .filter_map(|name| Option::<PackageName>::from(name.clone()))
-            .map(|name| pool.intern_package_name(&name))
+            .filter_map(|spec| spec.name.as_exact())
+            .map(|name| pool.intern_package_name(name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -343,21 +367,13 @@ impl<'a> CondaDependencyProvider<'a> {
 
             for record in repo_data.records {
                 // Determine if this record will be excluded by exclude_newer.
-                let excluded_by_newer = matches!((&exclude_newer, &record.package_record.timestamp),
-                    (Some(exclude_newer), Some(record_timestamp))
-                        if record_timestamp > exclude_newer);
-
-                // Determine if this record will be excluded by min_age.
-                let excluded_by_age =
-                    match (&min_age, &min_age_cutoff, &record.package_record.timestamp) {
-                        (Some(config), Some(cutoff), Some(timestamp)) => {
-                            // Exclude if published after cutoff and not exempt
-                            timestamp > cutoff && !config.is_exempt(&record.package_record.name)
-                        }
-                        _ => false,
-                    };
-
-                let excluded = excluded_by_newer || excluded_by_age;
+                let excluded = exclude_newer.as_ref().is_some_and(|config| {
+                    config.is_excluded(
+                        &record.package_record.name,
+                        record.channel.as_deref(),
+                        record.package_record.timestamp.as_ref(),
+                    )
+                });
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;
@@ -414,36 +430,22 @@ impl<'a> CondaDependencyProvider<'a> {
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
-                // Filter out any records that are newer than a specific date.
-                match (&exclude_newer, &record.package_record.timestamp) {
-                    (Some(exclude_newer), Some(record_timestamp))
-                        if record_timestamp > exclude_newer =>
-                    {
-                        let reason = pool.intern_string(format!(
-                            "the package is uploaded after the cutoff date of {exclude_newer}"
-                        ));
+                if let Some(config) = &exclude_newer {
+                    if config.is_excluded(
+                        &record.package_record.name,
+                        record.channel.as_deref(),
+                        record.package_record.timestamp.as_ref(),
+                    ) {
+                        let reason = pool.intern_string(
+                            exclude_newer_reason(
+                                config,
+                                &record.package_record.name,
+                                record.channel.as_deref(),
+                                record.package_record.timestamp.as_ref(),
+                            )
+                            .expect("excluded records must have an exclusion reason"),
+                        );
                         candidates.excluded.push((solvable_id, reason));
-                    }
-                    _ => {}
-                }
-
-                // Filter out any records that haven't been published long enough.
-                if let (Some(config), Some(cutoff)) = (&min_age, &min_age_cutoff) {
-                    if !config.is_exempt(&record.package_record.name) {
-                        let exclude_reason = match &record.package_record.timestamp {
-                            Some(timestamp) if timestamp > cutoff => {
-                                let age = humantime::format_duration(config.min_age);
-                                Some(format!("the package was published less than {age} ago"))
-                            }
-                            None if !config.include_unknown_timestamp => {
-                                Some("the package has no timestamp".to_string())
-                            }
-                            _ => None,
-                        };
-                        if let Some(reason) = exclude_reason {
-                            let reason = pool.intern_string(reason);
-                            candidates.excluded.push((solvable_id, reason));
-                        }
                     }
                 }
 
@@ -451,8 +453,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
                         spec.name
-                            .as_ref()
-                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                            .as_exact()
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
@@ -544,6 +545,14 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.hint_dependencies_available = HintDependenciesAvailable::All;
         }
 
+        // Build a lookup table for dependency overrides keyed by target package name.
+        let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
+        for rule in dependency_overrides {
+            if let Some(name) = rule.override_spec.name.as_exact() {
+                override_map.entry(name.clone()).or_default().push(rule);
+            }
+        }
+
         Ok(Self {
             pool,
             name_to_condition: RefCell::default(),
@@ -551,8 +560,10 @@ impl<'a> CondaDependencyProvider<'a> {
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,
+            cancellation_token,
             strategy,
             direct_dependencies,
+            dependency_overrides: override_map,
         })
     }
 
@@ -573,12 +584,31 @@ impl<'a> CondaDependencyProvider<'a> {
                 .intern_condition(Condition::Requirement(version_set))
         })
     }
+
+    fn apply_dependency_override(
+        &self,
+        record: &RepoDataRecord,
+        dep_spec: &MatchSpec,
+    ) -> Option<String> {
+        let dep_name = dep_spec.name.as_exact()?;
+        let rules = self.dependency_overrides.get(dep_name)?;
+        for rule in rules {
+            if rule.package_matcher.matches(&record.package_record) {
+                return Some(rule.override_spec.to_string());
+            }
+        }
+        None
+    }
 }
 
 /// The reason why the solver was cancelled
 pub enum CancelReason {
     /// The solver was cancelled because the timeout was reached
     Timeout,
+
+    /// The solver was cancelled because a [`CancellationToken`] was triggered
+    /// by the caller.
+    Cancelled,
 }
 
 impl Interner for CondaDependencyProvider<'_> {
@@ -662,7 +692,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         };
 
         // Custom sorter that sorts by name, version, and build
-        // and then by the maximalization of dependency versions
+        // and then by the maximization of dependency versions
         // more information can be found at the struct location
         SolvableSorter::new(solver, strategy, dependency_strategy)
             .sort(solvables, &mut highest_version_spec);
@@ -704,7 +734,17 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
-            let specs = match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+            // Try to parse the dependency and check for overrides.
+            let dep_str = match MatchSpec::from_str(
+                depends,
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+            ) {
+                Ok(dep_spec) => self
+                    .apply_dependency_override(record, &dep_spec)
+                    .unwrap_or_else(|| depends.clone()),
+                Err(_) => depends.clone(),
+            };
+            let specs = match parse_match_spec(&self.pool, &dep_str, &mut parse_match_spec_cache) {
                 Ok(version_set_id) => version_set_id,
                 Err(e) => {
                     tracing::debug!(
@@ -712,12 +752,12 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         record.package_record.subdir,
                         record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
-                        depends,
+                        dep_str,
                         e
                     );
                     let reason = self
                         .pool
-                        .intern_string(format!("the dependency '{depends}' failed to parse: {e}",));
+                        .intern_string(format!("the dependency '{dep_str}' failed to parse: {e}",));
 
                     return Dependencies::Unknown(reason);
                 }
@@ -796,7 +836,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                 }
             };
 
-            // Add them as conditional requirements (e.g. `numpy; if extra`).
+            // Add them as conditional requirements (e.g. `numpy[when="extra"]`).
             let extra_condition = self.extra_condition(&record.package_record.name, extra);
             for version_set_id in version_set_ids {
                 dependencies.requirements.push(ConditionalRequirement {
@@ -876,6 +916,11 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
     }
 
     fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
+        if let Some(token) = &self.cancellation_token {
+            if token.is_cancelled() {
+                return Some(Box::new(CancelReason::Cancelled));
+            }
+        }
         if let Some(stop_time) = self.stop_time {
             if std::time::SystemTime::now() > stop_time {
                 return Some(Box::new(CancelReason::Timeout));
@@ -906,6 +951,15 @@ impl super::SolverImpl for Solver {
             .map(|timeout| std::time::SystemTime::now() + timeout);
 
         // Construct a provider that can serve the data.
+        let dependency_overrides: Vec<DependencyOverride> = task
+            .dependency_overrides
+            .into_iter()
+            .map(|(package_matcher, override_spec)| DependencyOverride {
+                package_matcher,
+                override_spec,
+            })
+            .collect();
+
         let provider = CondaDependencyProvider::new(
             task.available_packages.into_iter().map(|r| r.into()),
             &task.locked_packages,
@@ -913,10 +967,11 @@ impl super::SolverImpl for Solver {
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,
+            task.cancellation_token.clone(),
             task.channel_priority,
-            task.exclude_newer,
-            task.min_age.as_ref(),
+            task.exclude_newer.as_ref(),
             task.strategy,
+            dependency_overrides,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.
@@ -952,8 +1007,7 @@ impl super::SolverImpl for Solver {
             .constraints
             .iter()
             .map(|spec| {
-                let (Some(PackageNameMatcher::Exact(name)), spec) = spec.clone().into_nameless()
-                else {
+                let (PackageNameMatcher::Exact(name), spec) = spec.clone().into_nameless() else {
                     unimplemented!("only exact package names are supported");
                 };
                 let name_id = provider.pool.intern_package_name(&name);
@@ -1011,10 +1065,10 @@ fn parse_match_spec(
     }
 
     // Parse the match spec and extract the name of the package it depends on.
-    // Enable conditionals parsing to support dependencies with conditions like "numpy; if python >=3.9"
+    // Enable conditionals parsing to support dependencies with conditions like `numpy[when="python >=3.9"]`
     let match_spec = MatchSpec::from_str(
         spec_str,
-        ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
     )?;
     let condition_id = if let Some(condition) = match_spec.condition.as_ref() {
         let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
@@ -1039,7 +1093,7 @@ fn version_sets_for_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec: MatchSpec,
 ) -> Vec<VersionSetId> {
-    let (Some(PackageNameMatcher::Exact(name)), spec) = spec.into_nameless() else {
+    let (PackageNameMatcher::Exact(name), spec) = spec.into_nameless() else {
         unimplemented!("only exact package names are supported");
     };
 

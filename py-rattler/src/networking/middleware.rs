@@ -5,7 +5,6 @@ use pyo3::{
 };
 use rattler_networking::{
     mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
-    OciMiddleware,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
@@ -19,6 +18,7 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
+    Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
     S3(PyS3Middleware),
@@ -79,6 +79,21 @@ impl PyAuthenticationMiddleware {
 }
 
 #[pyclass]
+#[derive(Clone)]
+pub struct PyRetryMiddleware {
+    pub(crate) max_retries: u32,
+}
+
+#[pymethods]
+impl PyRetryMiddleware {
+    #[new]
+    #[pyo3(signature = (max_retries=3))]
+    pub fn __init__(max_retries: u32) -> Self {
+        Self { max_retries }
+    }
+}
+
+#[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyOciMiddleware {}
@@ -88,12 +103,6 @@ impl PyOciMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
-    }
-}
-
-impl From<PyOciMiddleware> for OciMiddleware {
-    fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
     }
 }
 
@@ -112,7 +121,7 @@ impl PyGCSMiddleware {
 
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
-        GCSMiddleware
+        GCSMiddleware::default()
     }
 }
 
@@ -213,7 +222,7 @@ pub struct AddHeadersMiddleware {
 }
 
 impl AddHeadersMiddleware {
-    /// Create a new AddHeadersMiddleware from a Python callback.
+    /// Create a new `AddHeadersMiddleware` from a Python callback.
     pub fn new(callback: Py<PyAny>) -> Self {
         Self {
             callback: Arc::new(callback),
@@ -258,13 +267,12 @@ impl Middleware for AddHeadersMiddleware {
                 }
 
                 // Try to extract as a dictionary
-                let dict = result.downcast_bound::<PyDict>(py).map_err(|_| {
+                let dict = result.downcast_bound::<PyDict>(py).map_err(|_e| {
                     let type_name = result
                         .bind(py)
                         .get_type()
                         .name()
-                        .map(|n| n.to_string())
-                        .unwrap_or_else(|_| "unknown".to_string());
+                        .map_or_else(|_| "unknown".to_string(), |n| n.to_string());
                     reqwest_middleware::Error::Middleware(anyhow::anyhow!(
                         "Python callback must return a dict or None, got: {type_name}",
                     ))

@@ -7,6 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.28.0...rattler_repodata_gateway-v0.28.1) - 2026-05-04
+
+### Added
+
+- Handle 501 in sharded repodata ([#2401](https://github.com/conda/rattler/pull/2401))
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.7...rattler_repodata_gateway-v0.28.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.6...rattler_repodata_gateway-v0.27.7) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+- add support for CEP-42 channel relations in repodata ([#2370](https://github.com/conda/rattler/pull/2370))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.5...rattler_repodata_gateway-v0.27.6) - 2026-04-13
+
+### Other
+
+- updated the following local packages: file_url, rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_config, rattler_cache
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.4...rattler_repodata_gateway-v0.27.5) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.3...rattler_repodata_gateway-v0.27.4) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.2...rattler_repodata_gateway-v0.27.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.1...rattler_repodata_gateway-v0.27.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.0...rattler_repodata_gateway-v0.27.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.2...rattler_repodata_gateway-v0.27.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+### Fixed
+
+- bz2 cache overwritten with zst state in repodata cache ([#2180](https://github.com/conda/rattler/pull/2180))
+- enable deletion of memory mapped repodata on windows ([#2084](https://github.com/conda/rattler/pull/2084))
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.1...rattler_repodata_gateway-v0.26.2) - 2026-02-25
+
+### Fixed
+
+- *(gateway)* resolve data race in BarrierCell ([#2101](https://github.com/conda/rattler/pull/2101))
+
+### Other
+
+- experimental repodata v3 ([#2093](https://github.com/conda/rattler/pull/2093))
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.26.0...rattler_repodata_gateway-v0.26.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.12...rattler_repodata_gateway-v0.26.0) - 2026-02-19
+
+### Added
+
+- support glob and regex patterns in repodata queries ([#2036](https://github.com/conda/rattler/pull/2036))
+
+### Other
+
+- bump rust to 1.93.1 ([#2072](https://github.com/conda/rattler/pull/2072))
+- wrap RepoDataRecord in Arc throughout gateway ([#2061](https://github.com/conda/rattler/pull/2061))
+- optimized repodata loading ([#2058](https://github.com/conda/rattler/pull/2058))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.25.12](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.11...rattler_repodata_gateway-v0.25.12) - 2026-02-10
 
 ### Other

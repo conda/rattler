@@ -3,15 +3,14 @@
 
 use std::{cmp::Ordering, collections::HashMap};
 
-use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, DistArchiveType},
-    GenericVirtualPackage, RepoDataRecord,
+    GenericVirtualPackage, RepoDataRecord, RepodataRevision,
 };
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
 
-use crate::MinimumAgeConfig;
+use crate::ExcludeNewer;
 
 use super::{
     c_string,
@@ -30,6 +29,18 @@ use super::{
     },
 };
 use crate::SolveError;
+
+fn parse_libsolv_match_spec(match_spec_str: &str) -> Result<Option<MatchSpec>, SolveError> {
+    let Ok(match_spec) = MatchSpec::from_str(
+        match_spec_str,
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+    ) else {
+        return Ok(None);
+    };
+
+    super::ensure_matchspec_flags_supported(&match_spec)?;
+    Ok(Some(match_spec))
+}
 
 #[cfg(not(target_family = "unix"))]
 /// Adds solvables to a repo from an in-memory .solv file
@@ -84,8 +95,7 @@ pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     repo_data: impl IntoIterator<Item = &'a RepoDataRecord>,
-    exclude_newer: Option<&DateTime<Utc>>,
-    min_age: Option<&MinimumAgeConfig>,
+    exclude_newer: Option<&ExcludeNewer>,
 ) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -115,29 +125,18 @@ pub fn add_repodata_records<'a>(
     // details)
     let data = repo.add_repodata();
 
-    // Compute the cutoff time for min_age.
-    // Packages published after this time will be excluded (unless exempt).
-    let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
-
     let mut solvable_ids = Vec::new();
 
     // Track all extras we encounter so we can create synthetic solvables for them
     let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
-        // Skip packages that are newer than the specified timestamp
-        match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
-            (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,
-            _ => {}
-        }
-
-        // Skip packages that haven't been published long enough (unless exempt)
-        if let (Some(config), Some(cutoff)) = (min_age, &min_age_cutoff) {
-            if !config.is_exempt(&repo_data.package_record.name) {
-                match repo_data.package_record.timestamp.as_ref() {
-                    Some(timestamp) if *timestamp > *cutoff => continue,
-                    None if !config.include_unknown_timestamp => continue,
-                    _ => {}
-                }
+        if let Some(config) = exclude_newer {
+            if config.is_excluded(
+                &repo_data.package_record.name,
+                repo_data.channel.as_deref(),
+                repo_data.package_record.timestamp.as_ref(),
+            ) {
+                continue;
             }
         }
 
@@ -172,11 +171,7 @@ pub fn add_repodata_records<'a>(
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
-            // Parse the match spec to check for conditions
-            if let Ok(match_spec) = MatchSpec::from_str(
-                match_spec_str,
-                ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
-            ) {
+            if let Some(match_spec) = parse_libsolv_match_spec(match_spec_str)? {
                 if let Some(condition) = match_spec.condition.as_ref() {
                     // Create the dependency without the condition
                     let mut dep_spec = match_spec.clone();
@@ -202,6 +197,8 @@ pub fn add_repodata_records<'a>(
 
         // Constraints
         for match_spec in record.constrains.iter() {
+            parse_libsolv_match_spec(match_spec)?;
+
             // Create a reldep id from a matchspec
             let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
 
@@ -214,8 +211,10 @@ pub fn add_repodata_records<'a>(
             // Track this extra for synthetic solvable creation
             extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 
-            // Create conditional dependencies: dep; if package[extra]
+            // Create conditional dependencies: dep[when="package[extra]"]
             for dep_str in deps.iter() {
+                parse_libsolv_match_spec(dep_str)?;
+
                 // Parse the dependency matchspec
                 let dep_id = pool.conda_matchspec(&c_string(dep_str));
 
@@ -223,7 +222,7 @@ pub fn add_repodata_records<'a>(
                 let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
                 let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
 
-                // Create a conditional dependency: dep; if package[extra]
+                // Create a conditional dependency: dep[when="package[extra]"]
                 let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
 
                 // Add it as a requirement
@@ -442,7 +441,7 @@ pub fn cache_repodata(
     // Add repodata to a new pool + repo
     let pool = Pool::default();
     let repo = Repo::new(&pool, url, channel_priority.unwrap_or(0));
-    add_repodata_records(&pool, &repo, data, None, None)?;
+    add_repodata_records(&pool, &repo, data, None)?;
 
     // Export repo to .solv in memory
     let mut stream_ptr = std::ptr::null_mut();

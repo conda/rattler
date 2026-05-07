@@ -1,14 +1,21 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, PyResult};
+use pyo3::{
+    exceptions::PyValueError, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python,
+};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
-    VersionWithSource,
+    Flag, VersionWithSource,
 };
 use rattler_package_streaming::seek::read_package_file;
+use url::Url;
 
-use crate::{error::PyRattlerError, package_name::PyPackageName, version::PyVersion};
+use crate::{
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, package_name::PyPackageName,
+    version::PyVersion,
+};
 
 #[pyclass]
 #[repr(transparent)]
@@ -55,7 +62,7 @@ impl PyIndexJson {
     ///
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
-    /// parsable format or if the file could not be read, this function returns an error.
+    /// parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_package_directory(path: PathBuf) -> PyResult<Self> {
         Ok(IndexJson::from_package_directory(path)
@@ -66,13 +73,37 @@ impl PyIndexJson {
     /// Parses the object from a string, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
-    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {
         Ok(IndexJson::from_str(str)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let index_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    IndexJson,
+                >(client.into(), url)
+                .await
+                .map(PyIndexJson::from)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+
+            Python::with_gil(|py| Ok(Py::new(py, index_json)?.into_any()))
+        })
     }
 
     /// Returns the path to the file within the Conda archive.
@@ -151,6 +182,17 @@ impl PyIndexJson {
         self.inner.features = features;
     }
 
+    /// Plain string flags used to select package variants.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.inner.flags.iter().map(ToString::to_string).collect()
+    }
+
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.inner.flags = flags.into_iter().map(Flag::new_unchecked).collect();
+    }
+
     /// Optionally, the license
     #[getter]
     pub fn license(&self) -> Option<String> {
@@ -225,9 +267,9 @@ impl PyIndexJson {
         Ok(())
     }
 
-    /// Track features are nowadays only used to downweigh packages (ie. give them less priority). To
+    /// Track features are nowadays only used to down-weigh packages (ie. give them less priority). To
     /// that effect, the number of track features is counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[getter]
     pub fn track_features(&self) -> Vec<String> {
         self.inner.track_features.clone()

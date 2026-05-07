@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.11](https://github.com/conda/rattler/compare/rattler_shell-v0.26.10...rattler_shell-v0.26.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.10](https://github.com/conda/rattler/compare/rattler_shell-v0.26.9...rattler_shell-v0.26.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.26.9](https://github.com/conda/rattler/compare/rattler_shell-v0.26.8...rattler_shell-v0.26.9) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.8](https://github.com/conda/rattler/compare/rattler_shell-v0.26.7...rattler_shell-v0.26.8) - 2026-04-08
+
+### Fixed
+
+- handle all shells in run_in_environment ([#2315](https://github.com/conda/rattler/pull/2315))
+
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_shell-v0.26.6...rattler_shell-v0.26.7) - 2026-04-07
+
+### Added
+
+- Add CLI run command ([#2263](https://github.com/conda/rattler/pull/2263))
+
+## [0.26.6](https://github.com/conda/rattler/compare/rattler_shell-v0.26.5...rattler_shell-v0.26.6) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_shell-v0.26.4...rattler_shell-v0.26.5) - 2026-03-20
+
+### Fixed
+
+- logic bug in collect_env_vars causing spurious warnings ([#2254](https://github.com/conda/rattler/pull/2254))
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_shell-v0.26.3...rattler_shell-v0.26.4) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_shell-v0.26.2...rattler_shell-v0.26.3) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_shell-v0.26.1...rattler_shell-v0.26.2) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_shell-v0.26.0...rattler_shell-v0.26.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_shell-v0.25.19...rattler_shell-v0.26.0) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.25.19](https://github.com/conda/rattler/compare/rattler_shell-v0.25.18...rattler_shell-v0.25.19) - 2026-02-04
 
 ### Fixed

@@ -26,7 +26,7 @@ impl From<CachedRepoData> for PyCachedRepoData {
 
 #[pymethods]
 impl PyCachedRepoData {
-    /// Returns a string representation of PyCachedRepoData.
+    /// Returns a string representation of `PyCachedRepoData`.
     pub fn as_str(&self) -> String {
         format!("{:?}", self.inner)
     }

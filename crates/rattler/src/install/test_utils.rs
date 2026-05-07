@@ -24,8 +24,8 @@ pub async fn install_package_to_environment(
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
     // Link the contents of the package into our environment. This returns all the
-    // paths that were linked.
-    let paths = crate::install::link_package_sync(
+    // paths that were linked and the link type that was used.
+    let (paths, _link_type) = crate::install::link_package_sync(
         &package_dir,
         target_prefix,
         install_driver.clobber_registry.clone(),
@@ -38,7 +38,7 @@ pub async fn install_package_to_environment(
         ..PrefixRecord::from_repodata_record(repodata_record, paths)
     };
 
-    // Create the conda-meta directory if it doesnt exist yet.
+    // Create the conda-meta directory if it doesn't exist yet.
     let target_prefix = target_prefix.path().to_path_buf();
     let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
@@ -81,7 +81,7 @@ pub async fn execute_operation(
     }
 
     install_driver
-        .remove_empty_directories(&[op.clone()], &[], target_prefix)
+        .remove_empty_directories(std::slice::from_ref(&op), &[], target_prefix)
         .unwrap();
 
     let install_package = if let Some(install_record) = install_record {

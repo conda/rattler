@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.11](https://github.com/conda/rattler/compare/rattler_networking-v0.26.10...rattler_networking-v0.26.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.10](https://github.com/conda/rattler/compare/rattler_networking-v0.26.9...rattler_networking-v0.26.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.26.9](https://github.com/conda/rattler/compare/rattler_networking-v0.26.8...rattler_networking-v0.26.9) - 2026-04-13
+
+### Fixed
+
+- warn when $NETRC points to a missing or invalid file ([#2330](https://github.com/conda/rattler/pull/2330))
+
+## [0.26.8](https://github.com/conda/rattler/compare/rattler_networking-v0.26.7...rattler_networking-v0.26.8) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_networking-v0.26.6...rattler_networking-v0.26.7) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.6](https://github.com/conda/rattler/compare/rattler_networking-v0.26.5...rattler_networking-v0.26.6) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_networking-v0.26.4...rattler_networking-v0.26.5) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_networking-v0.26.3...rattler_networking-v0.26.4) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_networking-v0.26.2...rattler_networking-v0.26.3) - 2026-03-16
+
+### Fixed
+
+- fall back to AWS SDK credential chain for S3 when no rattler credentials ([#2222](https://github.com/conda/rattler/pull/2222))
+- preserve mirror URL path when rewriting requests ([#2183](https://github.com/conda/rattler/pull/2183))
+- replace panicking unwrap/expect in mirror, S3, and GCS middleware ([#2216](https://github.com/conda/rattler/pull/2216))
+- replace panicking unwraps in `OCIUrl::new` ([#2162](https://github.com/conda/rattler/pull/2162))
+- *(networking)* cache GCS OAuth2 token across requests ([#2114](https://github.com/conda/rattler/pull/2114))
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_networking-v0.26.1...rattler_networking-v0.26.2) - 2026-02-25
+
+### Fixed
+
+- reuse reqwest client in OCI middleware ([#2089](https://github.com/conda/rattler/pull/2089))
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_networking-v0.26.0...rattler_networking-v0.26.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_networking-v0.25.33...rattler_networking-v0.26.0) - 2026-02-19
+
+### Added
+
+- add OAuth/OIDC authentication support ([#2049](https://github.com/conda/rattler/pull/2049))
+
+### Fixed
+
+- gracefully handle missing `$HOME` in file backend ([#2065](https://github.com/conda/rattler/pull/2065))
+- cache negative credential lookups in auth middleware ([#2055](https://github.com/conda/rattler/pull/2055))
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.25.33](https://github.com/conda/rattler/compare/rattler_networking-v0.25.32...rattler_networking-v0.25.33) - 2026-02-04
 
 ### Other

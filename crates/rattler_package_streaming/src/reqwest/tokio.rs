@@ -16,9 +16,9 @@ use zip::result::ZipError;
 
 use crate::{DownloadReporter, ExtractError, ExtractResult};
 
-/// zipfiles may use data descriptors to signal that the decompressor needs to
+/// zip files may use data descriptors to signal that the decompressor needs to
 /// seek ahead in the buffer to find the compressed data length.
-/// Since we stream the package over a non seekable HTTP connection, this
+/// Since we stream the package over a non seek-able HTTP connection, this
 /// condition will cause an error during decompression. In this case, we
 /// fallback to reading the whole data to a buffer before attempting
 /// decompression. Read more in <https://github.com/conda/rattler/issues/794>

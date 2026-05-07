@@ -8,6 +8,7 @@ from rattler.rattler import (
     PyGCSMiddleware,
     PyMirrorMiddleware,
     PyOciMiddleware,
+    PyRetryMiddleware,
     PyS3Middleware,
     PyS3Config,
 )
@@ -76,6 +77,32 @@ class AuthenticationMiddleware:
         ```
         """
         return f"{type(self).__name__}()"
+
+
+class RetryMiddleware:
+    """
+    Middleware that retries transient HTTP errors with exponential back-off.
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import Client, RetryMiddleware
+    >>> RetryMiddleware()
+    RetryMiddleware(max_retries=3)
+    >>> RetryMiddleware(5)
+    RetryMiddleware(max_retries=5)
+    >>> Client([RetryMiddleware()])
+    Client()
+    >>>
+    ```
+    """
+
+    def __init__(self, max_retries: int = 3) -> None:
+        self._max_retries = max_retries
+        self._middleware = PyRetryMiddleware(max_retries)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(max_retries={self._max_retries})"
 
 
 class OciMiddleware:

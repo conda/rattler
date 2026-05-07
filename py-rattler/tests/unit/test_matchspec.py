@@ -1,3 +1,5 @@
+import pytest
+
 from rattler import MatchSpec, NamelessMatchSpec
 
 
@@ -88,16 +90,12 @@ def test_experimental_extras_enabled() -> None:
 
 def test_experimental_extras_disabled() -> None:
     """Test that extras syntax fails to parse when experimental_extras is disabled."""
-    import pytest
-
     with pytest.raises(Exception):  # Should raise InvalidBracketKey error
         MatchSpec("numpy[extras=[test]]", experimental_extras=False)
 
 
 def test_experimental_extras_default() -> None:
     """Test that extras syntax fails to parse by default (experimental_extras defaults to False)."""
-    import pytest
-
     with pytest.raises(Exception):  # Should raise InvalidBracketKey error
         MatchSpec("numpy[extras=[test]]")
 
@@ -112,33 +110,38 @@ def test_experimental_extras_multiple() -> None:
 
 def test_experimental_conditionals_enabled() -> None:
     """Test that conditionals syntax can be parsed when experimental_conditionals is enabled."""
-    m = MatchSpec("requests; if python >=3.6", experimental_conditionals=True)
+    m = MatchSpec('requests[when="python >=3.6"]', experimental_conditionals=True)
     assert m.name is not None
     assert m.name.normalized == "requests"
     assert m.condition == "python >=3.6"
 
 
 def test_experimental_conditionals_disabled() -> None:
-    """Test that conditionals are ignored when experimental_conditionals is disabled."""
-    # When disabled, the condition part should be stripped/ignored
-    m = MatchSpec("requests; if python >=3.6", experimental_conditionals=False)
-    assert m.name is not None
-    assert m.name.normalized == "requests"
-    assert m.condition is None
+    """Test that conditionals are rejected when experimental_conditionals is disabled."""
+    # When disabled, the when key should be rejected as invalid
+    with pytest.raises(Exception):
+        MatchSpec('requests[when="python >=3.6"]', experimental_conditionals=False)
 
 
 def test_experimental_conditionals_default() -> None:
-    """Test that conditionals are ignored by default (experimental_conditionals defaults to False)."""
-    # When disabled, the condition part should be stripped/ignored
-    m = MatchSpec("requests; if python >=3.6")
-    assert m.name is not None
-    assert m.name.normalized == "requests"
-    assert m.condition is None
+    """Test that conditionals are rejected by default (experimental_conditionals defaults to False)."""
+    # When disabled, the when key should be rejected as invalid
+    with pytest.raises(Exception):
+        MatchSpec('requests[when="python >=3.6"]')
+
+
+def test_deprecated_if_syntax_returns_error() -> None:
+    """Test that the deprecated '; if' syntax returns an error."""
+    # Old syntax should always return an error, regardless of experimental_conditionals setting
+    with pytest.raises(Exception):
+        MatchSpec("requests; if python >=3.6", experimental_conditionals=True)
+    with pytest.raises(Exception):
+        MatchSpec("requests; if python >=3.6", experimental_conditionals=False)
 
 
 def test_experimental_both_features() -> None:
     """Test using both experimental extras and conditionals together."""
-    m = MatchSpec("numpy[extras=[test]]; if python >=3.7", experimental_extras=True, experimental_conditionals=True)
+    m = MatchSpec('numpy[extras=[test], when="python >=3.7"]', experimental_extras=True, experimental_conditionals=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]

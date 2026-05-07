@@ -7,7 +7,7 @@
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
   schedule: ["before 4am on Tuesday"],
-  prHourlyLimit: 10,
+  prHourlyLimit: 2,
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
@@ -25,15 +25,10 @@
       versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
-      description: "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
-      matchPackageNames: "macos",
-      matchManagers: ["github-actions"],
-      enabled: false,
-    },
-    {
       "groupName": "Pixi-Lock",
       "matchManagers": ["pixi"],
-      "matchUpdateTypes": ["lockFileMaintenance"]
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true,
     },
     {
       description: "We want to update Rust manually and keep it in sync with rust-toolchain",
@@ -48,9 +43,16 @@
       description: "Weekly update of Rust development dependencies",
     },
     {
+      description: "Automerge Cargo patch bumps (only touches Cargo.lock via update-lockfile).",
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["patch"],
+      automerge: true,
+    },
+    {
       "groupName": "Npm-Lock",
       "matchManagers": ["npm"],
-      "matchUpdateTypes": ["lockFileMaintenance"]
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true,
     },
   ],
   vulnerabilityAlerts: {

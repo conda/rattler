@@ -30,8 +30,7 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
             MapOrVec::Map(m) => m
                 .into_iter()
                 .map(|(name, spec)| {
-                    MatchSpec::from_nameless(spec, Some(PackageNameMatcher::Exact(name)))
-                        .to_string()
+                    MatchSpec::from_nameless(spec, PackageNameMatcher::Exact(name)).to_string()
                 })
                 .collect(),
         })

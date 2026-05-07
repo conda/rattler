@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.20](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.19...rattler_virtual_packages-v2.3.20) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.19](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.18...rattler_virtual_packages-v2.3.19) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [2.3.18](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.17...rattler_virtual_packages-v2.3.18) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.17](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.16...rattler_virtual_packages-v2.3.17) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.16](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.15...rattler_virtual_packages-v2.3.16) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.15](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.14...rattler_virtual_packages-v2.3.15) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.14](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.13...rattler_virtual_packages-v2.3.14) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.13](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.12...rattler_virtual_packages-v2.3.13) - 2026-03-18
+
+### Fixed
+
+- *(virtual_packages)* handle invalid chars in LibC family ([#2209](https://github.com/conda/rattler/pull/2209))
+
+## [2.3.12](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.11...rattler_virtual_packages-v2.3.12) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.11](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.10...rattler_virtual_packages-v2.3.11) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.10](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.9...rattler_virtual_packages-v2.3.10) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.9](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.8...rattler_virtual_packages-v2.3.9) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [2.3.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.7...rattler_virtual_packages-v2.3.8) - 2026-02-04
 
 ### Other

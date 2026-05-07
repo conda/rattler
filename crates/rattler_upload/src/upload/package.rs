@@ -63,9 +63,13 @@ impl<'a> ExtractedPackage<'a> {
         sha256_sum(self.file)
     }
 
-    pub fn base64_md5(&self) -> Result<String, std::io::Error> {
+    pub fn md5_base64(&self) -> Result<String, std::io::Error> {
         compute_file_digest::<Md5>(&self.file)
             .map(|digest| general_purpose::STANDARD.encode(digest))
+    }
+
+    pub fn md5_hex(&self) -> Result<String, std::io::Error> {
+        compute_file_digest::<Md5>(&self.file).map(|digest| format!("{digest:x}"))
     }
 
     pub fn filename(&self) -> Option<&str> {

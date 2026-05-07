@@ -31,7 +31,7 @@ async def solve(
     virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: Optional[datetime.datetime] = None,
+    exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
 ) -> List[RepoDataRecord]:
@@ -67,7 +67,8 @@ async def solve(
                  the only channel for that package. When `ChannelPriority.Disabled`
                  it will search for every package in every channel.
         timeout:    The maximum time the solver is allowed to run.
-        exclude_newer: Exclude any record that is newer than the given datetime.
+        exclude_newer: Exclude any record that is newer than the given datetime,
+            or newer than the cutoff produced by subtracting a timedelta from now.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -109,7 +110,10 @@ async def solve(
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
-            if exclude_newer
+            if isinstance(exclude_newer, datetime.datetime)
+            else None,
+            exclude_newer_duration_seconds=int(exclude_newer.total_seconds())
+            if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
             constraints=[
@@ -132,7 +136,7 @@ async def solve_with_sparse_repodata(
     virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: Optional[datetime.datetime] = None,
+    exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
@@ -169,7 +173,8 @@ async def solve_with_sparse_repodata(
                  the only channel for that package. When `ChannelPriority.Disabled`
                  it will search for every package in every channel.
         timeout:    The maximum time the solver is allowed to run.
-        exclude_newer: Exclude any record that is newer than the given datetime.
+        exclude_newer: Exclude any record that is newer than the given datetime,
+            or newer than the cutoff produced by subtracting a timedelta from now.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -205,7 +210,10 @@ async def solve_with_sparse_repodata(
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
             package_format_selection=package_format_selection.value,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
-            if exclude_newer
+            if isinstance(exclude_newer, datetime.datetime)
+            else None,
+            exclude_newer_duration_seconds=int(exclude_newer.total_seconds())
+            if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
             constraints=[

@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 //! `rattler-conda-types` contains data models for types commonly found within
-//! the Conda ecosystem. The library itself doesnt provide any functionality
+//! the Conda ecosystem. The library itself doesn't provide any functionality
 //! besides parsing the data types.
 
 pub mod backup;
@@ -8,6 +8,7 @@ mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
+mod flags;
 pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
@@ -27,6 +28,7 @@ pub mod minimal_prefix_record;
 pub mod package;
 mod package_name;
 pub mod prefix;
+pub mod prefix_data;
 pub mod prefix_record;
 mod record_traits;
 
@@ -41,6 +43,7 @@ pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
+pub use flags::{Flag, InvalidFlagError};
 pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
@@ -53,16 +56,20 @@ pub use minimal_prefix_record::{
     collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
-pub use package_name::{InvalidPackageNameError, PackageName};
+pub use package_name::{
+    InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
+};
 pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
+pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData, SubdirRunExportsJson,
+    ChannelInfo, ChannelRelations, ConvertSubdirError, ExperimentalV3Packages, PackageRecord,
+    RecordFromPath, RepoData, RepodataRevision, RepodataRevisionInfo, SubdirRunExportsJson,
     UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};

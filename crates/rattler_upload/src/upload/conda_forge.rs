@@ -96,7 +96,7 @@ pub async fn upload_packages_to_conda_forge(
             anaconda
                 .upload_file(
                     &conda_forge_data.staging_channel,
-                    &[channel.clone()],
+                    std::slice::from_ref(&channel),
                     ForceOverwrite(false),
                     &package,
                 )

@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_upload-v0.5.8...rattler_upload-v0.6.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.5.8](https://github.com/conda/rattler/compare/rattler_upload-v0.5.7...rattler_upload-v0.5.8) - 2026-04-30
+
+### Fixed
+
+- skip existing upload to prefix ([#2378](https://github.com/conda/rattler/pull/2378))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.5.7](https://github.com/conda/rattler/compare/rattler_upload-v0.5.6...rattler_upload-v0.5.7) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_config, rattler_solve, rattler_s3
+
+## [0.5.6](https://github.com/conda/rattler/compare/rattler_upload-v0.5.5...rattler_upload-v0.5.6) - 2026-04-08
+
+### Fixed
+
+- fail when uploading with --generate-attestation and api key ([#2313](https://github.com/conda/rattler/pull/2313))
+
+## [0.5.5](https://github.com/conda/rattler/compare/rattler_upload-v0.5.4...rattler_upload-v0.5.5) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.5.4](https://github.com/conda/rattler/compare/rattler_upload-v0.5.3...rattler_upload-v0.5.4) - 2026-03-27
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.5.3](https://github.com/conda/rattler/compare/rattler_upload-v0.5.2...rattler_upload-v0.5.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.5.2](https://github.com/conda/rattler/compare/rattler_upload-v0.5.1...rattler_upload-v0.5.2) - 2026-03-20
+
+### Added
+
+- *(rattler_upload)* add Cloudsmith upload target ([#2233](https://github.com/conda/rattler/pull/2233))
+
+## [0.5.1](https://github.com/conda/rattler/compare/rattler_upload-v0.5.0...rattler_upload-v0.5.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_upload-v0.4.15...rattler_upload-v0.5.0) - 2026-03-16
+
+### Fixed
+
+- upload token matching for anaconda.org ([#2231](https://github.com/conda/rattler/pull/2231))
+
+### Other
+
+- *(upload)* [**breaking**] add proper errors and tests to rattler upload  ([#2157](https://github.com/conda/rattler/pull/2157))
+
+## [0.4.15](https://github.com/conda/rattler/compare/rattler_upload-v0.4.14...rattler_upload-v0.4.15) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.14](https://github.com/conda/rattler/compare/rattler_upload-v0.4.13...rattler_upload-v0.4.14) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.13](https://github.com/conda/rattler/compare/rattler_upload-v0.4.12...rattler_upload-v0.4.13) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.4.12](https://github.com/conda/rattler/compare/rattler_upload-v0.4.11...rattler_upload-v0.4.12) - 2026-02-10
 
 ### Other

@@ -508,11 +508,15 @@ impl LibC {
 impl From<LibC> for GenericVirtualPackage {
     fn from(libc: LibC) -> Self {
         GenericVirtualPackage {
-            // TODO: Convert the family to a valid package name. We can simply replace invalid
-            // characters.
-            name: format!("__{}", libc.family.to_lowercase())
-                .try_into()
-                .unwrap(),
+            name: format!(
+                "__{}",
+                libc.family.to_lowercase().replace(
+                    |c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_',
+                    "_"
+                )
+            )
+            .try_into()
+            .unwrap(),
             version: libc.version,
             build_string: "0".into(),
         }
@@ -595,10 +599,10 @@ impl From<Cuda> for VirtualPackage {
 /// Archspec describes the CPU architecture
 #[derive(Clone, Debug)]
 pub enum Archspec {
-    /// A microarchitecture from the archspec library.
+    /// A micro-architecture from the archspec library.
     Microarchitecture(Arc<Microarchitecture>),
 
-    /// An unknown microarchitecture
+    /// An unknown micro-architecture
     Unknown,
 }
 
@@ -902,6 +906,16 @@ mod test {
                 .unwrap(),
             res
         );
+    }
+
+    #[test]
+    fn parse_libc_invalid_family_chars() {
+        let libc = LibC {
+            family: "glibc 2.34 (Ubuntu)".into(),
+            version: Version::from_str("2.34").unwrap(),
+        };
+        let pkg: GenericVirtualPackage = libc.into();
+        assert_eq!(pkg.name.as_normalized(), "__glibc_2_34__ubuntu_");
     }
 
     #[test]

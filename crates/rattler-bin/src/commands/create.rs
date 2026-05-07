@@ -34,38 +34,53 @@ use reqwest::Client;
 
 use crate::{exclude_newer::ExcludeNewer, global_multi_progress};
 
+/// Create a conda environment from package listing
+///
+/// Resolves and installs the specified packages into a target prefix,
+/// pulling from the configured channels.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    #[clap(short)]
+    /// Channel to search for packages
+    ///
+    /// Example: -c conda-forge -c main
+    #[clap(short, long = "channel")]
     channels: Option<Vec<String>>,
 
+    /// Package specs to install
     #[clap(required = true)]
     specs: Vec<String>,
 
+    /// Simulute command without installation
     #[clap(long)]
     dry_run: bool,
 
+    /// Target platform (e.g., linux-64, osx-arm64)
     #[clap(long)]
     platform: Option<String>,
 
     #[clap(long)]
     virtual_package: Option<Vec<String>>,
 
+    /// SAT Solver backend to use
     #[clap(long)]
     solver: Option<Solver>,
 
+    /// Request solver timeout in milliseconds
     #[clap(long)]
     timeout: Option<u64>,
 
-    #[clap(long)]
+    /// Target prefix (environment path) for package installation
+    #[clap(short = 'p', long = "prefix", visible_alias = "target-prefix")]
     target_prefix: Option<PathBuf>,
 
     #[clap(long)]
     strategy: Option<SolveStrategy>,
 
+    /// Only install dependencies of package specs
     #[clap(long, group = "deps_mode")]
     only_deps: bool,
 
+    /// Only install package specifications without dependencies
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
 
@@ -133,7 +148,8 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // parsing matchspecs.
     let match_spec_options = ParseMatchSpecOptions::strict()
         .with_experimental_extras(true)
-        .with_experimental_conditionals(true);
+        .with_experimental_conditionals(true)
+        .with_experimental_flags(true);
 
     let specs = opt
         .specs
@@ -142,7 +158,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    // Find the default cache directory. Create it if it doesnt exist yet.
+    // Find the default cache directory. Create it if it doesn't exist yet.
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
     rattler_cache::ensure_cache_dir(&cache_dir)
@@ -172,18 +188,18 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .build()
         .expect("failed to create client");
 
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+    let download_client = reqwest_middleware::ClientBuilder::new(download_client.clone())
         .with_arc(Arc::new(
             AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
         ))
-        .with(rattler_networking::OciMiddleware);
+        .with(rattler_networking::OciMiddleware::new(download_client));
     #[cfg(feature = "s3")]
     let download_client = download_client.with(rattler_networking::S3Middleware::new(
         HashMap::new(),
         AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
     ));
     #[cfg(feature = "gcs")]
-    let download_client = download_client.with(rattler_networking::GCSMiddleware);
+    let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
     let download_client = download_client.build();
 
     // Get the package names from the matchspecs so we can only load the package
@@ -240,7 +256,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
                         version: elems
                             .get(1)
                             .map_or(Version::from_str("0"), |s| Version::from_str(s))
-                            .expect("Could not parse virtual package version"),
+                            .into_diagnostic()?,
                         build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
                     })
                 })
@@ -450,7 +466,7 @@ async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
     result
 }
 
-/// Returns the style to use for a progressbar that is indeterminate and simply
+/// Returns the style to use for a progress bar that is indeterminate and simply
 /// shows a spinner.
 fn long_running_progress_style() -> indicatif::ProgressStyle {
     ProgressStyle::with_template("{spinner:.green} {msg}").unwrap()

@@ -7,7 +7,7 @@ use wasm_bindgen_futures::{js_sys, js_sys::JsString};
 const NOARCH_TYPE_D_TS: &'static str = include_str!("noarch_type.d.ts");
 
 #[wasm_bindgen]
-#[rustfmt::skip] // Otherwise rustfmt stips the literals
+#[rustfmt::skip] // Otherwise rustfmt strips the literals
 extern "C" {
     #[wasm_bindgen(typescript_type = "NoArchType")]
     pub type JsNoArchType;

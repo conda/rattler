@@ -1,13 +1,19 @@
-//! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-use crate::authentication_storage::AuthenticationStorageError;
-use crate::{Authentication, AuthenticationStorage};
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+//! `reqwest` middleware that authenticates requests with data from the
+//! `AuthenticationStorage`
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
+
+use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use url::Url;
+
+use crate::{
+    authentication_storage::AuthenticationStorageError, oauth_refresh, Authentication,
+    AuthenticationStorage,
+};
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]
@@ -30,12 +36,21 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        match self.auth_storage.get_by_url(url) {
+        match self.auth_storage.get_by_url_with_host(url) {
             Err(_) => {
                 // Forward error to caller (invalid URL)
                 next.run(req, extensions).await
             }
-            Ok((url, auth)) => {
+            Ok((url, auth_with_key)) => {
+                // If this is an OAuth token, attempt refresh if expired
+                let auth = match auth_with_key {
+                    Some((matched_key, auth)) => {
+                        oauth_refresh::maybe_refresh_oauth(&self.auth_storage, auth, &matched_key)
+                            .await
+                    }
+                    None => None,
+                };
+
                 let url = Self::authenticate_url(url, &auth);
 
                 let mut req = req;
@@ -49,12 +64,14 @@ impl Middleware for AuthenticationMiddleware {
 }
 
 impl AuthenticationMiddleware {
-    /// Create a new authentication middleware with the given authentication storage
+    /// Create a new authentication middleware with the given authentication
+    /// storage
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
     }
 
-    /// Create a new authentication middleware with the default authentication storage
+    /// Create a new authentication middleware with the default authentication
+    /// storage
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
@@ -113,6 +130,17 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
+                Authentication::OAuth { access_token, .. } => {
+                    let bearer_auth = format!("Bearer {access_token}");
+
+                    let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                        .map_err(reqwest_middleware::Error::middleware)?;
+                    header_value.set_sensitive(true);
+
+                    req.headers_mut()
+                        .insert(reqwest::header::AUTHORIZATION, header_value);
+                    Ok(req)
+                }
                 Authentication::CondaToken(_) | Authentication::S3Credentials { .. } => Ok(req),
             }
         } else {
@@ -122,7 +150,8 @@ impl AuthenticationMiddleware {
 }
 
 /// Returns the default auth storage directory used by rattler.
-/// Would be placed in $HOME/.rattler, except when there is no home then it will be put in '/rattler/'
+/// Would be placed in $HOME/.rattler, except when there is no home then it will
+/// be put in '/rattler/'
 pub fn default_auth_store_fallback_directory() -> &'static Path {
     static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
     FALLBACK_AUTH_DIR.get_or_init(|| {
@@ -142,16 +171,18 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::authentication_storage::backends::file::FileStorage;
     use std::sync::Arc;
-    use tempfile::tempdir;
 
     #[cfg(feature = "keyring")]
     use anyhow::anyhow;
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::authentication_storage::backends::file::FileStorage;
 
     #[cfg(feature = "keyring")]
-    // Requests are only authenticated when executed, so we need to capture and cancel the request
+    // Requests are only authenticated when executed, so we need to capture and
+    // cancel the request
     struct CaptureAbortMiddleware {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
@@ -253,7 +284,8 @@ mod tests {
         let request = client.get("https://conda.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build()?;
 
-        // we expect middleware error. if auth middleware fails, tests below will detect it
+        // we expect middleware error. if auth middleware fails, tests below will detect
+        // it
         let _ = client.execute(request).await;
 
         let captured_request = captured_rx.recv().await.unwrap();

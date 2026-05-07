@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_index-v0.28.0...rattler_index-v0.28.1) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_index-v0.27.23...rattler_index-v0.28.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+- add support for CEP-42 channel relations in repodata ([#2370](https://github.com/conda/rattler/pull/2370))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.27.23](https://github.com/conda/rattler/compare/rattler_index-v0.27.22...rattler_index-v0.27.23) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_config, rattler_s3
+
+## [0.27.22](https://github.com/conda/rattler/compare/rattler_index-v0.27.21...rattler_index-v0.27.22) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.21](https://github.com/conda/rattler/compare/rattler_index-v0.27.20...rattler_index-v0.27.21) - 2026-04-07
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.20](https://github.com/conda/rattler/compare/rattler_index-v0.27.19...rattler_index-v0.27.20) - 2026-03-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.19](https://github.com/conda/rattler/compare/rattler_index-v0.27.18...rattler_index-v0.27.19) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.18](https://github.com/conda/rattler/compare/rattler_index-v0.27.17...rattler_index-v0.27.18) - 2026-03-18
+
+### Fixed
+
+- set AWS_LC_SYS_CMAKE_BUILDER in pixi-build package configs ([#2241](https://github.com/conda/rattler/pull/2241))
+
+### Other
+
+- bump dependency versions ([#2237](https://github.com/conda/rattler/pull/2237))
+
+## [0.27.17](https://github.com/conda/rattler/compare/rattler_index-v0.27.16...rattler_index-v0.27.17) - 2026-03-16
+
+### Fixed
+
+- *(rattler_index)* Remove non-existent packages from repodata ([#2196](https://github.com/conda/rattler/pull/2196))
+
+## [0.27.16](https://github.com/conda/rattler/compare/rattler_index-v0.27.15...rattler_index-v0.27.16) - 2026-02-25
+
+### Other
+
+- experimental repodata v3 ([#2093](https://github.com/conda/rattler/pull/2093))
+
+## [0.27.15](https://github.com/conda/rattler/compare/rattler_index-v0.27.14...rattler_index-v0.27.15) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.14](https://github.com/conda/rattler/compare/rattler_index-v0.27.13...rattler_index-v0.27.14) - 2026-02-19
+
+### Other
+
+- bump rust to 1.93.1 ([#2072](https://github.com/conda/rattler/pull/2072))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.27.13](https://github.com/conda/rattler/compare/rattler_index-v0.27.12...rattler_index-v0.27.13) - 2026-02-10
 
 ### Other

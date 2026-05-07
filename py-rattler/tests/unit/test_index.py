@@ -1,5 +1,6 @@
 # type: ignore
 import os
+import json
 import shutil
 import uuid
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ import boto3
 import pytest
 
 from rattler import Platform
-from rattler.index import index_fs, index_s3
+from rattler.index import RepodataRevisionInfo, index_fs, index_s3
 from rattler.index.index import S3Credentials
 
 
@@ -60,6 +61,37 @@ async def test_index_specific_subdir_noarch(package_directory):
     assert "repodata.json" in os.listdir(package_directory / "noarch")
     with open(package_directory / "noarch/repodata.json") as f:
         assert "pytweening-1.0.4-pyhd8ed1ab_0" in f.read()
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revision_info(package_directory):
+    await index_fs(
+        package_directory,
+        Platform("noarch"),
+        repodata_revisions=[
+            RepodataRevisionInfo(
+                revision="v3",
+                n_packages=123,
+                oldest=1710000000000,
+                newest=1710000000001,
+            )
+        ],
+        package_revision_assignment="latest",
+        force=True,
+    )
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+
+    assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
+    assert repodata["info"]["repodata_revisions"] == [
+        {
+            "revision": 3,
+            "n_packages": 123,
+            "oldest": 1710000000000,
+            "newest": 1710000000001,
+        }
+    ]
 
 
 # ---------------------------------------- S3 ---------------------------------------- #

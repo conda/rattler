@@ -70,10 +70,15 @@ impl FileStorage {
     /// Create a new file storage with the default path
     #[cfg(feature = "dirs")]
     pub fn new() -> Result<Self, FileStorageError> {
-        let path = dirs::home_dir()
-            .unwrap()
-            .join(".rattler")
-            .join("credentials.json");
+        let home_dir = dirs::home_dir().ok_or_else(|| {
+            FileStorageError::IOError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Could not determine the home directory. Please ensure the $HOME environment variable is set.",
+            ))
+        })?;
+
+        let path = home_dir.join(".rattler").join("credentials.json");
+
         Self::from_path(path)
     }
 

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    NoArchType, PackageRecord, RepoDataRecord, Version,
+    Flag, NoArchType, PackageRecord, RepoDataRecord, Version,
 };
 use url::Url;
 
@@ -47,6 +47,7 @@ impl PackageBuilder {
                     constrains: Vec::new(),
                     track_features: Vec::new(),
                     features: None,
+                    flags: Vec::new(),
                     noarch: NoArchType::default(),
                     license: None,
                     license_family: None,
@@ -125,6 +126,14 @@ impl PackageBuilder {
                 extra.to_string(),
                 deps.into_iter().map(Into::into).collect(),
             );
+        self
+    }
+
+    pub fn flags(mut self, flags: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.record.package_record.flags = flags
+            .into_iter()
+            .map(|flag| Flag::new_unchecked(flag.into()))
+            .collect();
         self
     }
 

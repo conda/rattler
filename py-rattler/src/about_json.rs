@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
+use pythonize::{depythonize, pythonize};
 use rattler_conda_types::package::{AboutJson, PackageFile};
+use url::Url;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 
 /// The `about.json` file contains metadata about the package
 #[pyclass]
@@ -33,7 +36,7 @@ impl PyAboutJson {
     ///
     /// For example, if the file is in JSON format, this function reads the data from the file at
     /// the specified path, parse the JSON string and return the resulting object. If the file is
-    /// not in a parsable format or if the file could not read, this function returns an error.
+    /// not in a parse-able format or if the file could not read, this function returns an error.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(AboutJson::from_path(path)
@@ -46,7 +49,7 @@ impl PyAboutJson {
     ///
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
-    /// parsable format or if the file could not be read, this function returns an error.
+    /// parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_package_directory(path: PathBuf) -> PyResult<Self> {
         Ok(AboutJson::from_package_directory(path)
@@ -57,13 +60,37 @@ impl PyAboutJson {
     /// Parses the object from a string, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
-    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {
         Ok(AboutJson::from_str(str)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let about_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    AboutJson,
+                >(client.into(), url)
+                .await
+                .map(PyAboutJson::from)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+
+            Python::with_gil(|py| Ok(Py::new(py, about_json)?.into_any()))
+        })
     }
 
     /// Returns the path to the file within the Conda archive.
@@ -139,6 +166,19 @@ impl PyAboutJson {
                     .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
             })
             .collect::<Result<_, _>>()?;
+        Ok(())
+    }
+
+    /// Extra metadata that was passed during the build
+    #[getter]
+    pub fn extra<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        pythonize(py, &self.inner.extra).map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+
+    #[setter]
+    pub fn set_extra(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.inner.extra =
+            depythonize(&value).map_err(|err| PyValueError::new_err(err.to_string()))?;
         Ok(())
     }
 

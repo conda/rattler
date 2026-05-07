@@ -3,7 +3,7 @@
 pub trait CacheReporter: Send + Sync {
     /// Called when validation starts
     fn on_validate_start(&self) -> usize;
-    /// Called when validation completex
+    /// Called when validation is complete
     fn on_validate_complete(&self, index: usize);
     /// Called when a download starts
     fn on_download_start(&self) -> usize;

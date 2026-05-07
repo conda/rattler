@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/conda/rattler/compare/rattler_cache-v0.6.22...rattler_cache-v0.7.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.6.22](https://github.com/conda/rattler/compare/rattler_cache-v0.6.21...rattler_cache-v0.6.22) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.6.21](https://github.com/conda/rattler/compare/rattler_cache-v0.6.20...rattler_cache-v0.6.21) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.20](https://github.com/conda/rattler/compare/rattler_cache-v0.6.19...rattler_cache-v0.6.20) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.19](https://github.com/conda/rattler/compare/rattler_cache-v0.6.18...rattler_cache-v0.6.19) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.18](https://github.com/conda/rattler/compare/rattler_cache-v0.6.17...rattler_cache-v0.6.18) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.17](https://github.com/conda/rattler/compare/rattler_cache-v0.6.16...rattler_cache-v0.6.17) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.16](https://github.com/conda/rattler/compare/rattler_cache-v0.6.15...rattler_cache-v0.6.16) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.6.15](https://github.com/conda/rattler/compare/rattler_cache-v0.6.14...rattler_cache-v0.6.15) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.14](https://github.com/conda/rattler/compare/rattler_cache-v0.6.13...rattler_cache-v0.6.14) - 2026-02-25
+
+### Fixed
+
+- *(rattler)* handle cleanup failures without panicking ([#2088](https://github.com/conda/rattler/pull/2088))
+
+## [0.6.13](https://github.com/conda/rattler/compare/rattler_cache-v0.6.12...rattler_cache-v0.6.13) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.12](https://github.com/conda/rattler/compare/rattler_cache-v0.6.11...rattler_cache-v0.6.12) - 2026-02-19
+
+### Fixed
+
+- retry at least three times during install ([#2068](https://github.com/conda/rattler/pull/2068))
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.6.11](https://github.com/conda/rattler/compare/rattler_cache-v0.6.10...rattler_cache-v0.6.11) - 2026-02-10
 
 ### Other

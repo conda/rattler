@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_config-v0.3.10...rattler_config-v0.3.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_config-v0.3.9...rattler_config-v0.3.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.3.9](https://github.com/conda/rattler/compare/rattler_config-v0.3.8...rattler_config-v0.3.9) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.8](https://github.com/conda/rattler/compare/rattler_config-v0.3.7...rattler_config-v0.3.8) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_config-v0.3.6...rattler_config-v0.3.7) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_config-v0.3.5...rattler_config-v0.3.6) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_config-v0.3.4...rattler_config-v0.3.5) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_config-v0.3.3...rattler_config-v0.3.4) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_config-v0.3.2...rattler_config-v0.3.3) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_config-v0.3.1...rattler_config-v0.3.2) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.1](https://github.com/conda/rattler/compare/rattler_config-v0.3.0...rattler_config-v0.3.1) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_config-v0.2.26...rattler_config-v0.3.0) - 2026-02-19
+
+### Other
+
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.2.26](https://github.com/conda/rattler/compare/rattler_config-v0.2.25...rattler_config-v0.2.26) - 2026-02-04
 
 ### Other

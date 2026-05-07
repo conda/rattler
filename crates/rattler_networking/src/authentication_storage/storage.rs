@@ -140,29 +140,37 @@ impl AuthenticationStorage {
             }
         }
 
+        // Cache the negative result to avoid repeated backend lookups
+        // (especially important for keyring which uses D-Bus IPC on Linux).
+        let mut cache = self.cache.lock().unwrap();
+        cache.insert(host.to_string(), None);
+
         Ok(None)
     }
 
-    /// Retrieve the authentication information for the given URL
-    /// (including the authentication information for the wildcard
-    /// host if no credentials are found for the given host)
+    /// Retrieve the authentication information for the given URL, along with the
+    /// storage key that matched (exact host or wildcard).
     ///
-    /// E.g. if credentials are stored for `*.prefix.dev` and the
-    /// given URL is `https://repo.prefix.dev`, the credentials
-    /// for `*.prefix.dev` will be returned.
-    pub fn get_by_url<U: IntoUrl>(
+    /// This is useful when the caller needs to store updated credentials back
+    /// under the same key (e.g. after an OAuth token refresh).
+    ///
+    /// Returns `(url, Some((matched_key, auth)))` or `(url, None)`.
+    pub fn get_by_url_with_host<U: IntoUrl>(
         &self,
         url: U,
-    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+    ) -> Result<(Url, Option<(String, Authentication)>), reqwest::Error> {
         let url = url.into_url()?;
-        let Some(host) = url.host_str() else {
-            return Ok((url, None));
+        let host = match url.host_str() {
+            Some(h) => h.to_string(),
+            None => return Ok((url, None)),
         };
 
-        match self.get(host) {
+        match self.get(&host) {
             Ok(None) => {}
             Err(_) => return Ok((url, None)),
-            Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+            Ok(Some(credentials)) => {
+                return Ok((url, Some((host, credentials))));
+            }
         };
 
         // S3 protocol URLs need to be treated separately since they follow a different schema
@@ -182,10 +190,12 @@ impl AuthenticationStorage {
                                     return Ok((url, None));
                                 }
                             }
-                            _ => return Ok((url, None)), // No more subpaths to check
+                            _ => return Ok((url, None)), // No more sub-paths to check
                         }
                     }
-                    Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+                    Ok(Some(credentials)) => {
+                        return Ok((url, Some((current_url.as_str().to_string(), credentials))));
+                    }
                     Err(_) => return Ok((url, None)),
                 }
             }
@@ -204,7 +214,7 @@ impl AuthenticationStorage {
             };
 
             if let Some(credentials) = credentials {
-                return Ok((url, Some(credentials)));
+                return Ok((url, Some((wildcard_host, credentials))));
             }
 
             let possible_rest = domain.split_once('.').map(|(_, rest)| rest);
@@ -216,6 +226,44 @@ impl AuthenticationStorage {
                 _ => return Ok((url, None)), // No more subdomains to check
             }
         }
+    }
+
+    /// Retrieve the authentication information for the given URL
+    /// (including the authentication information for the wildcard
+    /// host if no credentials are found for the given host)
+    ///
+    /// E.g. if credentials are stored for `*.prefix.dev` and the
+    /// given URL is `https://repo.prefix.dev`, the credentials
+    /// for `*.prefix.dev` will be returned.
+    pub fn get_by_url<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth) = self.get_by_url_with_host(url)?;
+        Ok((url, auth.map(|(_, credentials)| credentials)))
+    }
+
+    /// Like [`get_by_url`](Self::get_by_url), but additionally refreshes
+    /// expired OAuth access tokens via the provider's token endpoint
+    /// before returning. Refreshed credentials are written back to the
+    /// storage so subsequent calls see the new token.
+    ///
+    /// Non-OAuth credentials (bearer tokens, basic auth, S3, etc.) are
+    /// returned unchanged.
+    pub async fn get_by_url_refreshed<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth_with_key) = self.get_by_url_with_host(url)?;
+        let auth = match auth_with_key {
+            // `maybe_refresh_oauth` is a no-op for non-OAuth variants and
+            // returns them as-is, so this branch covers every auth type.
+            Some((matched_key, auth)) => {
+                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
+            }
+            None => None,
+        };
+        Ok((url, auth))
     }
 
     /// Delete the authentication information for the given host
@@ -248,6 +296,49 @@ impl AuthenticationStorage {
             Err(anyhow!("All backends failed to delete credentials"))
         } else {
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::authentication_storage::backends::memory::MemoryStorage;
+
+    fn storage_with(host: &str, auth: Authentication) -> AuthenticationStorage {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(host, &auth).unwrap();
+        storage
+    }
+
+    /// Non-OAuth credentials must pass through `get_by_url_refreshed`
+    /// unchanged — the refresh path only applies to OAuth.
+    #[tokio::test]
+    async fn get_by_url_refreshed_passes_through_non_oauth() {
+        let cases = [
+            Authentication::BearerToken("bearer".into()),
+            Authentication::CondaToken("conda".into()),
+            Authentication::BasicHTTP {
+                username: "u".into(),
+                password: "p".into(),
+            },
+            Authentication::S3Credentials {
+                access_key_id: "k".into(),
+                secret_access_key: "s".into(),
+                session_token: None,
+            },
+        ];
+
+        for auth in cases {
+            let storage = storage_with("example.com", auth.clone());
+            let (_, retrieved) = storage
+                .get_by_url_refreshed("https://example.com/foo")
+                .await
+                .unwrap();
+            assert_eq!(retrieved, Some(auth));
         }
     }
 }

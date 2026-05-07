@@ -1,0 +1,269 @@
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
+
+use rattler_conda_types::{
+    package::RunExportsJson, BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl,
+    VersionWithSource,
+};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+
+use super::{
+    package_selector::PackageSelector,
+    source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
+};
+use crate::{
+    conda::{
+        CondaSourceData, PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
+    },
+    source::SourceLocation,
+    utils::derived_fields,
+    CondaPackageData, ConversionError, SourceIdentifier,
+};
+
+/// A model struct for source packages in V7 lock files.
+///
+/// This type is used for packages identified by the `- conda_source:` key.
+/// Unlike `CondaPackageDataModel` (for binary packages), this type:
+/// - Always converts to `CondaPackageData::Source`
+/// - Does not include binary-specific fields (`file_name`, `channel`, `hashes`)
+/// - Includes source-specific fields (`variants`, `package_build_source`, `sources`)
+/// - Uses `SourceIdentifier` format: `name[hash] @ location`
+///
+/// The `source` field contains a unique identifier that includes:
+/// - Package name
+/// - A short hash computed from the package record
+/// - The source location (URL or path)
+#[serde_as]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
+pub(crate) struct SourcePackageDataModel<'a> {
+    /// The source identifier in the format `name[hash] @ location`.
+    /// This is the discriminator key and uniquely identifies the package.
+    pub conda_source: SourceIdentifier,
+
+    // Package record fields are optional: absent means the metadata has not
+    // been evaluated yet and `CondaSourceData::package_record` will be `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<Cow<'a, VersionWithSource>>,
+
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub build: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub build_number: BuildNumber,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<Cow<'a, str>>,
+
+    #[serde(default, skip_serializing_if = "NoArchType::is_none")]
+    pub noarch: NoArchType,
+
+    // Conda-build variants for source packages
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variants: Option<Cow<'a, BTreeMap<String, VariantValue>>>,
+
+    // Dependencies
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub depends: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub constrains: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+
+    // Metadata
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub features: Cow<'a, Option<String>>,
+    #[serde(default, skip_serializing_if = "<[Flag]>::is_empty")]
+    pub flags: Cow<'a, [Flag]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub track_features: Cow<'a, [String]>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Cow<'a, Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_family: Cow<'a, Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Cow<'a, Option<BTreeSet<PackageUrl>>>,
+
+    /// Run-exports of the package. Source packages always know their
+    /// run-exports once evaluated, so this field is non-optional. An absent
+    /// or empty value in the lockfile means there are no run-exports.
+    #[serde(default, skip_serializing_if = "RunExportsJson::is_empty")]
+    pub run_exports: Cow<'a, RunExportsJson>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Cow<'a, Option<u64>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
+    pub source: Option<PackageBuildSource>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
+    pub source_depends: BTreeMap<String, SourceLocation>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    /// Selectors for packages in the build environment.
+    /// Populated at lockfile serialization time; empty for standalone package
+    /// serialization. Resolved to indices after deserialization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_packages: Vec<PackageSelector>,
+    /// Selectors for packages in the host environment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_packages: Vec<PackageSelector>,
+}
+
+fn is_zero(value: &BuildNumber) -> bool {
+    *value == 0
+}
+
+impl<'a> SourcePackageDataModel<'a> {
+    /// Converts into `(SourceIdentifier, CondaSourceData)`.
+    ///
+    /// This method preserves the deserialized `SourceIdentifier` so it can be
+    /// used directly for lookups without recomputing the hash.
+    ///
+    /// When `version` is absent all package-record fields are ignored and
+    /// `CondaSourceData::package_record` is set to `None`.
+    pub fn into_parts(self) -> Result<(SourceIdentifier, CondaSourceData), ConversionError> {
+        // Extract name and location from the identifier, preserving the identifier itself
+        let (name, hash, location) = self.conda_source.clone().into_parts();
+
+        // Only build a PackageRecord when version (and subdir) are present.
+        let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
+            let subdir = subdir.into_owned();
+            let build = self.build.into_owned();
+            let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
+            SourceMetadata::Full(Box::new(PackageRecord {
+                name: name.clone(),
+                version: version.into_owned(),
+                subdir,
+                build,
+                build_number: self.build_number,
+                noarch: self.noarch,
+                arch,
+                platform,
+                constrains: self.constrains.into_owned(),
+                depends: self.depends.into_owned(),
+                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                features: self.features.into_owned(),
+                flags: self.flags.into_owned(),
+                legacy_bz2_md5: None,
+                legacy_bz2_size: None,
+                license: self.license.into_owned(),
+                license_family: self.license_family.into_owned(),
+                md5: None,
+                purls: self.purls.into_owned(),
+                sha256: None,
+                size: self.size.into_owned(),
+                timestamp: None,
+                track_features: self.track_features.into_owned(),
+                run_exports: Some(self.run_exports.into_owned()),
+                python_site_packages_path: self.python_site_packages_path.into_owned(),
+            }))
+        } else {
+            SourceMetadata::Partial(Box::new(PartialSourceMetadata {
+                name,
+                depends: self.depends.into_owned(),
+                constrains: self.constrains.into_owned(),
+                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                flags: self.flags.into_owned(),
+                purls: self.purls.into_owned(),
+                run_exports: Some(self.run_exports.into_owned()),
+            }))
+        };
+
+        let source_data = CondaSourceData {
+            location,
+            variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
+            package_build_source: self.source,
+            identifier_hash: Some(hash),
+            sources: self.source_depends,
+            source_data: crate::SourceData::default(),
+            metadata,
+        };
+
+        Ok((self.conda_source, source_data))
+    }
+}
+
+impl<'a> TryFrom<SourcePackageDataModel<'a>> for CondaPackageData {
+    type Error = ConversionError;
+
+    fn try_from(value: SourcePackageDataModel<'a>) -> Result<Self, Self::Error> {
+        let (_identifier, source_data) = value.into_parts()?;
+        Ok(CondaPackageData::Source(Box::new(source_data)))
+    }
+}
+
+impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
+    fn from(value: &'a CondaSourceData) -> Self {
+        let variants = (!value.variants.is_empty()).then_some(Cow::Borrowed(&value.variants));
+        let identifier = SourceIdentifier::from_source_data(value);
+
+        match &value.metadata {
+            SourceMetadata::Full(full) => Self {
+                conda_source: identifier,
+                version: Some(Cow::Borrowed(&full.version)),
+                subdir: Some(Cow::Borrowed(&full.subdir)),
+                build: Cow::Borrowed(&full.build),
+                build_number: full.build_number,
+                noarch: full.noarch,
+                variants,
+                purls: Cow::Borrowed(&full.purls),
+                run_exports: full
+                    .run_exports
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default(),
+                depends: Cow::Borrowed(&full.depends),
+                constrains: Cow::Borrowed(&full.constrains),
+                experimental_extra_depends: Cow::Borrowed(&full.experimental_extra_depends),
+                size: Cow::Borrowed(&full.size),
+                features: Cow::Borrowed(&full.features),
+                flags: Cow::Borrowed(&full.flags),
+                track_features: Cow::Borrowed(&full.track_features),
+                license: Cow::Borrowed(&full.license),
+                license_family: Cow::Borrowed(&full.license_family),
+                python_site_packages_path: Cow::Borrowed(&full.python_site_packages_path),
+                source: value.package_build_source.clone(),
+                source_depends: value.sources.clone(),
+                build_packages: Vec::new(),
+                host_packages: Vec::new(),
+            },
+            SourceMetadata::Partial(partial) => Self {
+                conda_source: identifier,
+                version: None,
+                subdir: None,
+                build: Cow::Borrowed(""),
+                build_number: 0,
+                noarch: NoArchType::default(),
+                variants,
+                purls: Cow::Borrowed(&partial.purls),
+                run_exports: partial
+                    .run_exports
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default(),
+                depends: Cow::Borrowed(&partial.depends),
+                constrains: Cow::Borrowed(&partial.constrains),
+                experimental_extra_depends: Cow::Borrowed(&partial.experimental_extra_depends),
+                size: Cow::Owned(None),
+                features: Cow::Owned(None),
+                flags: Cow::Borrowed(&partial.flags),
+                track_features: Cow::Borrowed(&[]),
+                license: Cow::Owned(None),
+                license_family: Cow::Owned(None),
+                python_site_packages_path: Cow::Owned(None),
+                source: value.package_build_source.clone(),
+                source_depends: value.sources.clone(),
+                build_packages: Vec::new(),
+                host_packages: Vec::new(),
+            },
+        }
+    }
+}

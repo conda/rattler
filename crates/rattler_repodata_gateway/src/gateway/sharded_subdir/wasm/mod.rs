@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::OptionFuture;
-use http::StatusCode;
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
 use rattler_networking::LazyClient;
 use url::Url;
 
@@ -14,8 +13,10 @@ use crate::{
     fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
-        sharded_subdir::{decode_zst_bytes_async, parse_records},
-        subdir::SubdirClient,
+        sharded_subdir::{
+            decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+        },
+        subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
@@ -54,10 +55,12 @@ impl ShardedSubdir {
         )
         .await
         .map_err(|e| match e {
-            GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
+            GatewayError::ReqwestError(e)
+                if e.status().is_some_and(is_missing_sharded_repodata_status) =>
+            {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
-                    subdir,
+                    subdir: subdir.clone(),
                     source: e.into(),
                 }))
             }
@@ -101,10 +104,10 @@ impl SubdirClient for ShardedSubdir {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(vec![].into());
+            return Ok(PackageRecords::default());
         };
 
         // Download the shard
@@ -152,18 +155,20 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
-        // Create a future to parse the records from the shard
-        let records = parse_records(
+        // Parse the records from the shard (includes dep extraction)
+        parse_records(
             shard_bytes,
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
         )
-        .await?;
-
-        Ok(records.into())
+        .await
     }
 
     fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
+    }
+
+    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+        &self.sharded_repodata.info.repodata_revisions
     }
 }

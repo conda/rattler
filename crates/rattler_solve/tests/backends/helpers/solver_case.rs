@@ -1,8 +1,7 @@
-use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
-use rattler_solve::{MinimumAgeConfig, SolveStrategy, SolverImpl, SolverTask};
+use rattler_solve::{ExcludeNewer, SolveStrategy, SolverImpl, SolverTask};
 use std::collections::HashMap;
 
 /// Shared building blocks that keep the integration tests concise and data driven.
@@ -25,9 +24,9 @@ pub struct SolverCase<'a> {
     locked_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    exclude_newer: Option<DateTime<Utc>>,
-    min_age: Option<MinimumAgeConfig>,
+    exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
+    dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
     expect_extras: HashMap<String, Vec<String>>,
@@ -45,8 +44,8 @@ impl<'a> SolverCase<'a> {
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
             exclude_newer: None,
-            min_age: None,
             strategy: SolveStrategy::default(),
+            dependency_overrides: Vec::new(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
             expect_extras: HashMap::new(),
@@ -68,7 +67,8 @@ impl<'a> SolverCase<'a> {
                     spec,
                     ParseMatchSpecOptions::lenient()
                         .with_experimental_extras(true)
-                        .with_experimental_conditionals(true),
+                        .with_experimental_conditionals(true)
+                        .with_experimental_flags(true),
                 )
                 .unwrap()
             })
@@ -85,7 +85,8 @@ impl<'a> SolverCase<'a> {
                     spec,
                     ParseMatchSpecOptions::lenient()
                         .with_experimental_extras(true)
-                        .with_experimental_conditionals(true),
+                        .with_experimental_conditionals(true)
+                        .with_experimental_flags(true),
                 )
                 .unwrap()
             })
@@ -112,18 +113,26 @@ impl<'a> SolverCase<'a> {
         self
     }
 
-    /// Excludes packages newer than the given timestamp.
-    pub fn exclude_newer(mut self, timestamp: &str) -> Self {
-        self.exclude_newer = Some(timestamp.parse().expect("invalid timestamp format"));
+    /// Sets the package cutoff configuration for filtering.
+    pub fn exclude_newer(mut self, config: ExcludeNewer) -> Self {
+        self.exclude_newer = Some(config);
         self
     }
 
-    /// Sets the minimum age configuration for package filtering.
-    ///
-    /// Packages published more recently than the specified age will be excluded,
-    /// unless they are in the exempt packages list.
-    pub fn min_age(mut self, config: MinimumAgeConfig) -> Self {
-        self.min_age = Some(config);
+    /// Sets dependency overrides for the solve.
+    pub fn dependency_overrides(
+        mut self,
+        overrides: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Self {
+        self.dependency_overrides = overrides
+            .into_iter()
+            .map(|(pkg, dep)| {
+                (
+                    MatchSpec::from_str(pkg, ParseMatchSpecOptions::lenient()).unwrap(),
+                    MatchSpec::from_str(dep, ParseMatchSpecOptions::lenient()).unwrap(),
+                )
+            })
+            .collect();
         self
     }
 
@@ -181,9 +190,9 @@ impl<'a> SolverCase<'a> {
             locked_packages: self.locked_packages.clone(),
             pinned_packages: self.pinned_packages.clone(),
             virtual_packages: self.virtual_packages.clone(),
-            exclude_newer: self.exclude_newer,
-            min_age: self.min_age.clone(),
+            exclude_newer: self.exclude_newer.clone(),
             strategy: self.strategy,
+            dependency_overrides: self.dependency_overrides.clone(),
             ..SolverTask::from_iter(repo_refs)
         };
 

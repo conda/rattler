@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 import datetime
 
 from rattler import VersionWithSource
@@ -151,7 +151,7 @@ class PackageRecord:
         >>> from os import listdir
         >>> from os.path import isfile, join
         >>> from rattler import PrefixRecord
-        >>> from rattler.exceptions import ValidatePackageRecordsException
+        >>> from rattler.exceptions import ValidatePackageRecordsError
         >>> records = [
         ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in sorted(listdir("../test-data/conda-meta"))
@@ -159,7 +159,7 @@ class PackageRecord:
         ... ]
         >>> try:
         ...     PackageRecord.validate(records)
-        ... except ValidatePackageRecordsException as e:
+        ... except ValidatePackageRecordsError as e:
         ...     print(e)
         package 'libsqlite=3.40.0=hcfcfb64_0' has dependency 'ucrt >=10.0.20348.0', which is not in the environment
         >>>
@@ -200,6 +200,7 @@ class PackageRecord:
         license: Optional[str] = None,
         license_family: Optional[str] = None,
         python_site_packages_path: Optional[str] = None,
+        extra_depends: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -257,6 +258,8 @@ class PackageRecord:
             self._record.license = license
         if license_family is not None:
             self._record.license_family = license_family
+        if extra_depends is not None:
+            self._record.extra_depends = extra_depends
 
     @property
     def arch(self) -> Optional[str]:
@@ -395,6 +398,37 @@ class PackageRecord:
     @depends.setter
     def depends(self, value: List[str]) -> None:
         self._record.depends = value
+
+    @property
+    def extra_depends(self) -> Dict[str, List[str]]:
+        """
+        Conditional or optional dependencies. Maps a condition name (e.g. an
+        extra/feature name) to a list of dependency specifications that are
+        required when that condition is active.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord(
+        ...     name="requests",
+        ...     version="2.28.0",
+        ...     build="py3-none-any",
+        ...     build_number=0,
+        ...     subdir="noarch",
+        ... )
+        >>> record.extra_depends
+        {}
+        >>> record.extra_depends = {"security": ["cryptography >=3.0"]}
+        >>> record.extra_depends
+        {'security': ['cryptography >=3.0']}
+        >>>
+        ```
+        """
+        return self._record.extra_depends
+
+    @extra_depends.setter
+    def extra_depends(self, value: Dict[str, List[str]]) -> None:
+        self._record.extra_depends = value
 
     @property
     def features(self) -> Optional[str]:
@@ -550,15 +584,13 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
-        >>> record = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        >>> from rattler import PackageRecord
+        >>> record = PackageRecord(
+        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
         ... )
+        >>> record.md5 = bytes.fromhex("5e5a97795de72f8cc3baf3d9ea6327a2")
         >>> record.md5.hex()
         '5e5a97795de72f8cc3baf3d9ea6327a2'
-        >>> record.md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
-        >>> record.md5.hex()
-        '2ddbbaf3a82b46ac7214681262e3d746'
         >>> record.md5 = None
         >>> record.md5 is None
         True
@@ -668,12 +700,10 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
-        >>> record = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        >>> from rattler import PackageRecord
+        >>> record = PackageRecord(
+        ...     name="foo", version="1.0", build="bar", build_number=0, subdir="linux-64"
         ... )
-        >>> record.sha256.hex()
-        '4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9'
         >>> record.sha256 = bytes.fromhex("edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1")
         >>> record.sha256.hex()
         'edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1'
@@ -681,7 +711,7 @@ class PackageRecord:
         >>> record.sha256 is None
         True
         >>>
-        ````
+        ```
         """
         return self._record.sha256
 
@@ -877,7 +907,152 @@ class PackageRecord:
         >>>
         ```
         """
-        self._record.set_python_site_packages_path(value)
+        self._record.python_site_packages_path = value
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Returns True if the two records are equal.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> b = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> a == b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record == other._record
+
+    def __ne__(self, other: object) -> bool:
+        """
+        Returns True if the two records are not equal.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> b = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> a != b
+        False
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record != other._record
+
+    def __lt__(self, other: object) -> bool:
+        """
+        Returns True if this record is less than the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a < b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record < other._record
+
+    def __le__(self, other: object) -> bool:
+        """
+        Returns True if this record is less than or equal to the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> a <= b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record <= other._record
+
+    def __gt__(self, other: object) -> bool:
+        """
+        Returns True if this record is greater than the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a > b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record > other._record
+
+    def __ge__(self, other: object) -> bool:
+        """
+        Returns True if this record is greater than or equal to the other.
+
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> a >= b
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageRecord):
+            return NotImplemented
+        return self._record >= other._record
+
+    def __hash__(self) -> int:
+        """
+        Returns the hash of the record.
+
+        Examples
+        --------
+        ```python
+        >>> a = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> isinstance(hash(a), int)
+        True
+        >>>
+        ```
+        """
+        return hash(self._record)
 
     def __str__(self) -> str:
         """

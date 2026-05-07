@@ -21,8 +21,8 @@ use crate::utils::serde::DeserializeFromStrUnchecked;
 /// to make the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
-    normalized: Option<String>,
-    source: String,
+    normalized: Option<Box<str>>,
+    source: Box<str>,
 }
 
 impl PackageName {
@@ -32,7 +32,7 @@ impl PackageName {
     pub fn new_unchecked<S: Into<String>>(normalized: S) -> Self {
         Self {
             normalized: None,
-            source: normalized.into(),
+            source: normalized.into().into_boxed_str(),
         }
     }
 
@@ -45,7 +45,7 @@ impl PackageName {
     /// Returns the normalized version of the package name. The normalized string is guaranteed to
     /// be a valid conda package name.
     pub fn as_normalized(&self) -> &str {
-        self.normalized.as_ref().unwrap_or(&self.source)
+        self.normalized.as_deref().unwrap_or(&self.source)
     }
 
     /// Parses the package name part from a matchspec string without parsing
@@ -94,18 +94,15 @@ impl PackageName {
     /// assert_eq!(name.as_normalized(), "pillow");
     /// ```
     pub fn from_matchspec_str_unchecked(spec: &str) -> Self {
-        let package_name_str = name_from_matchspec_str(spec);
-
-        // Compute the normalized version only if there are uppercase characters
-        let normalized = if package_name_str.chars().any(|c| c.is_ascii_uppercase()) {
-            Some(package_name_str.to_ascii_lowercase())
+        let (name, has_upper) = scan_matchspec_name(spec);
+        let normalized = if has_upper {
+            Some(name.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
-
         Self {
             normalized,
-            source: package_name_str.to_string(),
+            source: name.to_string().into_boxed_str(),
         }
     }
 
@@ -133,28 +130,51 @@ impl PackageName {
     /// assert_eq!(name, "pillow");
     /// ```
     pub fn normalized_name_from_matchspec_str(spec: &str) -> Cow<'_, str> {
-        let package_name_str = name_from_matchspec_str(spec);
-
-        if package_name_str.chars().any(|c| c.is_ascii_uppercase()) {
-            Cow::Owned(package_name_str.to_ascii_lowercase())
+        let (name, has_upper) = scan_matchspec_name(spec);
+        if has_upper {
+            Cow::Owned(name.to_ascii_lowercase())
         } else {
-            Cow::Borrowed(package_name_str)
+            Cow::Borrowed(name)
         }
     }
 }
 
+/// Returns `true` if the byte is a matchspec delimiter (whitespace or version
+/// constraint character: `>`, `<`, `=`, `!`, `~`, `;`).
+fn is_matchspec_delimiter(b: u8) -> bool {
+    b.is_ascii_whitespace() || matches!(b, b'>' | b'<' | b'=' | b'!' | b'~' | b';' | b'[')
+}
+
+/// Scans a matchspec string to find the package name boundary and whether it
+/// contains uppercase characters. Single-pass over the bytes.
+fn scan_matchspec_name(spec: &str) -> (&str, bool) {
+    let bytes = spec.as_bytes();
+    let mut has_upper = false;
+    let mut end = bytes.len();
+    for (i, &b) in bytes.iter().enumerate() {
+        if is_matchspec_delimiter(b) {
+            end = i;
+            break;
+        }
+        has_upper |= b.is_ascii_uppercase();
+    }
+    (&spec[..end], has_upper)
+}
+
 /// Extracts the package name part from a matchspec string by splitting on
-/// whitespace or version constraint characters (`>`, `<`, `=`, `!`, `~`, `;`).
+/// whitespace, version constraint characters (`>`, `<`, `=`, `!`, `~`, `;`),
+/// or bracket `[` (used for bracket syntax like `pkg[when="..."]`).
 fn name_from_matchspec_str(spec: &str) -> &str {
-    spec.split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~' | ';'))
-        .map_or(spec, |(name, _)| name)
+    scan_matchspec_name(spec).0
 }
 
 /// An error that is returned when conversion from a string to a [`PackageName`] fails.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum InvalidPackageNameError {
     /// The package name contains illegal characters
-    #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     InvalidCharacters(String),
 }
 
@@ -162,7 +182,7 @@ impl TryFrom<&String> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
-        value.clone().try_into()
+        value.as_str().try_into()
     }
 }
 
@@ -180,21 +200,24 @@ impl TryFrom<String> for PackageName {
     fn try_from(source: String) -> Result<Self, Self::Error> {
         // Ensure that the string only contains valid characters
         if !source
-            .chars()
-            .all(|c| matches!(c, 'a'..='z'|'A'..='Z'|'0'..='9'|'-'|'_'|'.'))
+            .bytes()
+            .all(|b| matches!(b, b'a'..=b'z'|b'A'..=b'Z'|b'0'..=b'9'|b'-'|b'_'|b'.'))
         {
             return Err(InvalidPackageNameError::InvalidCharacters(source));
         }
 
         // Convert all characters to lowercase but only if it actually contains uppercase. This way
         // we dont allocate the memory of the string if it is already lowercase.
-        let normalized = if source.chars().any(|c| c.is_ascii_uppercase()) {
-            Some(source.to_ascii_lowercase())
+        let normalized = if source.bytes().any(|b| b.is_ascii_uppercase()) {
+            Some(source.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
 
-        Ok(Self { normalized, source })
+        Ok(Self {
+            normalized,
+            source: source.into_boxed_str(),
+        })
     }
 }
 
@@ -263,11 +286,129 @@ impl Borrow<str> for PackageName {
     }
 }
 
+/// A package name in its original source form (not normalized).
+///
+/// This is a newtype around [`Box<str>`] that preserves the exact casing and
+/// formatting as written by the user (e.g. `MyPackage` instead of `mypackage`).
+///
+/// Use this type when you only care about the source name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourcePackageName(Box<str>);
+
+impl SourcePackageName {
+    /// Returns the source package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SourcePackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for SourcePackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.source)
+    }
+}
+
+impl From<SourcePackageName> for PackageName {
+    fn from(name: SourcePackageName) -> Self {
+        PackageName::try_from(name.0.into_string())
+            .expect("SourcePackageName is always a valid PackageName")
+    }
+}
+
+impl AsRef<str> for SourcePackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A normalized package name (always lowercase).
+///
+/// This is a newtype around [`Box<str>`] that guarantees the package name is in
+/// its normalized (lowercase) form.
+///
+/// Use this type when you only care about the normalized name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NormalizedPackageName(Box<str>);
+
+impl NormalizedPackageName {
+    /// Returns the normalized package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for NormalizedPackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for NormalizedPackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.as_normalized().to_string().into_boxed_str())
+    }
+}
+
+impl From<NormalizedPackageName> for PackageName {
+    fn from(name: NormalizedPackageName) -> Self {
+        PackageName {
+            normalized: None,
+            source: name.0,
+        }
+    }
+}
+
+impl AsRef<str> for NormalizedPackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;
 
     use super::*;
+
+    #[test]
+    fn test_normalized_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let normalized = NormalizedPackageName::from(name);
+        assert_eq!(normalized.as_str(), "cudnn");
+        assert_eq!(normalized.to_string(), "cudnn");
+
+        // Convert back to PackageName
+        let back = PackageName::from(normalized);
+        assert_eq!(back.as_source(), "cudnn");
+        assert_eq!(back.as_normalized(), "cudnn");
+
+        // Round-trip: two different source names produce the same normalized name
+        let a = NormalizedPackageName::from(PackageName::try_from("cuDNN").unwrap());
+        let b = NormalizedPackageName::from(PackageName::try_from("cudnn").unwrap());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_source_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let source = SourcePackageName::from(name);
+        assert_eq!(source.as_str(), "cuDNN");
+        assert_eq!(source.to_string(), "cuDNN");
+
+        // Equality is exact (not normalized)
+        let name_lower = PackageName::try_from("cudnn").unwrap();
+        assert_ne!(source, SourcePackageName::from(name_lower));
+    }
 
     #[test]
     fn test_package_name_basics() {
@@ -293,12 +434,17 @@ mod test {
     #[case("numpy>=1.0", "numpy")]
     #[case("numpy!=1.5", "numpy")]
     #[case("numpy~=1.0", "numpy")]
-    // Conditional dependency syntax
+    // Conditional dependency syntax (deprecated ; if)
     #[case("package; if __osx", "package")]
     #[case("osx-dependency; if __osx", "osx-dependency")]
     #[case("linux-dependency; if __linux", "linux-dependency")]
     #[case("numpy; if python >=3.9", "numpy")]
     #[case("pkg-a; if python>=3.8 and python<3.9.5", "pkg-a")]
+    // Conditional dependency syntax (bracket [when="..."])
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package")]
+    #[case(r#"osx-dependency[when="__osx"]"#, "osx-dependency")]
+    #[case(r#"numpy >=1.0[when="python >=3.9"]"#, "numpy")]
+    #[case(r#"foo[version=">=1.0", when="python >=3.6"]"#, "foo")]
     fn test_from_matchspec_str(#[case] spec: &str, #[case] expected: &str) {
         let name = PackageName::from_matchspec_str(spec).unwrap();
         assert_eq!(name.as_source(), expected);
@@ -309,6 +455,8 @@ mod test {
     #[case("pillow >=10", "pillow", "pillow")]
     #[case("numpy>=1.0,<2.0", "numpy", "numpy")]
     #[case("Pillow >=10", "Pillow", "pillow")]
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package", "package")]
+    #[case(r#"Numpy[when="python >=3.9"]"#, "Numpy", "numpy")]
     fn test_from_matchspec_str_unchecked(
         #[case] spec: &str,
         #[case] expected_source: &str,
@@ -332,6 +480,7 @@ mod test {
     #[case("Pillow >=10", "pillow", false)]
     #[case("NUMPY>=1.0,<2.0", "numpy", false)]
     #[case("package; if __osx", "package", true)]
+    #[case(r#"package[when="__osx"]"#, "package", true)]
     fn test_normalized_name_from_matchspec_str(
         #[case] spec: &str,
         #[case] expected: &str,

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use miette::IntoDiagnostic;
 use rattler::install;
 
+/// Link an extracted package into a prefix.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// The package directory to link from

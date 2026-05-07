@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.58](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.57...rattler_menuinst-v0.2.58) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.57](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.56...rattler_menuinst-v0.2.57) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.2.56](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.55...rattler_menuinst-v0.2.56) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.55](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.54...rattler_menuinst-v0.2.55) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.54](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.53...rattler_menuinst-v0.2.54) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.53](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.52...rattler_menuinst-v0.2.53) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.52](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.51...rattler_menuinst-v0.2.52) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.51](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.50...rattler_menuinst-v0.2.51) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.50](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.49...rattler_menuinst-v0.2.50) - 2026-03-16
+
+### Added
+
+- improve Windows GUI app launching and file extension registration ([#2135](https://github.com/conda/rattler/pull/2135))
+
+## [0.2.49](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.48...rattler_menuinst-v0.2.49) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.48](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.47...rattler_menuinst-v0.2.48) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.47](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.46...rattler_menuinst-v0.2.47) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- Remove dead struct ([#2048](https://github.com/conda/rattler/pull/2048))
+
 ## [0.2.46](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.45...rattler_menuinst-v0.2.46) - 2026-02-04
 
 ### Fixed

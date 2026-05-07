@@ -1,9 +1,12 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from rattler.rattler import PyRunExportsJson
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class RunExportsJson:
@@ -116,6 +119,13 @@ class RunExportsJson:
         format, this function returns an error.
         """
         return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_str(string))
+
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> RunExportsJson:
+        """
+        Fetches `info/run_exports.json` from a remote package archive URL.
+        """
+        return cls._from_py_run_exports_json(await PyRunExportsJson.from_remote_url(client._client, url))
 
     @staticmethod
     def package_path() -> Path:

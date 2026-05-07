@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_lock-v0.28.1...rattler_lock-v0.29.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_lock-v0.27.6...rattler_lock-v0.28.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+
+### Fixed
+
+- *(rattler_lock)* downgrade version from 0.27.7 to 0.27.6
+- [**breaking**] Fix rattler_lock version to 0.28.0 ([#2338](https://github.com/conda/rattler/pull/2338))
+- [**breaking**] Lockfile version bump ([#2335](https://github.com/conda/rattler/pull/2335))
+
+### Other
+
+- revert lockfile-v7 ([#2339](https://github.com/conda/rattler/pull/2339))
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+- release ([#2323](https://github.com/conda/rattler/pull/2323))
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_lock-v0.27.6...rattler_lock-v0.27.7) - 2026-04-13
+
+### Other
+
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_lock-v0.27.5...rattler_lock-v0.27.6) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_lock-v0.27.4...rattler_lock-v0.27.5) - 2026-04-07
+
+### Added
+
+- Remove `exclude_newer` from rattler_lock, add `package_cutoffs` ([#2296](https://github.com/conda/rattler/pull/2296))
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_lock-v0.27.3...rattler_lock-v0.27.4) - 2026-03-27
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_lock-v0.27.2...rattler_lock-v0.27.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_lock-v0.27.1...rattler_lock-v0.27.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_lock-v0.27.0...rattler_lock-v0.27.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_lock-v0.26.16...rattler_lock-v0.27.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+## [0.26.16](https://github.com/conda/rattler/compare/rattler_lock-v0.26.15...rattler_lock-v0.26.16) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.15](https://github.com/conda/rattler/compare/rattler_lock-v0.26.14...rattler_lock-v0.26.15) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.14](https://github.com/conda/rattler/compare/rattler_lock-v0.26.13...rattler_lock-v0.26.14) - 2026-02-19
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [0.26.13](https://github.com/conda/rattler/compare/rattler_lock-v0.26.12...rattler_lock-v0.26.13) - 2026-02-04
 
 ### Other

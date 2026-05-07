@@ -157,8 +157,7 @@ impl PackageCacheLayer {
     pub fn is_readonly(&self) -> bool {
         self.path
             .metadata()
-            .map(|m| m.permissions().readonly())
-            .unwrap_or(false)
+            .is_ok_and(|m| m.permissions().readonly())
     }
 
     /// Validate the packages.
@@ -511,8 +510,16 @@ impl PackageCache {
                             // For context, conda itself only checks one hash.
                             if let Some(sha256) = sha256 {
                                 if sha256 != result.sha256 {
-                                    // Delete the package if the hash does not match
-                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    // Delete the package if the hash does not match.
+                                    // Failure here is non-fatal: the TempDir guard will
+                                    // clean up on drop; log and continue so the retry
+                                    // loop can proceed rather than panicking.
+                                    if let Err(e) = tokio_fs::remove_dir_all(&destination).await {
+                                        tracing::warn!(
+                                            "failed to remove destination on sha256 mismatch \
+                                             (will be cleaned up on drop): {e}"
+                                        );
+                                    }
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),
@@ -523,8 +530,16 @@ impl PackageCache {
                                 }
                             }  else if let Some(md5) = md5 {
                                 if md5 != result.md5 {
-                                    // Delete the package if the hash does not match
-                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    // Delete the package if the hash does not match.
+                                    // Failure here is non-fatal: the TempDir guard will
+                                    // clean up on drop; log and continue so the retry
+                                    // loop can proceed rather than panicking.
+                                    if let Err(e) = tokio_fs::remove_dir_all(&destination).await {
+                                        tracing::warn!(
+                                            "failed to remove destination on md5 mismatch \
+                                             (will be cleaned up on drop): {e}"
+                                        );
+                                    }
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),
@@ -539,12 +554,12 @@ impl PackageCache {
                         Err(err) => err,
                     };
 
-                    // Only retry on io errors. We assume that the user has
-                    // middleware installed that handles connection retries.
+                    // Check if we should retry this error. We assume that the
+                    // user has middleware installed that handles connection
+                    // retries, but we still need to handle streaming failures
+                    // that occur after a successful response.
 
-                    if !matches!(&err,
-                        ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
-                    ) {
+                    if !err.should_retry() {
                         return Err(err);
                     }
 
@@ -958,9 +973,70 @@ mod test {
         Ok(response)
     }
 
+    /// A helper middleware function that simulates a broken pipe error
+    /// by returning a stream that errors after sending partial data.
+    #[allow(clippy::type_complexity)]
+    async fn fail_with_broken_pipe(
+        State((count, bytes)): State<(Arc<Mutex<i32>>, Arc<Mutex<usize>>)>,
+        req: Request<Body>,
+        next: Next,
+    ) -> Result<Response, StatusCode> {
+        let count = {
+            let mut count = count.lock().await;
+            *count += 1;
+            *count
+        };
+
+        println!(
+            "Running broken pipe middleware for request #{count} for {}",
+            req.uri()
+        );
+        let response = next.run(req).await;
+
+        if count <= 2 {
+            // Get the full response body
+            let body = response.into_body();
+            let mut body = body.into_data_stream();
+            let mut buffer = Vec::new();
+            while let Some(Ok(chunk)) = body.next().await {
+                buffer.extend(chunk);
+            }
+
+            let byte_count = *bytes.lock().await;
+            // Create a stream that yields partial data then fails with broken pipe
+            let partial_data: Bytes = buffer
+                .into_iter()
+                .take(byte_count)
+                .collect::<Vec<u8>>()
+                .into();
+
+            let stream = stream::unfold((false, partial_data), |(has_sent, data)| async move {
+                if has_sent {
+                    // Return broken pipe error on second iteration
+                    return Some((
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::BrokenPipe,
+                            "stream closed because of a broken pipe",
+                        )),
+                        (true, data),
+                    ));
+                }
+                // Return the partial data first
+                Some((Ok::<_, std::io::Error>(data.clone()), (true, data)))
+            });
+
+            let body = Body::from_stream(stream);
+            return Ok(Response::new(body));
+        }
+
+        Ok(response)
+    }
+
+    #[allow(clippy::enum_variant_names)]
     enum Middleware {
         FailTheFirstTwoRequests,
         FailAfterBytes(usize),
+        FailWithBrokenPipe(usize),
     }
 
     async fn redirect_to_prefix(
@@ -988,6 +1064,10 @@ mod test {
             Middleware::FailAfterBytes(size) => router.layer(middleware::from_fn_with_state(
                 (request_count.clone(), Arc::new(Mutex::new(size))),
                 fail_with_half_package,
+            )),
+            Middleware::FailWithBrokenPipe(size) => router.layer(middleware::from_fn_with_state(
+                (request_count.clone(), Arc::new(Mutex::new(size))),
+                fail_with_broken_pipe,
             )),
         };
 
@@ -1061,6 +1141,10 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
+
+        test_flaky_package_cache(tar_bz2, Middleware::FailWithBrokenPipe(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(50)).await;
     }
 
     #[tokio::test]
@@ -1247,10 +1331,8 @@ mod test {
             writable_dirs.push(tempdir().unwrap());
         }
 
-        let all_layers_paths: Vec<TempDir> = readonly_dirs
-            .into_iter()
-            .chain(writable_dirs.into_iter())
-            .collect();
+        let all_layers_paths: Vec<TempDir> =
+            readonly_dirs.into_iter().chain(writable_dirs).collect();
 
         let cache = PackageCache::new_layered(
             all_layers_paths.iter().map(|dir| dir.path().to_path_buf()),

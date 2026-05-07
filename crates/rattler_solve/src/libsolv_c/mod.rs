@@ -11,8 +11,8 @@ use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_con
 pub use libc_byte_slice::LibcByteSlice;
 use output::{get_required_packages, SolverOutput};
 use rattler_conda_types::{
-    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec,
-    RepoDataRecord, SolverResult,
+    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, MatchSpecCondition,
+    NamelessMatchSpec, RepoDataRecord, SolverResult,
 };
 use wrapper::{
     flags::SolverFlag,
@@ -83,6 +83,35 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
+fn unsupported_matchspec_flags() -> SolveError {
+    SolveError::UnsupportedOperations(vec!["matchspec flags".to_string()])
+}
+
+fn match_spec_condition_has_flags(condition: &MatchSpecCondition) -> bool {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => match_spec_has_flags(match_spec),
+        MatchSpecCondition::And(left, right) | MatchSpecCondition::Or(left, right) => {
+            match_spec_condition_has_flags(left) || match_spec_condition_has_flags(right)
+        }
+    }
+}
+
+fn match_spec_has_flags(match_spec: &MatchSpec) -> bool {
+    match_spec.flags.is_some()
+        || match_spec
+            .condition
+            .as_ref()
+            .is_some_and(match_spec_condition_has_flags)
+}
+
+fn ensure_matchspec_flags_supported(match_spec: &MatchSpec) -> Result<(), SolveError> {
+    if match_spec_has_flags(match_spec) {
+        Err(unsupported_matchspec_flags())
+    } else {
+        Ok(())
+    }
+}
+
 /// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
 pub struct Solver;
@@ -108,6 +137,10 @@ impl super::SolverImpl for Solver {
             return Err(SolveError::UnsupportedOperations(vec![
                 "strategy".to_string()
             ]));
+        }
+
+        for spec in task.specs.iter().chain(task.constraints.iter()) {
+            ensure_matchspec_flags_supported(spec)?;
         }
 
         // Construct a default libsolv pool
@@ -194,7 +227,6 @@ impl super::SolverImpl for Solver {
                     &repo,
                     repodata.records.iter().copied(),
                     task.exclude_newer.as_ref(),
-                    task.min_age.as_ref(),
                 )?;
             }
 
@@ -205,8 +237,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked", highest_priority);
-        let installed_solvables =
-            add_repodata_records(&pool, &repo, &task.locked_packages, None, None)?;
+        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -214,14 +245,13 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned", highest_priority);
-        let pinned_solvables =
-            add_repodata_records(&pool, &repo, &task.pinned_packages, None, None)?;
+        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
         all_repodata_records.push(task.pinned_packages.iter().collect());
 
-        // Create datastructures for solving
+        // Create data-structures for solving
         pool.create_whatprovides();
 
         // Add matchspec to the queue
@@ -263,21 +293,19 @@ impl super::SolverImpl for Solver {
 
             // If the spec includes extras, also add dependencies on the synthetic extra solvables
             if let Some(extras) = extras_opt {
-                if let Some(name_matcher) = &spec.name {
-                    // Only exact package names support extras
-                    if let Some(exact_name) = name_matcher.as_exact() {
-                        for extra in extras.iter() {
-                            // Create a dependency on the synthetic "package[extra]" solvable
-                            // We can't use MatchSpec::from_str or conda_matchspec because brackets
-                            // have special meaning in conda matchspecs. Instead, we intern the name
-                            // directly and use it as an Id
-                            let extra_name = format!("{}[{}]", exact_name.as_normalized(), extra);
-                            let name_id = pool.intern_str(extra_name.as_str());
-                            // Convert StringId to MatchSpecId - this works because libsolv can use
-                            // a simple name as a dependency specification
-                            let extra_id = MatchSpecId(name_id.into());
-                            goal.install(extra_id, false);
-                        }
+                // Only exact package names support extras
+                if let Some(exact_name) = spec.name.as_exact() {
+                    for extra in extras.iter() {
+                        // Create a dependency on the synthetic "package[extra]" solvable
+                        // We can't use MatchSpec::from_str or conda_matchspec because brackets
+                        // have special meaning in conda matchspecs. Instead, we intern the name
+                        // directly and use it as an Id
+                        let extra_name = format!("{}[{}]", exact_name.as_normalized(), extra);
+                        let name_id = pool.intern_str(extra_name.as_str());
+                        // Convert StringId to MatchSpecId - this works because libsolv can use
+                        // a simple name as a dependency specification
+                        let extra_id = MatchSpecId(name_id.into());
+                        goal.install(extra_id, false);
                     }
                 }
             }
@@ -294,7 +322,7 @@ impl super::SolverImpl for Solver {
         for virtual_package in task.virtual_packages {
             let id = pool.intern_matchspec(&MatchSpec::from_nameless(
                 NamelessMatchSpec::default(),
-                Some(PackageNameMatcher::Exact(virtual_package.name)),
+                PackageNameMatcher::Exact(virtual_package.name),
             ));
             goal.install(id, false);
         }

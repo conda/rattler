@@ -12,7 +12,7 @@ use std::path::Path;
 
 use opendal::Operator;
 use rattler_conda_types::Platform;
-use rattler_index::{index, PreconditionChecks};
+use rattler_index::{index, PackageRevisionAssignment, PreconditionChecks};
 use tracing::Instrument;
 
 use super::etag_memory_backend::ETagMemoryBuilder;
@@ -22,7 +22,7 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 /// This test creates a deterministic race condition where two processes attempt to
 /// update the same repodata.json simultaneously. It verifies that:
 /// - The first process completes successfully
-/// - The second process detects the race condition (ETag mismatch)
+/// - The second process detects the race condition (`ETag` mismatch)
 /// - The second process retries and eventually succeeds
 /// - Exactly one retry occurs (deterministic due to synchronization barriers)
 /// - The final repodata.json is valid and contains the expected package
@@ -70,7 +70,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                         // First two stats - wait at barrier
                         tracing::info!("Process {} reached stat barrier", count + 1);
                         stat_barrier.wait().await;
-                        tracing::info!("Both processes statted, continuing");
+                        tracing::info!("Both processes stat-ed, continuing");
                     } else {
                         tracing::info!("Process on retry (stat {}), skipping barrier", count + 1);
                     }
@@ -107,6 +107,8 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 None,
                 false,
                 false,
+                Vec::new(),
+                PackageRevisionAssignment::default(),
                 false,
                 1,
                 None,
@@ -127,6 +129,8 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 None,
                 false,
                 false,
+                Vec::new(),
+                PackageRevisionAssignment::default(),
                 false,
                 1,
                 None,

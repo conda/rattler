@@ -31,7 +31,7 @@ pub(crate) fn url_to_cache_filename(url: &::url::Url) -> String {
     // more descriptive? Like a URL encoded string? End Rant.
     let mut url_str = url.to_string();
 
-    // Ensure there is a slash if the URL is empty or doesnt refer to json file
+    // Ensure there is a slash if the URL is empty or doesn't refer to json file
     if url_str.is_empty() || (!url_str.ends_with('/') && !url_str.ends_with(".json")) {
         url_str.push('/');
     }

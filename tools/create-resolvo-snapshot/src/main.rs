@@ -74,10 +74,11 @@ async fn main() {
         &[],
         &[],
         None,
+        None,
         ChannelPriority::default(),
         None,
-        None,
         SolveStrategy::default(),
+        Vec::new(),
     )
     .unwrap();
 

@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.1](https://github.com/conda/rattler/compare/rattler_solve-v6.0.0...rattler_solve-v6.0.1) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [6.0.0](https://github.com/conda/rattler/compare/rattler_solve-v5.2.2...rattler_solve-v6.0.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- Add `Hash` derive to `SolveStrategy` enum ([#2377](https://github.com/conda/rattler/pull/2377))
+- Add `Hash` derive to `ChannelPriority` enum ([#2373](https://github.com/conda/rattler/pull/2373))
+- *(solve)* add cancellation token for in-flight solves ([#2369](https://github.com/conda/rattler/pull/2369))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [5.2.2](https://github.com/conda/rattler/compare/rattler_solve-v5.2.1...rattler_solve-v5.2.2) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.2.1](https://github.com/conda/rattler/compare/rattler_solve-v5.2.0...rattler_solve-v5.2.1) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.2.0](https://github.com/conda/rattler/compare/rattler_solve-v5.1.0...rattler_solve-v5.2.0) - 2026-04-07
+
+### Added
+
+- Remove `exclude_newer` from rattler_lock, add `package_cutoffs` ([#2296](https://github.com/conda/rattler/pull/2296))
+
+## [5.1.0](https://github.com/conda/rattler/compare/rattler_solve-v5.0.3...rattler_solve-v5.1.0) - 2026-03-27
+
+### Added
+
+- *(solve)* Move min_age into exclude_newer, add per-channel configuration ([#2279](https://github.com/conda/rattler/pull/2279))
+
+## [5.0.3](https://github.com/conda/rattler/compare/rattler_solve-v5.0.2...rattler_solve-v5.0.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.0.2](https://github.com/conda/rattler/compare/rattler_solve-v5.0.1...rattler_solve-v5.0.2) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [5.0.1](https://github.com/conda/rattler/compare/rattler_solve-v5.0.0...rattler_solve-v5.0.1) - 2026-03-18
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types
+
+## [5.0.0](https://github.com/conda/rattler/compare/rattler_solve-v4.2.6...rattler_solve-v5.0.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+- add dependency override option to solver ([#2090](https://github.com/conda/rattler/pull/2090))
+
+### Fixed
+
+- exclude no-timestamp packages in resolvo min_age dedup ([#2185](https://github.com/conda/rattler/pull/2185))
+- merge issues on main ([#2156](https://github.com/conda/rattler/pull/2156))
+
+## [4.2.6](https://github.com/conda/rattler/compare/rattler_solve-v4.2.5...rattler_solve-v4.2.6) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [4.2.5](https://github.com/conda/rattler/compare/rattler_solve-v4.2.4...rattler_solve-v4.2.5) - 2026-02-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [4.2.4](https://github.com/conda/rattler/compare/rattler_solve-v4.2.3...rattler_solve-v4.2.4) - 2026-02-19
+
+### Other
+
+- use `when` syntax instead of `; if` ([#2007](https://github.com/conda/rattler/pull/2007))
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+
 ## [4.2.3](https://github.com/conda/rattler/compare/rattler_solve-v4.2.2...rattler_solve-v4.2.3) - 2026-02-04
 
 ### Other

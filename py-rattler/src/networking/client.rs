@@ -9,6 +9,8 @@ use rattler_networking::{
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
 use std::collections::HashMap;
 
 static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -23,14 +25,22 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None, headers=None))]
+    #[pyo3(signature = (middlewares=None, headers=None, user_agent=None, timeout=None))]
     pub fn new(
         middlewares: Option<Vec<PyMiddleware>>,
         headers: Option<HashMap<String, String>>,
+        user_agent: Option<String>,
+        timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
 
         let mut client_builder = reqwest::Client::builder();
+
+        if let Some(timeout) = timeout {
+            client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
+        }
+
+        let has_headers = headers.is_some();
 
         if let Some(headers) = headers {
             let mut header_map = HeaderMap::new();
@@ -41,11 +51,16 @@ impl PyClientWithMiddleware {
                 header_map.insert(header_name, header_value);
             }
             client_builder = client_builder.default_headers(header_map);
-        } else {
+        }
+
+        if let Some(user_agent) = user_agent {
+            client_builder = client_builder.user_agent(user_agent);
+        } else if !has_headers {
             client_builder = client_builder.user_agent(RATTLER_USER_AGENT);
         }
 
-        let mut client = reqwest_middleware::ClientBuilder::new(client_builder.build().unwrap());
+        let reqwest_client = client_builder.build().unwrap();
+        let mut client = reqwest_middleware::ClientBuilder::new(reqwest_client.clone());
 
         for middleware in middlewares {
             match middleware {
@@ -58,8 +73,13 @@ impl PyClientWithMiddleware {
                             .map_err(PyRattlerError::from)?,
                     );
                 }
-                PyMiddleware::Oci(middleware) => {
-                    client = client.with(OciMiddleware::from(middleware));
+                PyMiddleware::Retry(middleware) => {
+                    let policy = ExponentialBackoff::builder()
+                        .build_with_max_retries(middleware.max_retries);
+                    client = client.with(RetryTransientMiddleware::new_with_policy(policy));
+                }
+                PyMiddleware::Oci(_middleware) => {
+                    client = client.with(OciMiddleware::new(reqwest_client.clone()));
                 }
                 PyMiddleware::Gcs(middleware) => {
                     client = client.with(GCSMiddleware::from(middleware));

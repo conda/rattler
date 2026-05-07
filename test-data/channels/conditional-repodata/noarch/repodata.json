@@ -8,9 +8,9 @@
       "build_number": 0,
       "timestamp": 1765213400949,
       "depends": [
-        "linux-dependency; if __linux",
-        "osx-dependency; if __osx",
-        "win-dependency; if __win"
+        "linux-dependency[when=\"__linux\"]",
+        "osx-dependency[when=\"__osx\"]",
+        "win-dependency[when=\"__win\"]"
       ],
       "license": "MIT",
       "md5": "abcd0123abcd0123abcd0123abcd0123",
@@ -59,7 +59,7 @@
       "build": "0",
       "build_number": 0,
       "timestamp": 1765213400949,
-      "depends": ["package; if side-dependency=0.2"],
+      "depends": ["package[when=\"side-dependency=0.2\"]"],
       "license": "MIT",
       "md5": "abcd0123abcd0123abcd0123abcd0127",
       "name": "conditional-dependency",

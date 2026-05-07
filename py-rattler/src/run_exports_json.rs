@@ -1,9 +1,11 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{PackageFile, RunExportsJson};
 use rattler_package_streaming::seek::read_package_file;
 use std::path::PathBuf;
+use url::Url;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 
 /// A representation of the `run_exports.json` file found in package archives.
 ///
@@ -64,7 +66,7 @@ impl PyRunExportsJson {
     ///
     /// For example, if the file is in JSON format, this function reads the data from the file at
     /// the specified path, parse the JSON string and return the resulting object. If the file is
-    /// not in a parsable format or if the file could not read, this function returns an error.
+    /// not in a parse-able format or if the file could not read, this function returns an error.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(RunExportsJson::from_path(path)
@@ -77,7 +79,7 @@ impl PyRunExportsJson {
     ///
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
-    /// parsable format or if the file could not be read, this function returns an error.
+    /// parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_package_directory(path: PathBuf) -> PyResult<Self> {
         Ok(RunExportsJson::from_package_directory(path)
@@ -88,13 +90,37 @@ impl PyRunExportsJson {
     /// Parses the object from a string, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
-    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {
         Ok(RunExportsJson::from_str(str)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let run_exports_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    RunExportsJson,
+                >(client.into(), url)
+                .await
+                .map(PyRunExportsJson::from)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+
+            Python::with_gil(|py| Ok(Py::new(py, run_exports_json)?.into_any()))
+        })
     }
 
     /// Returns the path to the file within the Conda archive.
@@ -129,9 +155,9 @@ impl PyRunExportsJson {
         self.inner.strong = strong;
     }
 
-    /// NoArch run exports apply a run export only to noarch packages (other run exports are ignored).
+    /// `NoArch` run exports apply a run export only to noarch packages (other run exports are ignored).
     /// For example, python uses this to apply a dependency on python to all noarch packages, but not to
-    /// the python_abi package.
+    /// the `python_abi` package.
     #[getter]
     pub fn noarch(&self) -> Vec<String> {
         self.inner.noarch.clone()

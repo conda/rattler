@@ -1,4 +1,4 @@
-use rattler_conda_types::{PackageName, PackageRecord};
+use rattler_conda_types::{Flag, PackageName, PackageRecord};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
@@ -162,6 +162,22 @@ macro_rules! impl_package_record {
                 features: Option<String>,
             ) {
                 AsMut::<PackageRecord>::as_mut(self).features = features;
+            }
+
+            /// Plain string flags used to select package variants.
+            #[wasm_bindgen::prelude::wasm_bindgen(getter)]
+            pub fn flags(&self) -> Vec<String> {
+                AsRef::<PackageRecord>::as_ref(self)
+                    .flags
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            }
+
+            #[wasm_bindgen::prelude::wasm_bindgen(setter)]
+            pub fn set_flags(&mut self, flags: Vec<String>) {
+                AsMut::<PackageRecord>::as_mut(self).flags =
+                    flags.into_iter().map(Flag::new_unchecked).collect();
             }
 
             /// The specific license of the package

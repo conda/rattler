@@ -1,4 +1,8 @@
 //! This module contains CLI common entrypoint for authentication.
+
+#[cfg(feature = "oauth")]
+pub mod oauth;
+
 use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
@@ -8,39 +12,92 @@ use serde_json::json;
 use thiserror;
 use url::Url;
 
+/// Default `User-Agent` header sent to remote endpoints (OAuth providers,
+/// prefix.dev validation, token revocation) when the caller passes no
+/// override. Library consumers (pixi etc.) typically pass their own value.
+pub const DEFAULT_USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
+
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
 struct LoginArgs {
     /// The host to authenticate with (e.g. prefix.dev)
     host: String,
 
+    // -- Token / Basic auth --
     /// The token to use (for authentication with prefix.dev)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     token: Option<String>,
 
     /// The username to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     username: Option<String>,
 
     /// The password to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     password: Option<String>,
 
     /// The token to use on anaconda.org / quetz authentication
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     conda_token: Option<String>,
 
+    // -- S3 --
     /// The S3 access key ID
-    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"])]
+    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"], help_heading = "S3 Authentication")]
     s3_access_key_id: Option<String>,
 
     /// The S3 secret access key
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_secret_access_key: Option<String>,
 
     /// The S3 session token
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_session_token: Option<String>,
+
+    // -- OAuth/OIDC --
+    /// Use OAuth/OIDC authentication
+    #[cfg(feature = "oauth")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "OAuth/OIDC Authentication")]
+    oauth: bool,
+
+    /// OIDC issuer URL (defaults to <https://{host>})
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_issuer_url: Option<String>,
+
+    /// OAuth client ID (defaults to "rattler")
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_id: Option<String>,
+
+    /// OAuth client secret (for confidential clients)
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_secret: Option<String>,
+
+    /// OAuth flow: auto (default), auth-code, device-code
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"], help_heading = "OAuth/OIDC Authentication")]
+    oauth_flow: Option<String>,
+
+    /// Additional OAuth scopes to request (repeatable)
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long = "oauth-scope",
+        requires = "oauth",
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_scopes: Vec<String>,
+
+    /// OAuth redirect URI (defaults to a random localhost port). Set
+    /// this when the OAuth client on the `IdP` side is registered with
+    /// a specific redirect URI such as `http://127.0.0.1:8000/auth/oidc`.
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_redirect_uri: Option<String>,
+
+    /// User-Agent header used for requests
+    #[clap(long)]
+    user_agent: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -50,6 +107,7 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Subcommand {
     /// Store authentication information for a given host
     Login(LoginArgs),
@@ -85,11 +143,15 @@ pub enum AuthenticationCLIError {
     PrefixDevBadMethod,
 
     /// Bad authentication method when using anaconda.org
-    #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one")]
+    #[error(
+        "Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one"
+    )]
     AnacondaOrgBadMethod,
 
     /// Bad authentication method when using S3
-    #[error("Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them")]
+    #[error(
+        "Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them"
+    )]
     S3BadMethod,
 
     // TODO: rework this
@@ -114,6 +176,95 @@ pub enum AuthenticationCLIError {
     /// Token is unauthorized or invalid
     #[error("Unauthorized or invalid token")]
     UnauthorizedToken,
+
+    /// OAuth error
+    #[cfg(feature = "oauth")]
+    #[error(transparent)]
+    OAuthError(#[from] oauth::OAuthError),
+}
+
+/// Normalize a user-supplied host into its canonical hostname form.
+fn normalize_login_host(host: &str) -> String {
+    let host = host.trim_start_matches("*.");
+
+    // Try parsing as-is first (handles inputs like `https://prefix.dev`).
+    // Only accept the result if it actually yielded a hostname — not every
+    // parse-successful string contains a host component.
+    if let Some(h) = url::Url::parse(host)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+    {
+        return h;
+    }
+
+    // Fall back to prepending a scheme (handles bare `prefix.dev`,
+    // `prefix.dev/`, `localhost:8080`, etc.).
+    url::Url::parse(&format!("https://{host}"))
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_else(|| host.trim_end_matches('/').to_string())
+}
+
+/// prefix.dev's default channel scopes
+#[cfg(feature = "oauth")]
+const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
+    "openid",
+    "profile",
+    "offline_access",
+    "channel:read",
+    "channel:upload",
+];
+
+/// Built-in OAuth defaults for a known host.
+///
+/// Returned by [`default_oauth_config_for_host`] for hosts where rattler
+/// ships an out-of-the-box OAuth configuration. Carries everything needed
+/// to start a login flow without the user passing any flags.
+#[cfg(feature = "oauth")]
+struct DefaultOAuthConfig {
+    issuer_url: String,
+    client_id: String,
+    scopes: Vec<String>,
+    redirect_uri: Option<String>,
+}
+
+/// Returns the built-in OAuth configuration for a host, if rattler ships one.
+#[cfg(feature = "oauth")]
+fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
+    let normalized = normalize_login_host(host);
+
+    if !(normalized == "prefix.dev" || normalized.ends_with(".prefix.dev")) {
+        return None;
+    }
+
+    Some(DefaultOAuthConfig {
+        issuer_url: format!("https://{host}"),
+        client_id: "rattler".to_string(),
+        scopes: PREFIX_DEV_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect(),
+        redirect_uri: None,
+    })
+}
+
+/// Returns the built-in OAuth config for an implicit (flag-less) login —
+/// i.e. when the user passed no explicit auth method and the host ships
+/// an out-of-the-box OAuth configuration. The presence of `Some` is the
+/// signal that `login()` should fall back to OAuth.
+#[cfg(feature = "oauth")]
+fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
+    let no_explicit_method = args.token.is_none()
+        && args.username.is_none()
+        && args.password.is_none()
+        && args.conda_token.is_none()
+        && args.s3_access_key_id.is_none();
+
+    if !no_explicit_method {
+        return None;
+    }
+
+    default_oauth_config_for_host(&args.host)
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -152,14 +303,80 @@ async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
+    // explicit `--oauth` *or* no explicit method on an OAuth-capable host
+    #[cfg(feature = "oauth")]
+    {
+        let auto_default = default_oauth_for_login(&args);
+        if args.oauth || auto_default.is_some() {
+            if !args.oauth {
+                eprintln!(
+                    "No credentials provided; using OAuth browser login for {}.",
+                    args.host
+                );
+            }
+
+            // Reuse the implicit-default config when present; otherwise
+            // (`--oauth` was set explicitly) fall back to a fresh lookup.
+            let host_default = auto_default.or_else(|| default_oauth_config_for_host(&args.host));
+
+            let issuer_url = args
+                .oauth_issuer_url
+                .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
+                .unwrap_or_else(|| format!("https://{}", args.host));
+
+            let client_id = args
+                .oauth_client_id
+                .or_else(|| host_default.as_ref().map(|c| c.client_id.clone()))
+                .unwrap_or_else(|| "rattler".to_string());
+
+            let flow = match args.oauth_flow.as_deref() {
+                Some("auth-code") => oauth::OAuthFlow::AuthCode,
+                Some("device-code") => oauth::OAuthFlow::DeviceCode,
+                _ => oauth::OAuthFlow::Auto,
+            };
+
+            let redirect_uri = args
+                .oauth_redirect_uri
+                .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
+
+            let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
+                args.oauth_scopes.into_iter().collect()
+            } else if let Some(default) = host_default {
+                default.scopes.into_iter().collect()
+            } else {
+                oauth::DEFAULT_OAUTH_SCOPES
+                    .iter()
+                    .map(|&s| s.to_string())
+                    .collect()
+            };
+
+            let config = oauth::OAuthConfig {
+                issuer_url,
+                client_id,
+                client_secret: args.oauth_client_secret,
+                flow,
+                scopes,
+                redirect_uri,
+                user_agent: args.user_agent,
+            };
+
+            let auth = oauth::perform_oauth_login(config).await?;
+            // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
+            // any `https://...` form) write to the same storage key
+            let host = normalize_login_host(&args.host);
+            storage.store(&host, &auth)?;
+            eprintln!("Credentials stored for {host}.");
+            return Ok(());
+        }
+    }
+
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
-        if args.password.is_none() {
-            return Err(AuthenticationCLIError::MissingPassword);
-        } else {
-            let password = args.password.unwrap();
+        if let Some(password) = args.password {
             Authentication::BasicHTTP { username, password }
+        } else {
+            return Err(AuthenticationCLIError::MissingPassword);
         }
     } else if let Some(token) = args.token {
         Authentication::BearerToken(token)
@@ -202,9 +419,11 @@ async fn login(
         };
 
         // Validate the token using the extracted function
-        match validate_prefix_dev_token(token, &args.host).await? {
+        match validate_prefix_dev_token(token, &args.host, args.user_agent.as_deref()).await? {
             ValidationResult::Valid(username, url) => {
-                println!("✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials...");
+                println!(
+                    "✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials..."
+                );
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -226,6 +445,7 @@ async fn login(
 async fn validate_prefix_dev_token(
     token: &str,
     host: &str,
+    user_agent: Option<&str>,
 ) -> Result<ValidationResult, AuthenticationCLIError> {
     let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
         // If env var is set, parse it as a full URL
@@ -252,7 +472,9 @@ async fn validate_prefix_dev_token(
         "query": "query { viewer { login } }"
     });
 
-    let client = Client::new();
+    let client = Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .build()?;
     let response = client
         .post(prefix_url.join("api/graphql").expect("must be valid"))
         .bearer_auth(token)
@@ -281,8 +503,32 @@ async fn validate_prefix_dev_token(
     }
 }
 
-fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+async fn logout(
+    args: LogoutArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
     let host = get_url(&args.host)?;
+
+    // Revoke OAuth tokens before deleting credentials
+    #[cfg(feature = "oauth")]
+    if let Ok(Some(Authentication::OAuth {
+        ref access_token,
+        ref refresh_token,
+        revocation_endpoint: Some(ref revocation_endpoint),
+        ref client_id,
+        ..
+    })) = storage.get(&host)
+    {
+        eprintln!("Revoking OAuth tokens...");
+        oauth::revoke_tokens(
+            revocation_endpoint,
+            access_token,
+            refresh_token.as_deref(),
+            client_id,
+            None,
+        )
+        .await;
+    }
 
     println!("Removing authentication for {host}");
 
@@ -296,7 +542,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage).await,
-        Subcommand::Logout(args) => logout(args, storage),
+        Subcommand::Logout(args) => logout(args, storage).await,
     }
 }
 
@@ -331,6 +577,21 @@ mod tests {
             s3_access_key_id: None,
             s3_secret_access_key: None,
             s3_session_token: None,
+            #[cfg(feature = "oauth")]
+            oauth: false,
+            #[cfg(feature = "oauth")]
+            oauth_issuer_url: None,
+            #[cfg(feature = "oauth")]
+            oauth_client_id: None,
+            #[cfg(feature = "oauth")]
+            oauth_client_secret: None,
+            #[cfg(feature = "oauth")]
+            oauth_flow: None,
+            #[cfg(feature = "oauth")]
+            oauth_scopes: vec![],
+            #[cfg(feature = "oauth")]
+            oauth_redirect_uri: None,
+            user_agent: None,
         }
     }
 
@@ -418,7 +679,7 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("example.com");
         args.username = Some("testuser".to_string());
-        // password I set herer is:  None
+        // password I set here is:  None
         let result = login(args, storage).await;
         assert!(matches!(
             result,
@@ -518,5 +779,55 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_default_oauth_config_for_host() {
+        let has_default = |h: &str| default_oauth_config_for_host(h).is_some();
+
+        assert!(has_default("prefix.dev"));
+        assert!(has_default("repo.prefix.dev"));
+        assert!(has_default("https://prefix.dev"));
+        assert!(has_default("*.prefix.dev"));
+
+        // Normalization: trailing slash and full URLs should still match.
+        assert!(has_default("prefix.dev/"));
+        assert!(has_default("https://prefix.dev/"));
+        assert!(has_default("https://repo.prefix.dev/"));
+
+        // Loopback addresses are not auto-recognized: local dev servers
+        // could be running anything, so the user passes `--oauth` and
+        // their own `--oauth-scope` flags explicitly.
+        assert!(!has_default("localhost"));
+        assert!(!has_default("localhost:8080"));
+        assert!(!has_default("127.0.0.1"));
+
+        assert!(!has_default("example.com"));
+        // Suffix-injection guard: hostname containing "prefix.dev" must not match.
+        assert!(!has_default("evil-prefix.dev.attacker.com"));
+        assert!(!has_default("notprefix.dev"));
+
+        // Returned config carries the right scheme + client_id for prefix.dev.
+        let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
+        assert_eq!(prefix.issuer_url, "https://prefix.dev");
+        assert_eq!(prefix.client_id, "rattler");
+        assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_default_oauth_for_login() {
+        // No explicit method on prefix.dev → OAuth default kicks in
+        assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
+
+        // Explicit method blocks the OAuth default, even on prefix.dev.
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("t".into());
+        assert!(default_oauth_for_login(&args).is_none());
+
+        // No explicit method on a non-OAuth host → still falls through to existing
+        // NoAuthenticationMethod error.
+        assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
     }
 }
