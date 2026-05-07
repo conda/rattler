@@ -231,7 +231,7 @@ pub fn link_file(
                 )
                 .map_err(|err| {
                     LinkFileError::IoError(String::from("replacing placeholders"), err)
-                })?;      
+                })?;
             }
             None => {
                 // Replace the prefix placeholder in the file with the new placeholder
@@ -263,7 +263,7 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
         let executable = has_executable_permissions(&metadata.permissions());
-        
+
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
@@ -700,19 +700,18 @@ pub fn copy_and_replace_placeholders_with_offsets(
                             prefix_placeholder,
                             target_prefix,
                             offsets,
-                            null_offsets
+                            null_offsets,
                         )?;
                     }
                     None => {
                         copy_and_replace_cstring_placeholder(
-                            source_bytes, 
-                            destination, 
-                            prefix_placeholder, 
+                            source_bytes,
+                            destination,
+                            prefix_placeholder,
                             target_prefix,
                         )?;
                     }
                 };
-                
             }
         }
     }

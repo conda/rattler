@@ -596,6 +596,5 @@ mod test {
         // Should create v1
         assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 2);
-
     }
 }
