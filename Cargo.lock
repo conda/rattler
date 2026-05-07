@@ -5103,6 +5103,7 @@ dependencies = [
  "rattler_virtual_packages",
  "reqwest 0.12.28",
  "reqwest-middleware",
+ "tabwriter",
  "tokio",
  "tracing-subscriber",
  "url",
