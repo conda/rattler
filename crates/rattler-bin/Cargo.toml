@@ -34,6 +34,7 @@ rustls-tls = [
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
+oauth = ["rattler/oauth"]
 
 [dependencies]
 anyhow = { workspace = true }
