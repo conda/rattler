@@ -104,7 +104,7 @@ async fn async_main() -> miette::Result<()> {
 
     // Dispatch the selected comment
     match opt.command {
-        Command::Auth(opts) => commands::auth::auth(opts).await,
+        Command::Auth(opts) => commands::auth::auth(*opts).await,
         Command::Completion(opts) => commands::completion::completion(opts),
         Command::Create(opts) => commands::create::create(opts).await,
         Command::Download(opts) => commands::download::download(opts).await,
