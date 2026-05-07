@@ -12,6 +12,11 @@ use serde_json::json;
 use thiserror;
 use url::Url;
 
+/// Default `User-Agent` header sent to remote endpoints (OAuth providers,
+/// prefix.dev validation, token revocation) when the caller passes no
+/// override. Library consumers (pixi etc.) typically pass their own value.
+pub const DEFAULT_USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
+
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
 struct LoginArgs {
@@ -90,11 +95,11 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_redirect_uri: Option<String>,
 
-    /// User-Agent header sent to the OAuth provider (defaults to
-    /// `rattler/<version>`)
-    #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
-    oauth_user_agent: Option<String>,
+    /// User-Agent header sent to remote endpoints during this auth invocation
+    /// (OAuth provider, prefix.dev validation, token revocation). Defaults to
+    /// `rattler/<version>`.
+    #[clap(long)]
+    user_agent: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -354,7 +359,7 @@ async fn login(
                 flow,
                 scopes,
                 redirect_uri,
-                user_agent: args.oauth_user_agent,
+                user_agent: args.user_agent,
             };
 
             let auth = oauth::perform_oauth_login(config).await?;
@@ -416,7 +421,7 @@ async fn login(
         };
 
         // Validate the token using the extracted function
-        match validate_prefix_dev_token(token, &args.host).await? {
+        match validate_prefix_dev_token(token, &args.host, args.user_agent.as_deref()).await? {
             ValidationResult::Valid(username, url) => {
                 println!(
                     "✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials..."
@@ -442,6 +447,7 @@ async fn login(
 async fn validate_prefix_dev_token(
     token: &str,
     host: &str,
+    user_agent: Option<&str>,
 ) -> Result<ValidationResult, AuthenticationCLIError> {
     let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
         // If env var is set, parse it as a full URL
@@ -468,7 +474,9 @@ async fn validate_prefix_dev_token(
         "query": "query { viewer { login } }"
     });
 
-    let client = Client::new();
+    let client = Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .build()?;
     let response = client
         .post(prefix_url.join("api/graphql").expect("must be valid"))
         .bearer_auth(token)
@@ -585,8 +593,7 @@ mod tests {
             oauth_scopes: vec![],
             #[cfg(feature = "oauth")]
             oauth_redirect_uri: None,
-            #[cfg(feature = "oauth")]
-            oauth_user_agent: None,
+            user_agent: None,
         }
     }
 
