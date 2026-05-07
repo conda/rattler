@@ -143,7 +143,6 @@ pub struct LinkedFile {
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)] // TODO: Fix this properly
 pub fn link_file(
     path_json_entry: &PathsEntry,
-    has_executable: bool,
     destination_relative_path: PathBuf,
     package_dir: &Path,
     target_dir: &Prefix,
@@ -167,6 +166,7 @@ pub fn link_file(
         file_mode,
         placeholder,
         offsets,
+        null_offsets
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -216,11 +216,13 @@ pub fn link_file(
                     &target_platform,
                     *file_mode,
                     offsets,
+                    null_offsets
                 )
                 .map_err(|err| {
                     LinkFileError::IoError(String::from("replacing placeholders"), err)
                 })?;
-            }
+                             
+            },
             None => {
                 // Replace the prefix placeholder in the file with the new placeholder
                 copy_and_replace_placeholders(
@@ -250,12 +252,8 @@ pub fn link_file(
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
-        let executable = if has_executable {
-            path_json_entry.executable.unwrap_or(false)
-        } else {
-            has_executable_permissions(&metadata.permissions())
-        };
-
+        let executable = has_executable_permissions(&metadata.permissions());
+        
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
@@ -609,6 +607,7 @@ pub fn copy_and_replace_placeholders_with_offsets(
     target_platform: &Platform,
     file_mode: FileMode,
     offsets: &[usize],
+    null_offsets: &Option<Vec<usize>>,
 ) -> Result<(), std::io::Error> {
     match file_mode {
         FileMode::Text => {
@@ -627,13 +626,29 @@ pub fn copy_and_replace_placeholders_with_offsets(
             if target_platform.is_windows() {
                 destination.write_all(source_bytes)?;
             } else {
-                copy_and_replace_cstring_placeholder_offsets(
-                    source_bytes,
-                    destination,
-                    prefix_placeholder,
-                    target_prefix,
-                    offsets,
-                )?;
+                // the null_offsets are only usable and should only be available for cstrings
+                match null_offsets {
+                    Some(null_offsets) => {
+                        copy_and_replace_cstring_placeholder_offsets(
+                            source_bytes,
+                            destination,
+                            prefix_placeholder,
+                            target_prefix,
+                            offsets,
+                            null_offsets
+                        )?;
+                    },
+                    None => {
+                        copy_and_replace_cstring_placeholder(
+                            source_bytes, 
+                            destination, 
+                            prefix_placeholder, 
+                            target_prefix
+                        )?;
+                    }
+                };
+                
+                
             }
         }
     }
@@ -925,54 +940,56 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
     prefix_placeholder: &str,
     target_prefix: &str,
     offsets: &[usize],
+    null_offsets: &[usize],
 ) -> Result<(), std::io::Error> {
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
-    if new_prefix.len() > old_prefix.len() {
-        return Err(std::io::Error::new(
+    let shrink = old_prefix.len().checked_sub(new_prefix.len()).ok_or_else(|| {
+        std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "target prefix cannot be longer than the placeholder prefix",
-        ));
-    }
+        )
+    })?;
 
-    let mut last_pos = 0;
-    let length_change = old_prefix.len() - new_prefix.len();
-    let mut unfinished_changes = 0;
+    let mut last_pos = 0usize;
+    let mut pending_pad_bytes = 0usize;
+    let mut null_idx = 0usize;
 
-    for (index, &offset) in offsets.iter().enumerate() {
+    let nexts = offsets
+        .iter()
+        .skip(1)
+        .copied()
+        .chain(std::iter::once(source_bytes.len()));
+
+    for (&offset, next_offset) in offsets.iter().zip(nexts) {
+        let cstr_end = null_offsets[null_idx];
+
         destination.write_all(&source_bytes[last_pos..offset])?;
-
         destination.write_all(new_prefix)?;
 
-        let mut end = offset + old_prefix.len();
-        let next_offset = offsets
-            .get(index + 1)
-            .copied()
-            .unwrap_or(source_bytes.len());
+        let after_old_prefix = offset + old_prefix.len();
+        pending_pad_bytes += shrink;
 
-        while end < source_bytes.len() && source_bytes[end] != b'\0' && end < next_offset {
-            end += 1;
+        // This replacement is the last in its C-string if the next replacement
+        // starts beyond the current NUL terminator.
+        let last_in_cstr = next_offset > cstr_end;
+
+        if last_in_cstr {
+            destination.write_all(&source_bytes[after_old_prefix..cstr_end])?;
+            if pending_pad_bytes > 0 {
+                write_zeros(&mut destination, pending_pad_bytes)?;
+            }
+            pending_pad_bytes = 0;
+            last_pos = cstr_end;
+            null_idx += 1;
+        } else {
+            // More replacements in the same C-string; let the next iteration
+            // write source_bytes[after_old_prefix..next_offset].
+            last_pos = after_old_prefix;
         }
-
-        destination.write_all(&source_bytes[(offset + old_prefix.len())..end])?;
-
-        if end == next_offset {
-            unfinished_changes += 1;
-            last_pos = end;
-            continue;
-        };
-
-        let padding = (unfinished_changes + 1) * length_change;
-        if padding > 0 {
-            destination.write_all(&vec![0; padding])?;
-            unfinished_changes = 0;
-        }
-
-        last_pos = end;
     }
 
-    // Write any remaining bytes after the last replacement
     if last_pos < source_bytes.len() {
         destination.write_all(&source_bytes[last_pos..])?;
     }
@@ -993,6 +1010,16 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
     return false;
     #[cfg(unix)]
     return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
+}
+
+fn write_zeros(mut w: impl Write, mut count: usize) -> Result<(), std::io::Error> {
+    let zeros = [0u8; 64];
+    while count > 0 {
+        let n = count.min(zeros.len());
+        w.write_all(&zeros[..n])?;
+        count -= n;
+    }
+    Ok(())
 }
 
 /// Represents the type of file detected from its content
@@ -1324,13 +1351,24 @@ mod test {
     #[case(
         b"12345Hello, fabulous world!\x006789",
         [12].to_vec(),
+        [27].to_vec(),
         "fabulous",
         "cruel",
         b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
+    // Replace multiple offsets before the end of a string
+    #[case(
+        b"12345Hello, fabulous fabulous world!\x006789",
+        [12, 21].to_vec(),
+        [37].to_vec(),
+        "fabulous",
+        "cruel",
+        b"12345Hello, cruel cruel world!\x00\x00\x00\x00\x00\x00\x006789"
+    )]
     pub fn test_copy_and_replace_binary_placeholder_offsets(
         #[case] input: &[u8],
         #[case] offsets: Vec<usize>,
+        #[case] null_offsets: Vec<usize>,
         #[case] prefix_placeholder: &str,
         #[case] target_prefix: &str,
         #[case] expected_output: &[u8],
@@ -1347,17 +1385,19 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &offsets,
+            &null_offsets
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
     }
 
     #[rstest]
-    #[case(b"short\x00", [0].to_vec(), "short", "verylong")]
-    #[case(b"short1234\x00", [0].to_vec(), "short", "verylong")]
+    #[case(b"short\x00", [0].to_vec(), [5].to_vec(), "short", "verylong")]
+    #[case(b"short1234\x00", [0].to_vec(), [9].to_vec(), "short", "verylong")]
     pub fn test_shorter_binary_placeholder_offsets(
         #[case] input: &[u8],
         #[case] offsets: Vec<usize>,
+        #[case] null_offsets: Vec<usize>,
         #[case] prefix_placeholder: &str,
         #[case] target_prefix: &str,
     ) {
@@ -1370,6 +1410,7 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &offsets,
+            &null_offsets
         );
         assert!(result.is_err());
     }
@@ -1378,17 +1419,20 @@ mod test {
     #[case(
         b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext", 
         b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
-        [20, 43].to_vec()
+        [20, 43].to_vec(),
+        [61].to_vec()
     )]
     #[case(
         b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/another/placeholder/:\x00somemoretext",
         b"beginrandomdataPATH=/target/etc/share:/target/bin/another/target/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
         [20, 43, 67].to_vec(),
+        [81].to_vec()
     )]
     fn replace_binary_path_var_offsets(
         #[case] input: &[u8],
         #[case] result: &[u8],
         #[case] offsets: Vec<usize>,
+        #[case] null_offsets: Vec<usize>,
     ) {
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_cstring_placeholder_offsets(
@@ -1397,6 +1441,7 @@ mod test {
             "/placeholder",
             "/target",
             &offsets,
+            &null_offsets
         )
         .unwrap();
         let out = &output.into_inner();

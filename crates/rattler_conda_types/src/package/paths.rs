@@ -17,10 +17,6 @@ use std::path::{Path, PathBuf};
 #[sorted]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
-    /// If the file contains the executable field implemented
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub has_executable: Option<bool>,
-
     /// All entries included in the package.
     #[serde(serialize_with = "serialize_sorted_paths")]
     pub paths: Vec<PathsEntry>,
@@ -108,7 +104,6 @@ impl PathsJson {
 
         // Iterate over all files and create entries
         Ok(Self {
-            has_executable: None,
             paths: files
                 .files
                 .into_iter()
@@ -123,12 +118,12 @@ impl PathsJson {
                                 file_mode: entry.file_mode,
                                 placeholder: (*entry.prefix).to_owned(),
                                 offsets: None,
+                                null_offsets: None,
                             }),
                             no_link: no_link.contains(&path),
                             sha256: None,
                             size_in_bytes: None,
-                            relative_path: path,
-                            executable: None,
+                            relative_path: path
                         }),
                         Err(e) => Err(e),
                     }
@@ -192,9 +187,12 @@ pub struct PrefixPlaceholder {
     pub placeholder: String,
 
     /// The offsets on which the placeholders are found in the file
-    /// only present in version 2 of the paths.json file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offsets: Option<Vec<usize>>,
+
+    /// The offsets on which the placeholders are found in the file
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub null_offsets: Option<Vec<usize>>,
 }
 
 /// A single entry in the `paths.json` file.
@@ -234,11 +232,6 @@ pub struct PathsEntry {
     /// This entry is present in version 1 and up of the paths.json file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_in_bytes: Option<u64>,
-
-    /// When a file is executable this will be true
-    /// This entry is only present in newer versions of the paths.json file
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub executable: Option<bool>,
 }
 
 /// The file mode of the entry
@@ -276,7 +269,6 @@ fn is_no_link_default(value: &bool) -> bool {
 #[cfg(test)]
 mod test {
     use crate::package::{PackageFile, PrefixPlaceholder};
-
     use super::{FileMode, PathBuf, PathType, PathsEntry, PathsJson};
 
     #[test]
@@ -349,8 +341,7 @@ mod test {
                 prefix_placeholder: None,
                 no_link: false,
                 sha256: None,
-                size_in_bytes: Some(0),
-                executable: None,
+                size_in_bytes: Some(0)
             });
         }
 
@@ -359,7 +350,6 @@ mod test {
         paths.shuffle(&mut rng);
 
         insta::assert_yaml_snapshot!(PathsJson {
-            has_executable: None,
             paths,
             paths_version: 1
         });
@@ -380,10 +370,10 @@ mod test {
                     "path_type": "hardlink",
                     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                     "size_in_bytes": 1024,
-                    "executable": true,
                     "file_mode": "binary",
                     "prefix_placeholder": "/opt/conda",
-                    "offsets": [100, 200, 300]
+                    "offsets": [100, 200, 300],
+                    "null_offsets": [150, 250]
                 },
                 {
                     "_path": "lib/library.so",
@@ -400,16 +390,15 @@ mod test {
                     "size_in_bytes": 256,
                     "file_mode": "text",
                     "prefix_placeholder": "/home/builder/conda",
-                    "offsets": [10, 45]
+                    "offsets": [10, 45],
+                    "null_offsets": [20]
                 },
                 {
                     "_path": "bin/symlink-example",
                     "no_link": false,
-                    "path_type": "softlink",
-                    "executable": true
+                    "path_type": "softlink"
                 }
             ],
-            "has_executable": true,
             "paths_version": 1
             }"#;
 
@@ -424,31 +413,28 @@ mod test {
         assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 4);
 
-        assert_eq!(paths_json.has_executable, Some(true));
-
-        // First entry: binary with offsets and executable
+        // First entry: binary with offsets 
         assert_eq!(
             paths_json.paths[0].relative_path,
             PathBuf::from("bin/example")
         );
-        assert_eq!(paths_json.paths[0].executable, Some(true));
         assert_eq!(paths_json.paths[0].size_in_bytes, Some(1024));
         let prefix = paths_json.paths[0].prefix_placeholder.as_ref().unwrap();
         assert_eq!(prefix.file_mode, FileMode::Binary);
         assert_eq!(prefix.offsets, Some(vec![100, 200, 300]));
+        assert_eq!(prefix.null_offsets, Some(vec![150, 250]));
 
-        // Second entry: no prefix, not executable
-        assert_eq!(paths_json.paths[1].executable, None);
+        // Second entry: no prefix
         assert!(paths_json.paths[1].prefix_placeholder.is_none());
 
         // Third entry: text with offsets
         let text_prefix = paths_json.paths[2].prefix_placeholder.as_ref().unwrap();
         assert_eq!(text_prefix.file_mode, FileMode::Text);
         assert_eq!(text_prefix.offsets, Some(vec![10, 45]));
+        assert_eq!(text_prefix.null_offsets, Some(vec![20]));
 
         // Fourth entry: symlink with executable
         assert_eq!(paths_json.paths[3].path_type, PathType::SoftLink);
-        assert_eq!(paths_json.paths[3].executable, Some(true));
 
         insta::assert_yaml_snapshot!(paths_json);
     }
@@ -475,7 +461,6 @@ mod test {
         let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
 
         assert_eq!(paths_json.paths_version, 1);
-        assert_eq!(paths_json.paths[0].executable, None);
         assert_eq!(paths_json.paths[0].sha256, None);
         assert_eq!(paths_json.paths[0].size_in_bytes, None);
         assert!(paths_json.paths[0].prefix_placeholder.is_none());
@@ -485,7 +470,6 @@ mod test {
     pub fn test_serialization_roundtrip() {
         // Create a PathsJson with executable and offset fields programmatically
         let original = PathsJson {
-            has_executable: Some(true),
             paths: vec![
                 PathsEntry {
                     relative_path: PathBuf::from("bin/tool"),
@@ -495,10 +479,10 @@ mod test {
                         file_mode: FileMode::Binary,
                         placeholder: "/opt/conda".to_string(),
                         offsets: Some(vec![50, 150]),
+                        null_offsets: Some(vec![75]),
                     }),
                     sha256: None,
                     size_in_bytes: Some(4096),
-                    executable: Some(true),
                 },
                 PathsEntry {
                     relative_path: PathBuf::from("lib/module.py"),
@@ -506,8 +490,7 @@ mod test {
                     path_type: PathType::HardLink,
                     prefix_placeholder: None,
                     sha256: None,
-                    size_in_bytes: Some(512),
-                    executable: None,
+                    size_in_bytes: Some(512)
                 },
             ],
             paths_version: 1,
@@ -522,7 +505,6 @@ mod test {
         // Verify roundtrip
         assert_eq!(original, deserialized);
         assert_eq!(deserialized.paths_version, 1);
-        assert_eq!(deserialized.paths[0].executable, Some(true));
         assert_eq!(
             deserialized.paths[0]
                 .prefix_placeholder
@@ -531,6 +513,59 @@ mod test {
                 .offsets,
             Some(vec![50, 150])
         );
+        assert_eq!(
+            deserialized.paths[0]
+                .prefix_placeholder
+                .as_ref()
+                .unwrap()
+                .null_offsets,
+            Some(vec![75])
+        );
+    }
+
+    #[test]
+    pub fn test_null_offsets_omitted_when_none() {
+        let paths = PathsJson {
+            paths: vec![PathsEntry {
+                relative_path: PathBuf::from("bin/tool"),
+                no_link: false,
+                path_type: PathType::HardLink,
+                prefix_placeholder: Some(PrefixPlaceholder {
+                    file_mode: FileMode::Binary,
+                    placeholder: "/opt/conda".to_string(),
+                    offsets: Some(vec![1, 2]),
+                    null_offsets: None,
+                }),
+                sha256: None,
+                size_in_bytes: None,
+            }],
+            paths_version: 1,
+        };
+
+        let json = serde_json::to_string_pretty(&paths).unwrap();
+
+        assert!(!json.contains("null_offsets"));
+    }
+    #[test]
+    pub fn test_null_offsets_defaults_to_none() {
+        let json = r#"
+        {
+            "paths": [{
+                "_path": "bin/tool",
+                "path_type": "hardlink",
+                "file_mode": "binary",
+                "prefix_placeholder": "/opt/conda",
+                "offsets": [1, 2]
+            }],
+            "paths_version": 1
+        }
+        "#;
+
+        let parsed: PathsJson = serde_json::from_str(json).unwrap();
+
+        let prefix = parsed.paths[0].prefix_placeholder.as_ref().unwrap();
+
+        assert_eq!(prefix.null_offsets, None);
     }
 
     #[test]
@@ -554,11 +589,9 @@ mod test {
         let paths_json =
             PathsJson::from_package_directory_with_deprecated_fallback(package_dir.path()).unwrap();
 
-        // Should fall back and create v1
+        // Should create v1
         assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 2);
 
-        // v1 shouldn't have v2 fields
-        assert!(paths_json.paths.iter().all(|p| p.executable.is_none()));
     }
 }
