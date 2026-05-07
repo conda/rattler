@@ -169,10 +169,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
             .collect();
     }
 
-    let user_agent = config
-        .user_agent
-        .as_deref()
-        .unwrap_or(DEFAULT_USER_AGENT);
+    let user_agent = config.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT);
 
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
