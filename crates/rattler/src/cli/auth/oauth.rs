@@ -17,8 +17,8 @@ use openidconnect::{
         CoreResponseType, CoreSubjectIdentifierType,
     },
     AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -55,11 +55,6 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
 >;
 
 /// Generic OIDC scopes used when no host-specific defaults apply.
-///
-/// Limited to the standard identity scopes (`openid`/`profile`) and
-/// `offline_access` for refresh tokens. Provider-specific scopes
-/// (e.g. prefix.dev's `channel:*` or anaconda.org's `email`) live in the
-/// per-host config tables in `auth.rs`.
 pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
 
 /// Configuration for an OAuth login flow.
@@ -74,6 +69,13 @@ pub struct OAuthConfig {
     pub flow: OAuthFlow,
     /// Additional OAuth scopes to request.
     pub scopes: HashSet<String>,
+    /// Fixed redirect URI for the auth-code flow. When `None`, rattler
+    /// binds to a random localhost port. Required when the OAuth client
+    /// is registered with a specific redirect URI on the `IdP` side.
+    pub redirect_uri: Option<String>,
+    /// Override for the User-Agent header. When `None`, defaults to
+    /// `rattler/<crate version>`.
+    pub user_agent: Option<String>,
 }
 
 /// Which OAuth flow to attempt.
@@ -165,8 +167,14 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
             .collect();
     }
 
+    let user_agent = config
+        .user_agent
+        .as_deref()
+        .unwrap_or(concat!("rattler/", env!("CARGO_PKG_VERSION")));
+
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .user_agent(user_agent)
         .build()
         .map_err(OAuthError::Network)?;
 
@@ -174,6 +182,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
 
     let client_secret = config.client_secret.as_deref();
+    let redirect_uri = config.redirect_uri.as_deref();
 
     // 2. Run the appropriate flow
     let tokens = match config.flow {
@@ -183,6 +192,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
             )
             .await?
@@ -203,6 +213,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
             )
             .await
@@ -263,9 +274,21 @@ async fn discover_endpoints(
     let oidc_issuer =
         IssuerUrl::new(issuer_url.to_string()).map_err(|e| OAuthError::Discovery(e.to_string()))?;
 
-    let provider_metadata = ExtendedCoreProviderMetadata::discover_async(oidc_issuer, http_client)
-        .await
-        .map_err(|e| OAuthError::Discovery(e.to_string()))?;
+    // Anaconda's identity provider serves a discovery doc that omits the
+    // OIDC-required `subject_types_supported` and
+    // `id_token_signing_alg_values_supported` fields, so the strict
+    // `openidconnect` deserializer rejects it. We've manually verified
+    // the correct values for Anaconda and skip straight to the lenient
+    // fetcher for that host. Every other host goes through the strict
+    // deserializer — a parse failure there is a real bug we don't want
+    // to paper over.
+    let provider_metadata = if oidc_issuer.url().host_str() == Some("auth.anaconda.com") {
+        fetch_provider_metadata_lenient(http_client, &oidc_issuer).await?
+    } else {
+        ExtendedCoreProviderMetadata::discover_async(oidc_issuer.clone(), http_client)
+            .await
+            .map_err(|e| OAuthError::Discovery(e.to_string()))?
+    };
 
     let token_endpoint = provider_metadata
         .token_endpoint()
@@ -286,6 +309,59 @@ async fn discover_endpoints(
     })
 }
 
+/// Targeted fallback for Anaconda's identity provider, whose discovery
+/// doc omits OIDC-required fields. Fetches the JSON, fills in
+/// `subject_types_supported = ["public"]` and
+/// `id_token_signing_alg_values_supported = ["RS256"]` when absent
+/// (verified-correct values for Anaconda), then deserializes.
+///
+/// Only invoked from the `auth.anaconda.com` arm of `discover_endpoints`
+/// — do not call for arbitrary hosts.
+async fn fetch_provider_metadata_lenient(
+    http_client: &reqwest::Client,
+    issuer: &IssuerUrl,
+) -> Result<ExtendedCoreProviderMetadata, OAuthError> {
+    let discovery_url = format!(
+        "{}/.well-known/openid-configuration",
+        issuer.url().as_str().trim_end_matches('/'),
+    );
+
+    let bytes = http_client
+        .get(&discovery_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+
+    let mut value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| OAuthError::Discovery(format!("invalid discovery JSON: {e}")))?;
+
+    if let Some(obj) = value.as_object_mut() {
+        obj.entry("subject_types_supported")
+            .or_insert_with(|| serde_json::json!(["public"]));
+        obj.entry("id_token_signing_alg_values_supported")
+            .or_insert_with(|| serde_json::json!(["RS256"]));
+    }
+
+    let metadata: ExtendedCoreProviderMetadata = serde_json::from_value(value)
+        .map_err(|e| OAuthError::Discovery(format!("invalid discovery document: {e}")))?;
+
+    // Mirror the strict path's issuer-claim check: the discovery
+    // document's `issuer` field must match the URL we discovered from.
+    // Without this, a malicious server could impersonate someone else's
+    // issuer through a non-compliant discovery doc.
+    if metadata.issuer() != issuer {
+        return Err(OAuthError::Discovery(format!(
+            "issuer claim {} does not match requested issuer {}",
+            metadata.issuer().as_str(),
+            issuer.as_str(),
+        )));
+    }
+
+    Ok(metadata)
+}
+
 /// Authorization code flow with PKCE.
 ///
 /// 1. Binds a local TCP listener for the redirect
@@ -297,12 +373,27 @@ async fn auth_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
+    redirect_uri: Option<&str>,
     http_client: &reqwest::Client,
 ) -> Result<OAuthTokens, OAuthError> {
-    // Bind to a random port on localhost
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let local_addr = listener.local_addr()?;
-    let redirect_url = format!("http://127.0.0.1:{}", local_addr.port());
+    // If the caller pinned a redirect URI (because the IdP requires an
+    // exact match against what was registered), bind there. Otherwise
+    // pick a random localhost port and use that.
+    let (listener, redirect_url) = if let Some(uri) = redirect_uri {
+        let parsed = Url::parse(uri).map_err(OAuthError::UrlParse)?;
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| OAuthError::Authorization(format!("redirect URI has no host: {uri}")))?;
+        let port = parsed.port().ok_or_else(|| {
+            OAuthError::Authorization(format!("redirect URI has no explicit port: {uri}"))
+        })?;
+        let listener = TcpListener::bind(format!("{host}:{port}")).await?;
+        (listener, uri.to_string())
+    } else {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let local_addr = listener.local_addr()?;
+        (listener, format!("http://127.0.0.1:{}", local_addr.port()))
+    };
 
     let mut client = CoreClient::from_provider_metadata(
         endpoints.provider_metadata.clone(),

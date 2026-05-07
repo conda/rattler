@@ -82,6 +82,19 @@ struct LoginArgs {
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_scopes: Vec<String>,
+
+    /// OAuth redirect URI (defaults to a random localhost port). Set
+    /// this when the OAuth client on the `IdP` side is registered with
+    /// a specific redirect URI such as `http://127.0.0.1:8000/auth/oidc`.
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_redirect_uri: Option<String>,
+
+    /// User-Agent header sent to the OAuth provider (defaults to
+    /// `rattler/<version>`)
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_user_agent: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -213,6 +226,7 @@ struct DefaultOAuthConfig {
     issuer_url: String,
     client_id: String,
     scopes: Vec<String>,
+    redirect_uri: Option<String>,
 }
 
 /// Returns the built-in OAuth configuration for a host, if rattler ships one.
@@ -220,25 +234,35 @@ struct DefaultOAuthConfig {
 fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
     let normalized = normalize_login_host(host);
 
-    let is_prefix_dev = normalized == "prefix.dev" || normalized.ends_with(".prefix.dev");
-    let is_anaconda = normalized == "anaconda.org" || normalized.ends_with(".anaconda.org");
-    let is_loopback =
-        normalized == "localhost" || normalized == "127.0.0.1" || normalized == "[::1]";
+    // anaconda.com use a different identity provider at a
+    // different subdomain (`auth.anaconda.com`) and registers a specific
+    // client + redirect URI on the IdP side, so all four fields are
+    // hard-coded rather than derived from the input host.
+    if normalized == "anaconda.com" || normalized.ends_with(".anaconda.com") {
+        return Some(DefaultOAuthConfig {
+            issuer_url: "https://auth.anaconda.com/api/auth".to_string(),
+            client_id: "b4ad7f1d-c784-46b5-a9fe-106e50441f5a".to_string(),
+            scopes: ANACONDA_OAUTH_SCOPES
+                .iter()
+                .map(|&s| s.to_string())
+                .collect(),
+            redirect_uri: Some("http://127.0.0.1:8000/auth/oidc".to_string()),
+        });
+    }
 
-    let scopes: &[&str] = if is_anaconda {
+    let scopes: &[&str] = if normalized == "anaconda.org" || normalized.ends_with(".anaconda.org") {
         ANACONDA_OAUTH_SCOPES
-    } else if is_prefix_dev || is_loopback {
+    } else if normalized == "prefix.dev" || normalized.ends_with(".prefix.dev") {
         PREFIX_DEV_OAUTH_SCOPES
     } else {
         return None;
     };
 
-    let scheme = if is_loopback { "http" } else { "https" };
-
     Some(DefaultOAuthConfig {
-        issuer_url: format!("{scheme}://{host}"),
+        issuer_url: format!("https://{host}"),
         client_id: "rattler".to_string(),
         scopes: scopes.iter().map(|&s| s.to_string()).collect(),
+        redirect_uri: None,
     })
 }
 
@@ -329,6 +353,10 @@ async fn login(
                 _ => oauth::OAuthFlow::Auto,
             };
 
+            let redirect_uri = args
+                .oauth_redirect_uri
+                .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
+
             let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
                 args.oauth_scopes.into_iter().collect()
             } else if let Some(default) = host_default {
@@ -346,6 +374,8 @@ async fn login(
                 client_secret: args.oauth_client_secret,
                 flow,
                 scopes,
+                redirect_uri,
+                user_agent: args.oauth_user_agent,
             };
 
             let auth = oauth::perform_oauth_login(config).await?;
@@ -573,6 +603,10 @@ mod tests {
             oauth_flow: None,
             #[cfg(feature = "oauth")]
             oauth_scopes: vec![],
+            #[cfg(feature = "oauth")]
+            oauth_redirect_uri: None,
+            #[cfg(feature = "oauth")]
+            oauth_user_agent: None,
         }
     }
 
@@ -777,22 +811,17 @@ mod tests {
         assert!(has_default("https://prefix.dev/"));
         assert!(has_default("https://repo.prefix.dev/"));
 
-        // Loopback addresses for local development. The normalization step
-        // strips the port so `localhost:8080` collapses to `localhost`.
-        assert!(has_default("localhost"));
-        assert!(has_default("localhost:8080"));
-        assert!(has_default("http://localhost:8080"));
-        assert!(has_default("127.0.0.1"));
-        assert!(has_default("127.0.0.1:8080"));
-        assert!(has_default("http://127.0.0.1:8080/"));
+        // Loopback addresses are not auto-recognized: local dev servers
+        // could be running anything, so the user passes `--oauth` and
+        // their own `--oauth-scope` flags explicitly.
+        assert!(!has_default("localhost"));
+        assert!(!has_default("localhost:8080"));
+        assert!(!has_default("127.0.0.1"));
 
         assert!(!has_default("example.com"));
         // Suffix-injection guard: hostname containing "prefix.dev" must not match.
         assert!(!has_default("evil-prefix.dev.attacker.com"));
         assert!(!has_default("notprefix.dev"));
-        // Loopback-spoofing guard: hostnames *containing* "localhost" must not match.
-        assert!(!has_default("localhost.attacker.com"));
-        assert!(!has_default("notlocalhost"));
 
         // anaconda.org family is recognized too.
         assert!(has_default("anaconda.org"));
@@ -812,8 +841,22 @@ mod tests {
         assert!(anaconda.scopes.iter().any(|s| s == "email"));
         assert!(!anaconda.scopes.iter().any(|s| s.starts_with("channel:")));
 
-        let local = default_oauth_config_for_host("localhost:8080").unwrap();
-        assert_eq!(local.issuer_url, "http://localhost:8080");
+        // anaconda.com routes to the auth.anaconda.com identity provider
+        // and uses a specific registered client + redirect URI.
+        assert!(has_default("anaconda.com"));
+        assert!(has_default("repo.anaconda.com"));
+        assert!(!has_default("notanaconda.com"));
+
+        let anaconda_com = default_oauth_config_for_host("anaconda.com").unwrap();
+        assert_eq!(
+            anaconda_com.issuer_url,
+            "https://auth.anaconda.com/api/auth"
+        );
+        assert_eq!(
+            anaconda_com.redirect_uri.as_deref(),
+            Some("http://127.0.0.1:8000/auth/oidc")
+        );
+        assert_ne!(anaconda_com.client_id, "rattler");
     }
 
     #[cfg(feature = "oauth")]
