@@ -233,14 +233,22 @@ impl VirtualPackages {
     /// Detect the virtual packages of the current system with the given
     /// overrides.
     pub fn detect(overrides: &VirtualPackageOverrides) -> Result<Self, DetectVirtualPackageError> {
+        let cuda = Cuda::detect(overrides.cuda.as_ref())?;
+        let mut cuda_arch = CudaArch::detect(overrides.cuda_arch.as_ref())?;
+
+        // Enforce CEP requirement: __cuda_arch must be absent when __cuda is absent
+        if cuda.is_none() {
+            cuda_arch = None;
+        }
+
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
             unix: Platform::current().is_unix(),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
             libc: LibC::detect(overrides.libc.as_ref())?,
-            cuda: Cuda::detect(overrides.cuda.as_ref())?,
-            cuda_arch: CudaArch::detect(overrides.cuda_arch.as_ref())?,
+            cuda,
+            cuda_arch,
             archspec: Archspec::detect(overrides.archspec.as_ref())?,
         })
     }
@@ -652,23 +660,16 @@ impl CudaArch {
 
 impl EnvOverride for CudaArch {
     fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        // Parse format: "major.minor" (e.g., "8.6")
-        // Per CEP specification, only the version is needed
-
-        // Validate version format: must be "major.minor" where both are digits
+        // CEP requires exactly "major.minor" format where both are digits
         if !cuda::is_valid_cuda_version_format(env_var_value) {
-            tracing::warn!(
-                "Invalid CUDA compute capability format '{}'. Expected format: 'major.minor' (e.g., '8.6'). \
-                 The default capability of '0.0' will be used instead.",
-                env_var_value
-            );
-            return Ok(Self {
-                version: Version::from_str("0.0")?,
+            // Invalid format - return a ParseVersionError
+            // We use an empty string to generate a proper error
+            return Version::from_str("").map(|_| Self {
+                version: Version::major(0),
             });
         }
 
         let version = Version::from_str(env_var_value)?;
-
         Ok(Self { version })
     }
 
@@ -1152,15 +1153,10 @@ mod test {
         let cuda_arch = CudaArch::parse_version("9.0").unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("9.0").unwrap());
 
-        // Test invalid version format (falls back to 0.0)
-        let cuda_arch = CudaArch::parse_version("invalid").unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
-
-        let cuda_arch = CudaArch::parse_version("8").unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
-
-        let cuda_arch = CudaArch::parse_version("8.6.1").unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
+        // Test invalid version format (should return error)
+        assert!(CudaArch::parse_version("invalid").is_err());
+        assert!(CudaArch::parse_version("8").is_err());
+        assert!(CudaArch::parse_version("8.6.1").is_err());
 
         // Test override via environment variable
         let env_var_name = format!("{}_{}", CudaArch::DEFAULT_ENV_NAME, "test123");
@@ -1170,5 +1166,75 @@ mod test {
         let cuda_arch = result.unwrap();
         assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
         env::remove_var(&env_var_name);
+    }
+
+    #[test]
+    fn test_cuda_arch_coupling() {
+        // Test that cuda_arch is absent when cuda is absent (CEP requirement)
+        // Even with cuda_arch override, it should be None if cuda is None
+
+        // Case 1: Both not present - cuda_arch should be None
+        let overrides = VirtualPackageOverrides::default();
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        // If cuda is None, cuda_arch must also be None
+        if packages.cuda.is_none() {
+            assert!(
+                packages.cuda_arch.is_none(),
+                "cuda_arch should be None when cuda is None"
+            );
+        }
+
+        // Case 2: cuda_arch override with no cuda - cuda_arch should be None
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: None, // No cuda
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        if packages.cuda.is_none() {
+            assert!(
+                packages.cuda_arch.is_none(),
+                "cuda_arch should be None when cuda is None, even with override"
+            );
+        }
+
+        // Case 3: Both have overrides - cuda_arch should be present
+        let cuda_override = Override::String("12.0".to_string());
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: Some(cuda_override),
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        assert!(
+            packages.cuda.is_some(),
+            "cuda should be present with override"
+        );
+        assert!(
+            packages.cuda_arch.is_some(),
+            "cuda_arch should be present when cuda is present"
+        );
+        let cuda_arch = packages.cuda_arch.unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+
+        // Case 4: Empty string cuda override (disables cuda) - cuda_arch should be None
+        let cuda_override = Override::String("".to_string());
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: Some(cuda_override),
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        assert!(
+            packages.cuda.is_none(),
+            "cuda should be None with empty string override"
+        );
+        assert!(
+            packages.cuda_arch.is_none(),
+            "cuda_arch should be None when cuda is disabled via empty string"
+        );
     }
 }
