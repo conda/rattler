@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["authentication_middleware","authentication_storage","gcs_middleware","mirror_middleware","oci_middleware","retry_policies","s3_middleware"],"struct":["LazyClient"]};
+window.SIDEBAR_ITEMS = {"mod":["authentication_middleware","authentication_storage","gcs_middleware","mirror_middleware","oauth_refresh","oci_middleware","retry_policies","s3_middleware"],"struct":["LazyClient"]};

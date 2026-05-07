@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AuthenticationCLIError","ValidationResult"],"fn":["execute"],"mod":["oauth"],"struct":["Args"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_USER_AGENT"],"enum":["AuthenticationCLIError","ValidationResult"],"fn":["execute"],"mod":["oauth"],"struct":["Args"]};
