@@ -199,7 +199,7 @@ impl From<PyPathsEntry> for PathsEntry {
 impl PyPathsEntry {
     /// Constructor
     #[new]
-    #[pyo3(signature = (relative_path, no_link, path_type, prefix_placeholder=None, sha256=None, size_in_bytes=None, executable=None))]
+    #[pyo3(signature = (relative_path, no_link, path_type, prefix_placeholder=None, sha256=None, size_in_bytes=None))]
     pub fn new(
         relative_path: PathBuf,
         no_link: bool,
@@ -388,11 +388,12 @@ impl From<PyPrefixPlaceholder> for PrefixPlaceholder {
 impl PyPrefixPlaceholder {
     /// Constructor
     #[new]
-    #[pyo3(signature = (file_mode, placeholder, offsets=None))]
+    #[pyo3(signature = (file_mode, placeholder, offsets=None, null_offsets=None))]
     pub fn new(
         file_mode: PyFileMode,
         placeholder: &str,
         offsets: Option<Vec<usize>>,
+        null_offsets: Option<Vec<usize>>,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: PrefixPlaceholder {

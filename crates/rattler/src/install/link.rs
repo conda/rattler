@@ -177,7 +177,7 @@ pub fn link_file(
         file_mode,
         placeholder,
         offsets,
-        null_offsets
+        null_offsets,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -227,13 +227,12 @@ pub fn link_file(
                     &target_platform,
                     *file_mode,
                     offsets,
-                    null_offsets
+                    null_offsets,
                 )
                 .map_err(|err| {
                     LinkFileError::IoError(String::from("replacing placeholders"), err)
-                })?;
-                             
-            },
+                })?;      
+            }
             None => {
                 // Replace the prefix placeholder in the file with the new placeholder
                 copy_and_replace_placeholders(
@@ -703,17 +702,16 @@ pub fn copy_and_replace_placeholders_with_offsets(
                             offsets,
                             null_offsets
                         )?;
-                    },
+                    }
                     None => {
                         copy_and_replace_cstring_placeholder(
                             source_bytes, 
                             destination, 
                             prefix_placeholder, 
-                            target_prefix
+                            target_prefix,
                         )?;
                     }
                 };
-                
                 
             }
         }
@@ -1012,12 +1010,15 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
-    let shrink = old_prefix.len().checked_sub(new_prefix.len()).ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "target prefix cannot be longer than the placeholder prefix",
-        )
-    })?;
+    let shrink = old_prefix
+        .len()
+        .checked_sub(new_prefix.len())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "target prefix cannot be longer than the placeholder prefix",
+            )
+        })?;
 
     let mut last_pos = 0usize;
     let mut pending_pad_bytes = 0usize;
@@ -1162,7 +1163,6 @@ mod test {
         let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
         let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
 
-
         let entry = PathsEntry {
             relative_path: PathBuf::from("config.py"),
             no_link: false,
@@ -1172,7 +1172,6 @@ mod test {
                 placeholder: "/old/placeholder/path".to_string(),
                 offsets: None,
                 null_offsets: None,
-
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1589,7 +1588,7 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &offsets,
-            &null_offsets
+            &null_offsets,
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
@@ -1614,7 +1613,7 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &offsets,
-            &null_offsets
+            &null_offsets,
         );
         assert!(result.is_err());
     }
@@ -1645,7 +1644,7 @@ mod test {
             "/placeholder",
             "/target",
             &offsets,
-            &null_offsets
+            &null_offsets,
         )
         .unwrap();
         let out = &output.into_inner();

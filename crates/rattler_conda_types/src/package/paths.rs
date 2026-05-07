@@ -127,7 +127,7 @@ impl PathsJson {
                             no_link: no_link.contains(&path),
                             sha256: None,
                             size_in_bytes: None,
-                            relative_path: path
+                            relative_path: path,
                         }),
                         Err(e) => Err(e),
                     }
@@ -272,8 +272,8 @@ fn is_no_link_default(value: &bool) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::package::{PackageFile, PrefixPlaceholder};
     use super::{FileMode, PathBuf, PathType, PathsEntry, PathsJson};
+    use crate::package::{PackageFile, PrefixPlaceholder};
 
     #[test]
     pub fn roundtrip_paths_json() {
@@ -345,7 +345,7 @@ mod test {
                 prefix_placeholder: None,
                 no_link: false,
                 sha256: None,
-                size_in_bytes: Some(0)
+                size_in_bytes: Some(0),
             });
         }
 
@@ -417,7 +417,7 @@ mod test {
         assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 4);
 
-        // First entry: binary with offsets 
+        // First entry: binary with offsets
         assert_eq!(
             paths_json.paths[0].relative_path,
             PathBuf::from("bin/example")
@@ -494,7 +494,7 @@ mod test {
                     path_type: PathType::HardLink,
                     prefix_placeholder: None,
                     sha256: None,
-                    size_in_bytes: Some(512)
+                    size_in_bytes: Some(512),
                 },
             ],
             paths_version: 1,
