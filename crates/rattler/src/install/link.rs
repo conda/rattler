@@ -1160,6 +1160,7 @@ mod test {
         let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
         let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
 
+
         let entry = PathsEntry {
             relative_path: PathBuf::from("config.py"),
             no_link: false,
@@ -1167,6 +1168,9 @@ mod test {
             prefix_placeholder: Some(PrefixPlaceholder {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
+                offsets: None,
+                null_offsets: None,
+
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1675,6 +1679,8 @@ mod test {
         let output = output.into_inner();
         let replaced = String::from_utf8_lossy(&output);
         insta::assert_snapshot!(replaced);
+    }
+
     #[test]
     fn test_symlink_escape_rejected() {
         use super::{symlink_to_destination, LinkFileError};
