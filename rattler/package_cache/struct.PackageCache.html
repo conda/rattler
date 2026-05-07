@@ -57,7 +57,7 @@ request is coalesced. No duplicate fetch is performed.</p>
     &amp;self,
     pkg: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="struct.CacheKey.html" title="struct rattler::package_cache::CacheKey">CacheKey</a>&gt;,
     url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
-    client: <a class="struct" href="../../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>,
+    client: LazyClient,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.CacheMetadata.html" title="struct rattler::package_cache::CacheMetadata">CacheMetadata</a>, <a class="enum" href="enum.PackageCacheError.html" title="enum rattler::package_cache::PackageCacheError">PackageCacheError</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the directory that contains the specified package.</p>
 <p>This is a convenience wrapper around <code>get_or_fetch</code> which fetches the
@@ -75,7 +75,7 @@ cache.</p>
     &amp;self,
     pkg: impl <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="struct.CacheKey.html" title="struct rattler::package_cache::CacheKey">CacheKey</a>&gt;,
     url: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>,
-    client: <a class="struct" href="../../rattler_networking/lazy_client/struct.LazyClient.html" title="struct rattler_networking::lazy_client::LazyClient">LazyClient</a>,
+    client: LazyClient,
     retry_policy: impl RetryPolicy + <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.93.1/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + 'static,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.CacheMetadata.html" title="struct rattler::package_cache::CacheMetadata">CacheMetadata</a>, <a class="enum" href="enum.PackageCacheError.html" title="enum rattler::package_cache::PackageCacheError">PackageCacheError</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the directory that contains the specified package.</p>
