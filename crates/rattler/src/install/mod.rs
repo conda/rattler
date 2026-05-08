@@ -1015,6 +1015,7 @@ pub fn link_package_sync(
         paths.append(&mut entry_point_paths);
     };
 
+    paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok((paths, link_type))
 }
 
@@ -1246,7 +1247,7 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 
 #[cfg(test)]
 mod test {
-    use std::{env::temp_dir, process::Command, str::FromStr};
+    use std::{collections::HashSet, env::temp_dir, path::Path, process::Command, str::FromStr};
 
     use crate::{
         get_test_data_dir,
@@ -1419,5 +1420,57 @@ mod test {
         .unwrap();
 
         insta::assert_yaml_snapshot!(paths);
+    }
+
+    /// `link_package_sync` runs the per-file linking in parallel via rayon,
+    /// so its result must be sorted by `relative_path` before returning to
+    /// produce reproducible `conda-meta/<package>.json` files.
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_link_package_sync_sorts_paths() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let package_dir = tempfile::TempDir::new().unwrap();
+
+        let package_path = tools::download_and_cache_file_async(
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
+        )
+        .await
+        .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+
+        let install_driver = InstallDriver::default();
+        let prefix = Prefix::create(environment_dir.path()).unwrap();
+
+        let (paths, _link_type) = crate::install::link_package_sync(
+            package_dir.path(),
+            &prefix,
+            install_driver.clobber_registry.clone(),
+            InstallOptions::default(),
+        )
+        .unwrap();
+
+        // The package must contain entries in more than one directory, otherwise
+        // the sort guarantee is trivial and we are not actually exercising the
+        // multi-directory ordering that the fix addresses.
+        let distinct_parents: HashSet<_> = paths
+            .iter()
+            .filter_map(|entry| entry.relative_path.parent().map(Path::to_path_buf))
+            .collect();
+        assert!(
+            distinct_parents.len() > 1,
+            "test package must span multiple directories to exercise sort ordering"
+        );
+
+        for window in paths.windows(2) {
+            assert!(
+                window[0].relative_path <= window[1].relative_path,
+                "link_package_sync must return entries sorted by relative_path: {:?} > {:?}",
+                window[0].relative_path,
+                window[1].relative_path,
+            );
+        }
     }
 }
