@@ -118,7 +118,7 @@ pub enum PyShellEnum {
 impl PyShellEnum {
     pub fn to_shell_enum(&self) -> ShellEnum {
         match self {
-            PyShellEnum::Bash => Bash.into(),
+            PyShellEnum::Bash => Bash::default().into(),
             PyShellEnum::Zsh => Zsh.into(),
             PyShellEnum::Xonsh => Xonsh.into(),
             PyShellEnum::CmdExe => CmdExe.into(),

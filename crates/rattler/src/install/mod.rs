@@ -468,7 +468,8 @@ pub async fn link_package(
             .await
             .map_err(JoinError::try_into_panic)
             {
-                Ok(Ok(linked_file)) => linked_file,
+                Ok(Ok(Some(linked_file))) => linked_file,
+                Ok(Ok(None)) => return Ok(vec![]),
                 Ok(Err(e)) => {
                     return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
@@ -905,7 +906,8 @@ pub fn link_package_sync(
                 );
 
                 let result = match link_result {
-                    Ok(linked_file) => linked_file,
+                    Ok(Some(linked_file)) => linked_file,
+                    Ok(None) => continue,
                     Err(e) => {
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),

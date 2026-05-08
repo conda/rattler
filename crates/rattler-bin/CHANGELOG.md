@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/conda/rattler/compare/rattler-bin-v0.1.8...rattler-bin-v0.1.9) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
 ## [0.1.8](https://github.com/conda/rattler/compare/rattler-bin-v0.1.7...rattler-bin-v0.1.8) - 2026-05-04
 
 ### Other

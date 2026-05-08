@@ -34,7 +34,7 @@ pub trait SolverImpl {
         TAvailablePackagesIterator: IntoIterator<Item = R>,
     >(
         &mut self,
-        task: SolverTask<TAvailablePackagesIterator>,
+        task: SolverTask<'a, TAvailablePackagesIterator>,
     ) -> Result<SolverResult, SolveError>;
 }
 
@@ -362,7 +362,7 @@ pub enum ChannelPriority {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends
-pub struct SolverTask<TAvailablePackagesIterator> {
+pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// An iterator over all available packages
     pub available_packages: TAvailablePackagesIterator,
 
@@ -376,7 +376,11 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     ///
     /// Usually you add the currently installed packages or packages from a
     /// lock-file here.
-    pub locked_packages: Vec<RepoDataRecord>,
+    ///
+    /// Records are passed by reference so the caller keeps ownership of the
+    /// underlying storage (whether that is `Vec<RepoDataRecord>`,
+    /// `Vec<Arc<RepoDataRecord>>` from the gateway, or anything else).
+    pub locked_packages: Vec<&'a RepoDataRecord>,
 
     /// Records of packages that are previously selected and CANNOT be changed.
     ///
@@ -385,7 +389,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// best possible version. However, if there is a variant available in
     /// the `pinned_packages` field it will always select that version no matter
     /// what even if that means other packages have to be downgraded.
-    pub pinned_packages: Vec<RepoDataRecord>,
+    ///
+    /// See [`Self::locked_packages`] for the borrowing rationale.
+    pub pinned_packages: Vec<&'a RepoDataRecord>,
 
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
@@ -433,7 +439,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
-    for SolverTask<Vec<RepoDataIter<I>>>
+    for SolverTask<'r, Vec<RepoDataIter<I>>>
 {
     fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
         Self {
