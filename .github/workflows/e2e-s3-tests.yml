@@ -45,7 +45,7 @@ jobs:
         with:
           environments: minio
 
-      - run: pixi run e2e-s3-minio
+      - run: pixi run -vv e2e-s3-minio
 
   # TODO: add cloudflare R2 integration tests here as well
   e2e-aws-s3-test:
@@ -86,4 +86,4 @@ jobs:
         with:
           environments: s3
 
-      - run: pixi run e2e-s3-aws
+      - run: pixi run -vv e2e-s3-aws
