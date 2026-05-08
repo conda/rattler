@@ -1,8 +1,12 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 645
 expression: conda_lock
 ---
-version: 6
+version: 7
+platforms:
+  - name: linux-64
+  - name: win-64
 environments:
   default:
     channels:
@@ -15,4 +19,3 @@ environments:
 packages:
   - pypi: "E:\\Developer\\prefix\\pixi\\examples\\pypi-source-deps/minimal-project"
     name: minimal-project
-    version: "0.1"

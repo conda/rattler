@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4](https://github.com/conda/rattler/compare/rattler_digest-v1.2.3...rattler_digest-v1.2.4) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [1.2.3](https://github.com/conda/rattler/compare/rattler_digest-v1.2.2...rattler_digest-v1.2.3) - 2026-03-18
 
 ### Other

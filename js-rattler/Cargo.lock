@@ -52,6 +52,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "astral-reqwest-middleware"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "638d02e24aeb92f9537897cd1ff82e2bc98fd9ac9575a503e27bb07cdf64d4d7"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest",
+ "serde",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
 name = "astral-tokio-tar"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -65,6 +80,26 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "xattr",
+]
+
+[[package]]
+name = "astral_async_http_range_reader"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ddaca0fbbf0d91103cca7c7611790c65f6eff1d456f7fe6bf565d436dc9b8f3"
+dependencies = [
+ "astral-reqwest-middleware",
+ "bisection",
+ "futures",
+ "http-content-range",
+ "itertools 0.13.0",
+ "memmap2",
+ "reqwest",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -136,26 +171,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "async_http_range_reader"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b537c00269e3f943e06f5d7cabf8ccd281b800fd0c7f111dd82f77154334197"
-dependencies = [
- "bisection",
- "futures",
- "http-content-range",
- "itertools 0.13.0",
- "memmap2",
- "reqwest",
- "reqwest-middleware",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -606,11 +621,11 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file_url"
-version = "0.2.8"
+version = "0.3.0"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "typed-path",
  "url",
 ]
@@ -1334,6 +1349,7 @@ dependencies = [
 name = "js-rattler"
 version = "0.1.1"
 dependencies = [
+ "astral-reqwest-middleware",
  "chrono",
  "console_error_panic_hook",
  "getrandom 0.2.16",
@@ -1344,10 +1360,9 @@ dependencies = [
  "rattler_repodata_gateway",
  "rattler_solve",
  "reqwest",
- "reqwest-middleware",
  "serde",
  "serde-wasm-bindgen",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1765,7 +1780,7 @@ dependencies = [
  "hex",
  "percent-encoding",
  "serde",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1782,7 +1797,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "web-time",
@@ -1803,7 +1818,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tinyvec",
  "tracing",
  "web-time",
@@ -1881,10 +1896,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.21"
+version = "0.7.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral-reqwest-middleware",
  "dashmap",
  "digest",
  "dirs",
@@ -1900,11 +1916,10 @@ dependencies = [
  "rattler_redaction",
  "rayon",
  "reqwest",
- "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
@@ -1912,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.44.6"
+version = "0.46.0"
 dependencies = [
  "ahash",
  "chrono",
@@ -1945,7 +1960,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "typed-path",
  "url",
@@ -1953,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "blake2",
  "digest",
@@ -1970,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "1.0.12"
+version = "1.0.13"
 dependencies = [
  "quote",
  "syn",
@@ -1978,9 +1993,10 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.9"
+version = "0.26.11"
 dependencies = [
  "anyhow",
+ "astral-reqwest-middleware",
  "async-once-cell",
  "async-trait",
  "base64",
@@ -1989,25 +2005,25 @@ dependencies = [
  "http",
  "itertools 0.14.0",
  "reqwest",
- "reqwest-middleware",
  "retry-policies",
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.9"
+version = "0.25.0"
 dependencies = [
+ "astral-reqwest-middleware",
  "astral-tokio-tar",
+ "astral_async_http_range_reader",
  "astral_async_zip",
  "async-compression",
  "async-spooled-tempfile",
- "async_http_range_reader",
  "bzip2",
  "chrono",
  "fs-err",
@@ -2022,12 +2038,11 @@ dependencies = [
  "rattler_networking",
  "rattler_redaction",
  "reqwest",
- "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "tar",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2038,19 +2053,20 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
+ "astral-reqwest-middleware",
  "reqwest",
- "reqwest-middleware",
  "url",
 ]
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.27.6"
+version = "0.28.1"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral-reqwest-middleware",
  "async-compression",
  "async-fd-lock",
  "async-trait",
@@ -2085,7 +2101,6 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "reqwest",
- "reqwest-middleware",
  "retry-policies",
  "rmp-serde",
  "self_cell",
@@ -2096,7 +2111,7 @@ dependencies = [
  "strum",
  "superslice",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2108,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "5.2.2"
+version = "6.0.1"
 dependencies = [
  "chrono",
  "futures",
@@ -2118,7 +2133,7 @@ dependencies = [
  "rattler_digest",
  "resolvo",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2159,7 +2174,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2252,21 +2267,6 @@ dependencies = [
  "wasm-streams",
  "web-sys",
  "webpki-roots",
-]
-
-[[package]]
-name = "reqwest-middleware"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57f17d28a6e6acfe1733fe24bcd30774d13bffa4b8a22535b4c8c98423088d4e"
-dependencies = [
- "anyhow",
- "async-trait",
- "http",
- "reqwest",
- "serde",
- "thiserror 1.0.69",
- "tower-service",
 ]
 
 [[package]]
@@ -2840,11 +2840,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -2860,9 +2860,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",

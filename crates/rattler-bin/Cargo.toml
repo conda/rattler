@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.5"
+version = "0.1.9"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -16,7 +16,7 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls-tls", "s3", "gcs"]
+default = ["rustls-tls", "s3", "gcs", "oauth"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
@@ -34,6 +34,7 @@ rustls-tls = [
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
+oauth = ["rattler/oauth"]
 
 [dependencies]
 anyhow = { workspace = true }

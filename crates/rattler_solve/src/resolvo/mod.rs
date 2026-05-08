@@ -310,8 +310,8 @@ impl<'a> CondaDependencyProvider<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         repodata: impl IntoIterator<Item = RepoData<'a>>,
-        favored_records: &'a [RepoDataRecord],
-        locked_records: &'a [RepoDataRecord],
+        favored_records: &[&'a RepoDataRecord],
+        locked_records: &[&'a RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
@@ -524,7 +524,7 @@ impl<'a> CondaDependencyProvider<'a> {
         }
 
         // Add favored packages to the records
-        for favored_record in favored_records {
+        for &favored_record in favored_records {
             let name = pool.intern_package_name(&favored_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
             let candidates = records.entry(name).or_default();
@@ -532,7 +532,7 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.favored = Some(solvable);
         }
 
-        for locked_record in locked_records {
+        for &locked_record in locked_records {
             let name = pool.intern_package_name(&locked_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
             let candidates = records.entry(name).or_default();
@@ -944,7 +944,7 @@ impl super::SolverImpl for Solver {
         TAvailablePackagesIterator: IntoIterator<Item = R>,
     >(
         &mut self,
-        task: SolverTask<TAvailablePackagesIterator>,
+        task: SolverTask<'a, TAvailablePackagesIterator>,
     ) -> Result<SolverResult, SolveError> {
         let stop_time = task
             .timeout

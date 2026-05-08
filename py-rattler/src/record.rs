@@ -883,6 +883,30 @@ impl TryFrom<PyRecord> for RepoDataRecord {
     }
 }
 
+/// Extracts the existing `Arc<RepoDataRecord>` out of a `PyRecord` without
+/// deep-cloning the underlying record. Use this on hot paths that just need
+/// to share the record across the Python/Rust boundary; falling through to
+/// `TryFrom<PyRecord> for RepoDataRecord` would `Arc::unwrap_or_clone` and
+/// then re-allocate a fresh Arc, which is exactly what the Arc wrapping is
+/// meant to avoid.
+impl TryFrom<PyRecord> for Arc<RepoDataRecord> {
+    type Error = PyErr;
+    fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
+        match value.inner {
+            RecordInner::RepoData(r) => Ok(r),
+            // PrefixRecord embeds RepoDataRecord by value, so we can't share
+            // its Arc — clone the embedded record into a new one.
+            RecordInner::Prefix(r) => Ok(Arc::new(r.repodata_record.clone())),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+}
+
 impl From<WhlPackageRecord> for PyRecord {
     fn from(value: WhlPackageRecord) -> Self {
         Self {

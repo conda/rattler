@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.2](https://github.com/conda/rattler/compare/rattler_index-v0.28.1...rattler_index-v0.28.2) - 2026-05-07
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_index-v0.28.0...rattler_index-v0.28.1) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_index-v0.27.23...rattler_index-v0.28.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+- add support for CEP-42 channel relations in repodata ([#2370](https://github.com/conda/rattler/pull/2370))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.27.23](https://github.com/conda/rattler/compare/rattler_index-v0.27.22...rattler_index-v0.27.23) - 2026-04-13
 
 ### Other

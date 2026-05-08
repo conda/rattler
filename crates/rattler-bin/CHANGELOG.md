@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/conda/rattler/compare/rattler-bin-v0.1.8...rattler-bin-v0.1.9) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
+## [0.1.8](https://github.com/conda/rattler/compare/rattler-bin-v0.1.7...rattler-bin-v0.1.8) - 2026-05-04
+
+### Other
+
+- updated the following local packages: rattler_repodata_gateway
+
+## [0.1.7](https://github.com/conda/rattler/compare/rattler-bin-v0.1.6...rattler-bin-v0.1.7) - 2026-05-01
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.6](https://github.com/conda/rattler/compare/rattler-bin-v0.1.5...rattler-bin-v0.1.6) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.1.5](https://github.com/conda/rattler/compare/rattler-bin-v0.1.4...rattler-bin-v0.1.5) - 2026-04-13
 
 ### Fixed

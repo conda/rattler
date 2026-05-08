@@ -466,7 +466,8 @@ pub async fn link_package(
             .await
             .map_err(JoinError::try_into_panic)
             {
-                Ok(Ok(linked_file)) => linked_file,
+                Ok(Ok(Some(linked_file))) => linked_file,
+                Ok(Ok(None)) => return Ok(vec![]),
                 Ok(Err(e)) => {
                     return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
@@ -903,7 +904,8 @@ pub fn link_package_sync(
                 );
 
                 let result = match link_result {
-                    Ok(linked_file) => linked_file,
+                    Ok(Some(linked_file)) => linked_file,
+                    Ok(None) => continue,
                     Err(e) => {
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
@@ -1295,7 +1297,8 @@ mod test {
             .default_environment()
             .expect("no default environment in lock file");
 
-        let Some(packages) = lock_env.packages(current_platform) else {
+        let packages_platform = lock.platform(current_platform.as_str()).unwrap();
+        let Some(packages) = lock_env.packages(packages_platform) else {
             panic!(
                 "the platform for which the explicit lock file was created does not match the current platform"
             )

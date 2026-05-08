@@ -589,7 +589,7 @@ impl NamesQuery {
         let channels_and_platforms = self
             .channels
             .iter()
-            .cartesian_product(self.platforms.into_iter())
+            .cartesian_product(self.platforms)
             .collect_vec();
 
         // Create barrier cells for each subdirectory.

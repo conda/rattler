@@ -7,21 +7,56 @@ use std::{
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Match a given string either by exact match, glob or regex
+/// A case-insensitive regex matcher that retains the original pattern for
+/// display/serialization while compiling the regex with the `(?i)` flag set
+/// (per CEP-29, build string matching is always case-insensitive).
+#[derive(Debug, Clone)]
+pub struct RegexMatcher {
+    original: String,
+    compiled: fancy_regex::Regex,
+}
+
+impl RegexMatcher {
+    /// Create a new [`RegexMatcher`] from a regex pattern. The pattern is
+    /// compiled with the case-insensitive flag set.
+    pub fn new(pattern: &str) -> Result<Self, fancy_regex::Error> {
+        let compiled = fancy_regex::Regex::new(&format!("(?i){pattern}"))?;
+        Ok(Self {
+            original: pattern.to_string(),
+            compiled,
+        })
+    }
+
+    /// Returns the original (non-modified) regex pattern.
+    pub fn as_str(&self) -> &str {
+        &self.original
+    }
+
+    /// Returns true if the regex matches the entire string `other`.
+    pub fn is_match(&self, other: &str) -> Result<bool, fancy_regex::Error> {
+        self.compiled.is_match(other)
+    }
+}
+
+/// Match a given string either by exact match, glob or regex.
+///
+/// Matching is always case-insensitive (ASCII), per CEP-29.
 #[derive(Debug, Clone)]
 pub enum StringMatcher {
-    /// Match the string exactly
+    /// Match the string exactly (case-insensitive, ASCII).
     Exact(String),
     /// Match the string by glob. A glob uses a * to match any characters.
     /// For example, `*` matches any string, `py*` matches any string starting
     /// with `py`, `*37` matches any string ending with `37` and `py*37`
     /// matches any string starting with `py` and ending with `37`.
+    /// Matching is case-insensitive.
     Glob(Box<glob::Pattern>),
     /// Match the string by regex. A regex starts with a `^`, ends with a `$`
     /// and uses the regex syntax. For example, `^py.*37$` matches any
     /// string starting with `py` and ending with `37`. Note that the regex
-    /// is anchored, so it must match the entire string.
-    Regex(Box<fancy_regex::Regex>),
+    /// is anchored, so it must match the entire string. Matching is
+    /// case-insensitive.
+    Regex(Box<RegexMatcher>),
 }
 
 impl Hash for StringMatcher {
@@ -46,11 +81,18 @@ impl PartialEq for StringMatcher {
 }
 
 impl StringMatcher {
-    /// Match string against [`StringMatcher`].
+    /// Match string against [`StringMatcher`]. Per CEP-29, matching is
+    /// always case-insensitive.
     pub fn matches(&self, other: &str) -> bool {
         match self {
-            StringMatcher::Exact(s) => s == other,
-            StringMatcher::Glob(glob) => glob.matches(other),
+            StringMatcher::Exact(s) => s.eq_ignore_ascii_case(other),
+            StringMatcher::Glob(glob) => glob.matches_with(
+                other,
+                glob::MatchOptions {
+                    case_sensitive: false,
+                    ..glob::MatchOptions::default()
+                },
+            ),
             // `fancy_regex` can fail on pathological backtracking cases.
             // Treat match errors as non-matches.
             StringMatcher::Regex(regex) => regex.is_match(other).unwrap_or(false),
@@ -82,10 +124,8 @@ impl FromStr for StringMatcher {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('^') && s.ends_with('$') {
             Ok(StringMatcher::Regex(Box::new(
-                fancy_regex::Regex::new(s).map_err(|_err| {
-                    StringMatcherParseError::InvalidRegex {
-                        regex: s.to_string(),
-                    }
+                RegexMatcher::new(s).map_err(|_err| StringMatcherParseError::InvalidRegex {
+                    regex: s.to_string(),
                 })?,
             )))
         } else if s.contains('*') {
@@ -152,7 +192,7 @@ mod tests {
             "foo*".parse().unwrap()
         );
         assert_eq!(
-            StringMatcher::Regex(Box::new(fancy_regex::Regex::new("^foo.*$").unwrap())),
+            StringMatcher::Regex(Box::new(RegexMatcher::new("^foo.*$").unwrap())),
             "^foo.*$".parse().unwrap()
         );
     }
@@ -254,6 +294,41 @@ mod tests {
                 glob: _invalid_glob,
             })
         );
+    }
+
+    #[test]
+    fn test_case_insensitive_matching() {
+        // CEP-29 mandates that build string matching is case-insensitive.
+
+        // Exact
+        assert!(StringMatcher::from_str("PyHash_0")
+            .unwrap()
+            .matches("pyhash_0"));
+        assert!(StringMatcher::from_str("pyhash_0")
+            .unwrap()
+            .matches("PYHASH_0"));
+
+        // Glob
+        assert!(StringMatcher::from_str("Py*").unwrap().matches("py37_0"));
+        assert!(StringMatcher::from_str("py*").unwrap().matches("Py37_0"));
+        assert!(StringMatcher::from_str("*PY39*")
+            .unwrap()
+            .matches("foo_py39_0"));
+        assert!(StringMatcher::from_str("*py39*")
+            .unwrap()
+            .matches("foo_PY39_0"));
+
+        // Regex
+        assert!(StringMatcher::from_str("^Py.*$").unwrap().matches("py37_0"));
+        assert!(StringMatcher::from_str("^py.*$").unwrap().matches("PY37_0"));
+    }
+
+    #[test]
+    fn test_regex_matcher_preserves_original_pattern() {
+        // The display / serialization should not leak the (?i) flag we
+        // prepend internally.
+        let matcher = StringMatcher::from_str("^foo.*$").unwrap();
+        assert_eq!(matcher.to_string(), "^foo.*$");
     }
 
     #[test]

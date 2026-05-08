@@ -243,6 +243,29 @@ impl AuthenticationStorage {
         Ok((url, auth.map(|(_, credentials)| credentials)))
     }
 
+    /// Like [`get_by_url`](Self::get_by_url), but additionally refreshes
+    /// expired OAuth access tokens via the provider's token endpoint
+    /// before returning. Refreshed credentials are written back to the
+    /// storage so subsequent calls see the new token.
+    ///
+    /// Non-OAuth credentials (bearer tokens, basic auth, S3, etc.) are
+    /// returned unchanged.
+    pub async fn get_by_url_refreshed<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth_with_key) = self.get_by_url_with_host(url)?;
+        let auth = match auth_with_key {
+            // `maybe_refresh_oauth` is a no-op for non-OAuth variants and
+            // returns them as-is, so this branch covers every auth type.
+            Some((matched_key, auth)) => {
+                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
+            }
+            None => None,
+        };
+        Ok((url, auth))
+    }
+
     /// Delete the authentication information for the given host
     pub fn delete(&self, host: &str) -> Result<()> {
         {
@@ -273,6 +296,49 @@ impl AuthenticationStorage {
             Err(anyhow!("All backends failed to delete credentials"))
         } else {
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::authentication_storage::backends::memory::MemoryStorage;
+
+    fn storage_with(host: &str, auth: Authentication) -> AuthenticationStorage {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(host, &auth).unwrap();
+        storage
+    }
+
+    /// Non-OAuth credentials must pass through `get_by_url_refreshed`
+    /// unchanged — the refresh path only applies to OAuth.
+    #[tokio::test]
+    async fn get_by_url_refreshed_passes_through_non_oauth() {
+        let cases = [
+            Authentication::BearerToken("bearer".into()),
+            Authentication::CondaToken("conda".into()),
+            Authentication::BasicHTTP {
+                username: "u".into(),
+                password: "p".into(),
+            },
+            Authentication::S3Credentials {
+                access_key_id: "k".into(),
+                secret_access_key: "s".into(),
+                session_token: None,
+            },
+        ];
+
+        for auth in cases {
+            let storage = storage_with("example.com", auth.clone());
+            let (_, retrieved) = storage
+                .get_by_url_refreshed("https://example.com/foo")
+                .await
+                .unwrap();
+            assert_eq!(retrieved, Some(auth));
         }
     }
 }
