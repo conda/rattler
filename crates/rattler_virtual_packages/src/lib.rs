@@ -51,8 +51,7 @@ use archspec::cpu::Microarchitecture;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use rattler_conda_types::{
-    GenericVirtualPackage, PackageName, ParseVersionError, ParseVersionErrorKind, Platform,
-    Version,
+    GenericVirtualPackage, PackageName, ParseVersionError, ParseVersionErrorKind, Platform, Version,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
