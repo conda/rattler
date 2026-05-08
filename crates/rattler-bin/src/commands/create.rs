@@ -286,9 +286,9 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // problem that we need to solve. We do this by constructing a
     // `SolverProblem`. This encapsulates all the information required to be
     // able to solve the problem.
-    let locked_packages = installed_packages
+    let locked_packages: Vec<&RepoDataRecord> = installed_packages
         .iter()
-        .map(|record| record.repodata_record.clone())
+        .map(|record| &record.repodata_record)
         .collect();
 
     let solver_task = SolverTask {
