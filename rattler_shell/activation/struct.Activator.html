@@ -41,7 +41,7 @@ scripts. These are evaluated after <code>activation_scripts</code> have run.</p>
 <span class="kw">use </span>rattler_conda_types::Platform;
 <span class="kw">use </span>std::path::PathBuf;
 
-<span class="kw">let </span>activator = Activator::from_path(<span class="kw-2">&amp;</span>PathBuf::from(<span class="string">"tests/fixtures/env_vars"</span>), shell::Bash, Platform::Osx64).unwrap();
+<span class="kw">let </span>activator = Activator::from_path(<span class="kw-2">&amp;</span>PathBuf::from(<span class="string">"tests/fixtures/env_vars"</span>), shell::Bash::default(), Platform::Osx64).unwrap();
 <span class="macro">assert_eq!</span>(activator.paths.len(), <span class="number">1</span>);
 <span class="macro">assert_eq!</span>(activator.paths[<span class="number">0</span>], PathBuf::from(<span class="string">"tests/fixtures/env_vars/bin"</span>));</code></pre></div></div></details><details class="toggle method-toggle" open><summary><section id="method.activation" class="method"><a class="src rightside" href="../../src/rattler_shell/activation.rs.html#462-531">Source</a><h4 class="code-header">pub fn <a href="#method.activation" class="fn">activation</a>(
     &amp;self,

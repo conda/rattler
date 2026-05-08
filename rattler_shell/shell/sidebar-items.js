@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ShellEnum","ShellError"],"struct":["Bash","CmdExe","Fish","NuShell","ParseShellEnumError","PowerShell","ShellScript","Xonsh","Zsh"],"trait":["Shell"]};
+window.SIDEBAR_ITEMS = {"enum":["BashFlavor","ShellEnum","ShellError"],"struct":["Bash","CmdExe","Fish","NuShell","ParseShellEnumError","PowerShell","ShellScript","Xonsh","Zsh"],"trait":["Shell"]};

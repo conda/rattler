@@ -120,7 +120,7 @@
 <a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">let </span>shell = <span class="kw">if </span>platform.is_windows() {
 <a href=#119 id=119 data-nosnippet>119</a>                ShellEnum::CmdExe(CmdExe)
 <a href=#120 id=120 data-nosnippet>120</a>            } <span class="kw">else </span>{
-<a href=#121 id=121 data-nosnippet>121</a>                ShellEnum::Bash(Bash)
+<a href=#121 id=121 data-nosnippet>121</a>                ShellEnum::Bash(Bash::default())
 <a href=#122 id=122 data-nosnippet>122</a>            };
 <a href=#123 id=123 data-nosnippet>123</a>
 <a href=#124 id=124 data-nosnippet>124</a>            <span class="macro">tracing::info!</span>(
