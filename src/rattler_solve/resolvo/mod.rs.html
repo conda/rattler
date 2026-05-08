@@ -312,8 +312,8 @@
 <a href=#310 id=310 data-nosnippet>310</a>    </span><span class="attr">#[allow(clippy::too_many_arguments)]
 <a href=#311 id=311 data-nosnippet>311</a>    </span><span class="kw">pub fn </span>new(
 <a href=#312 id=312 data-nosnippet>312</a>        repodata: <span class="kw">impl </span>IntoIterator&lt;Item = RepoData&lt;<span class="lifetime">'a</span>&gt;&gt;,
-<a href=#313 id=313 data-nosnippet>313</a>        favored_records: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord],
-<a href=#314 id=314 data-nosnippet>314</a>        locked_records: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[RepoDataRecord],
+<a href=#313 id=313 data-nosnippet>313</a>        favored_records: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord],
+<a href=#314 id=314 data-nosnippet>314</a>        locked_records: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepoDataRecord],
 <a href=#315 id=315 data-nosnippet>315</a>        virtual_packages: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[GenericVirtualPackage],
 <a href=#316 id=316 data-nosnippet>316</a>        match_specs: <span class="kw-2">&amp;</span>[MatchSpec],
 <a href=#317 id=317 data-nosnippet>317</a>        stop_time: <span class="prelude-ty">Option</span>&lt;std::time::SystemTime&gt;,
@@ -526,7 +526,7 @@
 <a href=#524 id=524 data-nosnippet>524</a>        }
 <a href=#525 id=525 data-nosnippet>525</a>
 <a href=#526 id=526 data-nosnippet>526</a>        <span class="comment">// Add favored packages to the records
-<a href=#527 id=527 data-nosnippet>527</a>        </span><span class="kw">for </span>favored_record <span class="kw">in </span>favored_records {
+<a href=#527 id=527 data-nosnippet>527</a>        </span><span class="kw">for </span><span class="kw-2">&amp;</span>favored_record <span class="kw">in </span>favored_records {
 <a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">let </span>name = pool.intern_package_name(<span class="kw-2">&amp;</span>favored_record.package_record.name);
 <a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">let </span>solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
 <a href=#530 id=530 data-nosnippet>530</a>            <span class="kw">let </span>candidates = records.entry(name).or_default();
@@ -534,7 +534,7 @@
 <a href=#532 id=532 data-nosnippet>532</a>            candidates.favored = <span class="prelude-val">Some</span>(solvable);
 <a href=#533 id=533 data-nosnippet>533</a>        }
 <a href=#534 id=534 data-nosnippet>534</a>
-<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">for </span>locked_record <span class="kw">in </span>locked_records {
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>locked_record <span class="kw">in </span>locked_records {
 <a href=#536 id=536 data-nosnippet>536</a>            <span class="kw">let </span>name = pool.intern_package_name(<span class="kw-2">&amp;</span>locked_record.package_record.name);
 <a href=#537 id=537 data-nosnippet>537</a>            <span class="kw">let </span>solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
 <a href=#538 id=538 data-nosnippet>538</a>            <span class="kw">let </span>candidates = records.entry(name).or_default();
@@ -946,7 +946,7 @@
 <a href=#944 id=944 data-nosnippet>944</a>        TAvailablePackagesIterator: IntoIterator&lt;Item = R&gt;,
 <a href=#945 id=945 data-nosnippet>945</a>    &gt;(
 <a href=#946 id=946 data-nosnippet>946</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#947 id=947 data-nosnippet>947</a>        task: SolverTask&lt;TAvailablePackagesIterator&gt;,
+<a href=#947 id=947 data-nosnippet>947</a>        task: SolverTask&lt;<span class="lifetime">'a</span>, TAvailablePackagesIterator&gt;,
 <a href=#948 id=948 data-nosnippet>948</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;SolverResult, SolveError&gt; {
 <a href=#949 id=949 data-nosnippet>949</a>        <span class="kw">let </span>stop_time = task
 <a href=#950 id=950 data-nosnippet>950</a>            .timeout
