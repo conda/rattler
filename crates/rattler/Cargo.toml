@@ -15,7 +15,7 @@ default = ['rustls-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls-tls = ['reqwest/rustls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
 oauth = ["dep:openidconnect", "dep:open"]
-cli-tools = ['dep:clap', 'reqwest/blocking', 'oauth']
+cli-tools = ['dep:clap', 'oauth']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]
@@ -48,7 +48,7 @@ path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["stream", "json", "gzip", "form"] }
+reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
