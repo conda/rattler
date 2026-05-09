@@ -319,16 +319,31 @@ impl<'de> Deserialize<'de> for VersionSpec {
 
 impl VersionSpec {
     /// Returns whether the version matches the specification.
+    ///
+    /// For range comparisons (`>`, `>=`, `<`, `<=`) and compatible release
+    /// (`~=`), when the constraint does not contain a local version segment
+    /// but the candidate *does*, the candidate's local part is stripped before
+    /// the comparison.  This mirrors how local versions are generally treated
+    /// in packaging ecosystems: they should not prevent a package from
+    /// satisfying a constraint that only talks about the public version.
+    ///
+    /// For example, `2.0.0+fastbuild` will match `>=2.0` and `~=2.0` because
+    /// the public part `2.0.0` satisfies both constraints.
     pub fn matches(&self, version: &Version) -> bool {
         match self {
             VersionSpec::None => false,
             VersionSpec::Any => true,
             VersionSpec::Exact(EqualityOperator::Equals, limit) => limit == version,
             VersionSpec::Exact(EqualityOperator::NotEquals, limit) => limit != version,
-            VersionSpec::Range(RangeOperator::Greater, limit) => version > limit,
-            VersionSpec::Range(RangeOperator::GreaterEquals, limit) => version >= limit,
-            VersionSpec::Range(RangeOperator::Less, limit) => version < limit,
-            VersionSpec::Range(RangeOperator::LessEquals, limit) => version <= limit,
+            VersionSpec::Range(op, limit) => {
+                let effective = strip_local_if_needed(version, limit);
+                match op {
+                    RangeOperator::Greater => effective.as_ref() > limit,
+                    RangeOperator::GreaterEquals => effective.as_ref() >= limit,
+                    RangeOperator::Less => effective.as_ref() < limit,
+                    RangeOperator::LessEquals => effective.as_ref() <= limit,
+                }
+            }
             VersionSpec::StrictRange(StrictRangeOperator::StartsWith, limit) => {
                 version.starts_with(&limit.0)
             }
@@ -336,10 +351,12 @@ impl VersionSpec {
                 !version.starts_with(&limit.0)
             }
             VersionSpec::StrictRange(StrictRangeOperator::Compatible, limit) => {
-                version.compatible_with(&limit.0)
+                let effective = strip_local_if_needed(version, &limit.0);
+                effective.compatible_with(&limit.0)
             }
             VersionSpec::StrictRange(StrictRangeOperator::NotCompatible, limit) => {
-                !version.compatible_with(&limit.0)
+                let effective = strip_local_if_needed(version, &limit.0);
+                !effective.compatible_with(&limit.0)
             }
             VersionSpec::Group(LogicalOperator::And, group) => {
                 group.iter().all(|spec| spec.matches(version))
@@ -348,6 +365,20 @@ impl VersionSpec {
                 group.iter().any(|spec| spec.matches(version))
             }
         }
+    }
+}
+
+/// If `version` has a local segment but `limit` does not, return a copy of
+/// `version` with the local part removed.  Otherwise return `version` as-is.
+///
+/// This is used so that range and compatibility comparisons are not thrown off
+/// by local version strings (e.g. `+fastbuild`) that conda orders below the
+/// bare release version.
+fn strip_local_if_needed<'a>(version: &'a Version, limit: &Version) -> Cow<'a, Version> {
+    if version.has_local() && !limit.has_local() {
+        version.strip_local()
+    } else {
+        Cow::Borrowed(version)
     }
 }
 
@@ -617,6 +648,96 @@ mod tests {
             ParseVersionSpecError::InvalidConstraint(
                 ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
             )
+        );
+    }
+
+    /// Regression test for <https://github.com/conda/rattler/issues/1033>
+    ///
+    /// Versions with a string-only local segment (e.g. `2.0.0+fastbuild`)
+    /// sort *below* the bare release in conda's ordering because string
+    /// components are less than numeric ones.  That caused `~=2.0` and
+    /// `>=2.0` to reject `2.0.0+fastbuild`, which broke pinned-package
+    /// resolution when the pinned version carried a local tag.
+    #[test]
+    fn issue_1033_local_version_matches_compatible_release() {
+        let version = Version::from_str("2.0.0+fastbuild").unwrap();
+
+        // ~= (compatible release) should match
+        let spec = VersionSpec::from_str("~=2.0", ParseStrictness::Strict).unwrap();
+        assert!(spec.matches(&version), "~=2.0 should match 2.0.0+fastbuild");
+
+        // >= should match
+        let spec = VersionSpec::from_str(">=2.0", ParseStrictness::Strict).unwrap();
+        assert!(spec.matches(&version), ">=2.0 should match 2.0.0+fastbuild");
+
+        // >=2.0,<3.0 should match
+        let spec = VersionSpec::from_str(">=2.0,<3.0", ParseStrictness::Strict).unwrap();
+        assert!(
+            spec.matches(&version),
+            ">=2.0,<3.0 should match 2.0.0+fastbuild"
+        );
+
+        // <= with a version higher than 2.0.0 should also match
+        let spec = VersionSpec::from_str("<=3.0", ParseStrictness::Strict).unwrap();
+        assert!(spec.matches(&version), "<=3.0 should match 2.0.0+fastbuild");
+
+        // < should use the stripped version for comparison
+        let spec = VersionSpec::from_str("<2.0", ParseStrictness::Strict).unwrap();
+        assert!(
+            !spec.matches(&version),
+            "<2.0 should NOT match 2.0.0+fastbuild (public version 2.0.0 is not < 2.0)"
+        );
+
+        // Exact equality should still consider the local part
+        let spec = VersionSpec::from_str("==2.0.0", ParseStrictness::Strict).unwrap();
+        assert!(
+            !spec.matches(&version),
+            "==2.0.0 should NOT match 2.0.0+fastbuild (exact match includes local)"
+        );
+    }
+
+    /// Ensure that when both the spec limit and the version carry local
+    /// segments, stripping does NOT happen — both locals must match.
+    #[test]
+    fn local_version_with_local_limit_no_stripping() {
+        let version = Version::from_str("2.0.0+fastbuild").unwrap();
+
+        // When the spec itself also has a local part, compare as-is
+        let spec = VersionSpec::from_str(">=2.0.0+fastbuild", ParseStrictness::Strict).unwrap();
+        assert!(
+            spec.matches(&version),
+            ">=2.0.0+fastbuild should match 2.0.0+fastbuild"
+        );
+
+        let spec = VersionSpec::from_str(">=2.0.0+otherbuild", ParseStrictness::Strict).unwrap();
+        // "fastbuild" < "otherbuild" lexicographically, so this should NOT match
+        assert!(
+            !spec.matches(&version),
+            ">=2.0.0+otherbuild should NOT match 2.0.0+fastbuild"
+        );
+    }
+
+    /// Verify `compatible_with` (used by `~=`) works directly on Version.
+    #[test]
+    fn compatible_with_local_version() {
+        let v = Version::from_str("2.0.0+fastbuild").unwrap();
+        let limit = Version::from_str("2.0").unwrap();
+        assert!(
+            v.compatible_with(&limit),
+            "2.0.0+fastbuild should be compatible_with 2.0"
+        );
+
+        let limit2 = Version::from_str("2.0.0").unwrap();
+        assert!(
+            v.compatible_with(&limit2),
+            "2.0.0+fastbuild should be compatible_with 2.0.0"
+        );
+
+        // But a genuinely lower version still fails
+        let v_lower = Version::from_str("1.9.0+fastbuild").unwrap();
+        assert!(
+            !v_lower.compatible_with(&limit),
+            "1.9.0+fastbuild should NOT be compatible_with 2.0"
         );
     }
 }
