@@ -1,0 +1,21 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      linux-64:
+        - conda_source: "my-partial-pkg[abcd1234] @ my-partial-pkg"
+packages:
+  - conda_source: "my-partial-pkg[abcd1234] @ my-partial-pkg"
+    depends:
+      - python >=3.10
+    flags:
+      - cuda
+      - mkl

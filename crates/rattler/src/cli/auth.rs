@@ -12,6 +12,11 @@ use serde_json::json;
 use thiserror;
 use url::Url;
 
+/// Default `User-Agent` header sent to remote endpoints (OAuth providers,
+/// prefix.dev validation, token revocation) when the caller passes no
+/// override. Library consumers (pixi etc.) typically pass their own value.
+pub const DEFAULT_USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
+
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
 struct LoginArgs {
@@ -82,6 +87,17 @@ struct LoginArgs {
         help_heading = "OAuth/OIDC Authentication"
     )]
     oauth_scopes: Vec<String>,
+
+    /// OAuth redirect URI (defaults to a random localhost port). Set
+    /// this when the OAuth client on the `IdP` side is registered with
+    /// a specific redirect URI such as `http://127.0.0.1:8000/auth/oidc`.
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_redirect_uri: Option<String>,
+
+    /// User-Agent header used for requests
+    #[clap(long)]
+    user_agent: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -167,6 +183,90 @@ pub enum AuthenticationCLIError {
     OAuthError(#[from] oauth::OAuthError),
 }
 
+/// Normalize a user-supplied host into its canonical hostname form.
+fn normalize_login_host(host: &str) -> String {
+    let host = host.trim_start_matches("*.");
+
+    // Try parsing as-is first (handles inputs like `https://prefix.dev`).
+    // Only accept the result if it actually yielded a hostname — not every
+    // parse-successful string contains a host component.
+    if let Some(h) = url::Url::parse(host)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+    {
+        return h;
+    }
+
+    // Fall back to prepending a scheme (handles bare `prefix.dev`,
+    // `prefix.dev/`, `localhost:8080`, etc.).
+    url::Url::parse(&format!("https://{host}"))
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_else(|| host.trim_end_matches('/').to_string())
+}
+
+/// prefix.dev's default channel scopes
+#[cfg(feature = "oauth")]
+const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
+    "openid",
+    "profile",
+    "offline_access",
+    "channel:read",
+    "channel:upload",
+];
+
+/// Built-in OAuth defaults for a known host.
+///
+/// Returned by [`default_oauth_config_for_host`] for hosts where rattler
+/// ships an out-of-the-box OAuth configuration. Carries everything needed
+/// to start a login flow without the user passing any flags.
+#[cfg(feature = "oauth")]
+struct DefaultOAuthConfig {
+    issuer_url: String,
+    client_id: String,
+    scopes: Vec<String>,
+    redirect_uri: Option<String>,
+}
+
+/// Returns the built-in OAuth configuration for a host, if rattler ships one.
+#[cfg(feature = "oauth")]
+fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
+    let normalized = normalize_login_host(host);
+
+    if !(normalized == "prefix.dev" || normalized.ends_with(".prefix.dev")) {
+        return None;
+    }
+
+    Some(DefaultOAuthConfig {
+        issuer_url: ensure_url_scheme(host),
+        client_id: "rattler".to_string(),
+        scopes: PREFIX_DEV_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect(),
+        redirect_uri: None,
+    })
+}
+
+/// Returns the built-in OAuth config for an implicit (flag-less) login —
+/// i.e. when the user passed no explicit auth method and the host ships
+/// an out-of-the-box OAuth configuration. The presence of `Some` is the
+/// signal that `login()` should fall back to OAuth.
+#[cfg(feature = "oauth")]
+fn default_oauth_for_login(args: &LoginArgs) -> Option<DefaultOAuthConfig> {
+    let no_explicit_method = args.token.is_none()
+        && args.username.is_none()
+        && args.password.is_none()
+        && args.conda_token.is_none()
+        && args.s3_access_key_id.is_none();
+
+    if !no_explicit_method {
+        return None;
+    }
+
+    default_oauth_config_for_host(&args.host)
+}
+
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
     let host = if url.contains("://") {
@@ -183,6 +283,16 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     };
 
     Ok(host)
+}
+
+/// Ensure a user-supplied `host` is a fully-qualified URL by prepending
+/// `https://` when it has no scheme.
+fn ensure_url_scheme(host: &str) -> String {
+    if host.contains("://") {
+        host.to_string()
+    } else {
+        format!("https://{host}")
+    }
 }
 
 /// Result of prefix.dev token validation
@@ -203,35 +313,71 @@ async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
-    // OAuth flow (when --oauth is set)
+    // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
-    if args.oauth {
-        let issuer_url = args
-            .oauth_issuer_url
-            .unwrap_or_else(|| format!("https://{}", args.host));
-        let client_id = args
-            .oauth_client_id
-            .unwrap_or_else(|| "rattler".to_string());
-        let flow = match args.oauth_flow.as_deref() {
-            Some("auth-code") => oauth::OAuthFlow::AuthCode,
-            Some("device-code") => oauth::OAuthFlow::DeviceCode,
-            _ => oauth::OAuthFlow::Auto,
-        };
+    {
+        let auto_default = default_oauth_for_login(&args);
+        if args.oauth || auto_default.is_some() {
+            if !args.oauth {
+                eprintln!(
+                    "No credentials provided; using OAuth browser login for {}.",
+                    args.host
+                );
+            }
 
-        let config = oauth::OAuthConfig {
-            issuer_url,
-            client_id,
-            client_secret: args.oauth_client_secret,
-            flow,
-            scopes: args.oauth_scopes.into_iter().collect(),
-        };
+            // Reuse the implicit-default config when present; otherwise
+            // (`--oauth` was set explicitly) fall back to a fresh lookup.
+            let host_default = auto_default.or_else(|| default_oauth_config_for_host(&args.host));
 
-        let auth = oauth::perform_oauth_login(config).await?;
-        // OAuth credentials are issuer-specific, skip wildcard conversion
-        let host = args.host.clone();
-        storage.store(&host, &auth)?;
-        eprintln!("Credentials stored for {host}.");
-        return Ok(());
+            let issuer_url = args
+                .oauth_issuer_url
+                .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
+                .unwrap_or_else(|| ensure_url_scheme(&args.host));
+
+            let client_id = args
+                .oauth_client_id
+                .or_else(|| host_default.as_ref().map(|c| c.client_id.clone()))
+                .unwrap_or_else(|| "rattler".to_string());
+
+            let flow = match args.oauth_flow.as_deref() {
+                Some("auth-code") => oauth::OAuthFlow::AuthCode,
+                Some("device-code") => oauth::OAuthFlow::DeviceCode,
+                _ => oauth::OAuthFlow::Auto,
+            };
+
+            let redirect_uri = args
+                .oauth_redirect_uri
+                .or_else(|| host_default.as_ref().and_then(|c| c.redirect_uri.clone()));
+
+            let scopes: std::collections::HashSet<String> = if !args.oauth_scopes.is_empty() {
+                args.oauth_scopes.into_iter().collect()
+            } else if let Some(default) = host_default {
+                default.scopes.into_iter().collect()
+            } else {
+                oauth::DEFAULT_OAUTH_SCOPES
+                    .iter()
+                    .map(|&s| s.to_string())
+                    .collect()
+            };
+
+            let config = oauth::OAuthConfig {
+                issuer_url,
+                client_id,
+                client_secret: args.oauth_client_secret,
+                flow,
+                scopes,
+                redirect_uri,
+                user_agent: args.user_agent,
+            };
+
+            let auth = oauth::perform_oauth_login(config).await?;
+            // Normalize the host so that `prefix.dev` and `prefix.dev/` (and
+            // any `https://...` form) write to the same storage key
+            let host = normalize_login_host(&args.host);
+            storage.store(&host, &auth)?;
+            eprintln!("Credentials stored for {host}.");
+            return Ok(());
+        }
     }
 
     let auth = if let Some(conda_token) = args.conda_token {
@@ -283,7 +429,7 @@ async fn login(
         };
 
         // Validate the token using the extracted function
-        match validate_prefix_dev_token(token, &args.host).await? {
+        match validate_prefix_dev_token(token, &args.host, args.user_agent.as_deref()).await? {
             ValidationResult::Valid(username, url) => {
                 println!(
                     "✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials..."
@@ -309,6 +455,7 @@ async fn login(
 async fn validate_prefix_dev_token(
     token: &str,
     host: &str,
+    user_agent: Option<&str>,
 ) -> Result<ValidationResult, AuthenticationCLIError> {
     let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
         // If env var is set, parse it as a full URL
@@ -317,12 +464,7 @@ async fn validate_prefix_dev_token(
         // Strip wildcard if given
         let host = host.replace("*.", "");
 
-        // Convert the host URL to a full URL if it doesn't contain a scheme
-        let host_url = if host.contains("://") {
-            Url::parse(&host)?
-        } else {
-            Url::parse(&format!("https://{host}"))?
-        };
+        let host_url = Url::parse(&ensure_url_scheme(&host))?;
 
         let host_url = host_url.host_str().unwrap_or("prefix.dev");
         // Strip "repo." prefix if present
@@ -335,7 +477,9 @@ async fn validate_prefix_dev_token(
         "query": "query { viewer { login } }"
     });
 
-    let client = Client::new();
+    let client = Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .build()?;
     let response = client
         .post(prefix_url.join("api/graphql").expect("must be valid"))
         .bearer_auth(token)
@@ -386,6 +530,7 @@ async fn logout(
             access_token,
             refresh_token.as_deref(),
             client_id,
+            None,
         )
         .await;
     }
@@ -449,6 +594,9 @@ mod tests {
             oauth_flow: None,
             #[cfg(feature = "oauth")]
             oauth_scopes: vec![],
+            #[cfg(feature = "oauth")]
+            oauth_redirect_uri: None,
+            user_agent: None,
         }
     }
 
@@ -636,5 +784,76 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[test]
+    fn ensure_url_scheme_prepends_https_for_bare_host() {
+        assert_eq!(ensure_url_scheme("prefix.dev"), "https://prefix.dev");
+    }
+
+    #[test]
+    fn ensure_url_scheme_keeps_existing_https_scheme() {
+        assert_eq!(
+            ensure_url_scheme("https://prefix.dev"),
+            "https://prefix.dev"
+        );
+    }
+
+    #[test]
+    fn ensure_url_scheme_keeps_existing_http_scheme() {
+        assert_eq!(
+            ensure_url_scheme("http://localhost:4444"),
+            "http://localhost:4444"
+        );
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_default_oauth_config_for_host() {
+        let has_default = |h: &str| default_oauth_config_for_host(h).is_some();
+
+        assert!(has_default("prefix.dev"));
+        assert!(has_default("repo.prefix.dev"));
+        assert!(has_default("https://prefix.dev"));
+        assert!(has_default("*.prefix.dev"));
+
+        // Normalization: trailing slash and full URLs should still match.
+        assert!(has_default("prefix.dev/"));
+        assert!(has_default("https://prefix.dev/"));
+        assert!(has_default("https://repo.prefix.dev/"));
+
+        // Loopback addresses are not auto-recognized: local dev servers
+        // could be running anything, so the user passes `--oauth` and
+        // their own `--oauth-scope` flags explicitly.
+        assert!(!has_default("localhost"));
+        assert!(!has_default("localhost:8080"));
+        assert!(!has_default("127.0.0.1"));
+
+        assert!(!has_default("example.com"));
+        // Suffix-injection guard: hostname containing "prefix.dev" must not match.
+        assert!(!has_default("evil-prefix.dev.attacker.com"));
+        assert!(!has_default("notprefix.dev"));
+
+        // Returned config carries the right scheme + client_id for prefix.dev.
+        let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
+        assert_eq!(prefix.issuer_url, "https://prefix.dev");
+        assert_eq!(prefix.client_id, "rattler");
+        assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+    }
+
+    #[cfg(feature = "oauth")]
+    #[test]
+    fn test_default_oauth_for_login() {
+        // No explicit method on prefix.dev → OAuth default kicks in
+        assert!(default_oauth_for_login(&create_login_args("prefix.dev")).is_some());
+
+        // Explicit method blocks the OAuth default, even on prefix.dev.
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("t".into());
+        assert!(default_oauth_for_login(&args).is_none());
+
+        // No explicit method on a non-OAuth host → still falls through to existing
+        // NoAuthenticationMethod error.
+        assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
     }
 }

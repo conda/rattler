@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0](https://github.com/conda/rattler/compare/rattler-v0.41.0...rattler-v0.42.0) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
+### Fixed
+
+- copy symlinked files when symbolic linking is disabled ([#2409](https://github.com/conda/rattler/pull/2409))
+
+## [0.41.0](https://github.com/conda/rattler/compare/rattler-v0.40.7...rattler-v0.41.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.40.7](https://github.com/conda/rattler/compare/rattler-v0.40.6...rattler-v0.40.7) - 2026-04-30
+
+### Other
+
+- revert lockfile-v7 ([#2339](https://github.com/conda/rattler/pull/2339))
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.40.6](https://github.com/conda/rattler/compare/rattler-v0.40.5...rattler-v0.40.6) - 2026-04-13
 
 ### Other

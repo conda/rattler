@@ -118,7 +118,7 @@ pub fn run_link_scripts<'a>(
             let shell = if platform.is_windows() {
                 ShellEnum::CmdExe(CmdExe)
             } else {
-                ShellEnum::Bash(Bash)
+                ShellEnum::Bash(Bash::default())
             };
 
             tracing::info!(

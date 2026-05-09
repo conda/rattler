@@ -2,7 +2,9 @@
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
-version: 6
+version: 7
+platforms:
+  - name: osx-arm64
 environments:
   default:
     channels:
@@ -13,6 +15,7 @@ environments:
       - path: "./links"
     packages:
       osx-arm64:
+        - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h93a5062_5.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/ca-certificates-2024.2.2-hf0a4a13_0.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.6.2-hebf3989_0.conda"
@@ -24,14 +27,19 @@ environments:
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/python-3.12.0-h47c9636_0_cpython.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.2-h92ec313_1.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h5083fa2_1.conda"
-        - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"
         - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/xz-5.2.6-h57fd34a_0.tar.bz2"
-        - pypi: "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl"
-        - pypi: "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl"
-        - pypi: "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl"
-        - pypi: "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl"
         - pypi: "./links/requests-2.31.0-py3-none-any.whl"
+        - pypi: "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl"
+        - pypi: "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl"
+        - pypi: "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl"
+        - pypi: "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl"
 packages:
+  - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"
+    sha256: 7b2b69c54ec62a243eb6fba2391b5e443421608c3ae5dbff938ad33ca8db5122
+    md5: 161081fc7cec0bfda0d86d7cb595f8d8
+    license: LicenseRef-Public-Domain
+    size: 119815
+    timestamp: 1706886945727
   - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h93a5062_5.conda"
     sha256: bfa84296a638bea78a8bb29abc493ee95f2a0218775642474a840411b950fe5f
     md5: 1bbc659ca658bfd49a481b5ef7a0f40f
@@ -45,21 +53,6 @@ packages:
     license: ISC
     size: 155725
     timestamp: 1706844034242
-  - pypi: "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl"
-    name: certifi
-    version: 2024.2.2
-    sha256: dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1
-    requires_python: ">=3.6"
-  - pypi: "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl"
-    name: charset-normalizer
-    version: 3.3.2
-    sha256: 55086ee1064215781fff39a1af09518bc9255b50d6333f2e4c74ca09fac6a8f6
-    requires_python: ">=3.7.0"
-  - pypi: "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl"
-    name: idna
-    version: "3.7"
-    sha256: 82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0
-    requires_python: ">=3.5"
   - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.6.2-hebf3989_0.conda"
     sha256: ba7173ac30064ea901a4c9fb5a51846dcc25512ceb565759be7d18cbf3e5415e
     md5: e3cde7cfa87f82f7cb13d482d5e0ad09
@@ -139,6 +132,21 @@ packages:
     license_family: GPL
     size: 250351
     timestamp: 1679532511311
+  - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h5083fa2_1.conda"
+    sha256: 72457ad031b4c048e5891f3f6cb27a53cb479db68a52d965f796910e71a403a8
+    md5: b50a57ba89c32b62428b71a875291c9b
+    depends:
+      - "libzlib >=1.2.13,<1.3.0a0"
+    license: TCL
+    license_family: BSD
+    size: 3145523
+    timestamp: 1699202432999
+  - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/xz-5.2.6-h57fd34a_0.tar.bz2"
+    sha256: 59d78af0c3e071021cfe82dc40134c19dab8cdf804324b62940f5c8cd71803ec
+    md5: 39c6b54e94014701dd157f4f576ed211
+    license: LGPL-2.1 and GPL-2.0
+    size: 235693
+    timestamp: 1660346961024
   - pypi: "./links/requests-2.31.0-py3-none-any.whl"
     name: requests
     version: 2.31.0
@@ -150,21 +158,11 @@ packages:
       - "pysocks>=1.5.6,!=1.5.7 ; extra == 'socks'"
       - "chardet>=3.0.2,<6 ; extra == 'use-chardet-on-py3'"
     requires_python: ">=3.7"
-  - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h5083fa2_1.conda"
-    sha256: 72457ad031b4c048e5891f3f6cb27a53cb479db68a52d965f796910e71a403a8
-    md5: b50a57ba89c32b62428b71a875291c9b
-    depends:
-      - "libzlib >=1.2.13,<1.3.0a0"
-    license: TCL
-    license_family: BSD
-    size: 3145523
-    timestamp: 1699202432999
-  - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda"
-    sha256: 7b2b69c54ec62a243eb6fba2391b5e443421608c3ae5dbff938ad33ca8db5122
-    md5: 161081fc7cec0bfda0d86d7cb595f8d8
-    license: LicenseRef-Public-Domain
-    size: 119815
-    timestamp: 1706886945727
+  - pypi: "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl"
+    name: charset-normalizer
+    version: 3.3.2
+    sha256: 55086ee1064215781fff39a1af09518bc9255b50d6333f2e4c74ca09fac6a8f6
+    requires_python: ">=3.7.0"
   - pypi: "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl"
     name: urllib3
     version: 2.2.1
@@ -176,9 +174,13 @@ packages:
       - "pysocks>=1.5.6,!=1.5.7,<2.0 ; extra == 'socks'"
       - "zstandard>=0.18.0 ; extra == 'zstd'"
     requires_python: ">=3.8"
-  - conda: "https://conda.anaconda.org/conda-forge/osx-arm64/xz-5.2.6-h57fd34a_0.tar.bz2"
-    sha256: 59d78af0c3e071021cfe82dc40134c19dab8cdf804324b62940f5c8cd71803ec
-    md5: 39c6b54e94014701dd157f4f576ed211
-    license: LGPL-2.1 and GPL-2.0
-    size: 235693
-    timestamp: 1660346961024
+  - pypi: "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl"
+    name: certifi
+    version: 2024.2.2
+    sha256: dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1
+    requires_python: ">=3.6"
+  - pypi: "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl"
+    name: idna
+    version: "3.7"
+    sha256: 82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0
+    requires_python: ">=3.5"

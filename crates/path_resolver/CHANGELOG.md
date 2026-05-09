@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/path_resolver-v0.2.7...path_resolver-v0.2.8) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/path_resolver-v0.2.6...path_resolver-v0.2.7) - 2026-03-18
 
 ### Other

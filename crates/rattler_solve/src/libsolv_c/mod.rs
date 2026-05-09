@@ -125,7 +125,7 @@ impl super::SolverImpl for Solver {
         TAvailablePackagesIterator: IntoIterator<Item = R>,
     >(
         &mut self,
-        task: SolverTask<TAvailablePackagesIterator>,
+        task: SolverTask<'a, TAvailablePackagesIterator>,
     ) -> Result<SolverResult, SolveError> {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
@@ -237,19 +237,21 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked", highest_priority);
-        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None)?;
+        let installed_solvables =
+            add_repodata_records(&pool, &repo, task.locked_packages.iter().copied(), None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(task.locked_packages.iter().collect());
+        all_repodata_records.push(task.locked_packages.clone());
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned", highest_priority);
-        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None)?;
+        let pinned_solvables =
+            add_repodata_records(&pool, &repo, task.pinned_packages.iter().copied(), None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(task.pinned_packages.iter().collect());
+        all_repodata_records.push(task.pinned_packages.clone());
 
         // Create data-structures for solving
         pool.create_whatprovides();
