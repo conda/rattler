@@ -13,7 +13,7 @@ readme.workspace = true
 [features]
 default = ["rustls-tls", "system-integration"]
 native-tls = ["reqwest/native-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
+rustls-tls = ["reqwest/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
@@ -50,7 +50,7 @@ keyring = { workspace = true, optional = true, features = [
     "crypto-rust",
 ] }
 netrc-rs = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

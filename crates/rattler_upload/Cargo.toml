@@ -16,7 +16,7 @@ readme.workspace = true
 [features]
 default = ["rustls-tls", "s3", "sigstore-sign"]
 rustls-tls = [
-  "reqwest/rustls-tls",
+  "reqwest/rustls",
   "rattler_networking/rustls-tls",
   "rattler_package_streaming/rustls-tls",
   "sigstore-sign?/rustls",
