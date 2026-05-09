@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
 from rattler.channel.channel import Channel
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.networking.client import Client
-from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 
 if TYPE_CHECKING:
+    from rattler.networking.fetch_repo_data import CacheAction
     from rattler.repo_data.source import RepoDataSource
 
 
