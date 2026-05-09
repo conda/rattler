@@ -3,7 +3,6 @@
 #![deny(missing_docs)]
 
 pub mod cache;
-mod channel_options;
 /// Defines errors used in this crate.
 pub mod error;
 mod utils;
@@ -34,10 +33,13 @@ use rattler_conda_types::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
-    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
-    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
+    ChannelInfo, ChannelRelations, ExperimentalV3Packages, PackageRecord, PatchInstructions,
+    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
 };
 pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
+pub use rattler_config::config::index::{
+    IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
+};
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
     read,
@@ -46,14 +48,38 @@ use rattler_package_streaming::{
 #[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
 use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
 
-pub use channel_options::{ChannelMetadata, ChannelOptions};
+/// Channel metadata written into generated repodata.
+///
+/// Distinct from [`IndexChannelConfig`] — that type describes the indexer's
+/// behavior knobs (zst, shards, revisions, ...). `ChannelMetadata` is just the
+/// data that ends up under `info` in the generated repodata.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChannelMetadata {
+    /// The `info.base_url` value written to `repodata.json`.
+    pub base_url: Option<String>,
+    /// The `info.channel_relations` value written to `repodata.json`.
+    pub channel_relations: Option<ChannelRelations>,
+}
+
+impl ChannelMetadata {
+    /// Pull the metadata fields out of an [`IndexChannelConfig`].
+    pub fn from_index_config(config: &IndexChannelConfig) -> Self {
+        Self {
+            base_url: config.base_url.clone(),
+            channel_relations: config
+                .channel_relations
+                .clone()
+                .filter(|relations| !relations.is_empty()),
+        }
+    }
+}
 
 /// Configuration for precondition checks during file operations.
 ///
@@ -78,41 +104,11 @@ impl PreconditionChecks {
     }
 }
 
-/// How packages are assigned to repodata revisions while indexing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PackageRevisionAssignment {
-    /// Assign each package to the revision required by its `info/index.json`.
-    ///
-    /// Packages without an explicit `repodata_revision` are assigned to the
-    /// oldest known revision that can represent their fields.
-    #[default]
-    FromIndexJson,
-
-    /// Assign every package to the newest revision configured for the index.
-    ///
-    /// If no revisions are configured, packages are assigned to `Legacy`.
-    Latest,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct IndexedPackageRecord {
     record: PackageRecord,
     repodata_revision: RepodataRevision,
     wheel_url: Option<UrlOrPath>,
-}
-
-impl PackageRevisionAssignment {
-    fn assign(
-        self,
-        package_revision: RepodataRevision,
-        latest_revision: RepodataRevision,
-    ) -> RepodataRevision {
-        match self {
-            PackageRevisionAssignment::FromIndexJson => package_revision,
-            PackageRevisionAssignment::Latest => latest_revision,
-        }
-    }
 }
 
 /// Statistics for a single subdir indexing operation

@@ -8,13 +8,14 @@ use url::Url;
 
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
-    build::BuildConfig, concurrency::ConcurrencyConfig, proxy::ProxyConfig,
+    build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
 
 pub mod build;
 pub mod channel_config;
 pub mod concurrency;
+pub mod index;
 pub mod proxy;
 pub mod repodata_config;
 pub mod run_post_link_scripts;
@@ -114,6 +115,10 @@ pub struct ConfigBase<T> {
     #[serde(skip_serializing_if = "S3OptionsMap::is_default")]
     pub s3_options: S3OptionsMap,
 
+    /// Per-channel configuration for `rattler-index`.
+    #[serde(default, skip_serializing_if = "IndexConfig::is_empty")]
+    pub index_config: IndexConfig,
+
     /// Run the post link scripts
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -153,6 +158,7 @@ where
             concurrency: ConcurrencyConfig::default(),
             proxy_config: ProxyConfig::default(),
             s3_options: S3OptionsMap::default(),
+            index_config: IndexConfig::default(),
             run_post_link_scripts: None,
             extensions: T::default(),
             loaded_from: Vec::new(),
@@ -270,6 +276,7 @@ where
             repodata_config: self.repodata_config.merge_config(&other.repodata_config)?,
             concurrency: self.concurrency.merge_config(&other.concurrency)?,
             proxy_config: self.proxy_config.merge_config(&other.proxy_config)?,
+            index_config: self.index_config.merge_config(&other.index_config)?,
             extensions: self.extensions.merge_config(&other.extensions)?,
             run_post_link_scripts: other
                 .run_post_link_scripts
@@ -306,6 +313,7 @@ where
         keys.extend(get_keys(&self.proxy_config));
         keys.extend(get_keys(&self.extensions));
         keys.extend(get_keys(&self.s3_options));
+        keys.extend(get_keys(&self.index_config));
 
         keys.push("default_channels".to_string());
         keys.push("authentication_override_file".to_string());

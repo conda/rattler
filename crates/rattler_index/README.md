@@ -9,92 +9,111 @@ packages stored on a local filesystem or in S3.
 Index a local channel:
 
 ```shell
-rattler-index --channel-options ./channel-options.toml fs ./channel
+rattler-index --config ./rattler-config.toml fs ./channel
 ```
 
 Index an S3 channel:
 
 ```shell
-rattler-index --channel-options ./channel-options.toml s3 s3://my-bucket/my-channel
+rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 ```
 
-The `--channel-options` file is TOML. Values from explicit CLI flags override
-values from the TOML file. When a key is omitted from the TOML file and not
-provided on the CLI, the normal `rattler-index` defaults are used.
+The `--config` flag points at the same TOML configuration file used by pixi. It
+configures S3 credentials, concurrency, and per-channel index options under the
+`[index-config]` section.
 
-`--channel-options` is separate from `--config`: the former describes metadata
-and indexing behavior for the channel being written, while the latter loads the
-normal rattler/pixi configuration for settings such as S3 access and
-concurrency.
+When `--config` is omitted, `rattler-index` falls back to its built-in defaults
+(`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
+`from-index-json` revision assignment, no channel metadata).
 
-## Channel Options TOML
+## Per-channel index configuration
 
-Only add the fields you need:
+Index options live in `[index-config]` and follow the same shape as
+`[repodata-config]`: a flat default block with optional per-channel overrides
+keyed by URL or absolute path. The most specific entry wins; less-specific
+entries supply fallback values, and `[index-config]` itself is the final
+fallback.
 
 ```toml
+# Defaults applied when no per-channel entry matches
+[index-config]
 write-zst = true
 write-shards = true
 repodata-revisions = ["v3"]
-package-revision-assignment = "latest"
+package-revision-assignment = "from-index-json"
+
+# Per-host: applies to every channel under this bucket
+[index-config."s3://my-bucket"]
 base-url = "../packages/"
 
-[channel-relations]
+# Per-channel: most specific entry wins, then falls back to the host entry,
+# then to [index-config]
+[index-config."s3://my-bucket/staging"]
+write-shards = false
+package-revision-assignment = "latest"
+
+[index-config."s3://my-bucket/staging".channel-relations]
 base = "../conda-forge"
-overrides = "../fallback"
+
+# Local directory keys are absolute paths
+[index-config."/srv/conda/internal"]
+base-url = "../packages/"
 ```
 
-Supported fields:
+Matching rules:
+
+- Keys are compared against the canonical channel target — the full URL for
+  remote channels (`s3://...`) or the canonicalized absolute path for local
+  channels.
+- Match is on path-component boundaries: `s3://my-bucket` matches
+  `s3://my-bucket/staging` but not `s3://my-bucket-other/staging`.
+- All matching keys are layered onto `[index-config]` in shortest-to-longest
+  order, so the most specific entry overrides earlier values field by field.
+
+### Supported fields
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `write-zst` | boolean | Writes `repodata.json.zst`. Defaults to `true` if unset. |
-| `write-shards` | boolean | Writes `repodata_shards.msgpack.zst` and shard files. Defaults to `true` if unset. |
-| `repodata-revisions` | array | Repodata revisions to enable, for example `["v3"]` or `[3]`. The indexer fills revision package counts and timestamps while writing repodata. |
-| `package-revision-assignment` | string | `from-index-json` assigns packages from their package metadata; `latest` assigns packages to the newest configured revision. Defaults to `from-index-json`. |
-| `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. It may be relative or absolute and is written as provided. |
+| `write-zst` | boolean | Writes `repodata.json.zst`. Defaults to `true`. |
+| `write-shards` | boolean | Writes `repodata_shards.msgpack.zst` and shard files. Defaults to `true`. |
+| `repodata-revisions` | array | Repodata revisions to enable, e.g. `["v3"]` or `[3]`. The indexer fills revision package counts and timestamps while writing repodata. |
+| `package-revision-assignment` | string | `from-index-json` (default) reads the revision from each package's `info/index.json`; `latest` assigns every package to the newest configured revision. |
+| `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. May be relative or absolute. |
 | `channel-relations.base` | string | A single channel reference with higher priority than this channel, written to `info.channel_relations.base`. |
 | `channel-relations.overrides` | string | A single channel reference with lower priority than this channel, written to `info.channel_relations.overrides`. |
 
-`channel-relations.base` and `channel-relations.overrides` are scalar channel
-references, not arrays. They follow
+`channel-relations.base` and `channel-relations.overrides` follow
 [CEP-42 channel relationship metadata](https://github.com/conda/ceps/blob/main/cep-0042.md)
 and must not point to the same channel.
 
-TOML keys should use kebab-case. Snake-case aliases are accepted for
-compatibility with Rust field names, but new files should prefer kebab-case.
+### Common configurations
 
-## Common Configurations
-
-Advertise v3 repodata and keep package revision assignment driven by each
-package's `info/index.json`:
+Advertise v3 repodata for all channels:
 
 ```toml
+[index-config]
 repodata-revisions = ["v3"]
 ```
 
 Advertise v3 repodata and assign every package to the newest configured
-revision:
+revision for one specific channel:
 
 ```toml
+[index-config."s3://my-bucket/staging"]
 repodata-revisions = ["v3"]
 package-revision-assignment = "latest"
-```
-
-Declare package URLs relative to the subdir repodata location:
-
-```toml
-base-url = "../packages/"
 ```
 
 Declare CEP-42 channel relationships:
 
 ```toml
-[channel-relations]
+[index-config."s3://my-bucket/my-channel".channel-relations]
 base = "../conda-forge"
 overrides = "../fallback"
 ```
 
-The generated `repodata.json` contains the metadata under `info`, for example:
+The generated `repodata.json` then contains the metadata under `info`, for
+example:
 
 ```json
 {
