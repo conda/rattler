@@ -24,6 +24,21 @@ use url::Url;
 mod cache_key;
 mod download;
 
+/// Resolves the cache path for a given package, supporting both the new
+/// platform-aware layout and the legacy layout.
+fn resolve_cache_path(base: &Path, key: &CacheKey) -> PathBuf {
+    let new_path = key.cache_path(base);
+    let legacy_path = base.join(key.to_string());
+
+    if new_path.exists() {
+        new_path
+    } else if legacy_path.exists() {
+        legacy_path
+    } else {
+        new_path
+    }
+}
+
 pub use cache_key::{CacheKey, CacheKeyError};
 
 use crate::package_cache::CacheReporter;
@@ -78,6 +93,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    subdir: Option<String>,
     sha256_string: String,
 }
 
@@ -87,6 +103,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name.clone(),
             version: key.version.clone(),
             build_string: key.build_string.clone(),
+            subdir: key.subdir.clone(),
             sha256_string: key.sha256_str(),
         }
     }
@@ -123,7 +140,7 @@ impl RunExportsCache {
         Fut: Future<Output = Result<Option<NamedTempFile>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_path = resolve_cache_path(&self.inner.path, cache_key);
         let cache_entry = self
             .inner
             .run_exports

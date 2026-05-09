@@ -3,7 +3,7 @@ use rattler_conda_types::PackageRecord;
 use rattler_digest::{compute_bytes_digest, compute_url_digest, Md5Hash, Sha256, Sha256Hash};
 use std::{
     fmt::{Display, Formatter},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 /// Provides a unique identifier for packages in the cache.
@@ -13,6 +13,7 @@ pub struct CacheKey {
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) build_string: String,
+    pub(crate) subdir: Option<String>,
     pub(crate) sha256: Option<Sha256Hash>,
     pub(crate) md5: Option<Md5Hash>,
     pub(crate) origin_hash: Option<String>,
@@ -68,6 +69,15 @@ impl CacheKey {
     pub fn md5(&self) -> Option<Md5Hash> {
         self.md5
     }
+
+    /// Returns the cache path for this key, given a base directory.
+    pub fn cache_path(&self, base: &Path) -> PathBuf {
+        if let Some(subdir) = self.subdir.as_deref() {
+            base.join(subdir).join(self.to_string())
+        } else {
+            base.join(self.to_string())
+        }
+    }
 }
 
 impl From<CondaArchiveIdentifier> for CacheKey {
@@ -76,6 +86,7 @@ impl From<CondaArchiveIdentifier> for CacheKey {
             name: pkg.identifier.name,
             version: pkg.identifier.version,
             build_string: pkg.identifier.build_string,
+            subdir: None,
             sha256: None,
             md5: None,
             origin_hash: None,
@@ -89,6 +100,7 @@ impl From<&PackageRecord> for CacheKey {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
             build_string: record.build.clone(),
+            subdir: Some(record.subdir.clone()),
             sha256: record.sha256,
             md5: record.md5,
             origin_hash: None,
