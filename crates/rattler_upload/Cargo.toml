@@ -54,6 +54,8 @@ reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
+  "query",
+  "stream",
 ] }
 url = { workspace = true }
 tracing = { workspace = true }
