@@ -1,0 +1,33 @@
+[package]
+name = "rattler_fs_safety"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Tobias Hunger <tobias.hunger@prefix.dev>"]
+description = "Symlink-resistant filesystem helpers shared across rattler crates."
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+cap-std = { workspace = true }
+cap-fs-ext = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Wdk_Foundation",
+  "Wdk_Storage_FileSystem",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
