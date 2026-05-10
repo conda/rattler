@@ -27,12 +27,14 @@
 //!   refusing to follow a symlink at the final component. Used
 //!   for `.lock` files and any short-lived metadata file the
 //!   daemon writes inside a shared cache root.
-//! * [`atomic_write_in`] / [`atomic_write_in_dir`] — writes
-//!   `bytes` to a temp file in the parent, optionally `fchmod`s
-//!   the still-open fd to `mode`, then renames over `name`.
-//!   Caller never sees a half-written file at the final path;
-//!   the chmod happens on the fd, not on the path, so a
-//!   co-tenant can't race a symlink between create and chmod.
+//! * [`atomic_write_in`] / [`atomic_write_in_dir`] /
+//!   [`atomic_write`] — writes `bytes` to a temp file in the
+//!   parent, optionally `fchmod`s the still-open fd to `mode`,
+//!   then renames over `name`. Caller never sees a half-written
+//!   file at the final path; the chmod happens on the fd, not
+//!   on the path, so a co-tenant can't race a symlink between
+//!   create and chmod. [`atomic_write`] takes a full
+//!   destination `&Path` and splits it for you.
 //! * [`validate_relative_inside`] — lexically normalises a
 //!   candidate relative path and refuses anything that would
 //!   escape `root`. For use against archive-supplied
@@ -437,6 +439,33 @@ pub fn atomic_write_in_dir(
     atomic_write_in(&dir, name, bytes, mode)
 }
 
+/// Atomically write `bytes` to `path`, replacing any existing
+/// entry on success.
+///
+/// Convenience wrapper around [`atomic_write_in_dir`] that
+/// splits `path` into its parent directory and final component
+/// for you. Returns [`io::ErrorKind::InvalidInput`] if `path`
+/// has no parent (e.g. `""`) or no final component (e.g. `"/"`,
+/// `"."`, `".."`).
+///
+/// See [`atomic_write_in`] for the TOCTOU model and the
+/// semantics of `mode`.
+pub fn atomic_write(path: &Path, bytes: &[u8], mode: Option<u32>) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("path has no parent: {path:?}"),
+        )
+    })?;
+    let name = path.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("path has no final component: {path:?}"),
+        )
+    })?;
+    atomic_write_in_dir(parent, name, bytes, mode)
+}
+
 /// Lexically normalise `candidate` and verify the result lives
 /// strictly inside `root`. Returns the normalised path on
 /// success, an [`io::ErrorKind::PermissionDenied`] error
@@ -586,6 +615,25 @@ mod tests {
             .map(|e| e.file_name())
             .collect();
         assert_eq!(entries, vec![std::ffi::OsString::from("entry")]);
+    }
+
+    #[test]
+    fn atomic_write_path_form_splits_and_writes() {
+        let root = td();
+        let target = root.path().join("entry");
+        atomic_write(&target, b"hi", None).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"hi");
+    }
+
+    #[test]
+    fn atomic_write_path_form_rejects_pathless_input() {
+        // Two failure shapes: `""` (no parent) and `"/"` (no
+        // final component). Both must surface as `InvalidInput`
+        // rather than panic or be silently accepted.
+        let err = atomic_write(Path::new(""), b"x", None).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        let err = atomic_write(Path::new("/"), b"x", None).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[cfg(unix)]

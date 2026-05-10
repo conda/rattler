@@ -5,9 +5,9 @@ use rattler_conda_types::{
     prefix_record::{PathType, PathsEntry},
     Platform,
 };
-use rattler_digest::HashingWriter;
-use rattler_digest::Sha256;
-use std::{fs::File, io, io::Write, path::Path};
+use rattler_digest::{compute_bytes_digest, Sha256};
+use rattler_fs_safety::atomic_write;
+use std::{io, path::Path};
 
 use super::Prefix;
 
@@ -56,7 +56,7 @@ pub fn create_windows_python_entry_point(
     )?;
     let script_contents =
         python_entry_point_template(target_prefix, true, entry_point, python_info);
-    let (hash, size) = write_and_hash(&script_path, script_contents)?;
+    let (hash, size) = write_and_hash(&script_path, script_contents, None)?;
 
     // Construct a path to where we will create the python launcher executable.
     let relative_path_script_exe = python_info
@@ -65,10 +65,8 @@ pub fn create_windows_python_entry_point(
 
     // Include the bytes of the launcher directly in the binary so we can write it to disk.
     let launcher_bytes = get_windows_launcher(target_platform);
-    std::fs::write(
-        target_dir.path().join(&relative_path_script_exe),
-        launcher_bytes,
-    )?;
+    let exe_path = target_dir.path().join(&relative_path_script_exe);
+    atomic_write(&exe_path, launcher_bytes, None)?;
 
     let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
         "28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a",
@@ -127,14 +125,12 @@ pub fn create_unix_python_entry_point(
     )?;
     let script_contents =
         python_entry_point_template(target_prefix, false, entry_point, python_info);
-    let (hash, size) = write_and_hash(&script_path, script_contents)?;
-
-    // Make the script executable. This is only supported on Unix based filesystems.
-    #[cfg(unix)]
-    std::fs::set_permissions(
-        script_path,
-        std::os::unix::fs::PermissionsExt::from_mode(0o775),
-    )?;
+    // Mode `0o775` is applied via `fchmod` on the open
+    // temporary-file fd inside `atomic_write_in_dir` (Unix
+    // only); the script never exists at `script_path` with the
+    // wrong permissions.
+    let mode = if cfg!(unix) { Some(0o775) } else { None };
+    let (hash, size) = write_and_hash(&script_path, script_contents, mode)?;
 
     Ok(PathsEntry {
         relative_path,
@@ -188,12 +184,19 @@ pub fn python_entry_point_template(
     )
 }
 
-/// Writes the given bytes to a file and records the hash, as well as the size of the file.
-fn write_and_hash(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(Output<Sha256>, usize)> {
+/// Atomically writes `contents` to `path` and records the
+/// sha256 + size of the bytes. `mode` (Unix only) is applied
+/// via `fchmod` on the still-open temporary-file fd before the
+/// rename, so the final path never exists with the wrong
+/// permissions.
+fn write_and_hash(
+    path: &Path,
+    contents: impl AsRef<[u8]>,
+    mode: Option<u32>,
+) -> io::Result<(Output<Sha256>, usize)> {
     let bytes = contents.as_ref();
-    let mut writer = HashingWriter::<_, Sha256>::new(File::create(path)?);
-    writer.write_all(bytes)?;
-    let (_, hash) = writer.finalize();
+    atomic_write(path, bytes, mode)?;
+    let hash = compute_bytes_digest::<Sha256>(bytes);
     Ok((hash, bytes.len()))
 }
 
