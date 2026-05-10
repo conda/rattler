@@ -40,6 +40,7 @@ parking_lot = { workspace = true }
 rattler_cache = { workspace = true }
 rattler_conda_types = { workspace = true }
 rattler_digest = { workspace = true }
+rattler_fs_safety = { workspace = true }
 rattler_networking = { workspace = true }
 rattler_shell = { workspace = true }
 rattler_package_streaming = { workspace = true, features = ["reqwest"] }
