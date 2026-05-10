@@ -5,15 +5,17 @@
 //!
 //! Under MIT license.
 
-use std::fs::{File, OpenOptions};
+use std::ffi::OsStr;
+use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+use rattler_fs_safety::{open_no_follow, OpenOptions};
 use serde::{Deserialize, Serialize};
 
 pub use sys::{lock_exclusive, try_lock_exclusive, unlock};
 
-const GUARD_PATH: &str = ".guard";
+const GUARD_FILE: &str = ".guard";
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -118,34 +120,43 @@ impl Drop for AsyncWriteGuard {
 }
 
 pub struct AsyncPrefixGuard {
-    guard_path: PathBuf,
+    prefix: PathBuf,
 }
 
 impl AsyncPrefixGuard {
     /// Constructs a new guard for the given prefix but does not perform any
     /// locking operations yet.
     pub async fn new(prefix: &Path) -> io::Result<Self> {
-        let guard_path = prefix.join(GUARD_PATH);
+        // Ensure that the prefix directory exists; the guard file
+        // itself is created (atomically, with NOFOLLOW) when
+        // `write` is called.
+        fs_err::tokio::create_dir_all(prefix).await?;
 
-        // Ensure that the directory exists
-        fs_err::tokio::create_dir_all(guard_path.parent().unwrap()).await?;
-
-        Ok(Self { guard_path })
+        Ok(Self {
+            prefix: prefix.to_path_buf(),
+        })
     }
 
     /// Locks the guard for writing and returns a write guard which can be used
     /// to unlock it.
     pub async fn write(self) -> io::Result<AsyncWriteGuard> {
-        let guard_path = self.guard_path.clone();
+        let prefix = self.prefix;
 
-        // Open the file and acquire the lock (in a blocking task)
+        // Open the file and acquire the lock (in a blocking task).
+        // `open_no_follow` refuses to follow a symlink at the
+        // final component, so a co-tenant on a shared cache root
+        // can't redirect this open at e.g. `~/.bashrc`.
         let file = tokio::task::spawn_blocking(move || -> io::Result<File> {
-            let file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .open(&guard_path)?;
+            let cap_file = open_no_follow(
+                &prefix,
+                OsStr::new(GUARD_FILE),
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false),
+            )?;
+            let file = cap_file.into_std();
 
             lock_exclusive(&file)?;
 
@@ -295,5 +306,28 @@ mod sys {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    /// A co-tenant who plants `<prefix>/.guard` as a symlink to a
+    /// sensitive file (here: a victim file in another tempdir) must
+    /// not be able to redirect the guard's truncate-on-write at it.
+    #[tokio::test]
+    async fn write_refuses_symlinked_guard_file() {
+        let prefix_dir = tempfile::tempdir().unwrap();
+        let victim_dir = tempfile::tempdir().unwrap();
+        let victim = victim_dir.path().join("victim");
+        std::fs::write(&victim, b"keep").unwrap();
+
+        std::os::unix::fs::symlink(&victim, prefix_dir.path().join(GUARD_FILE)).unwrap();
+
+        let guard = AsyncPrefixGuard::new(prefix_dir.path()).await.unwrap();
+        let err = guard.write().await.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied, "{err}");
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
     }
 }
