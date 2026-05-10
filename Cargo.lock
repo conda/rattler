@@ -5161,6 +5161,7 @@ dependencies = [
  "rattler_cache",
  "rattler_conda_types",
  "rattler_digest",
+ "rattler_fs_safety",
  "rattler_lock",
  "rattler_menuinst",
  "rattler_networking",

@@ -105,6 +105,14 @@ pub enum LinkFileError {
     #[error("symlink target escapes the target prefix")]
     SymlinkTargetEscapesPrefix,
 
+    /// A package-supplied relative path (the source-side
+    /// `paths.json::relative_path` or the destination-side path
+    /// computed by the clobber registry) would escape the prefix
+    /// directory after lexical normalisation. Refused before any
+    /// filesystem operation; the prefix is left untouched.
+    #[error("relative path escapes the prefix: {0}")]
+    RelativePathEscapesPrefix(PathBuf),
+
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
@@ -164,6 +172,30 @@ pub fn link_file(
     modification_time: filetime::FileTime,
     external_symlink_policy: ExternalSymlinkPolicy,
 ) -> Result<Option<LinkedFile>, LinkFileError> {
+    // Validate the package-supplied paths before joining them.
+    // Both originate from `paths.json` (directly or via the
+    // clobber registry's renaming) and are therefore controlled
+    // by whoever built the `.conda` archive. A malicious package
+    // could ship `relative_path = "../../../etc/cron.d/x"` and
+    // have the linker hardlink (or write through) into the
+    // user's `cron.d`. The lexical guard here rejects any input
+    // that resolves outside `package_dir` / `target_dir.path()`
+    // before touching the filesystem.
+    if rattler_fs_safety::validate_relative_inside(package_dir, &path_json_entry.relative_path)
+        .is_err()
+    {
+        return Err(LinkFileError::RelativePathEscapesPrefix(
+            path_json_entry.relative_path.clone(),
+        ));
+    }
+    if rattler_fs_safety::validate_relative_inside(target_dir.path(), &destination_relative_path)
+        .is_err()
+    {
+        return Err(LinkFileError::RelativePathEscapesPrefix(
+            destination_relative_path,
+        ));
+    }
+
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
     let destination_path = target_dir.path().join(&destination_relative_path);
@@ -999,6 +1031,84 @@ mod test {
         assert_eq!(
             dest_mtime, modification_time,
             "patched file should have modification_time ({modification_time}), not source mtime ({source_time})",
+        );
+    }
+
+    /// A package shipping `paths.json::relative_path = "../../etc/x"`
+    /// must be rejected before any filesystem operation. Ditto for
+    /// the destination-side path computed by the clobber registry.
+    #[test]
+    fn test_link_file_rejects_relative_path_escape() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(0, 0);
+
+        let escaping = PathsEntry {
+            relative_path: PathBuf::from("../../etc/cron.d/x"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let err = super::link_file(
+            &escaping,
+            PathBuf::from("safe_destination.txt"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, super::LinkFileError::RelativePathEscapesPrefix(_)),
+            "{err:?}"
+        );
+
+        // Also verify the destination-side check — clobber-rename
+        // produces the destination relative path, which is just as
+        // attacker-controllable.
+        let benign = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+        fs::write(package_dir.join("config.py"), "ok\n").unwrap();
+        let err = super::link_file(
+            &benign,
+            PathBuf::from("../../etc/cron.d/x"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, super::LinkFileError::RelativePathEscapesPrefix(_)),
+            "{err:?}"
         );
     }
 
