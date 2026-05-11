@@ -171,4 +171,34 @@ mod tests {
         // *not* an empty string.
         assert!(out.starts_with("foo @ file://"), "got: {out}");
     }
+
+    #[test]
+    fn https_url_with_stale_given_emits_actual_url() {
+        // If a non-file VerbatimUrl carries a `given` that no longer matches
+        // the parsed URL (possible when constructed programmatically via
+        // `.with_given(...)`), the old hand-rolled formatter would have
+        // echoed the stale `given` verbatim — silently writing the wrong
+        // URL to the lockfile. The wrapper ignores `given` for non-file
+        // schemes and always emits the actual URL.
+        let url = VerbatimUrl::parse_url("https://example.com/canonical")
+            .unwrap()
+            .with_given("https://example.com/stale".to_string());
+        assert_eq!(url.given(), Some("https://example.com/stale"));
+
+        let req = Requirement::<VerbatimUrl> {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            version_or_url: Some(pep508_rs::VersionOrUrl::Url(url)),
+            marker: pep508_rs::MarkerTree::TRUE,
+            origin: None,
+        };
+        let out = GivenVerbatimUrl::wrap_requirement(&req).to_string();
+        assert_eq!(out, "foo @ https://example.com/canonical");
+
+        // And the output is a fixed point: reparsing + serializing yields
+        // the same string.
+        let reparsed = Requirement::<VerbatimUrl>::parse(&out, base_dir()).unwrap();
+        let out2 = GivenVerbatimUrl::wrap_requirement(&reparsed).to_string();
+        assert_eq!(out, out2);
+    }
 }
