@@ -5,7 +5,7 @@ use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use super::{given_verbatim_url::with_given, package_selector::PackageSelector};
+use super::{given_verbatim_url::GivenVerbatimUrl, package_selector::PackageSelector};
 use crate::{
     parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
 };
@@ -129,9 +129,9 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
 
 /// Serialize a requirement as a string, preserving relative paths for file
 /// dependencies. Delegates to pep508_rs's own [`Display`](std::fmt::Display)
-/// impl via the [`GivenVerbatimUrl`](super::given_verbatim_url) wrapper.
+/// impl via the [`GivenVerbatimUrl`] wrapper.
 fn requirement_to_string(req: &pep508_rs::Requirement) -> String {
-    with_given(req).to_string()
+    GivenVerbatimUrl::wrap_requirement(req).to_string()
 }
 
 #[cfg(test)]

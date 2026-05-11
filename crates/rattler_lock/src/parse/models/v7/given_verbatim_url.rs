@@ -31,19 +31,31 @@ impl Pep508Url for GivenVerbatimUrl {
     }
 }
 
-/// Rewrap a [`Requirement<VerbatimUrl>`] as a [`Requirement<GivenVerbatimUrl>`]
-/// so it formats through pep508_rs's [`Display`] impl while preserving
-/// relative paths.
-pub(super) fn with_given(req: &Requirement<VerbatimUrl>) -> Requirement<GivenVerbatimUrl> {
-    Requirement {
-        name: req.name.clone(),
-        extras: req.extras.clone(),
-        version_or_url: req.version_or_url.as_ref().map(|v| match v {
-            VersionOrUrl::VersionSpecifier(s) => VersionOrUrl::VersionSpecifier(s.clone()),
-            VersionOrUrl::Url(u) => VersionOrUrl::Url(GivenVerbatimUrl(u.clone())),
-        }),
-        marker: req.marker.clone(),
-        origin: req.origin.clone(),
+impl GivenVerbatimUrl {
+    /// Rewrap a [`Requirement<VerbatimUrl>`] as a [`Requirement<GivenVerbatimUrl>`]
+    /// so it formats through pep508_rs's [`Display`] impl while preserving
+    /// relative paths.
+    ///
+    /// Destructured intentionally: if pep508_rs adds a new field to
+    /// [`Requirement`], this stops compiling so we can decide how to handle it.
+    pub(super) fn wrap_requirement(req: &Requirement<VerbatimUrl>) -> Requirement<Self> {
+        let Requirement {
+            name,
+            extras,
+            version_or_url,
+            marker,
+            origin,
+        } = req;
+        Requirement {
+            name: name.clone(),
+            extras: extras.clone(),
+            version_or_url: version_or_url.as_ref().map(|v| match v {
+                VersionOrUrl::VersionSpecifier(s) => VersionOrUrl::VersionSpecifier(s.clone()),
+                VersionOrUrl::Url(u) => VersionOrUrl::Url(Self(u.clone())),
+            }),
+            marker: marker.clone(),
+            origin: origin.clone(),
+        }
     }
 }
 
@@ -53,7 +65,7 @@ mod tests {
 
     use pep508_rs::{Requirement, VerbatimUrl};
 
-    use super::with_given;
+    use super::GivenVerbatimUrl;
 
     fn base_dir() -> PathBuf {
         // Use an absolute base dir; on Windows the parser still needs an
@@ -67,7 +79,7 @@ mod tests {
 
     fn fmt(input: &str) -> String {
         let req = Requirement::<VerbatimUrl>::parse(input, base_dir()).unwrap();
-        with_given(&req).to_string()
+        GivenVerbatimUrl::wrap_requirement(&req).to_string()
     }
 
     #[test]
@@ -154,7 +166,7 @@ mod tests {
             marker: pep508_rs::MarkerTree::TRUE,
             origin: None,
         };
-        let out = with_given(&req).to_string();
+        let out = GivenVerbatimUrl::wrap_requirement(&req).to_string();
         // Should be the file:// URL (whatever VerbatimUrl::Display produces),
         // *not* an empty string.
         assert!(out.starts_with("foo @ file://"), "got: {out}");
