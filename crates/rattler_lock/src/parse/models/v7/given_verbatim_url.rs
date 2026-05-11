@@ -8,7 +8,7 @@ use pep508_rs::{Pep508Url, Requirement, VerbatimUrl, VerbatimUrlError, VersionOr
 /// A [`VerbatimUrl`] newtype whose [`Display`] preserves the original (relative)
 /// string for file URLs, falling back to the absolute URL otherwise.
 ///
-/// This is used so we can reuse pep508_rs's own [`Display`] impl for
+/// This is used so we can reuse `pep508_rs`'s own [`Display`] impl for
 /// [`Requirement`] when serializing the lockfile, while still keeping
 /// relative path dependencies intact.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -33,10 +33,10 @@ impl Pep508Url for GivenVerbatimUrl {
 
 impl GivenVerbatimUrl {
     /// Rewrap a [`Requirement<VerbatimUrl>`] as a [`Requirement<GivenVerbatimUrl>`]
-    /// so it formats through pep508_rs's [`Display`] impl while preserving
+    /// so it formats through `pep508_rs`'s [`Display`] impl while preserving
     /// relative paths.
     ///
-    /// Destructured intentionally: if pep508_rs adds a new field to
+    /// Destructured intentionally: if `pep508_rs` adds a new field to
     /// [`Requirement`], this stops compiling so we can decide how to handle it.
     pub(super) fn wrap_requirement(req: &Requirement<VerbatimUrl>) -> Requirement<Self> {
         let Requirement {

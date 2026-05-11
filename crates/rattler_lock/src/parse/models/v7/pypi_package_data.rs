@@ -128,7 +128,7 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
 }
 
 /// Serialize a requirement as a string, preserving relative paths for file
-/// dependencies. Delegates to pep508_rs's own [`Display`](std::fmt::Display)
+/// dependencies. Delegates to `pep508_rs`'s own [`Display`](std::fmt::Display)
 /// impl via the [`GivenVerbatimUrl`] wrapper.
 fn requirement_to_string(req: &pep508_rs::Requirement) -> String {
     GivenVerbatimUrl::wrap_requirement(req).to_string()
