@@ -62,10 +62,20 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
+            let unresolved: Option<rattler_s3::S3Credentials> = s3_opts.credentials.into();
+            let credentials = match unresolved {
+                Some(unresolved) => unresolved
+                    .resolve(&s3_opts.channel, &store)
+                    .ok_or_else(|| miette::miette!(
+                        "Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."
+                    ))?,
+                None => rattler_s3::ResolvedS3Credentials::from_sdk()
+                    .await
+                    .into_diagnostic()?,
+            };
             upload::upload_package_to_s3(
-                &store,
                 s3_opts.channel,
-                s3_opts.credentials.into(),
+                credentials,
                 &args.package_files,
                 s3_opts.force,
             )
