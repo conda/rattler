@@ -16,7 +16,7 @@ readme.workspace = true
 [features]
 default = ["rustls-tls", "s3", "sigstore-sign"]
 rustls-tls = [
-  "reqwest/rustls-tls",
+  "reqwest/rustls",
   "rattler_networking/rustls-tls",
   "rattler_package_streaming/rustls-tls",
   "sigstore-sign?/rustls",
@@ -54,6 +54,8 @@ reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
+  "query",
+  "stream",
 ] }
 url = { workspace = true }
 tracing = { workspace = true }

@@ -25,8 +25,7 @@ native-tls = [
   "rattler_cache/native-tls",
 ]
 rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
+  "reqwest/rustls",
   "rattler/rustls-tls",
   "rattler_repodata_gateway/rustls-tls",
   "rattler_networking/rustls-tls",
@@ -68,7 +67,7 @@ rattler_package_streaming = { workspace = true, default-features = false, featur
 ] }
 rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
-reqwest = { workspace = true, features = ["stream"] }
+reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

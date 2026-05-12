@@ -15,14 +15,12 @@ default-run = "rattler-index"
 default = ["rustls-tls", "s3", "rattler_config"]
 native-tls = [
   "reqwest/native-tls",
-  "reqwest/native-tls-alpn",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
   "rattler_s3?/native-tls",
 ]
 rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
+  "reqwest/rustls",
   "rattler_package_streaming/rustls-tls",
   "rattler_networking/rustls-tls",
   "rattler_s3?/rustls-tls",
@@ -60,7 +58,7 @@ rattler_package_streaming = { workspace = true, default-features = false }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
-  "macos-system-configuration",
+  "system-proxy",
   "charset",
 ] }
 rmp-serde = { workspace = true }
