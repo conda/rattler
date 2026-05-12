@@ -1,7 +1,12 @@
 use fs_err::tokio as tokio_fs;
 use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
-use rattler_networking::{Authentication, AuthenticationStorage};
+use rattler_networking::{
+    trusted_publishing::{
+        check_trusted_publishing, TrustedPublishResult, TrustedPublishingOptions,
+    },
+    Authentication, AuthenticationStorage,
+};
 use reqwest::{
     header::{self, HeaderMap, HeaderValue},
     StatusCode,
@@ -19,10 +24,7 @@ use super::opt::{AttestationSource, PrefixData};
 
 #[cfg(feature = "sigstore-sign")]
 use crate::upload::attestation::{create_attestation, AttestationConfig};
-use crate::upload::{
-    default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
-};
+use crate::upload::{default_bytes_style, get_client_with_retry, get_default_client};
 
 use super::package::sha256_sum;
 
@@ -209,7 +211,13 @@ pub async fn upload_package_to_prefix(
             }
             (api_key, false)
         }
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::default(),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => {
                 // When using trusted publishing, we can generate attestations
                 // Note: sigstore-sign handles OIDC token retrieval internally
@@ -240,7 +248,13 @@ pub async fn upload_package_to_prefix(
     #[cfg(not(feature = "sigstore-sign"))]
     let token = match prefix_data.api_key {
         Some(api_key) => api_key,
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::default(),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => token.secret().to_string(),
             TrustedPublishResult::Skipped => {
                 if wants_attestation {
