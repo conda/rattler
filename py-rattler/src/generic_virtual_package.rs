@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::GenericVirtualPackage;
+use rattler_conda_types::{package::BuildString, GenericVirtualPackage};
 
 use crate::package_name::PyPackageName;
 use crate::version::PyVersion;
@@ -40,7 +40,7 @@ impl PyGenericVirtualPackage {
             inner: GenericVirtualPackage {
                 name: name.into(),
                 version: version.into(),
-                build_string,
+                build_string: BuildString::new_unchecked(build_string),
             },
         }
     }
@@ -65,6 +65,6 @@ impl PyGenericVirtualPackage {
     /// The build identifier of the package.
     #[getter]
     pub fn build_string(&self) -> String {
-        self.inner.build_string.clone()
+        self.inner.build_string.to_string()
     }
 }

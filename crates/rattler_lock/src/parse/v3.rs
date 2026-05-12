@@ -20,7 +20,9 @@ use crate::{
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::Requirement;
-use rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
+use rattler_conda_types::{
+    NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource, package::BuildString,
+};
 use serde::Deserialize;
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 use url::Url;
@@ -224,7 +226,7 @@ pub fn parse_v3_or_lower(
                                 ),
                                 package_record: PackageRecord {
                                     arch: value.arch.or(derived_arch),
-                                    build,
+                                    build: BuildString::new_unchecked(build),
                                     build_number,
                                     constrains: value.constrains,
                                     depends: value.dependencies,
