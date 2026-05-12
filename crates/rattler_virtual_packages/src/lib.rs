@@ -51,11 +51,30 @@ use archspec::cpu::Microarchitecture;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use rattler_conda_types::{
-    GenericVirtualPackage, PackageName, ParseVersionError, ParseVersionErrorKind, Platform, Version,
+    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::osx::ParseOsxVersionError;
+
+/// An error that occurred during parsing of a virtual package override value.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ParseVirtualPackageOverrideError {
+    /// The version string could not be parsed
+    #[error(transparent)]
+    ParseVersion(#[from] ParseVersionError),
+
+    /// The override value failed custom validation with a specific message
+    #[error("{0}")]
+    ValidationError(String),
+}
+
+impl ParseVirtualPackageOverrideError {
+    /// Create a validation error with a custom message
+    pub fn validation_error(message: impl Into<String>) -> Self {
+        Self::ValidationError(message.into())
+    }
+}
 
 /// Configure the overrides used in in this crate.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -73,7 +92,7 @@ pub enum Override {
 /// Use as `Cuda::detect(override)`
 pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
-    fn parse_version(value: &str) -> Result<Self, ParseVersionError>;
+    fn parse_version(value: &str) -> Result<Self, ParseVirtualPackageOverrideError>;
 
     /// Helper to convert the output of `parse_version` and handling empty
     /// strings.
@@ -405,6 +424,9 @@ pub enum DetectVirtualPackageError {
 
     #[error(transparent)]
     VersionParseError(#[from] ParseVersionError),
+
+    #[error(transparent)]
+    ParseOverride(#[from] ParseVirtualPackageOverrideError),
 }
 /// Configure the overrides used in this crate.
 ///
@@ -496,8 +518,8 @@ impl From<Version> for Linux {
 impl EnvOverride for Linux {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_LINUX";
 
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(Self::from)
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self::from(Version::from_str(env_var_value)?))
     }
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -554,10 +576,10 @@ impl From<LibC> for VirtualPackage {
 impl EnvOverride for LibC {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_GLIBC";
 
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
             family: "glibc".into(),
-            version,
+            version: Version::from_str(env_var_value)?,
         })
     }
 
@@ -593,8 +615,10 @@ impl From<Version> for Cuda {
 }
 
 impl EnvOverride for Cuda {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self { version })
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
         Ok(Self::current())
@@ -659,13 +683,12 @@ impl CudaArch {
 }
 
 impl EnvOverride for CudaArch {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
         // CEP requires exactly "major.minor" format where both are digits
         if !cuda::is_valid_cuda_version_format(env_var_value) {
-            return Err(ParseVersionError::new(
-                env_var_value,
-                ParseVersionErrorKind::ExpectedComponent,
-            ));
+            return Err(ParseVirtualPackageOverrideError::validation_error(format!(
+                "invalid CUDA compute capability format '{env_var_value}': expected 'major.minor' where both are digits (e.g., '8.6')"
+            )));
         }
 
         let version = Version::from_str(env_var_value)?;
@@ -837,7 +860,7 @@ impl From<Archspec> for VirtualPackage {
 }
 
 impl EnvOverride for Archspec {
-    fn parse_version(value: &str) -> Result<Self, ParseVersionError> {
+    fn parse_version(value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
         if value == "0" {
             Ok(Archspec::Unknown)
         } else {
@@ -892,8 +915,10 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self { version })
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
         Ok(Self::current()?)
@@ -948,9 +973,9 @@ impl From<Version> for Windows {
 }
 
 impl EnvOverride for Windows {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self {
-            version: Some(version),
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Some(Version::from_str(env_var_value)?),
         })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
