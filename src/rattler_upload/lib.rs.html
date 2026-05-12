@@ -64,23 +64,33 @@
 <a href=#62 id=62 data-nosnippet>62</a>        }
 <a href=#63 id=63 data-nosnippet>63</a>        <span class="attr">#[cfg(feature = <span class="string">"s3"</span>)]
 <a href=#64 id=64 data-nosnippet>64</a>        </span>ServerType::S3(s3_opts) =&gt; {
-<a href=#65 id=65 data-nosnippet>65</a>            upload::upload_package_to_s3(
-<a href=#66 id=66 data-nosnippet>66</a>                <span class="kw-2">&amp;</span>store,
-<a href=#67 id=67 data-nosnippet>67</a>                s3_opts.channel,
-<a href=#68 id=68 data-nosnippet>68</a>                s3_opts.credentials.into(),
-<a href=#69 id=69 data-nosnippet>69</a>                <span class="kw-2">&amp;</span>args.package_files,
-<a href=#70 id=70 data-nosnippet>70</a>                s3_opts.force,
-<a href=#71 id=71 data-nosnippet>71</a>            )
-<a href=#72 id=72 data-nosnippet>72</a>            .<span class="kw">await
-<a href=#73 id=73 data-nosnippet>73</a>        </span>}
-<a href=#74 id=74 data-nosnippet>74</a>        ServerType::CondaForge(conda_forge_opts) =&gt; {
-<a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">let </span>conda_forge_data = CondaForgeData::from(conda_forge_opts);
-<a href=#76 id=76 data-nosnippet>76</a>            upload::conda_forge::upload_packages_to_conda_forge(
-<a href=#77 id=77 data-nosnippet>77</a>                <span class="kw-2">&amp;</span>args.package_files,
-<a href=#78 id=78 data-nosnippet>78</a>                conda_forge_data,
-<a href=#79 id=79 data-nosnippet>79</a>            )
-<a href=#80 id=80 data-nosnippet>80</a>            .<span class="kw">await
-<a href=#81 id=81 data-nosnippet>81</a>        </span>}
-<a href=#82 id=82 data-nosnippet>82</a>    }
-<a href=#83 id=83 data-nosnippet>83</a>}
+<a href=#65 id=65 data-nosnippet>65</a>            <span class="kw">let </span>unresolved: <span class="prelude-ty">Option</span>&lt;rattler_s3::S3Credentials&gt; = s3_opts.credentials.into();
+<a href=#66 id=66 data-nosnippet>66</a>            <span class="kw">let </span>credentials = <span class="kw">match </span>unresolved {
+<a href=#67 id=67 data-nosnippet>67</a>                <span class="prelude-val">Some</span>(unresolved) =&gt; unresolved
+<a href=#68 id=68 data-nosnippet>68</a>                    .resolve(<span class="kw-2">&amp;</span>s3_opts.channel, <span class="kw-2">&amp;</span>store)
+<a href=#69 id=69 data-nosnippet>69</a>                    .ok_or_else(|| <span class="macro">miette::miette!</span>(
+<a href=#70 id=70 data-nosnippet>70</a>                        <span class="string">"Could not find S3 credentials in the authentication storage, and no credentials were provided via the command line."
+<a href=#71 id=71 data-nosnippet>71</a>                    </span>))<span class="question-mark">?</span>,
+<a href=#72 id=72 data-nosnippet>72</a>                <span class="prelude-val">None </span>=&gt; rattler_s3::ResolvedS3Credentials::from_sdk()
+<a href=#73 id=73 data-nosnippet>73</a>                    .<span class="kw">await
+<a href=#74 id=74 data-nosnippet>74</a>                    </span>.into_diagnostic()<span class="question-mark">?</span>,
+<a href=#75 id=75 data-nosnippet>75</a>            };
+<a href=#76 id=76 data-nosnippet>76</a>            upload::upload_package_to_s3(
+<a href=#77 id=77 data-nosnippet>77</a>                s3_opts.channel,
+<a href=#78 id=78 data-nosnippet>78</a>                credentials,
+<a href=#79 id=79 data-nosnippet>79</a>                <span class="kw-2">&amp;</span>args.package_files,
+<a href=#80 id=80 data-nosnippet>80</a>                s3_opts.force,
+<a href=#81 id=81 data-nosnippet>81</a>            )
+<a href=#82 id=82 data-nosnippet>82</a>            .<span class="kw">await
+<a href=#83 id=83 data-nosnippet>83</a>        </span>}
+<a href=#84 id=84 data-nosnippet>84</a>        ServerType::CondaForge(conda_forge_opts) =&gt; {
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">let </span>conda_forge_data = CondaForgeData::from(conda_forge_opts);
+<a href=#86 id=86 data-nosnippet>86</a>            upload::conda_forge::upload_packages_to_conda_forge(
+<a href=#87 id=87 data-nosnippet>87</a>                <span class="kw-2">&amp;</span>args.package_files,
+<a href=#88 id=88 data-nosnippet>88</a>                conda_forge_data,
+<a href=#89 id=89 data-nosnippet>89</a>            )
+<a href=#90 id=90 data-nosnippet>90</a>            .<span class="kw">await
+<a href=#91 id=91 data-nosnippet>91</a>        </span>}
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>}
 </code></pre></div></section></main></body></html>
