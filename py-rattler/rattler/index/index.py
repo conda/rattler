@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import os
-from typing import Any, Literal, Mapping, Optional, Sequence, Union
-from typing_extensions import TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, Union
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeAlias
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
