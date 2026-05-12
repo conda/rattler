@@ -14,7 +14,7 @@ readme.workspace = true
 default = ['rustls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
-oauth = ["dep:openidconnect", "dep:open"]
+oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth']
 indicatif = ['dep:indicatif', 'dep:console']
 
@@ -61,6 +61,7 @@ uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
 open = { workspace = true, optional = true }
 openidconnect = { workspace = true, optional = true }
+oauth2-reqwest = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 

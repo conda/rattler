@@ -72,7 +72,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1daa54020e05aa0b163ee10434fff35a0f18d28a1cafa142bd1290e1abe630e"
 dependencies = [
  "astral-reqwest-middleware",
- "reqwest 0.13.3",
+ "reqwest",
  "secrecy",
  "serde",
  "serde_json",
@@ -189,7 +189,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http 1.4.0",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "thiserror 2.0.18",
  "tower-service",
@@ -208,7 +208,7 @@ dependencies = [
  "getrandom 0.2.17",
  "http 1.4.0",
  "hyper",
- "reqwest 0.13.3",
+ "reqwest",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -243,7 +243,7 @@ dependencies = [
  "http-content-range",
  "itertools 0.14.0",
  "memmap2",
- "reqwest 0.13.3",
+ "reqwest",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -1707,7 +1707,7 @@ dependencies = [
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
- "reqwest 0.13.3",
+ "reqwest",
  "resolvo",
  "serde_json",
  "tokio",
@@ -2734,7 +2734,7 @@ dependencies = [
  "hex",
  "hmac 0.13.0",
  "http 1.4.0",
- "reqwest 0.13.3",
+ "reqwest",
  "rustc_version",
  "rustls",
  "rustls-pki-types",
@@ -3013,7 +3013,7 @@ checksum = "0603b99309a1e404c2c0945650c0f775b50bb72ac90ae570cb93f9ff05d9efe7"
 dependencies = [
  "http 1.4.0",
  "http-serde",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "time",
 ]
@@ -4152,13 +4152,22 @@ dependencies = [
  "getrandom 0.2.17",
  "http 1.4.0",
  "rand 0.8.6",
- "reqwest 0.12.28",
  "serde",
  "serde_json",
  "serde_path_to_error",
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "url",
+]
+
+[[package]]
+name = "oauth2-reqwest"
+version = "0.1.0-alpha.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "234fb5c965bbce983ee5de636a7a51d6a3223da8067ea02f9ab2d2d78ac08be2"
+dependencies = [
+ "oauth2",
+ "reqwest",
 ]
 
 [[package]]
@@ -4249,7 +4258,7 @@ dependencies = [
  "percent-encoding",
  "quick-xml 0.38.4",
  "reqsign-core",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
@@ -5108,6 +5117,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "mockito",
+ "oauth2-reqwest",
  "once_cell",
  "open",
  "openidconnect",
@@ -5125,7 +5135,7 @@ dependencies = [
  "rayon",
  "reflink-copy",
  "regex",
- "reqwest 0.13.3",
+ "reqwest",
  "rstest",
  "serde",
  "serde_json",
@@ -5172,7 +5182,7 @@ dependencies = [
  "rattler_solve",
  "rattler_upload",
  "rattler_virtual_packages",
- "reqwest 0.13.3",
+ "reqwest",
  "tokio",
  "tracing-subscriber",
  "url",
@@ -5203,7 +5213,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "rayon",
- "reqwest 0.13.3",
+ "reqwest",
  "rstest",
  "serde_json",
  "simple_spawn_blocking",
@@ -5317,7 +5327,7 @@ dependencies = [
  "dunce",
  "fs-err",
  "rattler_prefix_guard",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
@@ -5350,7 +5360,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_s3",
- "reqwest 0.13.3",
+ "reqwest",
  "retry-policies",
  "rmp-serde",
  "serde",
@@ -5473,7 +5483,7 @@ dependencies = [
  "keyring",
  "netrc-rs",
  "rattler_config",
- "reqwest 0.13.3",
+ "reqwest",
  "retry-policies",
  "rstest",
  "serde",
@@ -5514,7 +5524,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_redaction",
- "reqwest 0.13.3",
+ "reqwest",
  "rstest",
  "rstest_reuse",
  "serde_json",
@@ -5560,7 +5570,7 @@ name = "rattler_redaction"
 version = "0.1.15"
 dependencies = [
  "astral-reqwest-middleware",
- "reqwest 0.13.3",
+ "reqwest",
  "url",
 ]
 
@@ -5612,7 +5622,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "regex",
- "reqwest 0.13.3",
+ "reqwest",
  "retry-policies",
  "rmp-serde",
  "rstest",
@@ -5735,7 +5745,7 @@ dependencies = [
  "rattler_redaction",
  "rattler_s3",
  "rattler_solve",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -5940,38 +5950,6 @@ dependencies = [
  "anyhow",
  "reqsign-core",
  "tokio",
-]
-
-[[package]]
-name = "reqwest"
-version = "0.12.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "futures-core",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper",
- "hyper-util",
- "js-sys",
- "log",
- "percent-encoding",
- "pin-project-lite",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tower",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]
@@ -6812,7 +6790,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c60b95ecc87b2e279705e4a617cfb2d668bb9dfb15b3a99322524b6f44a4201b"
 dependencies = [
  "base64 0.22.1",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "serde_json",
  "sigstore-crypto",
@@ -6844,7 +6822,7 @@ dependencies = [
  "ambient-id",
  "base64 0.22.1",
  "rand 0.10.1",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "serde_json",
  "sigstore-crypto",
@@ -6862,7 +6840,7 @@ checksum = "641fdaaa40d0cd6e249cf1671c2240beff1a3ece578062cf43e750779e8db2b3"
 dependencies = [
  "base64 0.22.1",
  "hex",
- "reqwest 0.13.3",
+ "reqwest",
  "serde",
  "serde_json",
  "sigstore-crypto",
@@ -6925,7 +6903,7 @@ dependencies = [
  "der 0.7.10",
  "hex",
  "rand 0.10.1",
- "reqwest 0.13.3",
+ "reqwest",
  "rustls-pki-types",
  "rustls-webpki",
  "sigstore-crypto",
@@ -7617,7 +7595,7 @@ dependencies = [
  "fs-err",
  "fslock",
  "rattler_digest",
- "reqwest 0.13.3",
+ "reqwest",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
