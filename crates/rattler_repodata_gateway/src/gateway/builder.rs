@@ -145,31 +145,7 @@ impl GatewayBuilder {
     }
 
     /// Bootstrap authentication for `channel_url` using
-    /// [trusted publishing](rattler_networking::trusted_publishing): detects
-    /// the CI provider (GitHub Actions, GitLab CI, or Google Cloud), exchanges
-    /// the runner-issued OIDC ID token at the server's mint endpoint, and
-    /// installs a [`TrustedPublishingMiddleware`] scoped to `channel_url`'s
-    /// host so the resulting bearer token rides on every fetch to that host.
-    ///
-    /// Defaults target prefix.dev (`audience = "prefix.dev"`,
-    /// `mint_path = "/api/oidc/mint_token"`); override via `options` to point
-    /// at a different server.
-    ///
-    /// **Outside CI** this is a no-op — it logs at `debug` and returns
-    /// `Ok(self)` unchanged, so the same code can run both locally and inside
-    /// CI. It only errors if a CI provider is detected and the OIDC exchange
-    /// itself fails (e.g. missing `id-token: write` permission, misconfigured
-    /// trusted publisher on the server side).
-    ///
-    /// # Combining with [`Self::with_client`]
-    ///
-    /// `reqwest_middleware::ClientWithMiddleware` is an opaque, fully-assembled
-    /// chain — we cannot retroactively add another middleware to a client the
-    /// caller already built. If you supply your own client via
-    /// [`Self::with_client`], this method's middleware **will not** be
-    /// installed; a warning is logged at `finish()` time. In that case, build
-    /// the [`TrustedPublishingMiddleware`] yourself and add it to your own
-    /// client's middleware chain.
+    /// [trusted publishing](rattler_networking::trusted_publishing)
     pub async fn with_trusted_publishing(
         mut self,
         channel_url: Url,
