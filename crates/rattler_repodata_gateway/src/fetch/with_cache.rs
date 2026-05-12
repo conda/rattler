@@ -265,7 +265,7 @@ pub async fn fetch_repo_data(
 
     // Determine the availability of variants based on the cache or by querying the
     // remote.
-    let variant_availability = check_variant_availability(
+    let mut variant_availability = check_variant_availability(
         &client,
         &subdir_url,
         cache_state.as_ref(),
@@ -280,167 +280,197 @@ pub async fn fetch_repo_data(
     let has_zst = options.zstd_enabled && variant_availability.has_zst();
     let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
 
-    // Determine which variant to download
-    let repo_data_url = if has_zst {
-        subdir_url
-            .join(&format!("{}.zst", options.variant.file_name()))
-            .unwrap()
-    } else if has_bz2 {
-        subdir_url
-            .join(&format!("{}.bz2", options.variant.file_name()))
-            .unwrap()
-    } else {
-        subdir_url.join(options.variant.file_name()).unwrap()
-    };
-
-    // Construct the HTTP request
-    tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = client.client().get(repo_data_url.clone());
-
-    let mut headers = HeaderMap::default();
-
-    // We can handle g-zip encoding which is often used. We could also set this
-    // option on the client, but that will disable all download progress
-    // messages by `reqwest` because the gzipped data is decoded on the fly and
-    // the size of the decompressed body is unknown. However, we don't really
-    // care about the decompressed size but rather we'd like to know the number
-    // of raw bytes that are actually downloaded.
-    //
-    // To do this we manually set the request header to accept gzip encoding and we
-    // use the [`AsyncEncoding`] trait to perform the decoding on the fly.
-    headers.insert(
-        reqwest::header::ACCEPT_ENCODING,
-        HeaderValue::from_static("gzip"),
-    );
-
-    // Add previous cache headers if we have them
-    if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
-        cache_headers.add_to_request(&mut headers);
-    }
-    // Send the request and wait for a reply
-    let download_reporter = reporter
-        .as_deref()
-        .and_then(|reporter| reporter.download_reporter())
-        .map(|r| (r, r.on_download_start(&repo_data_url)));
-
-    let (client, request) = request_builder.headers(headers).build_split();
-    let request = request.expect("must have a valid request at this point");
     let default_retry_behavior = default_retry_policy();
     let retry_behavior = options
         .retry_policy
         .as_deref()
         .unwrap_or(&default_retry_behavior);
-    let mut retry_count = 0;
-    let (temp_file, blake2_hash, response_url, cache_headers) = loop {
-        let request_start_time = SystemTime::now();
-        let response = match client.execute(request.try_clone().unwrap()).await {
-            Ok(response) if response.status() == StatusCode::NOT_FOUND => {
-                return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
-                    response.error_for_status().unwrap_err(),
-                )));
-            }
-            Ok(response) => response.error_for_status()?,
-            Err(e) => {
-                return Err(FetchRepoDataError::from(e));
-            }
+
+    let mut candidates = Vec::with_capacity(3);
+    if has_zst {
+        candidates.push((
+            subdir_url
+                .join(&format!("{}.zst", options.variant.file_name()))
+                .unwrap(),
+            Encoding::Zst,
+        ));
+    }
+    if has_bz2 {
+        candidates.push((
+            subdir_url
+                .join(&format!("{}.bz2", options.variant.file_name()))
+                .unwrap(),
+            Encoding::Bz2,
+        ));
+    }
+    candidates.push((
+        subdir_url.join(options.variant.file_name()).unwrap(),
+        Encoding::Passthrough,
+    ));
+
+    let mut last_not_found = None;
+    let (repo_data_url, temp_file, blake2_hash, cache_headers) = 'candidates: loop {
+        let Some((repo_data_url, content_encoding)) = candidates.first().cloned() else {
+            return Err(FetchRepoDataError::NotFound(
+                last_not_found.expect("plain repodata was tried"),
+            ));
         };
+        candidates.remove(0);
 
-        // If the content didn't change, simply return whatever we have on disk.
-        if response.status() == StatusCode::NOT_MODIFIED {
-            tracing::debug!("repodata was unmodified");
+        // Construct the HTTP request
+        tracing::debug!("fetching '{}'", &repo_data_url);
+        let request_builder = client.client().get(repo_data_url.clone());
 
-            // Update the cache on disk with any new findings.
-            let cache_state = RepoDataState {
-                url: repo_data_url,
-                has_zst: variant_availability.has_zst,
-                has_bz2: variant_availability.has_bz2,
-                ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+        let mut headers = HeaderMap::default();
+
+        // We can handle g-zip encoding which is often used. We could also set this
+        // option on the client, but that will disable all download progress
+        // messages by `reqwest` because the gzipped data is decoded on the fly and
+        // the size of the decompressed body is unknown. However, we don't really
+        // care about the decompressed size but rather we'd like to know the number
+        // of raw bytes that are actually downloaded.
+        //
+        // To do this we manually set the request header to accept gzip encoding and we
+        // use the [`AsyncEncoding`] trait to perform the decoding on the fly.
+        headers.insert(
+            reqwest::header::ACCEPT_ENCODING,
+            HeaderValue::from_static("gzip"),
+        );
+
+        // Add previous cache headers only when revalidating the same URL. Cache
+        // validators for compressed variants are not valid for the plain JSON URL.
+        if let Some(cache_headers) = cache_state
+            .as_ref()
+            .filter(|state| state.url == repo_data_url)
+            .map(|state| &state.cache_headers)
+        {
+            cache_headers.add_to_request(&mut headers);
+        }
+        // Send the request and wait for a reply
+        let download_reporter = reporter
+            .as_deref()
+            .and_then(|reporter| reporter.download_reporter())
+            .map(|r| (r, r.on_download_start(&repo_data_url)));
+
+        let (client, request) = request_builder.headers(headers).build_split();
+        let request = request.expect("must have a valid request at this point");
+        let mut retry_count = 0;
+        loop {
+            let request_start_time = SystemTime::now();
+            let response = match client.execute(request.try_clone().unwrap()).await {
+                Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+                    let unavailable = Some(Expiring {
+                        value: false,
+                        last_checked: chrono::Utc::now(),
+                    });
+                    match content_encoding {
+                        Encoding::Zst => variant_availability.has_zst = unavailable,
+                        Encoding::Bz2 => variant_availability.has_bz2 = unavailable,
+                        _ => {}
+                    }
+                    last_not_found = Some(RepoDataNotFoundError::from(
+                        response.error_for_status().unwrap_err(),
+                    ));
+                    continue 'candidates;
+                }
+                Ok(response) => response.error_for_status()?,
+                Err(e) => {
+                    return Err(FetchRepoDataError::from(e));
+                }
             };
 
-            let cache_state = tokio::task::spawn_blocking(move || {
-                cache_state
-                    .to_path(&cache_state_path)
-                    .map(|_| cache_state)
-                    .map_err(FetchRepoDataError::FailedToWriteCacheState)
-            })
-            .await??;
+            // If the content didn't change, simply return whatever we have on disk.
+            if response.status() == StatusCode::NOT_MODIFIED {
+                tracing::debug!("repodata was unmodified");
 
-            return Ok(CachedRepoData {
-                lock_file,
-                repo_data_json_path,
-                cache_state,
-                cache_result: CacheResult::CacheHitAfterFetch,
-            });
-        }
+                // Update the cache on disk with any new findings.
+                let cache_state = RepoDataState {
+                    url: repo_data_url,
+                    has_zst: variant_availability.has_zst,
+                    has_bz2: variant_availability.has_bz2,
+                    ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+                };
 
-        // Fail if the status code is not a success
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.ok();
-            return Err(FetchRepoDataError::HttpError(
-                reqwest_middleware::Error::Middleware(anyhow::format_err!(
-                    "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
-                    status,
-                    repo_data_url.redact(),
-                    body.as_deref().unwrap_or("<failed to get body>"),
-                )),
-            ));
-        }
+                let cache_state = tokio::task::spawn_blocking(move || {
+                    cache_state
+                        .to_path(&cache_state_path)
+                        .map(|_| cache_state)
+                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
+                })
+                .await??;
 
-        // Get cache headers from the response
-        let cache_headers = CacheHeaders::from(&response);
+                return Ok(CachedRepoData {
+                    lock_file,
+                    repo_data_json_path,
+                    cache_state,
+                    cache_result: CacheResult::CacheHitAfterFetch,
+                });
+            }
 
-        // Stream the content to a temporary file
-        let response_url = response.url().clone();
-        let stream_result = stream_and_decode_to_file(
-            repo_data_url.clone(),
-            response,
-            if has_zst {
-                Encoding::Zst
-            } else if has_bz2 {
-                Encoding::Bz2
-            } else {
-                Encoding::Passthrough
-            },
-            &cache_path,
-            download_reporter,
-        )
-        .await;
+            // Fail if the status code is not a success
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.ok();
+                return Err(FetchRepoDataError::HttpError(
+                    reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                        "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                        status,
+                        repo_data_url.redact(),
+                        body.as_deref().unwrap_or("<failed to get body>"),
+                    )),
+                ));
+            }
 
-        match stream_result {
-            Ok((file, hash)) => break (file, hash, response_url, cache_headers),
-            Err(FetchRepoDataError::FailedToDownload(url, err)) => {
-                let execute_after =
-                    match retry_behavior.should_retry(request_start_time, retry_count) {
-                        RetryDecision::Retry { execute_after } => execute_after,
-                        RetryDecision::DoNotRetry => {
-                            return Err(FetchRepoDataError::FailedToDownload(url, err))
-                        }
-                    };
-                let duration = execute_after
-                    .duration_since(SystemTime::now())
-                    .unwrap_or(Duration::ZERO);
+            // Get cache headers from the response
+            let cache_headers = CacheHeaders::from(&response);
 
-                // Wait for a second to let the remote service restore itself. This increases
-                // the chance of success.
-                tracing::warn!(
+            // Stream the content to a temporary file
+            let response_url = response.url().clone();
+            let stream_result = stream_and_decode_to_file(
+                repo_data_url.clone(),
+                response,
+                content_encoding,
+                &cache_path,
+                download_reporter,
+            )
+            .await;
+
+            match stream_result {
+                Ok((file, hash)) => {
+                    if let Some((reporter, index)) = download_reporter {
+                        reporter.on_download_complete(&response_url, index);
+                    }
+                    break 'candidates (repo_data_url, file, hash, cache_headers);
+                }
+                Err(FetchRepoDataError::FailedToDownload(url, err)) => {
+                    let execute_after =
+                        match retry_behavior.should_retry(request_start_time, retry_count) {
+                            RetryDecision::Retry { execute_after } => execute_after,
+                            RetryDecision::DoNotRetry => {
+                                return Err(FetchRepoDataError::FailedToDownload(url, err))
+                            }
+                        };
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or(Duration::ZERO);
+
+                    // Wait for a second to let the remote service restore itself. This increases
+                    // the chance of success.
+                    tracing::warn!(
                         "failed to download repodata from {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
                         &url,
                         err,
                         retry_count,
                         duration
                     );
-                tokio::time::sleep(duration).await;
+                    tokio::time::sleep(duration).await;
+                }
+                Err(e) => return Err(e),
             }
-            Err(e) => return Err(e),
+
+            retry_count += 1;
         }
-
-        retry_count += 1;
     };
-
-    if let Some((reporter, index)) = download_reporter {
-        reporter.on_download_complete(&response_url, index);
-    }
 
     // Persist the file to its final destination
     let repo_data_destination_path = repo_data_json_path.clone();
@@ -1176,6 +1206,66 @@ mod test {
             result.cache_state.has_bz2, Some(super::Expiring {
                 value, ..
             }) if value
+        );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_bz2_404_falls_back_to_repodata_json() {
+        let subdir_path = TempDir::new().unwrap();
+        write_encoded(
+            FAKE_REPO_DATA.as_bytes(),
+            &subdir_path.path().join("repodata.json.bz2"),
+            Encoding::Bz2,
+        )
+        .await
+        .unwrap();
+
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
+        let cache_dir = TempDir::new().unwrap();
+        let options = FetchRepoDataOptions {
+            zstd_enabled: false,
+            ..FetchRepoDataOptions::default()
+        };
+
+        let result = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_owned(),
+            options.clone(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(result.cache_state.url.path().ends_with("repodata.json.bz2"));
+        drop(result);
+
+        std::fs::remove_file(subdir_path.path().join("repodata.json.bz2")).unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+
+        // Let the local HTTP cache entry expire while keeping the compressed variant
+        // availability cache fresh.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let result = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.keep(),
+            options,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(result.repo_data_json_path).unwrap(),
+            FAKE_REPO_DATA
+        );
+        assert!(result.cache_state.url.path().ends_with("repodata.json"));
+        assert_matches!(
+            result.cache_state.has_bz2, Some(super::Expiring {
+                value, ..
+            }) if !value
         );
     }
 

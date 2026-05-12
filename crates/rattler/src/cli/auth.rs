@@ -238,7 +238,7 @@ fn default_oauth_config_for_host(host: &str) -> Option<DefaultOAuthConfig> {
     }
 
     Some(DefaultOAuthConfig {
-        issuer_url: format!("https://{host}"),
+        issuer_url: ensure_url_scheme(host),
         client_id: "rattler".to_string(),
         scopes: PREFIX_DEV_OAUTH_SCOPES
             .iter()
@@ -285,6 +285,16 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
+/// Ensure a user-supplied `host` is a fully-qualified URL by prepending
+/// `https://` when it has no scheme.
+fn ensure_url_scheme(host: &str) -> String {
+    if host.contains("://") {
+        host.to_string()
+    } else {
+        format!("https://{host}")
+    }
+}
+
 /// Result of prefix.dev token validation
 #[derive(Debug, PartialEq)]
 pub enum ValidationResult {
@@ -322,7 +332,7 @@ async fn login(
             let issuer_url = args
                 .oauth_issuer_url
                 .or_else(|| host_default.as_ref().map(|c| c.issuer_url.clone()))
-                .unwrap_or_else(|| format!("https://{}", args.host));
+                .unwrap_or_else(|| ensure_url_scheme(&args.host));
 
             let client_id = args
                 .oauth_client_id
@@ -454,12 +464,7 @@ async fn validate_prefix_dev_token(
         // Strip wildcard if given
         let host = host.replace("*.", "");
 
-        // Convert the host URL to a full URL if it doesn't contain a scheme
-        let host_url = if host.contains("://") {
-            Url::parse(&host)?
-        } else {
-            Url::parse(&format!("https://{host}"))?
-        };
+        let host_url = Url::parse(&ensure_url_scheme(&host))?;
 
         let host_url = host_url.host_str().unwrap_or("prefix.dev");
         // Strip "repo." prefix if present
@@ -779,6 +784,27 @@ mod tests {
 
         let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[test]
+    fn ensure_url_scheme_prepends_https_for_bare_host() {
+        assert_eq!(ensure_url_scheme("prefix.dev"), "https://prefix.dev");
+    }
+
+    #[test]
+    fn ensure_url_scheme_keeps_existing_https_scheme() {
+        assert_eq!(
+            ensure_url_scheme("https://prefix.dev"),
+            "https://prefix.dev"
+        );
+    }
+
+    #[test]
+    fn ensure_url_scheme_keeps_existing_http_scheme() {
+        assert_eq!(
+            ensure_url_scheme("http://localhost:4444"),
+            "http://localhost:4444"
+        );
     }
 
     #[cfg(feature = "oauth")]
