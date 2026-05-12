@@ -190,11 +190,13 @@ pub struct PrefixPlaceholder {
     #[serde(rename = "prefix_placeholder")]
     pub placeholder: String,
 
+    /// 
+    /// 
     /// The offsets on which the placeholders are found in the file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offsets: Option<Vec<usize>>,
 
-    /// The offsets on which the placeholders are found in the file
+    /// The offsets for the 0 bytes on which the placeholders are found in the file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub null_offsets: Option<Vec<usize>>,
 }

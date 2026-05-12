@@ -411,8 +411,6 @@ pub async fn link_package(
         }
     }
 
-    // let has_executable = paths_json.has_executable.unwrap_or(false);
-
     let directories_target_dir = target_dir.path().to_path_buf();
     driver
         .run_blocking_io_task(move || {

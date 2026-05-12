@@ -180,6 +180,9 @@ pub fn link_file(
         null_offsets,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
+        // a static empty vector
+        static EMPTY_VEC: Vec<usize> = Vec::new();
+
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = map_or_read_source_file(&source_path)?;
@@ -219,6 +222,13 @@ pub fn link_file(
         // depending on the availability of the offsets
         match offsets {
             Some(offsets) => {
+                let null_offsets = match null_offsets {
+                    Some(null_offsets) => null_offsets,
+                    None => {
+                        // There are offsets but no null_offsets, meaning it is either a binary file or short file where the eof is the 
+                        &EMPTY_VEC
+                    }
+                };
                 copy_and_replace_placeholders_with_offsets(
                     source.as_ref(),
                     &mut destination_writer,
@@ -691,7 +701,7 @@ pub fn copy_and_replace_placeholders_with_offsets(
     target_platform: &Platform,
     file_mode: FileMode,
     offsets: &[usize],
-    null_offsets: &Option<Vec<usize>>,
+    null_offsets: &[usize],
 ) -> Result<(), std::io::Error> {
     match file_mode {
         FileMode::Text => {
@@ -711,26 +721,15 @@ pub fn copy_and_replace_placeholders_with_offsets(
                 destination.write_all(source_bytes)?;
             } else {
                 // the null_offsets are only usable and should only be available for cstrings
-                match null_offsets {
-                    Some(null_offsets) => {
-                        copy_and_replace_cstring_placeholder_offsets(
-                            source_bytes,
-                            destination,
-                            prefix_placeholder,
-                            target_prefix,
-                            offsets,
-                            null_offsets,
-                        )?;
-                    }
-                    None => {
-                        copy_and_replace_cstring_placeholder(
-                            source_bytes,
-                            destination,
-                            prefix_placeholder,
-                            target_prefix,
-                        )?;
-                    }
-                };
+                copy_and_replace_cstring_placeholder_offsets(
+                    source_bytes,
+                    destination,
+                    prefix_placeholder,
+                    target_prefix,
+                    offsets,
+                    null_offsets,
+                )?;
+                
             }
         }
     }
@@ -1049,7 +1048,10 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
         .chain(std::iter::once(source_bytes.len()));
 
     for (&offset, next_offset) in offsets.iter().zip(nexts) {
-        let cstr_end = null_offsets[null_idx];
+        let cstr_end = if null_offsets.is_empty(){
+            // there were no stored null offsets, fall back to the length of the source bytes
+            source_bytes.len()
+        } else { null_offsets[null_idx] };
 
         destination.write_all(&source_bytes[last_pos..offset])?;
         destination.write_all(new_prefix)?;
@@ -1078,6 +1080,10 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
 
     if last_pos < source_bytes.len() {
         destination.write_all(&source_bytes[last_pos..])?;
+    }
+
+    if pending_pad_bytes > 0 {
+        write_zeros(&mut destination, pending_pad_bytes)?;
     }
 
     Ok(())
@@ -1641,6 +1647,15 @@ mod test {
         "fabulous",
         "cruel",
         b"12345Hello, cruel cruel world!\x00\x00\x00\x00\x00\x00\x006789"
+    )]
+    // The lists of null offets is an empty slice
+    #[case(
+        b"12345Hello, fabulous fabulous world!6789",
+        [12, 21].to_vec(),
+        [].to_vec(),
+        "fabulous",
+        "cruel",
+        b"12345Hello, cruel cruel world!6789\x00\x00\x00\x00\x00\x00"
     )]
     pub fn test_copy_and_replace_binary_placeholder_offsets(
         #[case] input: &[u8],
