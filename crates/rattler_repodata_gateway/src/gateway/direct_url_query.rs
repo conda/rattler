@@ -121,7 +121,7 @@ impl DirectUrlQuery {
                 identifier: ArchiveIdentifier {
                     name: index_json.name.as_source().to_string(),
                     version: index_json.version.to_string(),
-                    build_string: index_json.build.clone(),
+                    build_string: index_json.build.to_string(),
                 },
                 archive_type: archive_type.into(),
             }

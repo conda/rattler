@@ -98,12 +98,13 @@ macro_rules! impl_package_record {
             /// The build string of the package.
             #[wasm_bindgen::prelude::wasm_bindgen(getter)]
             pub fn build(&self) -> String {
-                AsRef::<PackageRecord>::as_ref(self).build.clone()
+                AsRef::<PackageRecord>::as_ref(self).build.to_string()
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
             pub fn set_build(&mut self, build: String) {
-                AsMut::<PackageRecord>::as_mut(self).build = build;
+                AsMut::<PackageRecord>::as_mut(self).build =
+                    rattler_conda_types::package::BuildString::new_unchecked(build);
             }
 
             /// The build number of the package.

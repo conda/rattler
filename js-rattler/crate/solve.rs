@@ -5,7 +5,7 @@ use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
     Channel, ChannelConfig, Flag, MatchSpec, NoArchType, PackageName, PackageRecord,
     ParseChannelError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, Version,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    package::{ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
@@ -89,7 +89,7 @@ pub async fn simple_solve(
             let rec = PackageRecord {
                 name: PackageName::try_from(pkg.package_name.clone())?,
                 version: Version::from_str(&pkg.version)?.into(),
-                build: pkg.build.clone(),
+                build: BuildString::new_unchecked(pkg.build.clone()),
                 build_number: pkg.build_number.unwrap_or_default(),
                 md5: pkg
                     .md5
@@ -134,7 +134,7 @@ pub async fn simple_solve(
                         identifier: ArchiveIdentifier {
                             name: rec.name.as_source().to_string(),
                             version: rec.version.to_string(),
-                            build_string: rec.build.clone(),
+                            build_string: rec.build.to_string(),
                         },
                         archive_type,
                     }
@@ -166,13 +166,13 @@ pub async fn simple_solve(
         .await?;
 
     // We need this to find depends for locked packages
-    let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata
+    let repodata_keys: HashMap<(String, String, String), &Vec<String>> = repodata
         .iter()
         .flat_map(|r| r.iter())
         .map(|rec| {
             let name = rec.package_record.name.as_normalized().to_string();
             let version = rec.package_record.version.to_string();
-            let build = &rec.package_record.build;
+            let build = rec.package_record.build.to_string();
             ((name, version, build), &rec.package_record.depends)
         })
         .collect();
@@ -182,7 +182,7 @@ pub async fn simple_solve(
         let key = (
             records.package_record.name.as_normalized().to_string(),
             records.package_record.version.to_string(),
-            &records.package_record.build,
+            records.package_record.build.to_string(),
         );
 
         if records.package_record.depends.is_empty()
@@ -206,7 +206,7 @@ pub async fn simple_solve(
         .map(|r| SolvedPackage {
             url: r.url.to_string(),
             package_name: r.package_record.name.as_source().to_string(),
-            build: r.package_record.build.clone(),
+            build: r.package_record.build.to_string(),
             build_number: Some(r.package_record.build_number),
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),

@@ -900,7 +900,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                                 }
 
                                 if let Some(build_match) = spec.build.as_ref()
-                                    && !build_match.matches(build_string)
+                                    && !build_match.matches(build_string.as_str())
                                 {
                                     return inverse;
                                 }

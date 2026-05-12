@@ -27,8 +27,8 @@ use crate::{
     ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
     build_spec::BuildNumber,
     package::{
-        ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
-        WheelArchiveType,
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, IndexJson,
+        RunExportsJson, WheelArchiveType,
     },
     utils::{
         TimestampMs, UrlWithTrailingSlash,
@@ -367,7 +367,7 @@ pub struct PackageRecord {
     pub arch: Option<String>,
 
     /// The build string of the package
-    pub build: String,
+    pub build: BuildString,
 
     /// The build number of the package
     pub build_number: BuildNumber,
@@ -735,7 +735,11 @@ impl AsRef<PackageRecord> for PackageRecord {
 impl PackageRecord {
     /// A simple helper method that constructs a `PackageRecord` with the bare
     /// minimum values.
-    pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
+    pub fn new(
+        name: PackageName,
+        version: impl Into<VersionWithSource>,
+        build: BuildString,
+    ) -> Self {
         Self {
             arch: None,
             build,
@@ -1041,7 +1045,7 @@ mod test {
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
         RepodataRevision, V3Packages,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
         repo_data::{compute_package_url, determine_subdir},
     };
 
@@ -1367,7 +1371,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("zebra"),
                 Version::major(1),
-                "h123".to_string(),
+                BuildString::new_unchecked("h123"),
             ),
         );
         packages.insert(
@@ -1375,7 +1379,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("apple"),
                 Version::major(2),
-                "h456".to_string(),
+                BuildString::new_unchecked("h456"),
             ),
         );
         packages.insert(
@@ -1383,7 +1387,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("mango"),
                 Version::major(1),
-                "h789".to_string(),
+                BuildString::new_unchecked("h789"),
             ),
         );
         packages.insert(
@@ -1391,7 +1395,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("banana"),
                 Version::major(3),
-                "habc".to_string(),
+                BuildString::new_unchecked("habc"),
             ),
         );
 
@@ -1401,7 +1405,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("xray"),
                 Version::major(1),
-                "h111".to_string(),
+                BuildString::new_unchecked("h111"),
             ),
         );
         conda_packages.insert(
@@ -1409,7 +1413,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("alpha"),
                 Version::major(2),
-                "h222".to_string(),
+                BuildString::new_unchecked("h222"),
             ),
         );
         conda_packages.insert(
@@ -1417,7 +1421,7 @@ mod test {
             PackageRecord::new(
                 PackageName::new_unchecked("omega"),
                 Version::major(3),
-                "h333".to_string(),
+                BuildString::new_unchecked("h333"),
             ),
         );
 
@@ -1473,7 +1477,7 @@ mod test {
             let mut r = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 version.parse::<Version>().unwrap(),
-                format!("{build}_{build_number}"),
+                BuildString::new_unchecked(format!("{build}_{build_number}")),
             );
             r.build_number = build_number;
             r.subdir = subdir.to_string();
@@ -1536,7 +1540,7 @@ mod test {
                 let mut r = PackageRecord::new(
                     PackageName::new_unchecked("polars"),
                     version.parse::<Version>().unwrap(),
-                    format!("{build}_{build_number}"),
+                    BuildString::new_unchecked(format!("{build}_{build_number}")),
                 );
                 r.build_number = build_number;
                 r.subdir = "linux-64".to_string();

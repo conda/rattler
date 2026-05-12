@@ -629,7 +629,7 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !build_string.matches(&other.build)
+            && !build_string.matches(other.build.as_str())
         {
             return false;
         }
@@ -702,7 +702,7 @@ impl Matches<PackageRecord> for MatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !build_string.matches(&other.build)
+            && !build_string.matches(other.build.as_str())
         {
             return false;
         }
@@ -809,7 +809,7 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !build_string.matches(&other.build_string)
+            && !build_string.matches(other.build_string.as_str())
         {
             return false;
         }
@@ -895,8 +895,11 @@ mod tests {
 
     use crate::{
         Flag, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError,
-        ParseMatchSpecOptions, ParseStrictness::*, RepoDataRecord, RepodataRevision, StringMatcher,
-        Version, match_spec::Matches, package::DistArchiveIdentifier,
+        ParseMatchSpecOptions,
+        ParseStrictness::*,
+        RepoDataRecord, RepodataRevision, StringMatcher, Version,
+        match_spec::Matches,
+        package::{BuildString, DistArchiveIdentifier},
         parse_mode::ParseStrictnessWithNameMatcher,
     };
     use insta::assert_snapshot;
@@ -1018,7 +1021,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from("foo_bar_py310_1"),
+                BuildString::new("foo_bar_py310_1").unwrap(),
             )
         };
 
@@ -1093,7 +1096,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from("foo_bar_py310_1"),
+                BuildString::new("foo_bar_py310_1").unwrap(),
             )
         };
         assert!(spec.matches(&matching_record));
@@ -1178,7 +1181,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from(""),
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1214,7 +1217,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from(""),
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1243,7 +1246,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from(""),
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1314,7 +1317,7 @@ mod tests {
         let virtual_package = crate::GenericVirtualPackage {
             name: PackageName::new_unchecked("foo"),
             version: Version::from_str("1.0").unwrap(),
-            build_string: String::from("py37_0"),
+            build_string: crate::package::BuildString::new("py37_0").unwrap(),
         };
 
         let spec = MatchSpec::from_str(spec_str, Strict).unwrap();
@@ -1397,17 +1400,17 @@ mod tests {
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("13.0").unwrap(),
-            String::from(""),
+            BuildString::default(),
         )));
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("11.0").unwrap(),
-            String::from(""),
+            BuildString::default(),
         )));
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            String::from(""),
+            BuildString::default(),
         )));
 
         let spec = MatchSpec::from_str(
@@ -1421,13 +1424,13 @@ mod tests {
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            String::from(""),
+            BuildString::default(),
         )));
         assert!(spec.matches(&{
             let mut record = PackageRecord::new(
                 PackageName::from_str("foo-bar").unwrap(),
                 Version::from_str("12.0").unwrap(),
-                String::from(""),
+                BuildString::default(),
             );
             record.license = Some("MIT".into());
             record

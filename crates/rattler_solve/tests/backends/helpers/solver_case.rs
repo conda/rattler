@@ -313,7 +313,7 @@ impl PackageFingerprint {
         Self {
             name: record.package_record.name.as_normalized().to_string(),
             version: record.package_record.version.as_str().to_string(),
-            build: record.package_record.build.clone(),
+            build: record.package_record.build.to_string(),
             build_number: record.package_record.build_number,
             channel: record.channel.clone(),
             subdir: record.package_record.subdir.clone(),
