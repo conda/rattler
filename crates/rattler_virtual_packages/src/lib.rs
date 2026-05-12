@@ -51,7 +51,7 @@ use archspec::cpu::Microarchitecture;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use rattler_conda_types::{
-    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
+    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version, package::BuildString,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -334,7 +334,7 @@ impl From<VirtualPackage> for GenericVirtualPackage {
             VirtualPackage::Unix => GenericVirtualPackage {
                 name: PackageName::new_unchecked("__unix"),
                 version: Version::major(0),
-                build_string: "0".into(),
+                build_string: BuildString::new_unchecked("0"),
             },
             VirtualPackage::Win(windows) => windows.into(),
             VirtualPackage::Linux(linux) => linux.into(),
@@ -454,7 +454,7 @@ impl From<Linux> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__linux"),
             version: linux.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }
@@ -518,7 +518,7 @@ impl From<LibC> for GenericVirtualPackage {
             .try_into()
             .unwrap(),
             version: libc.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }
@@ -585,7 +585,7 @@ impl From<Cuda> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__cuda"),
             version: cuda.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }
@@ -725,7 +725,7 @@ impl From<Archspec> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__archspec"),
             version: Version::major(1),
-            build_string: archspec.to_string(),
+            build_string: BuildString::new_unchecked(archspec.to_string()),
         }
     }
 }
@@ -774,7 +774,7 @@ impl From<Osx> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__osx"),
             version: osx.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }
@@ -828,7 +828,7 @@ impl From<Windows> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__win"),
             version: windows.version.unwrap_or_else(|| Version::major(0)),
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }

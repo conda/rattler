@@ -6,7 +6,7 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, VersionWithSource,
-    package::{IndexJson, PackageFile},
+    package::{BuildString, IndexJson, PackageFile},
     utils::TimestampMs,
 };
 use rattler_package_streaming::seek::read_package_file;
@@ -128,12 +128,12 @@ impl PyIndexJson {
     /// The build string of the package.
     #[getter]
     pub fn build(&self) -> String {
-        self.inner.build.clone()
+        self.inner.build.to_string()
     }
 
     #[setter]
     pub fn set_build(&mut self, build: String) {
-        self.inner.build = build;
+        self.inner.build = BuildString::new_unchecked(build);
     }
 
     /// The build number of the package. This is also included in the build string.

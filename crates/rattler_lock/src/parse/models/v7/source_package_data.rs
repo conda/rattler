@@ -5,7 +5,7 @@ use std::{
 
 use rattler_conda_types::{
     BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
-    package::RunExportsJson,
+    package::{BuildString, RunExportsJson},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -48,8 +48,8 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
 
-    #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub build: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "BuildString::is_empty")]
+    pub build: Cow<'a, BuildString>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub build_number: BuildNumber,
 
@@ -240,7 +240,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: None,
                 subdir: None,
-                build: Cow::Borrowed(""),
+                build: Cow::Owned(BuildString::default()),
                 build_number: 0,
                 noarch: NoArchType::default(),
                 variants,

@@ -6,7 +6,7 @@ use std::{
 use rattler_conda_types::{
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
-    package::{DistArchiveIdentifier, RunExportsJson},
+    package::{BuildString, DistArchiveIdentifier, RunExportsJson},
     utils::TimestampMs,
 };
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
@@ -60,7 +60,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<Cow<'a, str>>,
+    pub build: Option<Cow<'a, BuildString>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_number: Option<BuildNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,14 +137,15 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
         let derived = LocationDerivedFields::new(&value.location);
-        let build = value
+        let build: BuildString = value
             .build
             .map(Cow::into_owned)
-            .or_else(|| derived.build.clone())
+            .or_else(|| derived.build.clone().map(BuildString::new_unchecked))
             .unwrap_or_default();
+        let build_str = build.to_string();
         let build_number = value
             .build_number
-            .or_else(|| derived_fields::derive_build_number_from_build(&build))
+            .or_else(|| derived_fields::derive_build_number_from_build(&build_str))
             .unwrap_or(0);
         let subdir = value
             .subdir
@@ -155,7 +156,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             || {
                 derived_fields::derive_noarch_type(
                     derived.subdir.as_deref().unwrap_or(&subdir),
-                    derived.build.as_deref().unwrap_or(&build),
+                    derived.build.as_deref().unwrap_or(&build_str),
                 )
             },
             Cow::into_owned,
@@ -242,11 +243,12 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
     fn from(value: &'a CondaBinaryData) -> Self {
         let package_record = &value.package_record;
         let derived = LocationDerivedFields::new(&value.location);
+        let build_str = package_record.build.to_string();
         let derived_build_number =
-            derived_fields::derive_build_number_from_build(&package_record.build).unwrap_or(0);
+            derived_fields::derive_build_number_from_build(&build_str).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
             derived.subdir.as_deref().unwrap_or(&package_record.subdir),
-            derived.build.as_deref().unwrap_or(&package_record.build),
+            derived.build.as_deref().unwrap_or(&build_str),
         );
 
         let normalized_channel = value
@@ -263,9 +265,8 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             version: (Some(package_record.version.as_str())
                 != derived.version.as_ref().map(VersionWithSource::as_str))
             .then_some(Cow::Borrowed(&package_record.version)),
-            build: (package_record.build.as_str()
-                != derived.build.as_ref().map_or("", |s| s.as_str()))
-            .then_some(Cow::Borrowed(&package_record.build)),
+            build: (build_str.as_str() != derived.build.as_deref().unwrap_or(""))
+                .then_some(Cow::Borrowed(&package_record.build)),
             build_number: (package_record.build_number != derived_build_number)
                 .then_some(package_record.build_number),
             subdir: (Some(package_record.subdir.as_str()) != derived.subdir.as_deref())

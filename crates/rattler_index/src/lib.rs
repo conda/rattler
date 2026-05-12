@@ -1788,7 +1788,8 @@ mod tests {
     use indexmap::IndexMap;
     use rattler_conda_types::Version;
     use rattler_conda_types::{
-        PackageName, UrlOrPath, WhlPackageRecord, package::ArchiveIdentifier,
+        PackageName, UrlOrPath, WhlPackageRecord,
+        package::{ArchiveIdentifier, BuildString},
     };
 
     use super::*;
@@ -1799,7 +1800,7 @@ mod tests {
         let package_record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             Version::from_str("1.0").unwrap(),
-            "py_0".to_string(),
+            BuildString::new("py_0").unwrap(),
         );
         let wheel_url = UrlOrPath::Path("demo-1.0-py_0.whl".to_string());
 
