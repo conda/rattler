@@ -208,9 +208,7 @@ impl GatewayBuilder {
             (Some(client), tp) => {
                 if tp.is_some() {
                     tracing::warn!(
-                        "with_trusted_publishing was set alongside with_client; the minted \
-                        bearer token will not be applied because the caller-supplied client's \
-                        middleware chain is opaque. Build a client that includes \
+                        "with_trusted_publishing was set alongside with_client; Build a client that includes \
                         TrustedPublishingMiddleware yourself."
                     );
                 }
