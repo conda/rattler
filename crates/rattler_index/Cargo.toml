@@ -24,6 +24,7 @@ rustls = [
   "rattler_package_streaming/rustls",
   "rattler_networking/rustls",
   "rattler_s3?/rustls",
+  "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
 rattler_config = ["dep:rattler_config"]
@@ -47,7 +48,6 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = [
   "services-fs",
-  "reqwest-rustls-tls",
   "layers-retry",
 ], default-features = false }
 rattler_config = { workspace = true, optional = true }

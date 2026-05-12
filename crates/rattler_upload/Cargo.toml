@@ -20,6 +20,7 @@ rustls = [
   "rattler_networking/rustls",
   "rattler_package_streaming/rustls",
   "sigstore-sign?/rustls",
+  "opendal?/reqwest-rustls-tls",
 ]
 native-tls = [
   "reqwest/native-tls",
@@ -49,7 +50,6 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, optional = true, default-features = false, features = [
   "services-s3",
-  "reqwest-rustls-tls",
 ] }
 reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
