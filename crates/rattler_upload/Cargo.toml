@@ -49,6 +49,7 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, optional = true, default-features = false, features = [
   "services-s3",
+  "reqwest-rustls-tls",
 ] }
 reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
