@@ -3,8 +3,8 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Flag, NoArchType, PackageRecord, RepoDataRecord, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use url::Url;
 

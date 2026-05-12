@@ -1,13 +1,13 @@
 use std::{
     cmp::Ordering,
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
 };
 
 use futures::future::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::Version;
 use resolvo::{
-    utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+    Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId, utils::Pool,
 };
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};

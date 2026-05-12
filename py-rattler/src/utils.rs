@@ -1,5 +1,5 @@
 use pyo3::prelude::PyBytesMethods;
-use pyo3::{exceptions::PyValueError, types::PyBytes, Bound, PyErr};
+use pyo3::{Bound, PyErr, exceptions::PyValueError, types::PyBytes};
 use rattler_digest::{Md5Hash, Sha256Hash};
 
 pub fn sha256_from_pybytes(bytes: Bound<'_, PyBytes>) -> Result<Sha256Hash, PyErr> {

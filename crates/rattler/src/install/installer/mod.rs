@@ -13,7 +13,7 @@ use std::{
 };
 
 pub use error::InstallerError;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, stream::FuturesUnordered};
 #[cfg(feature = "indicatif")]
 pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
@@ -22,18 +22,18 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    prefix_record::Link, MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord,
-    RepoDataRecord,
+    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
+    prefix_record::Link,
 };
-use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
+use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rayon::prelude::*;
 pub use reporter::Reporter;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    unlink_package, AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions,
-    Prefix, Transaction,
+    AppleCodeSignBehavior, ExternalSymlinkPolicy, InstallDriver, InstallOptions, Prefix,
+    Transaction, unlink_package,
 };
 use crate::{
     default_cache_dir,
@@ -612,10 +612,10 @@ impl Installer {
             let prefix = &prefix;
             let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
-                if let Some(reporter) = &reporter {
-                    if operation.record_to_remove().is_none() {
-                        reporter.on_transaction_operation_start(operation_idx);
-                    }
+                if let Some(reporter) = &reporter
+                    && operation.record_to_remove().is_none()
+                {
+                    reporter.on_transaction_operation_start(operation_idx);
                 }
 
                 // Start populating the cache with the package if it's not already there.
@@ -684,10 +684,10 @@ impl Installer {
                         reporter.on_link_complete(index);
                     }
                 }
-                if let Some(reporter) = &reporter {
-                    if operation.record_to_install().is_some() {
-                        reporter.on_transaction_operation_complete(operation_idx);
-                    }
+                if let Some(reporter) = &reporter
+                    && operation.record_to_install().is_some()
+                {
+                    reporter.on_transaction_operation_complete(operation_idx);
                 }
 
                 Ok::<_, InstallerError>(())
@@ -1014,7 +1014,7 @@ mod tests {
 
     use super::*;
     use rattler_conda_types::{
-        package::IndexJson, prefix::Prefix, MatchSpec, PackageName, ParseStrictness::Strict,
+        MatchSpec, PackageName, ParseStrictness::Strict, package::IndexJson, prefix::Prefix,
     };
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
@@ -1315,7 +1315,8 @@ mod tests {
         // The package should now have the requested_specs cleared (set to empty)
         assert!(
             updated_record.requested_specs.is_empty(),
-            "Updated installation without specs should clear requested_specs, got nonempty record requested_specs: {:#?}", updated_record.requested_specs
+            "Updated installation without specs should clear requested_specs, got nonempty record requested_specs: {:#?}",
+            updated_record.requested_specs
         );
     }
 

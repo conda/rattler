@@ -698,7 +698,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
-    use crate::shell::{self, native_path_to_unix, ShellEnum};
+    use crate::shell::{self, ShellEnum, native_path_to_unix};
 
     #[test]
     #[cfg(unix)]

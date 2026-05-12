@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
 #[derive(Clone, Debug)]

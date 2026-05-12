@@ -1,8 +1,8 @@
 //! Read authentication credentials from `.netrc` files.
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
@@ -174,7 +174,9 @@ mod tests {
         netrc.flush().unwrap();
 
         let old_netrc = env::var("NETRC");
-        env::set_var("NETRC", path.as_os_str());
+        unsafe {
+            env::set_var("NETRC", path.as_os_str());
+        }
 
         let storage = NetRcStorage::from_env().unwrap();
 
@@ -188,10 +190,12 @@ mod tests {
 
         assert_eq!(storage.get("test_unknown").unwrap(), None);
 
-        if let Ok(netrc) = old_netrc {
-            env::set_var("NETRC", netrc);
-        } else {
-            env::remove_var("NETRC");
+        unsafe {
+            if let Ok(netrc) = old_netrc {
+                env::set_var("NETRC", netrc);
+            } else {
+                env::remove_var("NETRC");
+            }
         }
     }
 

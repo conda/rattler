@@ -5,14 +5,14 @@ use std::{
     sync::OnceLock,
 };
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use url::Url;
 
 use crate::{
-    authentication_storage::AuthenticationStorageError, oauth_refresh, Authentication,
-    AuthenticationStorage,
+    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
+    oauth_refresh,
 };
 
 /// `reqwest` middleware to authenticate requests

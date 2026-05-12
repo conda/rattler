@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
 use serde::{
+    Deserializer, Serializer,
     de::{Error, MapAccess, Visitor},
     ser::SerializeMap,
-    Deserializer, Serializer,
 };
 
 use crate::{MatchSpec, NamedChannelOrUrl, ParseStrictness};

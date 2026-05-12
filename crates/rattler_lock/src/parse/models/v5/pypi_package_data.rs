@@ -4,7 +4,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 
-use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
+use crate::{PackageHashes, UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw};
 
 /// This struct is similar to [`crate::parse::models::v6::PypiPackageDataModel`] but used for
 /// the V5 version of the lock file format.

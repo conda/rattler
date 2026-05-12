@@ -121,7 +121,7 @@ pub fn validate_package_directory(
             match PathsJson::from_deprecated_package_directory(package_dir) {
                 Ok(paths) => paths,
                 Err(e) if e.kind() == ErrorKind::NotFound => {
-                    return Err(PackageValidationError::MetadataMissing)
+                    return Err(PackageValidationError::MetadataMissing);
                 }
                 Err(e) => return Err(PackageValidationError::ReadDeprecatedPathsJsonError(e)),
             }
@@ -293,8 +293,8 @@ mod test {
     use url::Url;
 
     use super::{
-        validate_package_directory, validate_package_directory_from_paths,
         PackageEntryValidationError, PackageValidationError, ValidationMode,
+        validate_package_directory, validate_package_directory_from_paths,
     };
 
     #[rstest]

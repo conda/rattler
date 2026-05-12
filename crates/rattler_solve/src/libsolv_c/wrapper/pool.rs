@@ -66,7 +66,7 @@ impl Drop for Pool {
 type BoxedLogCallback = Box<dyn FnMut(&str, i32) + 'static>;
 
 /// The callback that is actually registered on the pool (it must be a function pointer)
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
     user_data: *mut c_void,
@@ -335,7 +335,8 @@ mod test {
             "イロハニホヘト チリヌルヲ ワカヨタレソ ツネナラム ウヰノオクヤマ ケフコエテ アサキユメミシ ヱヒモセスン",
             "Pchnąć w tę łódź jeża lub ośm skrzyń fig",
             "В чащах юга жил бы цитрус? Да, но фальшивый экземпляр!",
-            "Съешь же ещё этих мягких французских булок да выпей чаю"];
+            "Съешь же ещё этих мягких французских булок да выпей чаю",
+        ];
 
         let pool = Pool::default();
         for in_s in strings {

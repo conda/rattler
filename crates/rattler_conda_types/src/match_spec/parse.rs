@@ -1,39 +1,38 @@
 use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
+    Finish, IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
     character::complete::{char, multispace0, multispace1, one_of, space0},
     combinator::{opt, recognize},
-    error::{context, ContextError, ParseError},
+    error::{ContextError, ParseError, context},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
-    Finish, IResult, Parser,
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use smallvec::SmallVec;
 use thiserror::Error;
 use typed_path::Utf8TypedPath;
 use url::Url;
 
 use super::{
-    matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
+    matcher::{StringMatcher, StringMatcherParseError},
 };
 use crate::match_spec::condition::parse_condition;
 use crate::{
+    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
+    ParseStrictness, ParseVersionError, Platform, VersionSpec,
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     flags::is_valid_matchspec_flag,
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::CondaArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
-        is_start_of_version_constraint,
+        ParseVersionSpecError, is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
-        ParseVersionSpecError,
     },
-    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-    ParseStrictness, ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -110,7 +109,9 @@ pub enum ParseMatchSpecError {
     MoreThanOneSemicolon,
 
     /// Deprecated `; if` syntax used
-    #[error("the '; if' syntax for conditional dependencies is deprecated, use '[when=\"...\"]' bracket syntax instead")]
+    #[error(
+        "the '; if' syntax for conditional dependencies is deprecated, use '[when=\"...\"]' bracket syntax instead"
+    )]
     DeprecatedIfSyntax,
 
     /// Invalid condition in match spec
@@ -122,11 +123,15 @@ pub enum ParseMatchSpecError {
     InvalidFlagMatcher(String),
 
     /// Only exact package name matchers are allowed but a glob was provided
-    #[error("\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     OnlyExactPackageNameMatchersAllowedGlob(String),
 
     /// Only exact package name matchers are allowed but a regex was provided
-    #[error("\"{0}\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "\"{0}\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     OnlyExactPackageNameMatchersAllowedRegex(String),
 }
 
@@ -893,25 +898,25 @@ pub(crate) fn matchspec_parser(
     // TODO: What is this? I've never seen it
 
     // 4. Parse as url
-    if nameless_match_spec.url.is_none() {
-        if let Some(url) = parse_url_like(&input)? {
-            let archive = CondaArchiveIdentifier::try_from_url(&url);
-            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
+    if nameless_match_spec.url.is_none()
+        && let Some(url) = parse_url_like(&input)?
+    {
+        let archive = CondaArchiveIdentifier::try_from_url(&url);
+        let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
-            if let Some(name) = name {
-                // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-                // information. e.g. when a version is provided in the url is not the
-                // actual version this might be a problem when solving.
-                return Ok(MatchSpec {
-                    url: Some(url),
-                    name,
-                    ..Default::default()
-                });
-            } else {
-                // TODO: This should also work without a proper name from the url filename
-                // If we can't figure out the name from the URL, return an error
-                return Err(ParseMatchSpecError::MissingPackageName);
-            }
+        if let Some(name) = name {
+            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+            // information. e.g. when a version is provided in the url is not the
+            // actual version this might be a problem when solving.
+            return Ok(MatchSpec {
+                url: Some(url),
+                name,
+                ..Default::default()
+            });
+        } else {
+            // TODO: This should also work without a proper name from the url filename
+            // If we can't figure out the name from the URL, return an error
+            return Err(ParseMatchSpecError::MissingPackageName);
         }
     }
 
@@ -1023,21 +1028,21 @@ mod tests {
 
     use assert_matches::assert_matches;
     use indexmap::IndexMap;
-    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+    use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
     use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
     use url::Url;
 
     use super::{
-        parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
-        unescape_string, BracketVec, MatchSpec, ParseMatchSpecError,
+        BracketVec, MatchSpec, ParseMatchSpecError, parse_channel_and_subdir,
+        split_version_and_build, strip_brackets, strip_package_name, unescape_string,
     };
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions, ParseStrictness,
-        ParseStrictness::*, Version, VersionSpec,
+        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
+        ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version, VersionSpec,
+        match_spec::parse::parse_bracket_list,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1661,7 +1666,7 @@ mod tests {
 
     #[test]
     fn test_license_family_matching() {
-        use crate::{match_spec::Matches, PackageName, PackageRecord, Version};
+        use crate::{PackageName, PackageRecord, Version, match_spec::Matches};
 
         let mut record = PackageRecord::new(
             PackageName::from_str("numpy").unwrap(),
@@ -2152,11 +2157,13 @@ mod tests {
         .unwrap();
 
         assert_eq!(spec.extras, Some(vec!["bar".to_string()]));
-        assert!(MatchSpec::from_str(
-            "foo[extras=[bar,baz]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true)
-        )
-        .is_err());
+        assert!(
+            MatchSpec::from_str(
+                "foo[extras=[bar,baz]",
+                ParseMatchSpecOptions::strict().with_experimental_extras(true)
+            )
+            .is_err()
+        );
     }
 
     #[test]

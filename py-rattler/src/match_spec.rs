@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::{borrow::Borrow, str::FromStr};
 
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageNameMatcher, ParseMatchSpecOptions};
 
 use crate::{

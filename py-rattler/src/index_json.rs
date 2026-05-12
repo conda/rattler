@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
 use pyo3::{
-    exceptions::PyValueError, pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python,
+    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
+    Flag, VersionWithSource,
     package::{IndexJson, PackageFile},
     utils::TimestampMs,
-    Flag, VersionWithSource,
 };
 use rattler_package_streaming::seek::read_package_file;
 use url::Url;

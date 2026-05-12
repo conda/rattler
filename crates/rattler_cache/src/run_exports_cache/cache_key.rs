@@ -1,4 +1,4 @@
-use rattler_conda_types::{package::CondaArchiveIdentifier, PackageRecord};
+use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
 use rattler_digest::{Md5Hash, Sha256Hash};
 use std::fmt::{Display, Formatter};
 

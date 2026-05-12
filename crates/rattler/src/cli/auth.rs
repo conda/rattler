@@ -5,9 +5,9 @@ pub mod oauth;
 
 use clap::Parser;
 use rattler_networking::{
-    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
+    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
 };
-use reqwest::{header::CONTENT_TYPE, Client};
+use reqwest::{Client, header::CONTENT_TYPE};
 use serde_json::json;
 use thiserror;
 use url::Url;
@@ -555,7 +555,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 mod tests {
     use mockito::Server;
     use rattler_networking::{
-        authentication_storage::backends::memory::MemoryStorage, AuthenticationStorage,
+        AuthenticationStorage, authentication_storage::backends::memory::MemoryStorage,
     };
     use serde_json::json;
     use temp_env::async_with_vars;

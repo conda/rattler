@@ -12,17 +12,17 @@ use super::{
     add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
 };
 use crate::{
+    GatewayError, Reporter,
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{
         error::SubdirNotFoundError,
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    GatewayError, Reporter,
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
-use http::{header::CACHE_CONTROL, HeaderValue};
+use http::{HeaderValue, header::CACHE_CONTROL};
 use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;

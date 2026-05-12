@@ -8,23 +8,23 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::{Dictionary, Value};
-use rattler_conda_types::{menuinst::MacOsTracker, Platform};
+use rattler_conda_types::{Platform, menuinst::MacOsTracker};
 use rattler_shell::{
     activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use sha2::{Digest as _, Sha256};
 
-use crate::{render::replace_placeholders, utils::slugify};
 use crate::{
+    MenuInstError, MenuMode,
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString},
     schema::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
     utils::{log_output, run_pre_create_command},
-    MenuInstError, MenuMode,
 };
+use crate::{render::replace_placeholders, utils::slugify};
 use std::collections::HashMap;
 
 pub fn quote_args<I, S>(args: I) -> Vec<String>
@@ -900,7 +900,7 @@ fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
+    use crate::{MenuMode, schema::MenuInstSchema, test::test_data};
     use rattler_conda_types::menuinst::MacOsTracker;
     use std::{
         collections::HashMap,

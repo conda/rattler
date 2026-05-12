@@ -8,7 +8,7 @@ use crate::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
+use serde_with::{OneOrMany, Same, serde_as, skip_serializing_none};
 
 use url::Url;
 
@@ -110,7 +110,9 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        insta::assert_yaml_snapshot!(AboutJson::from_package_directory(package_dir.path()).unwrap());
+        insta::assert_yaml_snapshot!(
+            AboutJson::from_package_directory(package_dir.path()).unwrap()
+        );
     }
 
     #[test]

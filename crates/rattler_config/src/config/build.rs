@@ -1,5 +1,5 @@
 use rattler_conda_types::{compression_level::CompressionLevel, package::CondaArchiveType};
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Error};
 use std::str::FromStr;
 
 use crate::config::{Config, MergeError, ValidationError};

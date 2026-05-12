@@ -2,12 +2,12 @@
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::CondaArchiveIdentifier;
 use crate::{
-    build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
-    RepodataRevision, VersionSpec,
+    GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord, RepodataRevision,
+    VersionSpec, build_spec::BuildNumberSpec,
 };
 use itertools::Itertools;
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
@@ -485,46 +485,46 @@ pub trait Matches<T> {
 impl Matches<PackageRecord> for NamelessMatchSpec {
     /// Match a [`NamelessMatchSpec`] against a [`PackageRecord`]
     fn matches(&self, other: &PackageRecord) -> bool {
-        if let Some(spec) = self.version.as_ref() {
-            if !spec.matches(&other.version) {
-                return false;
-            }
+        if let Some(spec) = self.version.as_ref()
+            && !spec.matches(&other.version)
+        {
+            return false;
         }
 
-        if let Some(build_string) = self.build.as_ref() {
-            if !build_string.matches(&other.build) {
-                return false;
-            }
+        if let Some(build_string) = self.build.as_ref()
+            && !build_string.matches(&other.build)
+        {
+            return false;
         }
 
-        if let Some(build_number) = self.build_number.as_ref() {
-            if !build_number.matches(&other.build_number) {
-                return false;
-            }
+        if let Some(build_number) = self.build_number.as_ref()
+            && !build_number.matches(&other.build_number)
+        {
+            return false;
         }
 
-        if let Some(md5_spec) = self.md5.as_ref() {
-            if Some(md5_spec) != other.md5.as_ref() {
-                return false;
-            }
+        if let Some(md5_spec) = self.md5.as_ref()
+            && Some(md5_spec) != other.md5.as_ref()
+        {
+            return false;
         }
 
-        if let Some(sha256_spec) = self.sha256.as_ref() {
-            if Some(sha256_spec) != other.sha256.as_ref() {
-                return false;
-            }
+        if let Some(sha256_spec) = self.sha256.as_ref()
+            && Some(sha256_spec) != other.sha256.as_ref()
+        {
+            return false;
         }
 
-        if let Some(license) = self.license.as_ref() {
-            if Some(license) != other.license.as_ref() {
-                return false;
-            }
+        if let Some(license) = self.license.as_ref()
+            && Some(license) != other.license.as_ref()
+        {
+            return false;
         }
 
-        if let Some(license_family) = self.license_family.as_ref() {
-            if Some(license_family) != other.license_family.as_ref() {
-                return false;
-            }
+        if let Some(license_family) = self.license_family.as_ref()
+            && Some(license_family) != other.license_family.as_ref()
+        {
+            return false;
         }
 
         if let Some(track_features) = self.track_features.as_ref() {
@@ -558,46 +558,46 @@ impl Matches<PackageRecord> for MatchSpec {
             return false;
         }
 
-        if let Some(spec) = self.version.as_ref() {
-            if !spec.matches(&other.version) {
-                return false;
-            }
+        if let Some(spec) = self.version.as_ref()
+            && !spec.matches(&other.version)
+        {
+            return false;
         }
 
-        if let Some(build_string) = self.build.as_ref() {
-            if !build_string.matches(&other.build) {
-                return false;
-            }
+        if let Some(build_string) = self.build.as_ref()
+            && !build_string.matches(&other.build)
+        {
+            return false;
         }
 
-        if let Some(build_number) = self.build_number.as_ref() {
-            if !build_number.matches(&other.build_number) {
-                return false;
-            }
+        if let Some(build_number) = self.build_number.as_ref()
+            && !build_number.matches(&other.build_number)
+        {
+            return false;
         }
 
-        if let Some(md5_spec) = self.md5.as_ref() {
-            if Some(md5_spec) != other.md5.as_ref() {
-                return false;
-            }
+        if let Some(md5_spec) = self.md5.as_ref()
+            && Some(md5_spec) != other.md5.as_ref()
+        {
+            return false;
         }
 
-        if let Some(sha256_spec) = self.sha256.as_ref() {
-            if Some(sha256_spec) != other.sha256.as_ref() {
-                return false;
-            }
+        if let Some(sha256_spec) = self.sha256.as_ref()
+            && Some(sha256_spec) != other.sha256.as_ref()
+        {
+            return false;
         }
 
-        if let Some(license) = self.license.as_ref() {
-            if Some(license) != other.license.as_ref() {
-                return false;
-            }
+        if let Some(license) = self.license.as_ref()
+            && Some(license) != other.license.as_ref()
+        {
+            return false;
         }
 
-        if let Some(license_family) = self.license_family.as_ref() {
-            if Some(license_family) != other.license_family.as_ref() {
-                return false;
-            }
+        if let Some(license_family) = self.license_family.as_ref()
+            && Some(license_family) != other.license_family.as_ref()
+        {
+            return false;
         }
 
         if let Some(track_features) = self.track_features.as_ref() {
@@ -627,10 +627,10 @@ impl Matches<PackageRecord> for MatchSpec {
 impl Matches<RepoDataRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`RepoDataRecord`]
     fn matches(&self, other: &RepoDataRecord) -> bool {
-        if let Some(url_spec) = self.url.as_ref() {
-            if url_spec != &other.url {
-                return false;
-            }
+        if let Some(url_spec) = self.url.as_ref()
+            && url_spec != &other.url
+        {
+            return false;
         }
 
         if !self.matches(&other.package_record) {
@@ -644,10 +644,10 @@ impl Matches<RepoDataRecord> for MatchSpec {
 impl Matches<RepoDataRecord> for NamelessMatchSpec {
     /// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`]
     fn matches(&self, other: &RepoDataRecord) -> bool {
-        if let Some(url_spec) = self.url.as_ref() {
-            if url_spec != &other.url {
-                return false;
-            }
+        if let Some(url_spec) = self.url.as_ref()
+            && url_spec != &other.url
+        {
+            return false;
         }
 
         if !self.matches(&other.package_record) {
@@ -665,16 +665,16 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
             return false;
         }
 
-        if let Some(spec) = self.version.as_ref() {
-            if !spec.matches(&other.version) {
-                return false;
-            }
+        if let Some(spec) = self.version.as_ref()
+            && !spec.matches(&other.version)
+        {
+            return false;
         }
 
-        if let Some(build_string) = self.build.as_ref() {
-            if !build_string.matches(&other.build_string) {
-                return false;
-            }
+        if let Some(build_string) = self.build.as_ref()
+            && !build_string.matches(&other.build_string)
+        {
+            return false;
         }
         true
     }
@@ -754,13 +754,13 @@ mod tests {
     use rstest::rstest;
     use std::str::FromStr;
 
-    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+    use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 
     use crate::{
-        match_spec::Matches, package::DistArchiveIdentifier,
-        parse_mode::ParseStrictnessWithNameMatcher, Flag, MatchSpec, NamelessMatchSpec,
-        PackageName, PackageRecord, ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::*,
-        RepoDataRecord, RepodataRevision, StringMatcher, Version,
+        Flag, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError,
+        ParseMatchSpecOptions, ParseStrictness::*, RepoDataRecord, RepodataRevision, StringMatcher,
+        Version, match_spec::Matches, package::DistArchiveIdentifier,
+        parse_mode::ParseStrictnessWithNameMatcher,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -1017,20 +1017,22 @@ mod tests {
 
         let spec = MatchSpec::from_str("foo 3.0.* foo[build='foobar']", Strict);
         assert!(spec.is_err());
-        assert!(spec
-            .unwrap_err()
-            .to_string()
-            .contains("multiple values for: build"));
+        assert!(
+            spec.unwrap_err()
+                .to_string()
+                .contains("multiple values for: build")
+        );
 
         let spec = MatchSpec::from_str(
             "foo 3.0.* [build=baz, fn='/home/foo.tar.bz2', build='foobar']",
             Strict,
         );
         assert!(spec.is_err());
-        assert!(spec
-            .unwrap_err()
-            .to_string()
-            .contains("multiple values for: build"));
+        assert!(
+            spec.unwrap_err()
+                .to_string()
+                .contains("multiple values for: build")
+        );
     }
 
     #[test]
@@ -1121,36 +1123,44 @@ mod tests {
 
     #[test]
     fn test_serialize_matchspec() {
-        let specs = ["mamba 1.0.* py37_0",
+        let specs = [
+            "mamba 1.0.* py37_0",
             "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
             "conda-forge/linux-64::pytest",
             "conda-forge/linux-64::pytest[version=1.0.*]",
             "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0, license=MIT]",
-            "conda-forge/linux-64::pytest ==1.2.3"];
+            "conda-forge/linux-64::pytest ==1.2.3",
+        ];
 
-        assert_snapshot!(specs
-            .into_iter()
-            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
-            .map(|s| s.to_string())
-            .format("\n")
-            .to_string());
+        assert_snapshot!(
+            specs
+                .into_iter()
+                .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+                .map(|s| s.to_string())
+                .format("\n")
+                .to_string()
+        );
     }
 
     #[test]
     fn test_serialize_json_matchspec() {
-        let specs = ["mamba 1.0.* py37_0",
+        let specs = [
+            "mamba 1.0.* py37_0",
             "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
             "conda-forge/linux-64::pytest",
             "conda-forge/linux-64::pytest[version=1.0.*]",
             "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
-            "conda-forge/linux-64::pytest ==1.2.3"];
+            "conda-forge/linux-64::pytest ==1.2.3",
+        ];
 
-        assert_snapshot!(specs
-            .into_iter()
-            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
-            .map(|s| serde_json::to_string(&s).unwrap())
-            .format("\n")
-            .to_string());
+        assert_snapshot!(
+            specs
+                .into_iter()
+                .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+                .map(|s| serde_json::to_string(&s).unwrap())
+                .format("\n")
+                .to_string()
+        );
     }
 
     #[rstest]

@@ -7,7 +7,7 @@ use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sigstore_sign::{oidc::IdentityToken, Attestation, SigningContext};
+use sigstore_sign::{Attestation, SigningContext, oidc::IdentityToken};
 use std::path::Path;
 
 /// Conda V1 predicate
@@ -143,8 +143,12 @@ async fn store_attestation_to_github(
         let body = response.text().await.into_diagnostic()?;
         let error_detail = match status.as_u16() {
             401 => "Authentication failed. Check your GitHub token.",
-            403 => "Permission denied. Ensure token has 'attestations:write' and repository allows attestations.",
-            404 => "Repository not found or attestations API unavailable. Ensure you're on a supported GitHub plan.",
+            403 => {
+                "Permission denied. Ensure token has 'attestations:write' and repository allows attestations."
+            }
+            404 => {
+                "Repository not found or attestations API unavailable. Ensure you're on a supported GitHub plan."
+            }
             422 => "Invalid attestation bundle format.",
             _ => "Unknown error storing attestation.",
         };

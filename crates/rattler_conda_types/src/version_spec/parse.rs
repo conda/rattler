@@ -1,20 +1,20 @@
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
     character::complete::char,
     combinator::opt,
     error::{ErrorKind, ParseError},
-    IResult, Parser,
 };
 use thiserror::Error;
 
 use crate::{
+    ParseStrictness, ParseVersionError, ParseVersionErrorKind,
     version::parse::version_parser,
     version_spec::{
-        constraint::Constraint, EqualityOperator, RangeOperator, StrictRangeOperator,
-        VersionOperators,
+        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+        constraint::Constraint,
     },
-    ParseStrictness, ParseVersionError, ParseVersionErrorKind,
 };
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]

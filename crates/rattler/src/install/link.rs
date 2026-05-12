@@ -3,8 +3,8 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
+use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -16,7 +16,7 @@ use std::fs::Permissions;
 use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+use super::apple_codesign::{AppleCodeSignBehavior, codesign};
 use super::{ExternalSymlinkPolicy, Prefix};
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
@@ -1370,7 +1370,7 @@ mod test {
 
     #[test]
     fn test_symlink_escape_rejected() {
-        use super::{symlink_to_destination, LinkFileError};
+        use super::{LinkFileError, symlink_to_destination};
 
         let tmp = tempfile::tempdir().unwrap();
         let prefix = tmp.path().join("prefix");

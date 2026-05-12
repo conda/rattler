@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_conda_types::{ChannelInfo, ChannelRelations, RepoData};
 
 use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};

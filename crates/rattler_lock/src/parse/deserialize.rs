@@ -7,22 +7,22 @@ use ahash::HashMapExt;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use rattler_conda_types::{PackageName, VersionWithSource};
-use serde::{de::Error, Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs};
+use serde::{Deserialize, Deserializer, de::Error};
+use serde_with::{DeserializeAs, serde_as};
 use serde_yaml::Value;
 
 use crate::{
-    file_format_version::FileFormatVersion,
-    parse::{
-        models::{self, legacy::LegacyCondaPackageData, v6, v7, v7::PackageSelector},
-        V5, V6, V7,
-    },
-    platform::{ParsePlatformError, PlatformData, PlatformName},
     Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
     EnvironmentPackages, LockFile, LockFileInner, LockedPackage, PackageHandle, PackageHashes,
     PackageIndex, ParseCondaLockError, PlatformIndex, PypiDistributionData, PypiIndexes,
     PypiPackageData, PypiSourceData, SelectorId, SelectorKind, SolveOptions, SourceData,
     SourceIdentifier, UrlOrPath, Verbatim,
+    file_format_version::FileFormatVersion,
+    parse::{
+        V5, V6, V7,
+        models::{self, legacy::LegacyCondaPackageData, v6, v7, v7::PackageSelector},
+    },
+    platform::{ParsePlatformError, PlatformData, PlatformName},
 };
 
 #[serde_as]
@@ -948,12 +948,11 @@ fn parse_from_lock<P>(
                         url::Url::parse("https://pypi.org/simple").expect("valid hard-coded URL")
                     });
                 for pkg in &resolved {
-                    if let LockedPackage::Pypi(p) = &mut packages[pkg.0] {
-                        if let Some(w) = p.as_wheel_mut() {
-                            if w.index_url.is_none() {
-                                w.index_url = Some(default_index.clone());
-                            }
-                        }
+                    if let LockedPackage::Pypi(p) = &mut packages[pkg.0]
+                        && let Some(w) = p.as_wheel_mut()
+                        && w.index_url.is_none()
+                    {
+                        w.index_url = Some(default_index.clone());
                     }
                 }
             }

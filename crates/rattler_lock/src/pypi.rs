@@ -1,7 +1,7 @@
 use crate::{PackageHashes, SourceData, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{PackageName, Requirement};
-use rattler_digest::{digest::Digest, Sha256};
+use rattler_digest::{Sha256, digest::Digest};
 use std::fs;
 use std::path::Path;
 

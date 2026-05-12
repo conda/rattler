@@ -14,18 +14,17 @@ use std::{
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url,
+    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
+    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord, compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
     },
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
-    de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
+    de::{Error, MapAccess, Visitor},
 };
 use serde_json::value::RawValue;
 use superslice::Ext;
@@ -1093,7 +1092,7 @@ mod test {
     use rstest::rstest;
 
     use super::{
-        load_repo_data_recursively, PackageFilename, PackageFormatSelection, SparseRepoData,
+        PackageFilename, PackageFormatSelection, SparseRepoData, load_repo_data_recursively,
     };
 
     fn test_dir() -> PathBuf {

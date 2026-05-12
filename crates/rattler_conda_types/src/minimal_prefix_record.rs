@@ -19,11 +19,11 @@ use hex;
 use itertools::Itertools;
 use memmap2::Mmap;
 use nom::{
+    IResult, Parser,
     bytes::complete::{tag, take_while},
     combinator::opt,
     multi::separated_list0,
     sequence::{delimited, preceded},
-    IResult, Parser,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
 
@@ -515,27 +515,25 @@ fn parse_field_value<'a>(
     match field_name {
         b"sha256" => {
             let (rest, value) = parse_json_string_content(input)?;
-            if let Ok(hex_str) = std::str::from_utf8(value) {
-                if let Ok(bytes) = hex::decode(hex_str) {
-                    if bytes.len() == 32 {
-                        fields.sha256 = Some(Sha256Hash::from(
-                            <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
-                        ));
-                    }
-                }
+            if let Ok(hex_str) = std::str::from_utf8(value)
+                && let Ok(bytes) = hex::decode(hex_str)
+                && bytes.len() == 32
+            {
+                fields.sha256 = Some(Sha256Hash::from(
+                    <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
+                ));
             }
             Ok((rest, ()))
         }
         b"md5" => {
             let (rest, value) = parse_json_string_content(input)?;
-            if let Ok(hex_str) = std::str::from_utf8(value) {
-                if let Ok(bytes) = hex::decode(hex_str) {
-                    if bytes.len() == 16 {
-                        fields.md5 = Some(Md5Hash::from(
-                            <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
-                        ));
-                    }
-                }
+            if let Ok(hex_str) = std::str::from_utf8(value)
+                && let Ok(bytes) = hex::decode(hex_str)
+                && bytes.len() == 16
+            {
+                fields.md5 = Some(Md5Hash::from(
+                    <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
+                ));
             }
             Ok((rest, ()))
         }

@@ -29,7 +29,7 @@ use std::{
 
 use bytes::Bytes;
 use opendal::{
-    raw::*, Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result,
+    Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result, raw::*,
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -43,13 +43,13 @@ const SCHEME_NAME: &str = "etag-memory";
 /// read").
 #[inline]
 fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
-    if let Some(if_match) = cond {
-        if if_match != current {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                format!("ETag mismatch{ctx}: expected {if_match}, got {current}"),
-            ));
-        }
+    if let Some(if_match) = cond
+        && if_match != current
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            format!("ETag mismatch{ctx}: expected {if_match}, got {current}"),
+        ));
     }
     Ok(())
 }
@@ -61,13 +61,13 @@ fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
 /// parameter adds context to error messages.
 #[inline]
 fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
-    if let Some(if_none_match) = cond {
-        if if_none_match == "*" || if_none_match == current {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                format!("if_none_match condition failed{ctx}"),
-            ));
-        }
+    if let Some(if_none_match) = cond
+        && (if_none_match == "*" || if_none_match == current)
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            format!("if_none_match condition failed{ctx}"),
+        ));
     }
     Ok(())
 }
@@ -79,13 +79,13 @@ fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<(
 /// provided timestamp.
 #[inline]
 fn check_if_unmodified_since(last_modified: Timestamp, cond: Option<Timestamp>) -> Result<()> {
-    if let Some(if_unmodified_since) = cond {
-        if last_modified > if_unmodified_since {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                "file was modified after if_unmodified_since",
-            ));
-        }
+    if let Some(if_unmodified_since) = cond
+        && last_modified > if_unmodified_since
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            "file was modified after if_unmodified_since",
+        ));
     }
     Ok(())
 }
@@ -351,13 +351,13 @@ impl Access for ETagMemoryBackend {
                 check_if_match(&entry.etag, args.if_match(), " on write")?;
 
                 // Check if_none_match for create-only semantics
-                if let Some(if_none_match) = args.if_none_match() {
-                    if if_none_match == "*" {
-                        return Err(Error::new(
-                            ErrorKind::ConditionNotMatch,
-                            "if_none_match: file already exists",
-                        ));
-                    }
+                if let Some(if_none_match) = args.if_none_match()
+                    && if_none_match == "*"
+                {
+                    return Err(Error::new(
+                        ErrorKind::ConditionNotMatch,
+                        "if_none_match: file already exists",
+                    ));
                 }
 
                 // Check if_not_exists for create-only semantics
@@ -435,19 +435,21 @@ impl Access for ETagMemoryBackend {
         for dir in directories.iter() {
             if prefix.is_empty() {
                 // List root level directories
-                if let Some(first) = dir.split('/').next() {
-                    if !first.is_empty() && seen.insert(first) {
-                        entries.push(ListEntry::dir(format!("{first}/")));
-                    }
+                if let Some(first) = dir.split('/').next()
+                    && !first.is_empty()
+                    && seen.insert(first)
+                {
+                    entries.push(ListEntry::dir(format!("{first}/")));
                 }
-            } else if let Some(ps) = &prefix_slash {
-                if let Some(stripped) = dir.strip_prefix(ps) {
-                    // List subdirectories under prefix
-                    if let Some(first) = stripped.split('/').next() {
-                        if !first.is_empty() && seen.insert(first) {
-                            entries.push(ListEntry::dir(format!("{first}/")));
-                        }
-                    }
+            } else if let Some(ps) = &prefix_slash
+                && let Some(stripped) = dir.strip_prefix(ps)
+            {
+                // List subdirectories under prefix
+                if let Some(first) = stripped.split('/').next()
+                    && !first.is_empty()
+                    && seen.insert(first)
+                {
+                    entries.push(ListEntry::dir(format!("{first}/")));
                 }
             }
         }

@@ -96,13 +96,17 @@ pub enum TrustedPublishingError {
         "Prefix.dev returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}"
     )]
     PrefixDev(StatusCode, String),
-    #[error("GitLab CI OIDC token not found. Make sure you have configured `id_tokens` in your .gitlab-ci.yml:\n\n\
+    #[error(
+        "GitLab CI OIDC token not found. Make sure you have configured `id_tokens` in your .gitlab-ci.yml:\n\n\
         job_name:\n  \
           id_tokens:\n    \
             PREFIX_ID_TOKEN:\n      \
-              aud: prefix.dev\n")]
+              aud: prefix.dev\n"
+    )]
     GitLabOidcTokenNotFound,
-    #[error("Google Cloud OIDC token retrieval failed. Make sure you are running in a Google Cloud environment (Cloud Build, Cloud Run, GCE, or GKE) with a service account attached.")]
+    #[error(
+        "Google Cloud OIDC token retrieval failed. Make sure you are running in a Google Cloud environment (Cloud Build, Cloud Run, GCE, or GKE) with a service account attached."
+    )]
     GoogleCloudOidcTokenNotFound,
 }
 

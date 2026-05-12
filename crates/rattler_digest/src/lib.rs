@@ -52,7 +52,7 @@ use std::{
     path::Path,
 };
 
-use blake2::{digest::consts::U32, Blake2b, Blake2bMac};
+use blake2::{Blake2b, Blake2bMac, digest::consts::U32};
 pub use digest;
 use digest::{Digest, Output};
 pub use md5::Md5;

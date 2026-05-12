@@ -1,12 +1,12 @@
 //! The upload module provides the package upload functionality.
 
 use crate::{
-    tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, CloudsmithData, QuetzData,
+    AnacondaData, ArtifactoryData, CloudsmithData, QuetzData, tool_configuration::APP_USER_AGENT,
 };
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
-use indicatif::{style::TemplateError, HumanBytes, ProgressState};
-use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
+use indicatif::{HumanBytes, ProgressState, style::TemplateError};
+use reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use std::{
     fmt::Write,
     path::{Path, PathBuf},
@@ -21,7 +21,7 @@ use reqwest::{Method, StatusCode};
 use tracing::{info, warn};
 use url::Url;
 
-use crate::upload::package::{sha256_sum, ExtractedPackage};
+use crate::upload::package::{ExtractedPackage, sha256_sum};
 
 #[cfg(test)]
 pub(crate) mod test_utils;
@@ -42,7 +42,7 @@ pub use s3::upload_package_to_s3;
 
 pub use anaconda::AnacondaError;
 pub use cloudsmith::CloudsmithError;
-pub use prefix::{upload_package_to_prefix, PrefixUploadError};
+pub use prefix::{PrefixUploadError, upload_package_to_prefix};
 
 /// Returns the style to use for a progress bar that is currently in progress.
 fn default_bytes_style() -> Result<indicatif::ProgressStyle, TemplateError> {
@@ -473,7 +473,7 @@ async fn send_request(
 
 #[cfg(test)]
 mod test {
-    use axum::{http::StatusCode, Router};
+    use axum::{Router, http::StatusCode};
     use rattler_networking::AuthenticationStorage;
 
     use crate::upload::opt::{ArtifactoryData, QuetzData};

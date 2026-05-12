@@ -27,8 +27,9 @@ use rattler_networking::AuthenticationMiddleware;
 use rattler_networking::AuthenticationStorage;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
+    SolverImpl, SolverTask,
     libsolv_c::{self},
-    resolvo, SolverImpl, SolverTask,
+    resolvo,
 };
 use reqwest::Client;
 
