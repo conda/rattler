@@ -16,7 +16,7 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls-tls", "s3", "gcs", "oauth"]
+default = ["rustls", "s3", "gcs", "oauth"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
@@ -24,12 +24,12 @@ native-tls = [
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
 ]
-rustls-tls = [
+rustls = [
   "reqwest/rustls",
-  "rattler/rustls-tls",
-  "rattler_repodata_gateway/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_cache/rustls-tls",
+  "rattler/rustls",
+  "rattler_repodata_gateway/rustls",
+  "rattler_networking/rustls",
+  "rattler_cache/rustls",
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
