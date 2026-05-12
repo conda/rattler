@@ -15,7 +15,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
-    package::{DistArchiveIdentifier, IndexJson, PackageFile},
+    package::{BuildString, DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
 };
@@ -197,7 +197,7 @@ impl PyRecord {
             inner: RecordInner::Package(Arc::new(PackageRecord {
                 name: name.into(),
                 version: VersionWithSource::new(version.0.inner.clone(), version.1),
-                build,
+                build: BuildString::new_unchecked(build),
                 build_number,
                 arch,
                 platform,
@@ -372,12 +372,12 @@ impl PyRecord {
     /// The build string of the package.
     #[getter]
     pub fn build(&self) -> String {
-        self.as_package_record().build.clone()
+        self.as_package_record().build.to_string()
     }
 
     #[setter]
     pub fn set_build(&mut self, build: String) {
-        self.as_package_record_mut().build = build;
+        self.as_package_record_mut().build = BuildString::new_unchecked(build);
     }
 
     /// The build number of the package.
