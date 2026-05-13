@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.2...rattler_libsolv_c-v1.3.3) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
 ## [1.3.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.1...rattler_libsolv_c-v1.3.2) - 2026-04-30
 
 ### Other
