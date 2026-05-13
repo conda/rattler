@@ -3,11 +3,11 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_conda_types/match_spec/</div>condition.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::fmt::Display;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>nom::{
-<a href=#4 id=4 data-nosnippet>4</a>    branch::alt,
-<a href=#5 id=5 data-nosnippet>5</a>    bytes::complete::tag,
-<a href=#6 id=6 data-nosnippet>6</a>    character::complete::{char, multispace0},
-<a href=#7 id=7 data-nosnippet>7</a>    sequence::{delimited, preceded},
-<a href=#8 id=8 data-nosnippet>8</a>    IResult, Parser,
+<a href=#4 id=4 data-nosnippet>4</a>    IResult, Parser,
+<a href=#5 id=5 data-nosnippet>5</a>    branch::alt,
+<a href=#6 id=6 data-nosnippet>6</a>    bytes::complete::tag,
+<a href=#7 id=7 data-nosnippet>7</a>    character::complete::{char, multispace0},
+<a href=#8 id=8 data-nosnippet>8</a>    sequence::{delimited, preceded},
 <a href=#9 id=9 data-nosnippet>9</a>};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#11 id=11 data-nosnippet>11</a>

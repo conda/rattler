@@ -21,7 +21,7 @@
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>std::{collections::HashSet, sync::Arc};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::reporter::report_unsupported_repodata_revisions;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use crate</span>::{gateway::subdir_builder::SubdirBuilder, Reporter};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use crate</span>::{Reporter, gateway::subdir_builder::SubdirBuilder};
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub use </span>barrier_cell::BarrierCell;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub use </span>builder::{GatewayBuilder, MaxConcurrency};
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub use </span>channel_config::{ChannelConfig, SourceConfig};
@@ -39,7 +39,7 @@
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub use </span>run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 <a href=#38 id=38 data-nosnippet>38</a><span class="kw">pub use </span>source::{RepoDataSource, Source};
 <a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>subdir::Subdir;
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>tracing::{instrument, Level};
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>tracing::{Level, instrument};
 <a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>url::Url;
 <a href=#42 id=42 data-nosnippet>42</a>
 <a href=#43 id=43 data-nosnippet>43</a><span class="doccomment">/// Central access point for high level queries about
@@ -393,9 +393,9 @@
 <a href=#391 id=391 data-nosnippet>391</a>    <span class="kw">use </span>url::Url;
 <a href=#392 id=392 data-nosnippet>392</a>
 <a href=#393 id=393 data-nosnippet>393</a>    <span class="kw">use crate</span>::{
-<a href=#394 id=394 data-nosnippet>394</a>        fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
-<a href=#395 id=395 data-nosnippet>395</a>        DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
-<a href=#396 id=396 data-nosnippet>396</a>        UnsupportedRepodataRevision,
+<a href=#394 id=394 data-nosnippet>394</a>        DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
+<a href=#395 id=395 data-nosnippet>395</a>        UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
+<a href=#396 id=396 data-nosnippet>396</a>        utils::simple_channel_server::SimpleChannelServer,
 <a href=#397 id=397 data-nosnippet>397</a>    };
 <a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">use </span>rattler_conda_types::RepodataRevision;
 <a href=#399 id=399 data-nosnippet>399</a>
@@ -1028,7 +1028,7 @@
 <a href=#1026 id=1026 data-nosnippet>1026</a>    <span class="attr">#[test]
 <a href=#1027 id=1027 data-nosnippet>1027</a>    </span><span class="kw">fn </span>test_clear_sharded_disk_cache() {
 <a href=#1028 id=1028 data-nosnippet>1028</a>        <span class="kw">use </span><span class="kw">crate</span>::gateway::sharded_subdir::{
-<a href=#1029 id=1029 data-nosnippet>1029</a>            ShardedSubdir, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX,
+<a href=#1029 id=1029 data-nosnippet>1029</a>            REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedSubdir,
 <a href=#1030 id=1030 data-nosnippet>1030</a>        };
 <a href=#1031 id=1031 data-nosnippet>1031</a>
 <a href=#1032 id=1032 data-nosnippet>1032</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
@@ -1453,7 +1453,7 @@
 <a href=#1451 id=1451 data-nosnippet>1451</a>
 <a href=#1452 id=1452 data-nosnippet>1452</a>    <span class="kw">fn </span>make_test_record(name: <span class="kw-2">&amp;</span>str, version: <span class="kw-2">&amp;</span>str, subdir: <span class="kw-2">&amp;</span>str) -&gt; RepoDataRecord {
 <a href=#1453 id=1453 data-nosnippet>1453</a>        <span class="kw">use </span>rattler_conda_types::{
-<a href=#1454 id=1454 data-nosnippet>1454</a>            package::DistArchiveIdentifier, PackageRecord, VersionWithSource,
+<a href=#1454 id=1454 data-nosnippet>1454</a>            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
 <a href=#1455 id=1455 data-nosnippet>1455</a>        };
 <a href=#1456 id=1456 data-nosnippet>1456</a>
 <a href=#1457 id=1457 data-nosnippet>1457</a>        <span class="kw">let </span>package_record = PackageRecord {

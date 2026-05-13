@@ -8,8 +8,8 @@
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::{PackageName, Platform, PrefixRecord};
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use super</span>::{installer::result_record::ContentComparable, InstallationResultRecord};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::install::{python::PythonInfoError, PythonInfo};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use super</span>::{InstallationResultRecord, installer::result_record::ContentComparable};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::install::{PythonInfo, python::PythonInfoError};
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Error that occurred during creation of a Transaction
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
@@ -444,10 +444,10 @@
 <a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">use </span>std::collections::HashSet;
 <a href=#443 id=443 data-nosnippet>443</a>
 <a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">use </span>assert_matches::assert_matches;
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">use </span>rattler_conda_types::{prefix::Prefix, Platform};
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="kw">use </span>rattler_conda_types::{Platform, prefix::Prefix};
 <a href=#446 id=446 data-nosnippet>446</a>
 <a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">use </span><span class="kw">crate</span>::install::{
-<a href=#448 id=448 data-nosnippet>448</a>        test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,
+<a href=#448 id=448 data-nosnippet>448</a>        Transaction, TransactionOperation, test_utils::download_and_get_prefix_record,
 <a href=#449 id=449 data-nosnippet>449</a>    };
 <a href=#450 id=450 data-nosnippet>450</a>
 <a href=#451 id=451 data-nosnippet>451</a>    <span class="attr">#[tokio::test]

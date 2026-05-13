@@ -12,7 +12,7 @@
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">use </span>std::{sync::Arc, time::SystemTime};
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>opendal::{raw::Timestamp, Operator};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>opendal::{Operator, raw::Timestamp};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>rattler_networking::retry_policies::default_retry_policy;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>retry_policies::{RetryDecision, RetryPolicy};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>tokio::sync::RwLock;
@@ -98,7 +98,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>
 <a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(cached) = cached {
 <a href=#98 id=98 data-nosnippet>98</a>            <span class="comment">// Validate using ETag first (preferred)
-<a href=#99 id=99 data-nosnippet>99</a>            </span><span class="kw">if let </span>(<span class="prelude-val">Some</span>(cached_etag), <span class="prelude-val">Some</span>(<span class="kw-2">ref </span>current_etag)) = (<span class="kw-2">&amp;</span>cached.etag, <span class="kw-2">&amp;</span>current_etag) {
+<a href=#99 id=99 data-nosnippet>99</a>            </span><span class="kw">if let </span>(<span class="prelude-val">Some</span>(cached_etag), <span class="prelude-val">Some</span>(current_etag)) = (<span class="kw-2">&amp;</span>cached.etag, <span class="kw-2">&amp;</span>current_etag) {
 <a href=#100 id=100 data-nosnippet>100</a>                <span class="kw">if </span>cached_etag == current_etag {
 <a href=#101 id=101 data-nosnippet>101</a>                    <span class="macro">tracing::debug!</span>(<span class="string">"Cache hit for {} (etag validated)"</span>, path);
 <a href=#102 id=102 data-nosnippet>102</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(CacheResult::Hit(Box::new(cached.record)));

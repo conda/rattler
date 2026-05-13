@@ -6,20 +6,20 @@
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#7 id=7 data-nosnippet>7</a>    package::{DistArchiveIdentifier, RunExportsJson},
-<a href=#8 id=8 data-nosnippet>8</a>    utils::TimestampMs,
-<a href=#9 id=9 data-nosnippet>9</a>    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
-<a href=#10 id=10 data-nosnippet>10</a>    VersionWithSource,
+<a href=#7 id=7 data-nosnippet>7</a>    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
+<a href=#8 id=8 data-nosnippet>8</a>    VersionWithSource,
+<a href=#9 id=9 data-nosnippet>9</a>    package::{DistArchiveIdentifier, RunExportsJson},
+<a href=#10 id=10 data-nosnippet>10</a>    utils::TimestampMs,
 <a href=#11 id=11 data-nosnippet>11</a>};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>serde_with::serde_as;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>url::Url;
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use crate</span>::{
-<a href=#18 id=18 data-nosnippet>18</a>    conda::CondaBinaryData,
-<a href=#19 id=19 data-nosnippet>19</a>    utils::derived_fields::{<span class="self">self</span>, LocationDerivedFields},
-<a href=#20 id=20 data-nosnippet>20</a>    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
+<a href=#18 id=18 data-nosnippet>18</a>    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
+<a href=#19 id=19 data-nosnippet>19</a>    conda::CondaBinaryData,
+<a href=#20 id=20 data-nosnippet>20</a>    utils::derived_fields::{<span class="self">self</span>, LocationDerivedFields},
 <a href=#21 id=21 data-nosnippet>21</a>};
 <a href=#22 id=22 data-nosnippet>22</a>
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">fn </span>skip_variant_serialization(input: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'_</span>, BTreeMap&lt;String, VariantValue&gt;&gt;&gt;) -&gt; bool {

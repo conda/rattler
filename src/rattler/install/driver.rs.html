@@ -9,16 +9,16 @@
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>indexmap::IndexSet;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>itertools::Itertools;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>thiserror::Error;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use super</span>::{
-<a href=#16 id=16 data-nosnippet>16</a>    clobber_registry::{ClobberError, ClobberMode, ClobberRegistry, ClobberedPath},
-<a href=#17 id=17 data-nosnippet>17</a>    link_script::{PrePostLinkError, PrePostLinkResult},
-<a href=#18 id=18 data-nosnippet>18</a>    unlink::{recursively_remove_empty_directories, UnlinkError},
-<a href=#19 id=19 data-nosnippet>19</a>    Transaction, TransactionOperation,
+<a href=#16 id=16 data-nosnippet>16</a>    Transaction, TransactionOperation,
+<a href=#17 id=17 data-nosnippet>17</a>    clobber_registry::{ClobberError, ClobberMode, ClobberRegistry, ClobberedPath},
+<a href=#18 id=18 data-nosnippet>18</a>    link_script::{PrePostLinkError, PrePostLinkResult},
+<a href=#19 id=19 data-nosnippet>19</a>    unlink::{UnlinkError, recursively_remove_empty_directories},
 <a href=#20 id=20 data-nosnippet>20</a>};
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::install::link_script::LinkScriptError;
 <a href=#22 id=22 data-nosnippet>22</a>
@@ -306,10 +306,10 @@
 <a href=#304 id=304 data-nosnippet>304</a>            <span class="kw">let </span><span class="kw-2">mut </span>removed_directories = HashSet::new();
 <a href=#305 id=305 data-nosnippet>305</a>
 <a href=#306 id=306 data-nosnippet>306</a>            <span class="kw">for </span>paths <span class="kw">in </span>record.paths_data.paths.iter() {
-<a href=#307 id=307 data-nosnippet>307</a>                <span class="kw">if </span>paths.<span class="macro">path_type !</span>= PathType::Directory {
-<a href=#308 id=308 data-nosnippet>308</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = paths.relative_path.parent() {
-<a href=#309 id=309 data-nosnippet>309</a>                        removed_directories.insert(parent);
-<a href=#310 id=310 data-nosnippet>310</a>                    }
+<a href=#307 id=307 data-nosnippet>307</a>                <span class="kw">if </span>paths.<span class="macro">path_type !</span>= PathType::Directory
+<a href=#308 id=308 data-nosnippet>308</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(parent) = paths.relative_path.parent()
+<a href=#309 id=309 data-nosnippet>309</a>                {
+<a href=#310 id=310 data-nosnippet>310</a>                    removed_directories.insert(parent);
 <a href=#311 id=311 data-nosnippet>311</a>                }
 <a href=#312 id=312 data-nosnippet>312</a>            }
 <a href=#313 id=313 data-nosnippet>313</a>

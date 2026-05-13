@@ -185,8 +185,8 @@
 <a href=#183 id=183 data-nosnippet>183</a></span><span class="kw">mod </span>test {
 <a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">use </span>std::{future::IntoFuture, net::SocketAddr};
 <a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">use </span>axum::{extract::State, http::StatusCode, routing::get, Router};
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">use </span>reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">use </span>axum::{Router, extract::State, http::StatusCode, routing::get};
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">use </span>reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 <a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">use </span>url::Url;
 <a href=#189 id=189 data-nosnippet>189</a>
 <a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">use </span><span class="kw">crate</span>::MirrorMiddleware;

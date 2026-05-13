@@ -4,10 +4,10 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use crate</span>::{
-<a href=#5 id=5 data-nosnippet>5</a>    utils::derived_fields::{
-<a href=#6 id=6 data-nosnippet>6</a>        derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
-<a href=#7 id=7 data-nosnippet>7</a>    },
-<a href=#8 id=8 data-nosnippet>8</a>    UrlOrPath,
+<a href=#5 id=5 data-nosnippet>5</a>    UrlOrPath,
+<a href=#6 id=6 data-nosnippet>6</a>    utils::derived_fields::{
+<a href=#7 id=7 data-nosnippet>7</a>        derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
+<a href=#8 id=8 data-nosnippet>8</a>    },
 <a href=#9 id=9 data-nosnippet>9</a>};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_conda_types::package::{
 <a href=#11 id=11 data-nosnippet>11</a>    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
@@ -16,7 +16,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
 <a href=#15 id=15 data-nosnippet>15</a>    VersionWithSource,
 <a href=#16 id=16 data-nosnippet>16</a>};
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>serde::Deserialize;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>serde_with::serde_as;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>url::Url;

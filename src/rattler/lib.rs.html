@@ -54,7 +54,7 @@
 <a href=#52 id=52 data-nosnippet>52</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>get_repodata_record(package_path: <span class="kw">impl </span>AsRef&lt;std::path::Path&gt;) -&gt; RepoDataRecord {
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">use </span>std::fs;
 <a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">use </span>rattler_conda_types::{package::IndexJson, PackageRecord};
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">use </span>rattler_conda_types::{PackageRecord, package::IndexJson};
 <a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">use </span>rattler_digest::{Md5, Sha256};
 <a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">use </span>rattler_package_streaming::seek::read_package_file;
 <a href=#58 id=58 data-nosnippet>58</a>

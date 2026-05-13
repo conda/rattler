@@ -8,13 +8,13 @@
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>itertools::Itertools;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>serde::{Serialize, Serializer};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde_with::{serde_as, SerializeAs};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde_with::{SerializeAs, serde_as};
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use crate</span>::{
-<a href=#12 id=12 data-nosnippet>12</a>    file_format_version::FileFormatVersion,
-<a href=#13 id=13 data-nosnippet>13</a>    parse::{models::v7, models::v7::PackageSelector, V7},
-<a href=#14 id=14 data-nosnippet>14</a>    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
-<a href=#15 id=15 data-nosnippet>15</a>    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
+<a href=#12 id=12 data-nosnippet>12</a>    Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
+<a href=#13 id=13 data-nosnippet>13</a>    PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
+<a href=#14 id=14 data-nosnippet>14</a>    file_format_version::FileFormatVersion,
+<a href=#15 id=15 data-nosnippet>15</a>    parse::{V7, models::v7, models::v7::PackageSelector},
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">fn </span>selector_ids_to_package_selectors(ids: Vec&lt;SelectorId&gt;) -&gt; Vec&lt;PackageSelector&gt; {

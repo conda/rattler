@@ -2,8 +2,8 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_upload/upload/</div>cloudsmith.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>miette::IntoDiagnostic;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>reqwest::multipart::{Form, Part};
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>reqwest::Client;
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>reqwest::Client;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>reqwest::multipart::{Form, Part};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>serde::Deserialize;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>tracing::{debug, info};
 <a href=#7 id=7 data-nosnippet>7</a>
@@ -331,7 +331,7 @@
 <a href=#329 id=329 data-nosnippet>329</a></span><span class="kw">mod </span>test {
 <a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">use </span>std::net::SocketAddr;
 <a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">use </span>axum::{http::StatusCode, routing::post, Router};
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">use </span>axum::{Router, http::StatusCode, routing::post};
 <a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">use </span>url::Url;
 <a href=#334 id=334 data-nosnippet>334</a>
 <a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">use </span><span class="kw">super</span>::Cloudsmith;
@@ -387,8 +387,8 @@
 <a href=#385 id=385 data-nosnippet>385</a>
 <a href=#386 id=386 data-nosnippet>386</a>    <span class="attr">#[tokio::test]
 <a href=#387 id=387 data-nosnippet>387</a>    </span><span class="kw">async fn </span>test_cloudsmith_multipart_upload_flow() {
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">use </span>std::sync::Arc;
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">use </span>std::sync::Arc;
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
 <a href=#390 id=390 data-nosnippet>390</a>
 <a href=#391 id=391 data-nosnippet>391</a>        <span class="kw">let </span>addr = SocketAddr::new([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>].into(), <span class="number">0</span>);
 <a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr).<span class="kw">await</span>.unwrap();

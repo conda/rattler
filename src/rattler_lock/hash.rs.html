@@ -2,8 +2,8 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_lock/</div>hash.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::cmp::Ordering;
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>serde_with::skip_serializing_none;
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="doccomment">/// This implementation of the `Deserialize` trait for the `PackageHashes` struct
@@ -125,7 +125,7 @@
 <a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">_ </span>=&gt; {
 <a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(D::Error::custom(
 <a href=#125 id=125 data-nosnippet>125</a>                    <span class="string">"Expected `sha256` field `md5` field or both"</span>,
-<a href=#126 id=126 data-nosnippet>126</a>                ))
+<a href=#126 id=126 data-nosnippet>126</a>                ));
 <a href=#127 id=127 data-nosnippet>127</a>            }
 <a href=#128 id=128 data-nosnippet>128</a>        })
 <a href=#129 id=129 data-nosnippet>129</a>    }

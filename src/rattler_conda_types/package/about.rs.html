@@ -10,7 +10,7 @@
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>serde_json::Value;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>serde_with::{OneOrMany, Same, serde_as, skip_serializing_none};
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>url::Url;
 <a href=#14 id=14 data-nosnippet>14</a>
@@ -112,81 +112,83 @@
 <a href=#110 id=110 data-nosnippet>110</a>        .unwrap();
 <a href=#111 id=111 data-nosnippet>111</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
 <a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(AboutJson::from_package_directory(package_dir.path()).unwrap());
-<a href=#114 id=114 data-nosnippet>114</a>    }
-<a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="attr">#[test]
-<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub fn </span>test_reconstruct_about_json_mamba() {
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>package_dir = tempfile::tempdir().unwrap();
-<a href=#119 id=119 data-nosnippet>119</a>
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file(
-<a href=#121 id=121 data-nosnippet>121</a>            <span class="string">"https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2"
-<a href=#122 id=122 data-nosnippet>122</a>                </span>.parse()
-<a href=#123 id=123 data-nosnippet>123</a>                .unwrap(),
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="string">"f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97"</span>,
-<a href=#125 id=125 data-nosnippet>125</a>        )
-<a href=#126 id=126 data-nosnippet>126</a>        .unwrap();
-<a href=#127 id=127 data-nosnippet>127</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>package_dir = package_dir.keep();
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, package_dir.display());
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(AboutJson::from_package_directory(<span class="kw-2">&amp;</span>package_dir).unwrap());
-<a href=#133 id=133 data-nosnippet>133</a>    }
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="attr">#[test]
-<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">fn </span>test_extra_field_is_recorded_when_present() {
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="comment">// Define a sample AboutJson instance with extra field populated
-<a href=#138 id=138 data-nosnippet>138</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>extra_metadata = BTreeMap::default();
-<a href=#139 id=139 data-nosnippet>139</a>        extra_metadata.insert(<span class="string">"flow_id"</span>.to_string(), <span class="macro">json!</span>(<span class="string">"2024.08.13"</span>.to_string()));
-<a href=#140 id=140 data-nosnippet>140</a>        extra_metadata.insert(<span class="string">"some_values"</span>.to_string(), <span class="macro">json!</span>({ <span class="string">"an"</span>: <span class="string">"object" </span>}));
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>about = AboutJson {
-<a href=#143 id=143 data-nosnippet>143</a>            channels: <span class="macro">vec!</span>[<span class="string">"conda-forge"</span>.to_string()],
-<a href=#144 id=144 data-nosnippet>144</a>            description: <span class="prelude-val">Some</span>(<span class="string">"A sample package"</span>.to_string()),
-<a href=#145 id=145 data-nosnippet>145</a>            dev_url: <span class="macro">vec!</span>[],
-<a href=#146 id=146 data-nosnippet>146</a>            doc_url: <span class="macro">vec!</span>[],
-<a href=#147 id=147 data-nosnippet>147</a>            extra: extra_metadata.clone(),
-<a href=#148 id=148 data-nosnippet>148</a>            home: <span class="macro">vec!</span>[],
-<a href=#149 id=149 data-nosnippet>149</a>            license: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
-<a href=#150 id=150 data-nosnippet>150</a>            license_family: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
-<a href=#151 id=151 data-nosnippet>151</a>            source_url: <span class="prelude-val">Some</span>(Url::parse(<span class="string">"https://github.com/some-user/sample"</span>).unwrap()),
-<a href=#152 id=152 data-nosnippet>152</a>            summary: <span class="prelude-val">Some</span>(<span class="string">"This is a test package"</span>.to_string()),
-<a href=#153 id=153 data-nosnippet>153</a>        };
-<a href=#154 id=154 data-nosnippet>154</a>
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="comment">// Serialize the AboutJson instance to JSON
-<a href=#156 id=156 data-nosnippet>156</a>        </span><span class="kw">let </span>serialized = serde_json::to_string(<span class="kw-2">&amp;</span>about).expect(<span class="string">"Serialization failed"</span>);
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="comment">// Deserialize the JSON back to an AboutJson instance
-<a href=#159 id=159 data-nosnippet>159</a>        </span><span class="kw">let </span>deserialized: AboutJson =
-<a href=#160 id=160 data-nosnippet>160</a>            serde_json::from_str(<span class="kw-2">&amp;</span>serialized).expect(<span class="string">"Deserialization failed"</span>);
-<a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="comment">// Verify that the deserialized instance matches the original
-<a href=#163 id=163 data-nosnippet>163</a>        </span><span class="macro">assert_snapshot!</span>(serialized);
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="macro">assert_eq!</span>(about, deserialized);
-<a href=#165 id=165 data-nosnippet>165</a>    }
-<a href=#166 id=166 data-nosnippet>166</a>
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="attr">#[test]
-<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">fn </span>test_extra_field_is_skipped() {
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="comment">// Define a sample AboutJson instance with extra field populated
-<a href=#170 id=170 data-nosnippet>170</a>        </span><span class="kw">let </span>about = AboutJson {
-<a href=#171 id=171 data-nosnippet>171</a>            channels: <span class="macro">vec!</span>[<span class="string">"conda-forge"</span>.to_string()],
-<a href=#172 id=172 data-nosnippet>172</a>            description: <span class="prelude-val">Some</span>(<span class="string">"A sample package"</span>.to_string()),
-<a href=#173 id=173 data-nosnippet>173</a>            dev_url: <span class="macro">vec!</span>[],
-<a href=#174 id=174 data-nosnippet>174</a>            doc_url: <span class="macro">vec!</span>[],
-<a href=#175 id=175 data-nosnippet>175</a>            extra: BTreeMap::default(),
-<a href=#176 id=176 data-nosnippet>176</a>            home: <span class="macro">vec!</span>[],
-<a href=#177 id=177 data-nosnippet>177</a>            license: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
-<a href=#178 id=178 data-nosnippet>178</a>            license_family: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
-<a href=#179 id=179 data-nosnippet>179</a>            source_url: <span class="prelude-val">Some</span>(Url::parse(<span class="string">"https://github.com/some-user/sample"</span>).unwrap()),
-<a href=#180 id=180 data-nosnippet>180</a>            summary: <span class="prelude-val">Some</span>(<span class="string">"This is a test package"</span>.to_string()),
-<a href=#181 id=181 data-nosnippet>181</a>        };
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="comment">// Serialize the AboutJson instance to JSON
-<a href=#184 id=184 data-nosnippet>184</a>        </span><span class="kw">let </span>serialized = serde_json::to_string(<span class="kw-2">&amp;</span>about).expect(<span class="string">"Serialization failed"</span>);
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="comment">// Verify that the deserialized instance matches the original
-<a href=#187 id=187 data-nosnippet>187</a>        </span><span class="macro">assert_snapshot!</span>(serialized);
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>}
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(
+<a href=#114 id=114 data-nosnippet>114</a>            AboutJson::from_package_directory(package_dir.path()).unwrap()
+<a href=#115 id=115 data-nosnippet>115</a>        );
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="attr">#[test]
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">pub fn </span>test_reconstruct_about_json_mamba() {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>package_dir = tempfile::tempdir().unwrap();
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file(
+<a href=#123 id=123 data-nosnippet>123</a>            <span class="string">"https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2"
+<a href=#124 id=124 data-nosnippet>124</a>                </span>.parse()
+<a href=#125 id=125 data-nosnippet>125</a>                .unwrap(),
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="string">"f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97"</span>,
+<a href=#127 id=127 data-nosnippet>127</a>        )
+<a href=#128 id=128 data-nosnippet>128</a>        .unwrap();
+<a href=#129 id=129 data-nosnippet>129</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>package_dir = package_dir.keep();
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, package_dir.display());
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(AboutJson::from_package_directory(<span class="kw-2">&amp;</span>package_dir).unwrap());
+<a href=#135 id=135 data-nosnippet>135</a>    }
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="attr">#[test]
+<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">fn </span>test_extra_field_is_recorded_when_present() {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="comment">// Define a sample AboutJson instance with extra field populated
+<a href=#140 id=140 data-nosnippet>140</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>extra_metadata = BTreeMap::default();
+<a href=#141 id=141 data-nosnippet>141</a>        extra_metadata.insert(<span class="string">"flow_id"</span>.to_string(), <span class="macro">json!</span>(<span class="string">"2024.08.13"</span>.to_string()));
+<a href=#142 id=142 data-nosnippet>142</a>        extra_metadata.insert(<span class="string">"some_values"</span>.to_string(), <span class="macro">json!</span>({ <span class="string">"an"</span>: <span class="string">"object" </span>}));
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>about = AboutJson {
+<a href=#145 id=145 data-nosnippet>145</a>            channels: <span class="macro">vec!</span>[<span class="string">"conda-forge"</span>.to_string()],
+<a href=#146 id=146 data-nosnippet>146</a>            description: <span class="prelude-val">Some</span>(<span class="string">"A sample package"</span>.to_string()),
+<a href=#147 id=147 data-nosnippet>147</a>            dev_url: <span class="macro">vec!</span>[],
+<a href=#148 id=148 data-nosnippet>148</a>            doc_url: <span class="macro">vec!</span>[],
+<a href=#149 id=149 data-nosnippet>149</a>            extra: extra_metadata.clone(),
+<a href=#150 id=150 data-nosnippet>150</a>            home: <span class="macro">vec!</span>[],
+<a href=#151 id=151 data-nosnippet>151</a>            license: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
+<a href=#152 id=152 data-nosnippet>152</a>            license_family: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
+<a href=#153 id=153 data-nosnippet>153</a>            source_url: <span class="prelude-val">Some</span>(Url::parse(<span class="string">"https://github.com/some-user/sample"</span>).unwrap()),
+<a href=#154 id=154 data-nosnippet>154</a>            summary: <span class="prelude-val">Some</span>(<span class="string">"This is a test package"</span>.to_string()),
+<a href=#155 id=155 data-nosnippet>155</a>        };
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="comment">// Serialize the AboutJson instance to JSON
+<a href=#158 id=158 data-nosnippet>158</a>        </span><span class="kw">let </span>serialized = serde_json::to_string(<span class="kw-2">&amp;</span>about).expect(<span class="string">"Serialization failed"</span>);
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="comment">// Deserialize the JSON back to an AboutJson instance
+<a href=#161 id=161 data-nosnippet>161</a>        </span><span class="kw">let </span>deserialized: AboutJson =
+<a href=#162 id=162 data-nosnippet>162</a>            serde_json::from_str(<span class="kw-2">&amp;</span>serialized).expect(<span class="string">"Deserialization failed"</span>);
+<a href=#163 id=163 data-nosnippet>163</a>
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="comment">// Verify that the deserialized instance matches the original
+<a href=#165 id=165 data-nosnippet>165</a>        </span><span class="macro">assert_snapshot!</span>(serialized);
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="macro">assert_eq!</span>(about, deserialized);
+<a href=#167 id=167 data-nosnippet>167</a>    }
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="attr">#[test]
+<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">fn </span>test_extra_field_is_skipped() {
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="comment">// Define a sample AboutJson instance with extra field populated
+<a href=#172 id=172 data-nosnippet>172</a>        </span><span class="kw">let </span>about = AboutJson {
+<a href=#173 id=173 data-nosnippet>173</a>            channels: <span class="macro">vec!</span>[<span class="string">"conda-forge"</span>.to_string()],
+<a href=#174 id=174 data-nosnippet>174</a>            description: <span class="prelude-val">Some</span>(<span class="string">"A sample package"</span>.to_string()),
+<a href=#175 id=175 data-nosnippet>175</a>            dev_url: <span class="macro">vec!</span>[],
+<a href=#176 id=176 data-nosnippet>176</a>            doc_url: <span class="macro">vec!</span>[],
+<a href=#177 id=177 data-nosnippet>177</a>            extra: BTreeMap::default(),
+<a href=#178 id=178 data-nosnippet>178</a>            home: <span class="macro">vec!</span>[],
+<a href=#179 id=179 data-nosnippet>179</a>            license: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
+<a href=#180 id=180 data-nosnippet>180</a>            license_family: <span class="prelude-val">Some</span>(<span class="string">"MIT"</span>.to_string()),
+<a href=#181 id=181 data-nosnippet>181</a>            source_url: <span class="prelude-val">Some</span>(Url::parse(<span class="string">"https://github.com/some-user/sample"</span>).unwrap()),
+<a href=#182 id=182 data-nosnippet>182</a>            summary: <span class="prelude-val">Some</span>(<span class="string">"This is a test package"</span>.to_string()),
+<a href=#183 id=183 data-nosnippet>183</a>        };
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="comment">// Serialize the AboutJson instance to JSON
+<a href=#186 id=186 data-nosnippet>186</a>        </span><span class="kw">let </span>serialized = serde_json::to_string(<span class="kw-2">&amp;</span>about).expect(<span class="string">"Serialization failed"</span>);
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="comment">// Verify that the deserialized instance matches the original
+<a href=#189 id=189 data-nosnippet>189</a>        </span><span class="macro">assert_snapshot!</span>(serialized);
+<a href=#190 id=190 data-nosnippet>190</a>    }
+<a href=#191 id=191 data-nosnippet>191</a>}
 </code></pre></div></section></main></body></html>

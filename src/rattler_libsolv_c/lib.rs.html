@@ -1070,7 +1070,7 @@
 <a href=#1068 id=1068 data-nosnippet>1068</a>}
 <a href=#1069 id=1069 data-nosnippet>1069</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#1070 id=1070 data-nosnippet>1070</a>    <span class="kw">pub fn </span>pool_calc_installsizechange(pool: <span class="kw-2">*mut </span>Pool, installedmap: <span class="kw-2">*mut </span>Map)
-<a href=#1071 id=1071 data-nosnippet>1071</a>        -&gt; libc::c_longlong;
+<a href=#1071 id=1071 data-nosnippet>1071</a>    -&gt; libc::c_longlong;
 <a href=#1072 id=1072 data-nosnippet>1072</a>}
 <a href=#1073 id=1073 data-nosnippet>1073</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#1074 id=1074 data-nosnippet>1074</a>    <span class="kw">pub fn </span>pool_add_fileconflicts_deps(pool: <span class="kw-2">*mut </span>Pool, conflicts: <span class="kw-2">*mut </span>Queue);
@@ -1340,7 +1340,7 @@
 <a href=#1338 id=1338 data-nosnippet>1338</a>}
 <a href=#1339 id=1339 data-nosnippet>1339</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#1340 id=1340 data-nosnippet>1340</a>    <span class="kw">pub fn </span>repodata_lookup_str(data: <span class="kw-2">*mut </span>Repodata, solvid: Id, keyname: Id)
-<a href=#1341 id=1341 data-nosnippet>1341</a>        -&gt; <span class="kw-2">*const </span>libc::c_char;
+<a href=#1341 id=1341 data-nosnippet>1341</a>    -&gt; <span class="kw-2">*const </span>libc::c_char;
 <a href=#1342 id=1342 data-nosnippet>1342</a>}
 <a href=#1343 id=1343 data-nosnippet>1343</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#1344 id=1344 data-nosnippet>1344</a>    <span class="kw">pub fn </span>repodata_lookup_num(
@@ -2453,7 +2453,7 @@
 <a href=#2451 id=2451 data-nosnippet>2451</a>}
 <a href=#2452 id=2452 data-nosnippet>2452</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#2453 id=2453 data-nosnippet>2453</a>    <span class="kw">pub fn </span>solver_set_flag(solv: <span class="kw-2">*mut </span>Solver, flag: libc::c_int, value: libc::c_int)
-<a href=#2454 id=2454 data-nosnippet>2454</a>        -&gt; libc::c_int;
+<a href=#2454 id=2454 data-nosnippet>2454</a>    -&gt; libc::c_int;
 <a href=#2455 id=2455 data-nosnippet>2455</a>}
 <a href=#2456 id=2456 data-nosnippet>2456</a><span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#2457 id=2457 data-nosnippet>2457</a>    <span class="kw">pub fn </span>solver_get_flag(solv: <span class="kw-2">*mut </span>Solver, flag: libc::c_int) -&gt; libc::c_int;

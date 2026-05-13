@@ -5,10 +5,10 @@
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>miette::IntoDiagnostic <span class="kw">as _</span>;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>rattler_networking::{Authentication, AuthenticationStorage};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>reqwest::{
-<a href=#6 id=6 data-nosnippet>6</a>    header::{<span class="self">self</span>, HeaderMap, HeaderValue},
-<a href=#7 id=7 data-nosnippet>7</a>    StatusCode,
+<a href=#6 id=6 data-nosnippet>6</a>    StatusCode,
+<a href=#7 id=7 data-nosnippet>7</a>    header::{<span class="self">self</span>, HeaderMap, HeaderValue},
 <a href=#8 id=8 data-nosnippet>8</a>};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>std::{
 <a href=#11 id=11 data-nosnippet>11</a>    path::{Path, PathBuf},
 <a href=#12 id=12 data-nosnippet>12</a>    time::{Duration, SystemTime},
@@ -20,10 +20,10 @@
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">super</span>::opt::{AttestationSource, PrefixData};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[cfg(feature = <span class="string">"sigstore-sign"</span>)]
-<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">use </span><span class="kw">crate</span>::upload::attestation::{create_attestation, AttestationConfig};
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">use </span><span class="kw">crate</span>::upload::attestation::{AttestationConfig, create_attestation};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::upload::{
 <a href=#23 id=23 data-nosnippet>23</a>    default_bytes_style, get_client_with_retry, get_default_client,
-<a href=#24 id=24 data-nosnippet>24</a>    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
+<a href=#24 id=24 data-nosnippet>24</a>    trusted_publishing::{TrustedPublishResult, check_trusted_publishing},
 <a href=#25 id=25 data-nosnippet>25</a>};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span><span class="kw">super</span>::package::sha256_sum;
@@ -305,306 +305,308 @@
 <a href=#303 id=303 data-nosnippet>303</a>                    <span class="macro">warn!</span>(<span class="string">"--store-github-attestation requires GITHUB_TOKEN environment variable"</span>);
 <a href=#304 id=304 data-nosnippet>304</a>                }
 <a href=#305 id=305 data-nosnippet>305</a>                <span class="kw">if </span>repo_owner.is_none() {
-<a href=#306 id=306 data-nosnippet>306</a>                    <span class="macro">warn!</span>(<span class="string">"--store-github-attestation requires GITHUB_REPOSITORY environment variable"</span>);
-<a href=#307 id=307 data-nosnippet>307</a>                }
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>                AttestationConfig {
-<a href=#310 id=310 data-nosnippet>310</a>                    repo_owner,
-<a href=#311 id=311 data-nosnippet>311</a>                    repo_name,
-<a href=#312 id=312 data-nosnippet>312</a>                    github_token,
-<a href=#313 id=313 data-nosnippet>313</a>                }
-<a href=#314 id=314 data-nosnippet>314</a>            } <span class="kw">else </span>{
-<a href=#315 id=315 data-nosnippet>315</a>                <span class="comment">// Return Sigstore bundle JSON for uploading to prefix.dev
-<a href=#316 id=316 data-nosnippet>316</a>                </span>AttestationConfig {
-<a href=#317 id=317 data-nosnippet>317</a>                    repo_owner: <span class="prelude-val">None</span>,
-<a href=#318 id=318 data-nosnippet>318</a>                    repo_name: <span class="prelude-val">None</span>,
-<a href=#319 id=319 data-nosnippet>319</a>                    github_token: <span class="prelude-val">None</span>,
-<a href=#320 id=320 data-nosnippet>320</a>                }
-<a href=#321 id=321 data-nosnippet>321</a>            };
-<a href=#322 id=322 data-nosnippet>322</a>
-<a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">match </span>create_attestation(package_file, channel_url.as_str(), <span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>client).<span class="kw">await </span>{
-<a href=#324 id=324 data-nosnippet>324</a>                <span class="prelude-val">Ok</span>(attestation_bundle_json) =&gt; {
-<a href=#325 id=325 data-nosnippet>325</a>                    <span class="comment">// Save attestation bundle JSON to a file next to the package
-<a href=#326 id=326 data-nosnippet>326</a>                    </span><span class="macro">tracing::info!</span>(<span class="string">"Generated attestation: {}"</span>, attestation_bundle_json);
-<a href=#327 id=327 data-nosnippet>327</a>                    <span class="kw">let </span>attestation_file = package_file.with_extension(<span class="string">"attestation.json"</span>);
-<a href=#328 id=328 data-nosnippet>328</a>                    tokio_fs::write(<span class="kw-2">&amp;</span>attestation_file, attestation_bundle_json)
-<a href=#329 id=329 data-nosnippet>329</a>                        .<span class="kw">await
-<a href=#330 id=330 data-nosnippet>330</a>                        </span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#331 id=331 data-nosnippet>331</a>                    <span class="macro">info!</span>(<span class="string">"Generated attestation for {}"</span>, filename);
-<a href=#332 id=332 data-nosnippet>332</a>                    <span class="prelude-val">Some</span>(attestation_file)
-<a href=#333 id=333 data-nosnippet>333</a>                }
-<a href=#334 id=334 data-nosnippet>334</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#335 id=335 data-nosnippet>335</a>                    <span class="comment">// If attestation generation was explicitly requested, fail the upload
-<a href=#336 id=336 data-nosnippet>336</a>                    </span><span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">miette::miette!</span>(
-<a href=#337 id=337 data-nosnippet>337</a>                        <span class="string">"Failed to generate attestation for {}: {}\n\
-<a href=#338 id=338 data-nosnippet>338</a>                         Upload aborted because attestation generation was requested but failed.\n\
-<a href=#339 id=339 data-nosnippet>339</a>                         \n\
-<a href=#340 id=340 data-nosnippet>340</a>                         Troubleshooting:\n\
-<a href=#341 id=341 data-nosnippet>341</a>                         1. Check that you're running in a supported CI environment (GitHub Actions, GitLab CI, etc.)\n\
-<a href=#342 id=342 data-nosnippet>342</a>                         2. For GitHub Actions, ensure you have 'id-token: write' permission\n\
-<a href=#343 id=343 data-nosnippet>343</a>                         3. Verify OIDC token is available and valid"</span>,
-<a href=#344 id=344 data-nosnippet>344</a>                        filename, e
-<a href=#345 id=345 data-nosnippet>345</a>                    )
-<a href=#346 id=346 data-nosnippet>346</a>                    .into());
-<a href=#347 id=347 data-nosnippet>347</a>                }
-<a href=#348 id=348 data-nosnippet>348</a>            }
-<a href=#349 id=349 data-nosnippet>349</a>        } <span class="kw">else if let </span>AttestationSource::Attestation(path) = <span class="kw-2">&amp;</span>prefix_data.attestation {
-<a href=#350 id=350 data-nosnippet>350</a>            <span class="prelude-val">Some</span>(path.clone())
-<a href=#351 id=351 data-nosnippet>351</a>        } <span class="kw">else </span>{
-<a href=#352 id=352 data-nosnippet>352</a>            <span class="prelude-val">None
-<a href=#353 id=353 data-nosnippet>353</a>        </span>};
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="attr">#[cfg(not(feature = <span class="string">"sigstore-sign"</span>))]
-<a href=#356 id=356 data-nosnippet>356</a>        </span><span class="kw">let </span>attestation_path = <span class="kw">match </span><span class="kw-2">&amp;</span>prefix_data.attestation {
-<a href=#357 id=357 data-nosnippet>357</a>            AttestationSource::Attestation(path) =&gt; <span class="prelude-val">Some</span>(path.clone()),
-<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#359 id=359 data-nosnippet>359</a>        };
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>progress_bar = indicatif::ProgressBar::new(file_size)
-<a href=#362 id=362 data-nosnippet>362</a>            .with_prefix(<span class="string">"Uploading"</span>)
-<a href=#363 id=363 data-nosnippet>363</a>            .with_style(default_bytes_style().into_diagnostic()<span class="question-mark">?</span>);
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>retry_policy = ExponentialBackoff::builder().build_with_max_retries(<span class="number">3</span>);
-<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">let </span><span class="kw-2">mut </span>current_try = <span class="number">0</span>;
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>request_start = SystemTime::now();
-<a href=#368 id=368 data-nosnippet>368</a>
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">loop </span>{
-<a href=#370 id=370 data-nosnippet>370</a>            progress_bar.reset();
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a>            <span class="kw">let </span>form = create_upload_form(
-<a href=#373 id=373 data-nosnippet>373</a>                package_file,
-<a href=#374 id=374 data-nosnippet>374</a>                <span class="kw-2">&amp;</span>filename,
-<a href=#375 id=375 data-nosnippet>375</a>                file_size,
-<a href=#376 id=376 data-nosnippet>376</a>                progress_bar.clone(),
-<a href=#377 id=377 data-nosnippet>377</a>                <span class="kw-2">&amp;</span>attestation_path,
-<a href=#378 id=378 data-nosnippet>378</a>            )
-<a href=#379 id=379 data-nosnippet>379</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>            <span class="kw">let </span>response = get_default_client()
-<a href=#382 id=382 data-nosnippet>382</a>                .into_diagnostic()<span class="question-mark">?
-<a href=#383 id=383 data-nosnippet>383</a>                </span>.post(url.clone())
-<a href=#384 id=384 data-nosnippet>384</a>                .multipart(form)
-<a href=#385 id=385 data-nosnippet>385</a>                .bearer_auth(<span class="kw-2">&amp;</span>token)
-<a href=#386 id=386 data-nosnippet>386</a>                .send()
-<a href=#387 id=387 data-nosnippet>387</a>                .<span class="kw">await
-<a href=#388 id=388 data-nosnippet>388</a>                </span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#389 id=389 data-nosnippet>389</a>
-<a href=#390 id=390 data-nosnippet>390</a>            <span class="kw">if </span>response.status().is_success() {
-<a href=#391 id=391 data-nosnippet>391</a>                progress_bar.finish();
-<a href=#392 id=392 data-nosnippet>392</a>                <span class="macro">info!</span>(<span class="string">"Upload complete for package file: {}"</span>, filename);
-<a href=#393 id=393 data-nosnippet>393</a>                <span class="kw">break</span>;
-<a href=#394 id=394 data-nosnippet>394</a>            }
-<a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a>            <span class="kw">let </span>status = response.status();
-<a href=#397 id=397 data-nosnippet>397</a>            <span class="kw">let </span>body = response.text().<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
-<a href=#398 id=398 data-nosnippet>398</a>
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="comment">// Non-retry status codes
-<a href=#400 id=400 data-nosnippet>400</a>            </span><span class="kw">match </span>status {
-<a href=#401 id=401 data-nosnippet>401</a>                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN =&gt; {
-<a href=#402 id=402 data-nosnippet>402</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::AuthenticationFailed {
-<a href=#403 id=403 data-nosnippet>403</a>                        status: status.as_u16(),
-<a href=#404 id=404 data-nosnippet>404</a>                        body,
-<a href=#405 id=405 data-nosnippet>405</a>                    });
-<a href=#406 id=406 data-nosnippet>406</a>                }
-<a href=#407 id=407 data-nosnippet>407</a>                StatusCode::CONFLICT =&gt; {
-<a href=#408 id=408 data-nosnippet>408</a>                    <span class="comment">// skip if package already exists
-<a href=#409 id=409 data-nosnippet>409</a>                    </span><span class="kw">if </span>prefix_data.skip_existing.is_enabled() {
-<a href=#410 id=410 data-nosnippet>410</a>                        progress_bar.finish();
-<a href=#411 id=411 data-nosnippet>411</a>                        <span class="macro">info!</span>(<span class="string">"Skip existing package: {}"</span>, filename);
-<a href=#412 id=412 data-nosnippet>412</a>                        <span class="kw">break</span>;
-<a href=#413 id=413 data-nosnippet>413</a>                    } <span class="kw">else </span>{
-<a href=#414 id=414 data-nosnippet>414</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::Conflict { body });
-<a href=#415 id=415 data-nosnippet>415</a>                    }
-<a href=#416 id=416 data-nosnippet>416</a>                }
-<a href=#417 id=417 data-nosnippet>417</a>                StatusCode::UNPROCESSABLE_ENTITY =&gt; {
-<a href=#418 id=418 data-nosnippet>418</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::UnprocessableEntity { body });
-<a href=#419 id=419 data-nosnippet>419</a>                }
-<a href=#420 id=420 data-nosnippet>420</a>                StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND | StatusCode::PAYLOAD_TOO_LARGE =&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::ClientError {
-<a href=#422 id=422 data-nosnippet>422</a>                        status: status.as_u16(),
-<a href=#423 id=423 data-nosnippet>423</a>                        body,
-<a href=#424 id=424 data-nosnippet>424</a>                    });
-<a href=#425 id=425 data-nosnippet>425</a>                }
-<a href=#426 id=426 data-nosnippet>426</a>                <span class="kw">_ </span>=&gt; {}
-<a href=#427 id=427 data-nosnippet>427</a>            }
-<a href=#428 id=428 data-nosnippet>428</a>
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="kw">match </span>retry_policy.should_retry(request_start, current_try) {
-<a href=#430 id=430 data-nosnippet>430</a>                RetryDecision::DoNotRetry =&gt; {
-<a href=#431 id=431 data-nosnippet>431</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::ServerError {
-<a href=#432 id=432 data-nosnippet>432</a>                        status: status.as_u16(),
-<a href=#433 id=433 data-nosnippet>433</a>                        body,
-<a href=#434 id=434 data-nosnippet>434</a>                    });
-<a href=#435 id=435 data-nosnippet>435</a>                }
-<a href=#436 id=436 data-nosnippet>436</a>                RetryDecision::Retry { execute_after } =&gt; {
-<a href=#437 id=437 data-nosnippet>437</a>                    <span class="kw">let </span>sleep_for = execute_after
-<a href=#438 id=438 data-nosnippet>438</a>                        .duration_since(SystemTime::now())
-<a href=#439 id=439 data-nosnippet>439</a>                        .unwrap_or(Duration::ZERO);
-<a href=#440 id=440 data-nosnippet>440</a>                    <span class="macro">warn!</span>(
-<a href=#441 id=441 data-nosnippet>441</a>                        <span class="string">"Failed to upload package file: {}\nStatus: {}\nBody: {}\nRetrying in {} seconds"</span>,
-<a href=#442 id=442 data-nosnippet>442</a>                        package_file.display(),
-<a href=#443 id=443 data-nosnippet>443</a>                        status,
-<a href=#444 id=444 data-nosnippet>444</a>                        body,
-<a href=#445 id=445 data-nosnippet>445</a>                        sleep_for.as_secs()
-<a href=#446 id=446 data-nosnippet>446</a>                    );
-<a href=#447 id=447 data-nosnippet>447</a>                    tokio::time::sleep(sleep_for).<span class="kw">await</span>;
-<a href=#448 id=448 data-nosnippet>448</a>                }
-<a href=#449 id=449 data-nosnippet>449</a>            }
-<a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a>            current_try += <span class="number">1</span>;
-<a href=#452 id=452 data-nosnippet>452</a>        }
-<a href=#453 id=453 data-nosnippet>453</a>    }
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a>    <span class="macro">info!</span>(<span class="string">"Packages successfully uploaded to prefix.dev server"</span>);
-<a href=#456 id=456 data-nosnippet>456</a>    <span class="prelude-val">Ok</span>(())
-<a href=#457 id=457 data-nosnippet>457</a>}
-<a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a><span class="attr">#[cfg(test)]
-<a href=#460 id=460 data-nosnippet>460</a></span><span class="kw">mod </span>test {
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="kw">use </span>axum::{http::StatusCode, Router};
-<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">use </span>rattler_networking::AuthenticationStorage;
-<a href=#463 id=463 data-nosnippet>463</a>
-<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">use super</span>::{upload_package_to_prefix, PrefixUploadError};
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">use </span><span class="kw">crate</span>::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
-<a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">use </span><span class="kw">crate</span>::upload::test_utils::{start_test_server, test_package_path};
-<a href=#467 id=467 data-nosnippet>467</a>
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">async fn </span>ok_with_bearer(
-<a href=#469 id=469 data-nosnippet>469</a>        headers: axum::http::HeaderMap,
-<a href=#470 id=470 data-nosnippet>470</a>        _body: axum::body::Bytes,
-<a href=#471 id=471 data-nosnippet>471</a>    ) -&gt; StatusCode {
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">let </span>auth = headers.get(<span class="string">"authorization"</span>).unwrap().to_str().unwrap();
-<a href=#473 id=473 data-nosnippet>473</a>        <span class="macro">assert!</span>(auth.starts_with(<span class="string">"Bearer "</span>));
-<a href=#474 id=474 data-nosnippet>474</a>        StatusCode::OK
-<a href=#475 id=475 data-nosnippet>475</a>    }
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">async fn </span>unauthorized(_body: axum::body::Bytes) -&gt; StatusCode {
-<a href=#478 id=478 data-nosnippet>478</a>        StatusCode::UNAUTHORIZED
-<a href=#479 id=479 data-nosnippet>479</a>    }
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">async fn </span>conflict(_body: axum::body::Bytes) -&gt; StatusCode {
-<a href=#482 id=482 data-nosnippet>482</a>        StatusCode::CONFLICT
-<a href=#483 id=483 data-nosnippet>483</a>    }
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">fn </span>make_prefix_data(url: url::Url, skip_existing: bool) -&gt; PrefixData {
-<a href=#486 id=486 data-nosnippet>486</a>        PrefixData::new(
-<a href=#487 id=487 data-nosnippet>487</a>            url,
-<a href=#488 id=488 data-nosnippet>488</a>            <span class="string">"test-channel"</span>.to_string(),
-<a href=#489 id=489 data-nosnippet>489</a>            <span class="prelude-val">Some</span>(<span class="string">"test-token"</span>.to_string()),
-<a href=#490 id=490 data-nosnippet>490</a>            AttestationSource::NoAttestation,
-<a href=#491 id=491 data-nosnippet>491</a>            SkipExisting(skip_existing),
-<a href=#492 id=492 data-nosnippet>492</a>            ForceOverwrite(<span class="bool-val">false</span>),
-<a href=#493 id=493 data-nosnippet>493</a>            <span class="bool-val">false</span>,
-<a href=#494 id=494 data-nosnippet>494</a>        )
-<a href=#495 id=495 data-nosnippet>495</a>    }
-<a href=#496 id=496 data-nosnippet>496</a>
-<a href=#497 id=497 data-nosnippet>497</a>    <span class="attr">#[tokio::test]
-<a href=#498 id=498 data-nosnippet>498</a>    </span><span class="kw">async fn </span>test_prefix_upload_success() {
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">let </span>router = Router::new().fallback(ok_with_bearer);
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#501 id=501 data-nosnippet>501</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
-<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span>result =
-<a href=#504 id=504 data-nosnippet>504</a>            upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data).<span class="kw">await</span>;
-<a href=#505 id=505 data-nosnippet>505</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
-<a href=#506 id=506 data-nosnippet>506</a>    }
-<a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="attr">#[tokio::test]
-<a href=#509 id=509 data-nosnippet>509</a>    </span><span class="kw">async fn </span>test_prefix_upload_skip_existing() {
-<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">let </span>router = Router::new().fallback(conflict);
-<a href=#511 id=511 data-nosnippet>511</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">true</span>);
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">let </span>result =
-<a href=#515 id=515 data-nosnippet>515</a>            upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data).<span class="kw">await</span>;
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
-<a href=#517 id=517 data-nosnippet>517</a>    }
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="attr">#[tokio::test]
-<a href=#520 id=520 data-nosnippet>520</a>    </span><span class="kw">async fn </span>test_prefix_upload_skip_existing_continues_remaining() {
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="comment">// First package returns 409, second returns 200 — both should succeed overall
-<a href=#522 id=522 data-nosnippet>522</a>        </span><span class="kw">use </span>axum::extract::State;
-<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
-<a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">use </span>std::sync::Arc;
-<a href=#525 id=525 data-nosnippet>525</a>
-<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">async fn </span>handler(
-<a href=#527 id=527 data-nosnippet>527</a>            State(count): State&lt;Arc&lt;AtomicUsize&gt;&gt;,
-<a href=#528 id=528 data-nosnippet>528</a>            _body: axum::body::Bytes,
-<a href=#529 id=529 data-nosnippet>529</a>        ) -&gt; StatusCode {
-<a href=#530 id=530 data-nosnippet>530</a>            <span class="kw">let </span>n = count.fetch_add(<span class="number">1</span>, Ordering::SeqCst);
-<a href=#531 id=531 data-nosnippet>531</a>            <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#532 id=532 data-nosnippet>532</a>                StatusCode::CONFLICT
-<a href=#533 id=533 data-nosnippet>533</a>            } <span class="kw">else </span>{
-<a href=#534 id=534 data-nosnippet>534</a>                StatusCode::OK
-<a href=#535 id=535 data-nosnippet>535</a>            }
-<a href=#536 id=536 data-nosnippet>536</a>        }
-<a href=#537 id=537 data-nosnippet>537</a>
-<a href=#538 id=538 data-nosnippet>538</a>        <span class="kw">let </span>call_count = Arc::new(AtomicUsize::new(<span class="number">0</span>));
-<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">let </span>router = Router::new().fallback(handler).with_state(call_count);
-<a href=#540 id=540 data-nosnippet>540</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">true</span>);
-<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">let </span>result = upload_package_to_prefix(
-<a href=#544 id=544 data-nosnippet>544</a>            <span class="kw-2">&amp;</span>storage,
-<a href=#545 id=545 data-nosnippet>545</a>            <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path(), test_package_path()],
-<a href=#546 id=546 data-nosnippet>546</a>            prefix_data,
-<a href=#547 id=547 data-nosnippet>547</a>        )
-<a href=#548 id=548 data-nosnippet>548</a>        .<span class="kw">await</span>;
-<a href=#549 id=549 data-nosnippet>549</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
-<a href=#550 id=550 data-nosnippet>550</a>    }
-<a href=#551 id=551 data-nosnippet>551</a>
-<a href=#552 id=552 data-nosnippet>552</a>    <span class="attr">#[tokio::test]
-<a href=#553 id=553 data-nosnippet>553</a>    </span><span class="kw">async fn </span>test_prefix_upload_conflict_without_skip() {
-<a href=#554 id=554 data-nosnippet>554</a>        <span class="kw">let </span>router = Router::new().fallback(conflict);
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#557 id=557 data-nosnippet>557</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
-<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
-<a href=#559 id=559 data-nosnippet>559</a>            .<span class="kw">await
-<a href=#560 id=560 data-nosnippet>560</a>            </span>.unwrap_err();
-<a href=#561 id=561 data-nosnippet>561</a>        <span class="macro">assert!</span>(
-<a href=#562 id=562 data-nosnippet>562</a>            <span class="macro">matches!</span>(err, PrefixUploadError::Conflict { .. }),
-<a href=#563 id=563 data-nosnippet>563</a>            <span class="string">"expected Conflict, got: {err:?}"
-<a href=#564 id=564 data-nosnippet>564</a>        </span>);
-<a href=#565 id=565 data-nosnippet>565</a>    }
-<a href=#566 id=566 data-nosnippet>566</a>
-<a href=#567 id=567 data-nosnippet>567</a>    <span class="attr">#[tokio::test]
-<a href=#568 id=568 data-nosnippet>568</a>    </span><span class="kw">async fn </span>test_prefix_upload_auth_failure() {
-<a href=#569 id=569 data-nosnippet>569</a>        <span class="kw">let </span>router = Router::new().fallback(unauthorized);
-<a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#571 id=571 data-nosnippet>571</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
-<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
-<a href=#574 id=574 data-nosnippet>574</a>            .<span class="kw">await
-<a href=#575 id=575 data-nosnippet>575</a>            </span>.unwrap_err();
-<a href=#576 id=576 data-nosnippet>576</a>        <span class="macro">assert!</span>(
-<a href=#577 id=577 data-nosnippet>577</a>            <span class="macro">matches!</span>(
-<a href=#578 id=578 data-nosnippet>578</a>                err,
-<a href=#579 id=579 data-nosnippet>579</a>                PrefixUploadError::AuthenticationFailed { status: <span class="number">401</span>, .. }
-<a href=#580 id=580 data-nosnippet>580</a>            ),
-<a href=#581 id=581 data-nosnippet>581</a>            <span class="string">"expected AuthenticationFailed, got: {err:?}"
-<a href=#582 id=582 data-nosnippet>582</a>        </span>);
-<a href=#583 id=583 data-nosnippet>583</a>    }
-<a href=#584 id=584 data-nosnippet>584</a>
-<a href=#585 id=585 data-nosnippet>585</a>    <span class="attr">#[tokio::test]
-<a href=#586 id=586 data-nosnippet>586</a>    </span><span class="kw">async fn </span>test_prefix_upload_missing_api_key() {
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span>router = Router::new().fallback(ok_with_bearer);
-<a href=#588 id=588 data-nosnippet>588</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
-<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
-<a href=#590 id=590 data-nosnippet>590</a>        <span class="kw">let </span>prefix_data = PrefixData::new(
-<a href=#591 id=591 data-nosnippet>591</a>            url,
-<a href=#592 id=592 data-nosnippet>592</a>            <span class="string">"test-channel"</span>.to_string(),
-<a href=#593 id=593 data-nosnippet>593</a>            <span class="prelude-val">None</span>,
-<a href=#594 id=594 data-nosnippet>594</a>            AttestationSource::NoAttestation,
-<a href=#595 id=595 data-nosnippet>595</a>            SkipExisting(<span class="bool-val">false</span>),
-<a href=#596 id=596 data-nosnippet>596</a>            ForceOverwrite(<span class="bool-val">false</span>),
-<a href=#597 id=597 data-nosnippet>597</a>            <span class="bool-val">false</span>,
-<a href=#598 id=598 data-nosnippet>598</a>        );
-<a href=#599 id=599 data-nosnippet>599</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
-<a href=#600 id=600 data-nosnippet>600</a>            .<span class="kw">await
-<a href=#601 id=601 data-nosnippet>601</a>            </span>.unwrap_err();
-<a href=#602 id=602 data-nosnippet>602</a>        <span class="macro">assert!</span>(
-<a href=#603 id=603 data-nosnippet>603</a>            <span class="macro">matches!</span>(err, PrefixUploadError::MissingApiKey),
-<a href=#604 id=604 data-nosnippet>604</a>            <span class="string">"expected MissingApiKey, got: {err:?}"
-<a href=#605 id=605 data-nosnippet>605</a>        </span>);
-<a href=#606 id=606 data-nosnippet>606</a>    }
-<a href=#607 id=607 data-nosnippet>607</a>}
+<a href=#306 id=306 data-nosnippet>306</a>                    <span class="macro">warn!</span>(
+<a href=#307 id=307 data-nosnippet>307</a>                        <span class="string">"--store-github-attestation requires GITHUB_REPOSITORY environment variable"
+<a href=#308 id=308 data-nosnippet>308</a>                    </span>);
+<a href=#309 id=309 data-nosnippet>309</a>                }
+<a href=#310 id=310 data-nosnippet>310</a>
+<a href=#311 id=311 data-nosnippet>311</a>                AttestationConfig {
+<a href=#312 id=312 data-nosnippet>312</a>                    repo_owner,
+<a href=#313 id=313 data-nosnippet>313</a>                    repo_name,
+<a href=#314 id=314 data-nosnippet>314</a>                    github_token,
+<a href=#315 id=315 data-nosnippet>315</a>                }
+<a href=#316 id=316 data-nosnippet>316</a>            } <span class="kw">else </span>{
+<a href=#317 id=317 data-nosnippet>317</a>                <span class="comment">// Return Sigstore bundle JSON for uploading to prefix.dev
+<a href=#318 id=318 data-nosnippet>318</a>                </span>AttestationConfig {
+<a href=#319 id=319 data-nosnippet>319</a>                    repo_owner: <span class="prelude-val">None</span>,
+<a href=#320 id=320 data-nosnippet>320</a>                    repo_name: <span class="prelude-val">None</span>,
+<a href=#321 id=321 data-nosnippet>321</a>                    github_token: <span class="prelude-val">None</span>,
+<a href=#322 id=322 data-nosnippet>322</a>                }
+<a href=#323 id=323 data-nosnippet>323</a>            };
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a>            <span class="kw">match </span>create_attestation(package_file, channel_url.as_str(), <span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>client).<span class="kw">await </span>{
+<a href=#326 id=326 data-nosnippet>326</a>                <span class="prelude-val">Ok</span>(attestation_bundle_json) =&gt; {
+<a href=#327 id=327 data-nosnippet>327</a>                    <span class="comment">// Save attestation bundle JSON to a file next to the package
+<a href=#328 id=328 data-nosnippet>328</a>                    </span><span class="macro">tracing::info!</span>(<span class="string">"Generated attestation: {}"</span>, attestation_bundle_json);
+<a href=#329 id=329 data-nosnippet>329</a>                    <span class="kw">let </span>attestation_file = package_file.with_extension(<span class="string">"attestation.json"</span>);
+<a href=#330 id=330 data-nosnippet>330</a>                    tokio_fs::write(<span class="kw-2">&amp;</span>attestation_file, attestation_bundle_json)
+<a href=#331 id=331 data-nosnippet>331</a>                        .<span class="kw">await
+<a href=#332 id=332 data-nosnippet>332</a>                        </span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#333 id=333 data-nosnippet>333</a>                    <span class="macro">info!</span>(<span class="string">"Generated attestation for {}"</span>, filename);
+<a href=#334 id=334 data-nosnippet>334</a>                    <span class="prelude-val">Some</span>(attestation_file)
+<a href=#335 id=335 data-nosnippet>335</a>                }
+<a href=#336 id=336 data-nosnippet>336</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#337 id=337 data-nosnippet>337</a>                    <span class="comment">// If attestation generation was explicitly requested, fail the upload
+<a href=#338 id=338 data-nosnippet>338</a>                    </span><span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">miette::miette!</span>(
+<a href=#339 id=339 data-nosnippet>339</a>                        <span class="string">"Failed to generate attestation for {}: {}\n\
+<a href=#340 id=340 data-nosnippet>340</a>                         Upload aborted because attestation generation was requested but failed.\n\
+<a href=#341 id=341 data-nosnippet>341</a>                         \n\
+<a href=#342 id=342 data-nosnippet>342</a>                         Troubleshooting:\n\
+<a href=#343 id=343 data-nosnippet>343</a>                         1. Check that you're running in a supported CI environment (GitHub Actions, GitLab CI, etc.)\n\
+<a href=#344 id=344 data-nosnippet>344</a>                         2. For GitHub Actions, ensure you have 'id-token: write' permission\n\
+<a href=#345 id=345 data-nosnippet>345</a>                         3. Verify OIDC token is available and valid"</span>,
+<a href=#346 id=346 data-nosnippet>346</a>                        filename, e
+<a href=#347 id=347 data-nosnippet>347</a>                    )
+<a href=#348 id=348 data-nosnippet>348</a>                    .into());
+<a href=#349 id=349 data-nosnippet>349</a>                }
+<a href=#350 id=350 data-nosnippet>350</a>            }
+<a href=#351 id=351 data-nosnippet>351</a>        } <span class="kw">else if let </span>AttestationSource::Attestation(path) = <span class="kw-2">&amp;</span>prefix_data.attestation {
+<a href=#352 id=352 data-nosnippet>352</a>            <span class="prelude-val">Some</span>(path.clone())
+<a href=#353 id=353 data-nosnippet>353</a>        } <span class="kw">else </span>{
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="prelude-val">None
+<a href=#355 id=355 data-nosnippet>355</a>        </span>};
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="attr">#[cfg(not(feature = <span class="string">"sigstore-sign"</span>))]
+<a href=#358 id=358 data-nosnippet>358</a>        </span><span class="kw">let </span>attestation_path = <span class="kw">match </span><span class="kw-2">&amp;</span>prefix_data.attestation {
+<a href=#359 id=359 data-nosnippet>359</a>            AttestationSource::Attestation(path) =&gt; <span class="prelude-val">Some</span>(path.clone()),
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#361 id=361 data-nosnippet>361</a>        };
+<a href=#362 id=362 data-nosnippet>362</a>
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>progress_bar = indicatif::ProgressBar::new(file_size)
+<a href=#364 id=364 data-nosnippet>364</a>            .with_prefix(<span class="string">"Uploading"</span>)
+<a href=#365 id=365 data-nosnippet>365</a>            .with_style(default_bytes_style().into_diagnostic()<span class="question-mark">?</span>);
+<a href=#366 id=366 data-nosnippet>366</a>
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>retry_policy = ExponentialBackoff::builder().build_with_max_retries(<span class="number">3</span>);
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span><span class="kw-2">mut </span>current_try = <span class="number">0</span>;
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>request_start = SystemTime::now();
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">loop </span>{
+<a href=#372 id=372 data-nosnippet>372</a>            progress_bar.reset();
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a>            <span class="kw">let </span>form = create_upload_form(
+<a href=#375 id=375 data-nosnippet>375</a>                package_file,
+<a href=#376 id=376 data-nosnippet>376</a>                <span class="kw-2">&amp;</span>filename,
+<a href=#377 id=377 data-nosnippet>377</a>                file_size,
+<a href=#378 id=378 data-nosnippet>378</a>                progress_bar.clone(),
+<a href=#379 id=379 data-nosnippet>379</a>                <span class="kw-2">&amp;</span>attestation_path,
+<a href=#380 id=380 data-nosnippet>380</a>            )
+<a href=#381 id=381 data-nosnippet>381</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">let </span>response = get_default_client()
+<a href=#384 id=384 data-nosnippet>384</a>                .into_diagnostic()<span class="question-mark">?
+<a href=#385 id=385 data-nosnippet>385</a>                </span>.post(url.clone())
+<a href=#386 id=386 data-nosnippet>386</a>                .multipart(form)
+<a href=#387 id=387 data-nosnippet>387</a>                .bearer_auth(<span class="kw-2">&amp;</span>token)
+<a href=#388 id=388 data-nosnippet>388</a>                .send()
+<a href=#389 id=389 data-nosnippet>389</a>                .<span class="kw">await
+<a href=#390 id=390 data-nosnippet>390</a>                </span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#391 id=391 data-nosnippet>391</a>
+<a href=#392 id=392 data-nosnippet>392</a>            <span class="kw">if </span>response.status().is_success() {
+<a href=#393 id=393 data-nosnippet>393</a>                progress_bar.finish();
+<a href=#394 id=394 data-nosnippet>394</a>                <span class="macro">info!</span>(<span class="string">"Upload complete for package file: {}"</span>, filename);
+<a href=#395 id=395 data-nosnippet>395</a>                <span class="kw">break</span>;
+<a href=#396 id=396 data-nosnippet>396</a>            }
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">let </span>status = response.status();
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">let </span>body = response.text().<span class="kw">await</span>.into_diagnostic()<span class="question-mark">?</span>;
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>            <span class="comment">// Non-retry status codes
+<a href=#402 id=402 data-nosnippet>402</a>            </span><span class="kw">match </span>status {
+<a href=#403 id=403 data-nosnippet>403</a>                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN =&gt; {
+<a href=#404 id=404 data-nosnippet>404</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::AuthenticationFailed {
+<a href=#405 id=405 data-nosnippet>405</a>                        status: status.as_u16(),
+<a href=#406 id=406 data-nosnippet>406</a>                        body,
+<a href=#407 id=407 data-nosnippet>407</a>                    });
+<a href=#408 id=408 data-nosnippet>408</a>                }
+<a href=#409 id=409 data-nosnippet>409</a>                StatusCode::CONFLICT =&gt; {
+<a href=#410 id=410 data-nosnippet>410</a>                    <span class="comment">// skip if package already exists
+<a href=#411 id=411 data-nosnippet>411</a>                    </span><span class="kw">if </span>prefix_data.skip_existing.is_enabled() {
+<a href=#412 id=412 data-nosnippet>412</a>                        progress_bar.finish();
+<a href=#413 id=413 data-nosnippet>413</a>                        <span class="macro">info!</span>(<span class="string">"Skip existing package: {}"</span>, filename);
+<a href=#414 id=414 data-nosnippet>414</a>                        <span class="kw">break</span>;
+<a href=#415 id=415 data-nosnippet>415</a>                    } <span class="kw">else </span>{
+<a href=#416 id=416 data-nosnippet>416</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::Conflict { body });
+<a href=#417 id=417 data-nosnippet>417</a>                    }
+<a href=#418 id=418 data-nosnippet>418</a>                }
+<a href=#419 id=419 data-nosnippet>419</a>                StatusCode::UNPROCESSABLE_ENTITY =&gt; {
+<a href=#420 id=420 data-nosnippet>420</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::UnprocessableEntity { body });
+<a href=#421 id=421 data-nosnippet>421</a>                }
+<a href=#422 id=422 data-nosnippet>422</a>                StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND | StatusCode::PAYLOAD_TOO_LARGE =&gt; {
+<a href=#423 id=423 data-nosnippet>423</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::ClientError {
+<a href=#424 id=424 data-nosnippet>424</a>                        status: status.as_u16(),
+<a href=#425 id=425 data-nosnippet>425</a>                        body,
+<a href=#426 id=426 data-nosnippet>426</a>                    });
+<a href=#427 id=427 data-nosnippet>427</a>                }
+<a href=#428 id=428 data-nosnippet>428</a>                <span class="kw">_ </span>=&gt; {}
+<a href=#429 id=429 data-nosnippet>429</a>            }
+<a href=#430 id=430 data-nosnippet>430</a>
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">match </span>retry_policy.should_retry(request_start, current_try) {
+<a href=#432 id=432 data-nosnippet>432</a>                RetryDecision::DoNotRetry =&gt; {
+<a href=#433 id=433 data-nosnippet>433</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PrefixUploadError::ServerError {
+<a href=#434 id=434 data-nosnippet>434</a>                        status: status.as_u16(),
+<a href=#435 id=435 data-nosnippet>435</a>                        body,
+<a href=#436 id=436 data-nosnippet>436</a>                    });
+<a href=#437 id=437 data-nosnippet>437</a>                }
+<a href=#438 id=438 data-nosnippet>438</a>                RetryDecision::Retry { execute_after } =&gt; {
+<a href=#439 id=439 data-nosnippet>439</a>                    <span class="kw">let </span>sleep_for = execute_after
+<a href=#440 id=440 data-nosnippet>440</a>                        .duration_since(SystemTime::now())
+<a href=#441 id=441 data-nosnippet>441</a>                        .unwrap_or(Duration::ZERO);
+<a href=#442 id=442 data-nosnippet>442</a>                    <span class="macro">warn!</span>(
+<a href=#443 id=443 data-nosnippet>443</a>                        <span class="string">"Failed to upload package file: {}\nStatus: {}\nBody: {}\nRetrying in {} seconds"</span>,
+<a href=#444 id=444 data-nosnippet>444</a>                        package_file.display(),
+<a href=#445 id=445 data-nosnippet>445</a>                        status,
+<a href=#446 id=446 data-nosnippet>446</a>                        body,
+<a href=#447 id=447 data-nosnippet>447</a>                        sleep_for.as_secs()
+<a href=#448 id=448 data-nosnippet>448</a>                    );
+<a href=#449 id=449 data-nosnippet>449</a>                    tokio::time::sleep(sleep_for).<span class="kw">await</span>;
+<a href=#450 id=450 data-nosnippet>450</a>                }
+<a href=#451 id=451 data-nosnippet>451</a>            }
+<a href=#452 id=452 data-nosnippet>452</a>
+<a href=#453 id=453 data-nosnippet>453</a>            current_try += <span class="number">1</span>;
+<a href=#454 id=454 data-nosnippet>454</a>        }
+<a href=#455 id=455 data-nosnippet>455</a>    }
+<a href=#456 id=456 data-nosnippet>456</a>
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="macro">info!</span>(<span class="string">"Packages successfully uploaded to prefix.dev server"</span>);
+<a href=#458 id=458 data-nosnippet>458</a>    <span class="prelude-val">Ok</span>(())
+<a href=#459 id=459 data-nosnippet>459</a>}
+<a href=#460 id=460 data-nosnippet>460</a>
+<a href=#461 id=461 data-nosnippet>461</a><span class="attr">#[cfg(test)]
+<a href=#462 id=462 data-nosnippet>462</a></span><span class="kw">mod </span>test {
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">use </span>axum::{Router, http::StatusCode};
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">use </span>rattler_networking::AuthenticationStorage;
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">use super</span>::{PrefixUploadError, upload_package_to_prefix};
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">use </span><span class="kw">crate</span>::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">use </span><span class="kw">crate</span>::upload::test_utils::{start_test_server, test_package_path};
+<a href=#469 id=469 data-nosnippet>469</a>
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">async fn </span>ok_with_bearer(
+<a href=#471 id=471 data-nosnippet>471</a>        headers: axum::http::HeaderMap,
+<a href=#472 id=472 data-nosnippet>472</a>        _body: axum::body::Bytes,
+<a href=#473 id=473 data-nosnippet>473</a>    ) -&gt; StatusCode {
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>auth = headers.get(<span class="string">"authorization"</span>).unwrap().to_str().unwrap();
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="macro">assert!</span>(auth.starts_with(<span class="string">"Bearer "</span>));
+<a href=#476 id=476 data-nosnippet>476</a>        StatusCode::OK
+<a href=#477 id=477 data-nosnippet>477</a>    }
+<a href=#478 id=478 data-nosnippet>478</a>
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">async fn </span>unauthorized(_body: axum::body::Bytes) -&gt; StatusCode {
+<a href=#480 id=480 data-nosnippet>480</a>        StatusCode::UNAUTHORIZED
+<a href=#481 id=481 data-nosnippet>481</a>    }
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">async fn </span>conflict(_body: axum::body::Bytes) -&gt; StatusCode {
+<a href=#484 id=484 data-nosnippet>484</a>        StatusCode::CONFLICT
+<a href=#485 id=485 data-nosnippet>485</a>    }
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="kw">fn </span>make_prefix_data(url: url::Url, skip_existing: bool) -&gt; PrefixData {
+<a href=#488 id=488 data-nosnippet>488</a>        PrefixData::new(
+<a href=#489 id=489 data-nosnippet>489</a>            url,
+<a href=#490 id=490 data-nosnippet>490</a>            <span class="string">"test-channel"</span>.to_string(),
+<a href=#491 id=491 data-nosnippet>491</a>            <span class="prelude-val">Some</span>(<span class="string">"test-token"</span>.to_string()),
+<a href=#492 id=492 data-nosnippet>492</a>            AttestationSource::NoAttestation,
+<a href=#493 id=493 data-nosnippet>493</a>            SkipExisting(skip_existing),
+<a href=#494 id=494 data-nosnippet>494</a>            ForceOverwrite(<span class="bool-val">false</span>),
+<a href=#495 id=495 data-nosnippet>495</a>            <span class="bool-val">false</span>,
+<a href=#496 id=496 data-nosnippet>496</a>        )
+<a href=#497 id=497 data-nosnippet>497</a>    }
+<a href=#498 id=498 data-nosnippet>498</a>
+<a href=#499 id=499 data-nosnippet>499</a>    <span class="attr">#[tokio::test]
+<a href=#500 id=500 data-nosnippet>500</a>    </span><span class="kw">async fn </span>test_prefix_upload_success() {
+<a href=#501 id=501 data-nosnippet>501</a>        <span class="kw">let </span>router = Router::new().fallback(ok_with_bearer);
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#504 id=504 data-nosnippet>504</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
+<a href=#505 id=505 data-nosnippet>505</a>        <span class="kw">let </span>result =
+<a href=#506 id=506 data-nosnippet>506</a>            upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data).<span class="kw">await</span>;
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
+<a href=#508 id=508 data-nosnippet>508</a>    }
+<a href=#509 id=509 data-nosnippet>509</a>
+<a href=#510 id=510 data-nosnippet>510</a>    <span class="attr">#[tokio::test]
+<a href=#511 id=511 data-nosnippet>511</a>    </span><span class="kw">async fn </span>test_prefix_upload_skip_existing() {
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>router = Router::new().fallback(conflict);
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">true</span>);
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">let </span>result =
+<a href=#517 id=517 data-nosnippet>517</a>            upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data).<span class="kw">await</span>;
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
+<a href=#519 id=519 data-nosnippet>519</a>    }
+<a href=#520 id=520 data-nosnippet>520</a>
+<a href=#521 id=521 data-nosnippet>521</a>    <span class="attr">#[tokio::test]
+<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">async fn </span>test_prefix_upload_skip_existing_continues_remaining() {
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="comment">// First package returns 409, second returns 200 — both should succeed overall
+<a href=#524 id=524 data-nosnippet>524</a>        </span><span class="kw">use </span>axum::extract::State;
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">use </span>std::sync::Arc;
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
+<a href=#527 id=527 data-nosnippet>527</a>
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">async fn </span>handler(
+<a href=#529 id=529 data-nosnippet>529</a>            State(count): State&lt;Arc&lt;AtomicUsize&gt;&gt;,
+<a href=#530 id=530 data-nosnippet>530</a>            _body: axum::body::Bytes,
+<a href=#531 id=531 data-nosnippet>531</a>        ) -&gt; StatusCode {
+<a href=#532 id=532 data-nosnippet>532</a>            <span class="kw">let </span>n = count.fetch_add(<span class="number">1</span>, Ordering::SeqCst);
+<a href=#533 id=533 data-nosnippet>533</a>            <span class="kw">if </span>n == <span class="number">0 </span>{
+<a href=#534 id=534 data-nosnippet>534</a>                StatusCode::CONFLICT
+<a href=#535 id=535 data-nosnippet>535</a>            } <span class="kw">else </span>{
+<a href=#536 id=536 data-nosnippet>536</a>                StatusCode::OK
+<a href=#537 id=537 data-nosnippet>537</a>            }
+<a href=#538 id=538 data-nosnippet>538</a>        }
+<a href=#539 id=539 data-nosnippet>539</a>
+<a href=#540 id=540 data-nosnippet>540</a>        <span class="kw">let </span>call_count = Arc::new(AtomicUsize::new(<span class="number">0</span>));
+<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">let </span>router = Router::new().fallback(handler).with_state(call_count);
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">true</span>);
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">let </span>result = upload_package_to_prefix(
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw-2">&amp;</span>storage,
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path(), test_package_path()],
+<a href=#548 id=548 data-nosnippet>548</a>            prefix_data,
+<a href=#549 id=549 data-nosnippet>549</a>        )
+<a href=#550 id=550 data-nosnippet>550</a>        .<span class="kw">await</span>;
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="macro">assert!</span>(result.is_ok(), <span class="string">"{:?}"</span>, result.unwrap_err());
+<a href=#552 id=552 data-nosnippet>552</a>    }
+<a href=#553 id=553 data-nosnippet>553</a>
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="attr">#[tokio::test]
+<a href=#555 id=555 data-nosnippet>555</a>    </span><span class="kw">async fn </span>test_prefix_upload_conflict_without_skip() {
+<a href=#556 id=556 data-nosnippet>556</a>        <span class="kw">let </span>router = Router::new().fallback(conflict);
+<a href=#557 id=557 data-nosnippet>557</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
+<a href=#561 id=561 data-nosnippet>561</a>            .<span class="kw">await
+<a href=#562 id=562 data-nosnippet>562</a>            </span>.unwrap_err();
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="macro">assert!</span>(
+<a href=#564 id=564 data-nosnippet>564</a>            <span class="macro">matches!</span>(err, PrefixUploadError::Conflict { .. }),
+<a href=#565 id=565 data-nosnippet>565</a>            <span class="string">"expected Conflict, got: {err:?}"
+<a href=#566 id=566 data-nosnippet>566</a>        </span>);
+<a href=#567 id=567 data-nosnippet>567</a>    }
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>    <span class="attr">#[tokio::test]
+<a href=#570 id=570 data-nosnippet>570</a>    </span><span class="kw">async fn </span>test_prefix_upload_auth_failure() {
+<a href=#571 id=571 data-nosnippet>571</a>        <span class="kw">let </span>router = Router::new().fallback(unauthorized);
+<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">let </span>prefix_data = make_prefix_data(url, <span class="bool-val">false</span>);
+<a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
+<a href=#576 id=576 data-nosnippet>576</a>            .<span class="kw">await
+<a href=#577 id=577 data-nosnippet>577</a>            </span>.unwrap_err();
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="macro">assert!</span>(
+<a href=#579 id=579 data-nosnippet>579</a>            <span class="macro">matches!</span>(
+<a href=#580 id=580 data-nosnippet>580</a>                err,
+<a href=#581 id=581 data-nosnippet>581</a>                PrefixUploadError::AuthenticationFailed { status: <span class="number">401</span>, .. }
+<a href=#582 id=582 data-nosnippet>582</a>            ),
+<a href=#583 id=583 data-nosnippet>583</a>            <span class="string">"expected AuthenticationFailed, got: {err:?}"
+<a href=#584 id=584 data-nosnippet>584</a>        </span>);
+<a href=#585 id=585 data-nosnippet>585</a>    }
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a>    <span class="attr">#[tokio::test]
+<a href=#588 id=588 data-nosnippet>588</a>    </span><span class="kw">async fn </span>test_prefix_upload_missing_api_key() {
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw">let </span>router = Router::new().fallback(ok_with_bearer);
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="kw">let </span>url = start_test_server(router).<span class="kw">await</span>;
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">let </span>storage = AuthenticationStorage::empty();
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">let </span>prefix_data = PrefixData::new(
+<a href=#593 id=593 data-nosnippet>593</a>            url,
+<a href=#594 id=594 data-nosnippet>594</a>            <span class="string">"test-channel"</span>.to_string(),
+<a href=#595 id=595 data-nosnippet>595</a>            <span class="prelude-val">None</span>,
+<a href=#596 id=596 data-nosnippet>596</a>            AttestationSource::NoAttestation,
+<a href=#597 id=597 data-nosnippet>597</a>            SkipExisting(<span class="bool-val">false</span>),
+<a href=#598 id=598 data-nosnippet>598</a>            ForceOverwrite(<span class="bool-val">false</span>),
+<a href=#599 id=599 data-nosnippet>599</a>            <span class="bool-val">false</span>,
+<a href=#600 id=600 data-nosnippet>600</a>        );
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="kw">let </span>err = upload_package_to_prefix(<span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span><span class="macro">vec!</span>[test_package_path()], prefix_data)
+<a href=#602 id=602 data-nosnippet>602</a>            .<span class="kw">await
+<a href=#603 id=603 data-nosnippet>603</a>            </span>.unwrap_err();
+<a href=#604 id=604 data-nosnippet>604</a>        <span class="macro">assert!</span>(
+<a href=#605 id=605 data-nosnippet>605</a>            <span class="macro">matches!</span>(err, PrefixUploadError::MissingApiKey),
+<a href=#606 id=606 data-nosnippet>606</a>            <span class="string">"expected MissingApiKey, got: {err:?}"
+<a href=#607 id=607 data-nosnippet>607</a>        </span>);
+<a href=#608 id=608 data-nosnippet>608</a>    }
+<a href=#609 id=609 data-nosnippet>609</a>}
 </code></pre></div></section></main></body></html>

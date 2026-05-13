@@ -3,7 +3,7 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_lock/parse/models/v7/</div>source_data.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>serde::{Deserialize, Deserializer, Serialize};
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>serde_with::{serde_as, DeserializeAs, SerializeAs};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>serde_with::{DeserializeAs, SerializeAs, serde_as};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>typed_path::Utf8TypedPathBuf;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>url::Url;
 <a href=#7 id=7 data-nosnippet>7</a>

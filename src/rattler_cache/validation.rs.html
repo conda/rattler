@@ -123,7 +123,7 @@
 <a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">match </span>PathsJson::from_deprecated_package_directory(package_dir) {
 <a href=#122 id=122 data-nosnippet>122</a>                <span class="prelude-val">Ok</span>(paths) =&gt; paths,
 <a href=#123 id=123 data-nosnippet>123</a>                <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.kind() == ErrorKind::NotFound =&gt; {
-<a href=#124 id=124 data-nosnippet>124</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PackageValidationError::MetadataMissing)
+<a href=#124 id=124 data-nosnippet>124</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(PackageValidationError::MetadataMissing);
 <a href=#125 id=125 data-nosnippet>125</a>                }
 <a href=#126 id=126 data-nosnippet>126</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(PackageValidationError::ReadDeprecatedPathsJsonError(e)),
 <a href=#127 id=127 data-nosnippet>127</a>            }
@@ -295,8 +295,8 @@
 <a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">use </span>url::Url;
 <a href=#294 id=294 data-nosnippet>294</a>
 <a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">use super</span>::{
-<a href=#296 id=296 data-nosnippet>296</a>        validate_package_directory, validate_package_directory_from_paths,
-<a href=#297 id=297 data-nosnippet>297</a>        PackageEntryValidationError, PackageValidationError, ValidationMode,
+<a href=#296 id=296 data-nosnippet>296</a>        PackageEntryValidationError, PackageValidationError, ValidationMode,
+<a href=#297 id=297 data-nosnippet>297</a>        validate_package_directory, validate_package_directory_from_paths,
 <a href=#298 id=298 data-nosnippet>298</a>    };
 <a href=#299 id=299 data-nosnippet>299</a>
 <a href=#300 id=300 data-nosnippet>300</a>    <span class="attr">#[rstest]

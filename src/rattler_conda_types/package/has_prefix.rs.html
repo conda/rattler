@@ -9,15 +9,15 @@
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>nom::{
-<a href=#10 id=10 data-nosnippet>10</a>    branch::alt,
-<a href=#11 id=11 data-nosnippet>11</a>    bytes::complete::{tag, tag_no_case, take_till1},
-<a href=#12 id=12 data-nosnippet>12</a>    character::complete::multispace1,
-<a href=#13 id=13 data-nosnippet>13</a>    combinator::{all_consuming, map, value},
-<a href=#14 id=14 data-nosnippet>14</a>    sequence::{preceded, terminated},
-<a href=#15 id=15 data-nosnippet>15</a>    IResult, Parser,
+<a href=#10 id=10 data-nosnippet>10</a>    IResult, Parser,
+<a href=#11 id=11 data-nosnippet>11</a>    branch::alt,
+<a href=#12 id=12 data-nosnippet>12</a>    bytes::complete::{tag, tag_no_case, take_till1},
+<a href=#13 id=13 data-nosnippet>13</a>    character::complete::multispace1,
+<a href=#14 id=14 data-nosnippet>14</a>    combinator::{all_consuming, map, value},
+<a href=#15 id=15 data-nosnippet>15</a>    sequence::{preceded, terminated},
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::package::{paths::FileMode, PackageFile};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::package::{PackageFile, paths::FileMode};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="doccomment">/// Representation of an entry in `info/has_prefix`.
 <a href=#21 id=21 data-nosnippet>21</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]

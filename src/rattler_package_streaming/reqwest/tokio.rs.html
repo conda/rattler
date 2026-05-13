@@ -173,66 +173,69 @@
 <a href=#171 id=171 data-nosnippet>171</a>        </span><span class="prelude-val">Err</span>(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
 <a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">if </span>(zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =&gt;
 <a href=#173 id=173 data-nosnippet>173</a>        {
-<a href=#174 id=174 data-nosnippet>174</a>            <span class="macro">tracing::warn!</span>(<span class="string">"Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression"</span>, url);
-<a href=#175 id=175 data-nosnippet>175</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(reporter) = <span class="kw-2">&amp;</span>reporter {
-<a href=#176 id=176 data-nosnippet>176</a>                reporter.on_download_complete();
-<a href=#177 id=177 data-nosnippet>177</a>            }
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">let </span>new_reader =
-<a href=#179 id=179 data-nosnippet>179</a>                get_reader(url.clone(), client, expected_sha256, reporter.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">match </span><span class="kw">crate</span>::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
-<a href=#182 id=182 data-nosnippet>182</a>                .<span class="kw">await
-<a href=#183 id=183 data-nosnippet>183</a>            </span>{
-<a href=#184 id=184 data-nosnippet>184</a>                <span class="prelude-val">Ok</span>(result) =&gt; {
-<a href=#185 id=185 data-nosnippet>185</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(reporter) = <span class="kw-2">&amp;</span>reporter {
-<a href=#186 id=186 data-nosnippet>186</a>                        reporter.on_download_complete();
-<a href=#187 id=187 data-nosnippet>187</a>                    }
-<a href=#188 id=188 data-nosnippet>188</a>                    <span class="prelude-val">Ok</span>(result)
-<a href=#189 id=189 data-nosnippet>189</a>                }
-<a href=#190 id=190 data-nosnippet>190</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
-<a href=#191 id=191 data-nosnippet>191</a>            }
-<a href=#192 id=192 data-nosnippet>192</a>        }
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
-<a href=#194 id=194 data-nosnippet>194</a>    }
-<a href=#195 id=195 data-nosnippet>195</a>}
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a><span class="doccomment">/// Extracts the contents a package archive from the specified remote location.
-<a href=#198 id=198 data-nosnippet>198</a>/// The type of package is determined based on the path of the url.
-<a href=#199 id=199 data-nosnippet>199</a>///
-<a href=#200 id=200 data-nosnippet>200</a>/// ```rust,no_run
-<a href=#201 id=201 data-nosnippet>201</a>/// # #[tokio::main]
-<a href=#202 id=202 data-nosnippet>202</a>/// # async fn main() {
-<a href=#203 id=203 data-nosnippet>203</a>/// # use std::path::Path;
-<a href=#204 id=204 data-nosnippet>204</a>/// use url::Url;
-<a href=#205 id=205 data-nosnippet>205</a>/// use rattler_package_streaming::reqwest::tokio::extract;
-<a href=#206 id=206 data-nosnippet>206</a>/// use reqwest::Client;
-<a href=#207 id=207 data-nosnippet>207</a>/// use reqwest_middleware::ClientWithMiddleware;
-<a href=#208 id=208 data-nosnippet>208</a>/// let _ = extract(
-<a href=#209 id=209 data-nosnippet>209</a>///     ClientWithMiddleware::from(Client::new()),
-<a href=#210 id=210 data-nosnippet>210</a>///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
-<a href=#211 id=211 data-nosnippet>211</a>///     Path::new("/tmp"),
-<a href=#212 id=212 data-nosnippet>212</a>///     None,
-<a href=#213 id=213 data-nosnippet>213</a>///     None)
-<a href=#214 id=214 data-nosnippet>214</a>///     .await
-<a href=#215 id=215 data-nosnippet>215</a>///     .unwrap();
-<a href=#216 id=216 data-nosnippet>216</a>/// # }
-<a href=#217 id=217 data-nosnippet>217</a>/// ```
-<a href=#218 id=218 data-nosnippet>218</a></span><span class="kw">pub async fn </span>extract(
-<a href=#219 id=219 data-nosnippet>219</a>    client: reqwest_middleware::ClientWithMiddleware,
-<a href=#220 id=220 data-nosnippet>220</a>    url: Url,
-<a href=#221 id=221 data-nosnippet>221</a>    destination: <span class="kw-2">&amp;</span>Path,
-<a href=#222 id=222 data-nosnippet>222</a>    expected_sha256: <span class="prelude-ty">Option</span>&lt;Sha256Hash&gt;,
-<a href=#223 id=223 data-nosnippet>223</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>DownloadReporter&gt;&gt;,
-<a href=#224 id=224 data-nosnippet>224</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">match </span>CondaArchiveType::try_from(Path::new(url.path()))
-<a href=#226 id=226 data-nosnippet>226</a>        .ok_or(ExtractError::UnsupportedArchiveType)<span class="question-mark">?
-<a href=#227 id=227 data-nosnippet>227</a>    </span>{
-<a href=#228 id=228 data-nosnippet>228</a>        CondaArchiveType::TarBz2 =&gt; {
-<a href=#229 id=229 data-nosnippet>229</a>            extract_tar_bz2(client, url, destination, expected_sha256, reporter).<span class="kw">await
-<a href=#230 id=230 data-nosnippet>230</a>        </span>}
-<a href=#231 id=231 data-nosnippet>231</a>        CondaArchiveType::Conda =&gt; {
-<a href=#232 id=232 data-nosnippet>232</a>            extract_conda(client, url, destination, expected_sha256, reporter).<span class="kw">await
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="macro">tracing::warn!</span>(
+<a href=#175 id=175 data-nosnippet>175</a>                <span class="string">"Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression"</span>,
+<a href=#176 id=176 data-nosnippet>176</a>                url
+<a href=#177 id=177 data-nosnippet>177</a>            );
+<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(reporter) = <span class="kw-2">&amp;</span>reporter {
+<a href=#179 id=179 data-nosnippet>179</a>                reporter.on_download_complete();
+<a href=#180 id=180 data-nosnippet>180</a>            }
+<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">let </span>new_reader =
+<a href=#182 id=182 data-nosnippet>182</a>                get_reader(url.clone(), client, expected_sha256, reporter.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">match </span><span class="kw">crate</span>::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
+<a href=#185 id=185 data-nosnippet>185</a>                .<span class="kw">await
+<a href=#186 id=186 data-nosnippet>186</a>            </span>{
+<a href=#187 id=187 data-nosnippet>187</a>                <span class="prelude-val">Ok</span>(result) =&gt; {
+<a href=#188 id=188 data-nosnippet>188</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(reporter) = <span class="kw-2">&amp;</span>reporter {
+<a href=#189 id=189 data-nosnippet>189</a>                        reporter.on_download_complete();
+<a href=#190 id=190 data-nosnippet>190</a>                    }
+<a href=#191 id=191 data-nosnippet>191</a>                    <span class="prelude-val">Ok</span>(result)
+<a href=#192 id=192 data-nosnippet>192</a>                }
+<a href=#193 id=193 data-nosnippet>193</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
+<a href=#194 id=194 data-nosnippet>194</a>            }
+<a href=#195 id=195 data-nosnippet>195</a>        }
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
+<a href=#197 id=197 data-nosnippet>197</a>    }
+<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a><span class="doccomment">/// Extracts the contents a package archive from the specified remote location.
+<a href=#201 id=201 data-nosnippet>201</a>/// The type of package is determined based on the path of the url.
+<a href=#202 id=202 data-nosnippet>202</a>///
+<a href=#203 id=203 data-nosnippet>203</a>/// ```rust,no_run
+<a href=#204 id=204 data-nosnippet>204</a>/// # #[tokio::main]
+<a href=#205 id=205 data-nosnippet>205</a>/// # async fn main() {
+<a href=#206 id=206 data-nosnippet>206</a>/// # use std::path::Path;
+<a href=#207 id=207 data-nosnippet>207</a>/// use url::Url;
+<a href=#208 id=208 data-nosnippet>208</a>/// use rattler_package_streaming::reqwest::tokio::extract;
+<a href=#209 id=209 data-nosnippet>209</a>/// use reqwest::Client;
+<a href=#210 id=210 data-nosnippet>210</a>/// use reqwest_middleware::ClientWithMiddleware;
+<a href=#211 id=211 data-nosnippet>211</a>/// let _ = extract(
+<a href=#212 id=212 data-nosnippet>212</a>///     ClientWithMiddleware::from(Client::new()),
+<a href=#213 id=213 data-nosnippet>213</a>///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
+<a href=#214 id=214 data-nosnippet>214</a>///     Path::new("/tmp"),
+<a href=#215 id=215 data-nosnippet>215</a>///     None,
+<a href=#216 id=216 data-nosnippet>216</a>///     None)
+<a href=#217 id=217 data-nosnippet>217</a>///     .await
+<a href=#218 id=218 data-nosnippet>218</a>///     .unwrap();
+<a href=#219 id=219 data-nosnippet>219</a>/// # }
+<a href=#220 id=220 data-nosnippet>220</a>/// ```
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub async fn </span>extract(
+<a href=#222 id=222 data-nosnippet>222</a>    client: reqwest_middleware::ClientWithMiddleware,
+<a href=#223 id=223 data-nosnippet>223</a>    url: Url,
+<a href=#224 id=224 data-nosnippet>224</a>    destination: <span class="kw-2">&amp;</span>Path,
+<a href=#225 id=225 data-nosnippet>225</a>    expected_sha256: <span class="prelude-ty">Option</span>&lt;Sha256Hash&gt;,
+<a href=#226 id=226 data-nosnippet>226</a>    reporter: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>DownloadReporter&gt;&gt;,
+<a href=#227 id=227 data-nosnippet>227</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ExtractResult, ExtractError&gt; {
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">match </span>CondaArchiveType::try_from(Path::new(url.path()))
+<a href=#229 id=229 data-nosnippet>229</a>        .ok_or(ExtractError::UnsupportedArchiveType)<span class="question-mark">?
+<a href=#230 id=230 data-nosnippet>230</a>    </span>{
+<a href=#231 id=231 data-nosnippet>231</a>        CondaArchiveType::TarBz2 =&gt; {
+<a href=#232 id=232 data-nosnippet>232</a>            extract_tar_bz2(client, url, destination, expected_sha256, reporter).<span class="kw">await
 <a href=#233 id=233 data-nosnippet>233</a>        </span>}
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>}
+<a href=#234 id=234 data-nosnippet>234</a>        CondaArchiveType::Conda =&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>            extract_conda(client, url, destination, expected_sha256, reporter).<span class="kw">await
+<a href=#236 id=236 data-nosnippet>236</a>        </span>}
+<a href=#237 id=237 data-nosnippet>237</a>    }
+<a href=#238 id=238 data-nosnippet>238</a>}
 </code></pre></div></section></main></body></html>

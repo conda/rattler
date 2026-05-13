@@ -64,7 +64,7 @@
 <a href=#62 id=62 data-nosnippet>62</a>            <span class="number">0 </span>=&gt; {
 <a href=#63 id=63 data-nosnippet>63</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ParseCondaLockError::ParseError(serde_yaml::Error::custom(
 <a href=#64 id=64 data-nosnippet>64</a>                    <span class="string">"`version` field in lock file is not an integer"</span>,
-<a href=#65 id=65 data-nosnippet>65</a>                )))
+<a href=#65 id=65 data-nosnippet>65</a>                )));
 <a href=#66 id=66 data-nosnippet>66</a>            }
 <a href=#67 id=67 data-nosnippet>67</a>            <span class="number">1 </span>=&gt; <span class="self">Self</span>::V1,
 <a href=#68 id=68 data-nosnippet>68</a>            <span class="number">2 </span>=&gt; <span class="self">Self</span>::V2,
@@ -77,7 +77,7 @@
 <a href=#75 id=75 data-nosnippet>75</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ParseCondaLockError::IncompatibleVersion {
 <a href=#76 id=76 data-nosnippet>76</a>                    lock_file_version: value,
 <a href=#77 id=77 data-nosnippet>77</a>                    max_supported_version: FileFormatVersion::LATEST,
-<a href=#78 id=78 data-nosnippet>78</a>                })
+<a href=#78 id=78 data-nosnippet>78</a>                });
 <a href=#79 id=79 data-nosnippet>79</a>            }
 <a href=#80 id=80 data-nosnippet>80</a>        })
 <a href=#81 id=81 data-nosnippet>81</a>    }

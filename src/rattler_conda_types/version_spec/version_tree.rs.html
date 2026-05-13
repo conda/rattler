@@ -3,14 +3,14 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_conda_types/version_spec/</div>version_tree.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::convert::TryFrom;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>nom::{
-<a href=#4 id=4 data-nosnippet>4</a>    branch::alt,
-<a href=#5 id=5 data-nosnippet>5</a>    bytes::complete::{tag, take_while},
-<a href=#6 id=6 data-nosnippet>6</a>    character::complete::{alpha1, digit1, multispace0, u32},
-<a href=#7 id=7 data-nosnippet>7</a>    combinator::{all_consuming, cut, map, not, opt, recognize, value},
-<a href=#8 id=8 data-nosnippet>8</a>    error::{context, ContextError, ParseError},
-<a href=#9 id=9 data-nosnippet>9</a>    multi::separated_list1,
-<a href=#10 id=10 data-nosnippet>10</a>    sequence::{delimited, preceded, terminated},
-<a href=#11 id=11 data-nosnippet>11</a>    IResult, Parser,
+<a href=#4 id=4 data-nosnippet>4</a>    IResult, Parser,
+<a href=#5 id=5 data-nosnippet>5</a>    branch::alt,
+<a href=#6 id=6 data-nosnippet>6</a>    bytes::complete::{tag, take_while},
+<a href=#7 id=7 data-nosnippet>7</a>    character::complete::{alpha1, digit1, multispace0, u32},
+<a href=#8 id=8 data-nosnippet>8</a>    combinator::{all_consuming, cut, map, not, opt, recognize, value},
+<a href=#9 id=9 data-nosnippet>9</a>    error::{ContextError, ParseError, context},
+<a href=#10 id=10 data-nosnippet>10</a>    multi::separated_list1,
+<a href=#11 id=11 data-nosnippet>11</a>    sequence::{delimited, preceded, terminated},
 <a href=#12 id=12 data-nosnippet>12</a>};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>nom_language::error::convert_error;
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>thiserror::Error;
@@ -261,10 +261,10 @@
 <a href=#259 id=259 data-nosnippet>259</a></span><span class="kw">mod </span>tests {
 <a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">use </span>std::convert::TryFrom;
 <a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">use super</span>::{parse_operator, recognize_version, LogicalOperator, VersionTree};
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">use super</span>::{LogicalOperator, VersionTree, parse_operator, recognize_version};
 <a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">use </span><span class="kw">crate</span>::version_spec::{
-<a href=#264 id=264 data-nosnippet>264</a>        version_tree::{parse_version_epoch, recognize_constraint},
-<a href=#265 id=265 data-nosnippet>265</a>        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+<a href=#264 id=264 data-nosnippet>264</a>        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+<a href=#265 id=265 data-nosnippet>265</a>        version_tree::{parse_version_epoch, recognize_constraint},
 <a href=#266 id=266 data-nosnippet>266</a>    };
 <a href=#267 id=267 data-nosnippet>267</a>
 <a href=#268 id=268 data-nosnippet>268</a>    <span class="attr">#[test]

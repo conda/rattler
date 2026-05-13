@@ -14,16 +14,16 @@
 <a href=#12 id=12 data-nosnippet>12</a>    str::FromStr,
 <a href=#13 id=13 data-nosnippet>13</a>};
 <a href=#14 id=14 data-nosnippet>14</a>
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>constraint::is_start_of_version_constraint;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>constraint::Constraint;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>constraint::Constraint;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>constraint::is_start_of_version_constraint;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub use </span>parse::ParseConstraintError;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>serde::{Deserialize, Serialize, Serializer};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>thiserror::Error;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>version_tree::VersionTree;
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use crate</span>::{
-<a href=#23 id=23 data-nosnippet>23</a>    version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
-<a href=#24 id=24 data-nosnippet>24</a>    ParseStrictness::Lenient, ParseVersionError, Version,
+<a href=#23 id=23 data-nosnippet>23</a>    ParseStrictness, ParseStrictness::Lenient, ParseVersionError, Version, version::StrictVersion,
+<a href=#24 id=24 data-nosnippet>24</a>    version_spec::version_tree::ParseVersionTreeError,
 <a href=#25 id=25 data-nosnippet>25</a>};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="doccomment">/// An operator to compare two versions.
@@ -361,11 +361,11 @@
 <a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">use </span>rstest::rstest;
 <a href=#360 id=360 data-nosnippet>360</a>
 <a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">use crate</span>::{
-<a href=#362 id=362 data-nosnippet>362</a>        version_spec::{
-<a href=#363 id=363 data-nosnippet>363</a>            parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
-<a href=#364 id=364 data-nosnippet>364</a>            RangeOperator, StrictRangeOperator,
-<a href=#365 id=365 data-nosnippet>365</a>        },
-<a href=#366 id=366 data-nosnippet>366</a>        ParseStrictness, StrictVersion, Version, VersionSpec,
+<a href=#362 id=362 data-nosnippet>362</a>        ParseStrictness, StrictVersion, Version, VersionSpec,
+<a href=#363 id=363 data-nosnippet>363</a>        version_spec::{
+<a href=#364 id=364 data-nosnippet>364</a>            EqualityOperator, LogicalOperator, ParseVersionSpecError, RangeOperator,
+<a href=#365 id=365 data-nosnippet>365</a>            StrictRangeOperator, parse::ParseConstraintError,
+<a href=#366 id=366 data-nosnippet>366</a>        },
 <a href=#367 id=367 data-nosnippet>367</a>    };
 <a href=#368 id=368 data-nosnippet>368</a>
 <a href=#369 id=369 data-nosnippet>369</a>    <span class="attr">#[test]

@@ -248,7 +248,7 @@
 <a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">use </span>windows_sys::Win32::Foundation::HANDLE;
 <a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">use </span>windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_LOCK_VIOLATION};
 <a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">use </span>windows_sys::Win32::Storage::FileSystem::{
-<a href=#249 id=249 data-nosnippet>249</a>        LockFileEx, UnlockFile, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+<a href=#249 id=249 data-nosnippet>249</a>        LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFile,
 <a href=#250 id=250 data-nosnippet>250</a>    };
 <a href=#251 id=251 data-nosnippet>251</a>
 <a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">pub fn </span>lock_exclusive(file: <span class="kw-2">&amp;</span>File) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

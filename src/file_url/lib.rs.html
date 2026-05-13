@@ -7,7 +7,7 @@
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>std::{fmt::Write, path::PathBuf, str::FromStr};
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>itertools::Itertools;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>percent_encoding::{AsciiSet, CONTROLS, percent_decode, percent_encode};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>thiserror::Error;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>typed_path::{
 <a href=#11 id=11 data-nosnippet>11</a>    Utf8TypedComponent, Utf8TypedPath, Utf8TypedPathBuf, Utf8UnixComponent, Utf8WindowsComponent,
@@ -20,17 +20,17 @@
 <a href=#18 id=18 data-nosnippet>18</a>/// letter segment.
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">fn </span>is_windows_drive_letter_segment(segment: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="comment">// Segment is a simple drive letter: X:
-<a href=#21 id=21 data-nosnippet>21</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>((drive_letter, <span class="string">':'</span>)) = segment.chars().collect_tuple() {
-<a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">if </span>drive_letter.is_ascii_alphabetic() {
-<a href=#23 id=23 data-nosnippet>23</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{drive_letter}:\\"</span>));
-<a href=#24 id=24 data-nosnippet>24</a>        }
+<a href=#21 id=21 data-nosnippet>21</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>((drive_letter, <span class="string">':'</span>)) = segment.chars().collect_tuple()
+<a href=#22 id=22 data-nosnippet>22</a>        &amp;&amp; drive_letter.is_ascii_alphabetic()
+<a href=#23 id=23 data-nosnippet>23</a>    {
+<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{drive_letter}:\\"</span>));
 <a href=#25 id=25 data-nosnippet>25</a>    }
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="comment">// Segment is a simple drive letter but the colon is percent escaped: E.g. X%3A
-<a href=#28 id=28 data-nosnippet>28</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>((drive_letter, <span class="string">'%'</span>, <span class="string">'3'</span>, <span class="string">'a' </span>| <span class="string">'A'</span>)) = segment.chars().collect_tuple() {
-<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">if </span>drive_letter.is_ascii_alphabetic() {
-<a href=#30 id=30 data-nosnippet>30</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{drive_letter}:\\"</span>));
-<a href=#31 id=31 data-nosnippet>31</a>        }
+<a href=#28 id=28 data-nosnippet>28</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>((drive_letter, <span class="string">'%'</span>, <span class="string">'3'</span>, <span class="string">'a' </span>| <span class="string">'A'</span>)) = segment.chars().collect_tuple()
+<a href=#29 id=29 data-nosnippet>29</a>        &amp;&amp; drive_letter.is_ascii_alphabetic()
+<a href=#30 id=30 data-nosnippet>30</a>    {
+<a href=#31 id=31 data-nosnippet>31</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"{drive_letter}:\\"</span>));
 <a href=#32 id=32 data-nosnippet>32</a>    }
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="prelude-val">None

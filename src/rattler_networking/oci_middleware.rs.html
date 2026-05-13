@@ -7,15 +7,15 @@
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>http::{
-<a href=#8 id=8 data-nosnippet>8</a>    header::{ACCEPT, AUTHORIZATION},
-<a href=#9 id=9 data-nosnippet>9</a>    Extensions,
+<a href=#8 id=8 data-nosnippet>8</a>    Extensions,
+<a href=#9 id=9 data-nosnippet>9</a>    header::{ACCEPT, AUTHORIZATION},
 <a href=#10 id=10 data-nosnippet>10</a>};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>reqwest::{Request, Response};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>reqwest_middleware::{Middleware, Next};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>serde::Deserialize;
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>url::{ParseError, Url};
 <a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use crate</span>::{mirror_middleware::create_404_response, LazyClient};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use crate</span>::{LazyClient, mirror_middleware::create_404_response};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[derive(thiserror::Error, Debug)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">enum </span>OciMiddlewareError {
@@ -182,7 +182,7 @@
 <a href=#180 id=180 data-nosnippet>180</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(OciMiddlewareError::InvalidUrl(
 <a href=#181 id=181 data-nosnippet>181</a>                        url.clone(),
 <a href=#182 id=182 data-nosnippet>182</a>                        <span class="string">"package filename must have the form name-version-build.conda"</span>,
-<a href=#183 id=183 data-nosnippet>183</a>                    ))
+<a href=#183 id=183 data-nosnippet>183</a>                    ));
 <a href=#184 id=184 data-nosnippet>184</a>                }
 <a href=#185 id=185 data-nosnippet>185</a>            }
 <a href=#186 id=186 data-nosnippet>186</a>        } <span class="kw">else if let </span><span class="prelude-val">Some</span>(archive_name) = filename.strip_suffix(<span class="string">".tar.bz2"</span>) {
@@ -197,7 +197,7 @@
 <a href=#195 id=195 data-nosnippet>195</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(OciMiddlewareError::InvalidUrl(
 <a href=#196 id=196 data-nosnippet>196</a>                        url.clone(),
 <a href=#197 id=197 data-nosnippet>197</a>                        <span class="string">"package filename must have the form name-version-build.tar.bz2"</span>,
-<a href=#198 id=198 data-nosnippet>198</a>                    ))
+<a href=#198 id=198 data-nosnippet>198</a>                    ));
 <a href=#199 id=199 data-nosnippet>199</a>                }
 <a href=#200 id=200 data-nosnippet>200</a>            }
 <a href=#201 id=201 data-nosnippet>201</a>        } <span class="kw">else if </span>filename.starts_with(<span class="string">"repodata.json"</span>) {

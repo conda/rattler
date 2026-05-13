@@ -4,7 +4,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use super</span>::{BuildNumber, BuildNumberSpec, OrdOperator};
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>nom::{bytes::complete::take_while1, character::complete::digit1, Finish, IResult};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>nom::{Finish, IResult, bytes::complete::take_while1, character::complete::digit1};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>std::str::FromStr;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>thiserror::Error;
 <a href=#8 id=8 data-nosnippet>8</a>
@@ -32,7 +32,7 @@
 <a href=#30 id=30 data-nosnippet>30</a>                    ParseBuildNumberSpecError::InvalidOperator(
 <a href=#31 id=31 data-nosnippet>31</a>                        ParseOrdOperatorError::InvalidOperator(op),
 <a href=#32 id=32 data-nosnippet>32</a>                    ),
-<a href=#33 id=33 data-nosnippet>33</a>                ))
+<a href=#33 id=33 data-nosnippet>33</a>                ));
 <a href=#34 id=34 data-nosnippet>34</a>            }
 <a href=#35 id=35 data-nosnippet>35</a>            <span class="prelude-val">Err</span>(nom::Err::Error(<span class="kw">_</span>)) =&gt; (input, <span class="prelude-val">None</span>),
 <a href=#36 id=36 data-nosnippet>36</a>            <span class="prelude-val">Ok</span>((rest, op)) =&gt; (rest, <span class="prelude-val">Some</span>(op)),
@@ -128,7 +128,7 @@
 <a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">_ </span>=&gt; {
 <a href=#127 id=127 data-nosnippet>127</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(nom::Err::Failure(ParseOrdOperatorError::InvalidOperator(
 <a href=#128 id=128 data-nosnippet>128</a>                    operator_str.to_string(),
-<a href=#129 id=129 data-nosnippet>129</a>                )))
+<a href=#129 id=129 data-nosnippet>129</a>                )));
 <a href=#130 id=130 data-nosnippet>130</a>            }
 <a href=#131 id=131 data-nosnippet>131</a>        };
 <a href=#132 id=132 data-nosnippet>132</a>

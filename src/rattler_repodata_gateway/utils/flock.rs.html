@@ -180,10 +180,10 @@
 <a href=#178 id=178 data-nosnippet>178</a>
 <a href=#179 id=179 data-nosnippet>179</a><span class="kw">impl </span>Drop <span class="kw">for </span>LockedFile {
 <a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">if </span><span class="self">self</span>.<span class="macro">state !</span>= State::Unlocked {
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(f) = <span class="self">self</span>.f.take() {
-<a href=#183 id=183 data-nosnippet>183</a>                <span class="kw">let _ </span>= unlock(<span class="kw-2">&amp;</span>f);
-<a href=#184 id=184 data-nosnippet>184</a>            }
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">if </span><span class="self">self</span>.<span class="macro">state !</span>= State::Unlocked
+<a href=#182 id=182 data-nosnippet>182</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(f) = <span class="self">self</span>.f.take()
+<a href=#183 id=183 data-nosnippet>183</a>        {
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">let _ </span>= unlock(<span class="kw-2">&amp;</span>f);
 <a href=#185 id=185 data-nosnippet>185</a>        }
 <a href=#186 id=186 data-nosnippet>186</a>    }
 <a href=#187 id=187 data-nosnippet>187</a>}
@@ -366,7 +366,7 @@
 <a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">use </span>windows_sys::Win32::Foundation::HANDLE;
 <a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">use </span>windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_LOCK_VIOLATION};
 <a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">use </span>windows_sys::Win32::Storage::FileSystem::{
-<a href=#367 id=367 data-nosnippet>367</a>        LockFileEx, UnlockFile, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+<a href=#367 id=367 data-nosnippet>367</a>        LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFile,
 <a href=#368 id=368 data-nosnippet>368</a>    };
 <a href=#369 id=369 data-nosnippet>369</a>
 <a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>lock_shared(file: <span class="kw-2">&amp;</span>File) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

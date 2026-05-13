@@ -75,10 +75,10 @@
 <a href=#73 id=73 data-nosnippet>73</a>            }
 <a href=#74 id=74 data-nosnippet>74</a>
 <a href=#75 id=75 data-nosnippet>75</a>            <span class="comment">// Remove empty sections
-<a href=#76 id=76 data-nosnippet>76</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(section_map) = <span class="self">self</span>.config.get_map_ref().get(<span class="kw-2">*</span>section) {
-<a href=#77 id=77 data-nosnippet>77</a>                <span class="kw">if </span>section_map.is_empty() {
-<a href=#78 id=78 data-nosnippet>78</a>                    <span class="self">self</span>.config.remove_section(section);
-<a href=#79 id=79 data-nosnippet>79</a>                }
+<a href=#76 id=76 data-nosnippet>76</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(section_map) = <span class="self">self</span>.config.get_map_ref().get(<span class="kw-2">*</span>section)
+<a href=#77 id=77 data-nosnippet>77</a>                &amp;&amp; section_map.is_empty()
+<a href=#78 id=78 data-nosnippet>78</a>            {
+<a href=#79 id=79 data-nosnippet>79</a>                <span class="self">self</span>.config.remove_section(section);
 <a href=#80 id=80 data-nosnippet>80</a>            }
 <a href=#81 id=81 data-nosnippet>81</a>        }
 <a href=#82 id=82 data-nosnippet>82</a>    }

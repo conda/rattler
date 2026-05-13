@@ -6,7 +6,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>    sync::Arc,
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>itertools::Itertools;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>rattler_conda_types::{
 <a href=#10 id=10 data-nosnippet>10</a>    Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform, RepoDataRecord,
@@ -14,9 +14,9 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>url::Url;
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use super</span>::{
-<a href=#15 id=15 data-nosnippet>15</a>    source::{CustomSourceClient, Source},
-<a href=#16 id=16 data-nosnippet>16</a>    subdir::{PackageRecords, Subdir, SubdirData},
-<a href=#17 id=17 data-nosnippet>17</a>    BarrierCell, GatewayError, GatewayInner, RepoData,
+<a href=#15 id=15 data-nosnippet>15</a>    BarrierCell, GatewayError, GatewayInner, RepoData,
+<a href=#16 id=16 data-nosnippet>16</a>    source::{CustomSourceClient, Source},
+<a href=#17 id=17 data-nosnippet>17</a>    subdir::{PackageRecords, Subdir, SubdirData},
 <a href=#18 id=18 data-nosnippet>18</a>};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::Reporter;
 <a href=#20 id=20 data-nosnippet>20</a>
@@ -299,13 +299,13 @@
 <a href=#297 id=297 data-nosnippet>297</a>                    </span>.map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))<span class="question-mark">?</span>;
 <a href=#298 id=298 data-nosnippet>298</a>
 <a href=#299 id=299 data-nosnippet>299</a>                <span class="comment">// Check if record actually has the same name
-<a href=#300 id=300 data-nosnippet>300</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(record) = records.first() {
-<a href=#301 id=301 data-nosnippet>301</a>                    <span class="kw">if </span>record.package_record.<span class="macro">name !</span>= name {
-<a href=#302 id=302 data-nosnippet>302</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(GatewayError::UrlRecordNameMismatch(
-<a href=#303 id=303 data-nosnippet>303</a>                            record.package_record.name.as_source().to_string(),
-<a href=#304 id=304 data-nosnippet>304</a>                            name.as_source().to_string(),
-<a href=#305 id=305 data-nosnippet>305</a>                        ));
-<a href=#306 id=306 data-nosnippet>306</a>                    }
+<a href=#300 id=300 data-nosnippet>300</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(record) = records.first()
+<a href=#301 id=301 data-nosnippet>301</a>                    &amp;&amp; record.package_record.<span class="macro">name !</span>= name
+<a href=#302 id=302 data-nosnippet>302</a>                {
+<a href=#303 id=303 data-nosnippet>303</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(GatewayError::UrlRecordNameMismatch(
+<a href=#304 id=304 data-nosnippet>304</a>                        record.package_record.name.as_source().to_string(),
+<a href=#305 id=305 data-nosnippet>305</a>                        name.as_source().to_string(),
+<a href=#306 id=306 data-nosnippet>306</a>                    ));
 <a href=#307 id=307 data-nosnippet>307</a>                }
 <a href=#308 id=308 data-nosnippet>308</a>
 <a href=#309 id=309 data-nosnippet>309</a>                <span class="comment">// Push the direct url in the first subdir result for channel priority logic

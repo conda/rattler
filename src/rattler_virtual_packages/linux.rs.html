@@ -25,7 +25,7 @@
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">mod </span>ffi {
 <a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">use </span>std::os::raw::{c_char, c_int};
 <a href=#25 id=25 data-nosnippet>25</a>
-<a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">extern </span><span class="string">"C" </span>{
+<a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">unsafe extern </span><span class="string">"C" </span>{
 <a href=#27 id=27 data-nosnippet>27</a>            <span class="kw">pub fn </span>uname(buf: <span class="kw-2">*mut </span>utsname) -&gt; c_int;
 <a href=#28 id=28 data-nosnippet>28</a>        }
 <a href=#29 id=29 data-nosnippet>29</a>
@@ -80,10 +80,10 @@
 <a href=#78 id=78 data-nosnippet>78</a><span class="doccomment">/// Takes the first 2, 3, or 4 digits of the linux uname version.
 <a href=#79 id=79 data-nosnippet>79</a></span><span class="attr">#[allow(dead_code)]
 <a href=#80 id=80 data-nosnippet>80</a></span><span class="kw">fn </span>extract_linux_version_part(version_str: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
-<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">use </span>nom::character::complete::{char, digit1};
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">use </span>nom::combinator::{opt, recognize};
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">use </span>nom::sequence::pair;
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">use </span>nom::Parser;
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">use </span>nom::Parser;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">use </span>nom::character::complete::{char, digit1};
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">use </span>nom::combinator::{opt, recognize};
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">use </span>nom::sequence::pair;
 <a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;<span class="kw">_</span>, nom::Err&lt;nom::error::Error&lt;<span class="kw">_</span>&gt;&gt;&gt; = recognize((
 <a href=#86 id=86 data-nosnippet>86</a>        digit1,
 <a href=#87 id=87 data-nosnippet>87</a>        char(<span class="string">'.'</span>),

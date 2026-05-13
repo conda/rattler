@@ -883,124 +883,136 @@
 <a href=#881 id=881 data-nosnippet>881</a>            family: <span class="string">"glibc"</span>.into(),
 <a href=#882 id=882 data-nosnippet>882</a>        };
 <a href=#883 id=883 data-nosnippet>883</a>        <span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, LibC::DEFAULT_ENV_NAME, <span class="string">"12345511231"</span>);
-<a href=#884 id=884 data-nosnippet>884</a>        env::set_var(env_var_name.clone(), v);
-<a href=#885 id=885 data-nosnippet>885</a>        <span class="macro">assert_eq!</span>(
-<a href=#886 id=886 data-nosnippet>886</a>            LibC::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
-<a href=#887 id=887 data-nosnippet>887</a>                .unwrap()
-<a href=#888 id=888 data-nosnippet>888</a>                .unwrap(),
-<a href=#889 id=889 data-nosnippet>889</a>            res
-<a href=#890 id=890 data-nosnippet>890</a>        );
-<a href=#891 id=891 data-nosnippet>891</a>        env::set_var(env_var_name.clone(), <span class="string">""</span>);
-<a href=#892 id=892 data-nosnippet>892</a>        <span class="macro">assert_eq!</span>(
-<a href=#893 id=893 data-nosnippet>893</a>            LibC::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone()))).unwrap(),
-<a href=#894 id=894 data-nosnippet>894</a>            <span class="prelude-val">None
-<a href=#895 id=895 data-nosnippet>895</a>        </span>);
-<a href=#896 id=896 data-nosnippet>896</a>        env::remove_var(env_var_name.clone());
-<a href=#897 id=897 data-nosnippet>897</a>        <span class="macro">assert_eq!</span>(
-<a href=#898 id=898 data-nosnippet>898</a>            LibC::detect_with_fallback(<span class="kw-2">&amp;</span>Override::DefaultEnvVar, || <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(res.clone())))
-<a href=#899 id=899 data-nosnippet>899</a>                .unwrap()
-<a href=#900 id=900 data-nosnippet>900</a>                .unwrap(),
-<a href=#901 id=901 data-nosnippet>901</a>            res
-<a href=#902 id=902 data-nosnippet>902</a>        );
+<a href=#884 id=884 data-nosnippet>884</a>        <span class="kw">unsafe </span>{
+<a href=#885 id=885 data-nosnippet>885</a>            env::set_var(env_var_name.clone(), v);
+<a href=#886 id=886 data-nosnippet>886</a>        }
+<a href=#887 id=887 data-nosnippet>887</a>        <span class="macro">assert_eq!</span>(
+<a href=#888 id=888 data-nosnippet>888</a>            LibC::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
+<a href=#889 id=889 data-nosnippet>889</a>                .unwrap()
+<a href=#890 id=890 data-nosnippet>890</a>                .unwrap(),
+<a href=#891 id=891 data-nosnippet>891</a>            res
+<a href=#892 id=892 data-nosnippet>892</a>        );
+<a href=#893 id=893 data-nosnippet>893</a>        <span class="kw">unsafe </span>{
+<a href=#894 id=894 data-nosnippet>894</a>            env::set_var(env_var_name.clone(), <span class="string">""</span>);
+<a href=#895 id=895 data-nosnippet>895</a>        }
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="macro">assert_eq!</span>(
+<a href=#897 id=897 data-nosnippet>897</a>            LibC::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone()))).unwrap(),
+<a href=#898 id=898 data-nosnippet>898</a>            <span class="prelude-val">None
+<a href=#899 id=899 data-nosnippet>899</a>        </span>);
+<a href=#900 id=900 data-nosnippet>900</a>        <span class="kw">unsafe </span>{
+<a href=#901 id=901 data-nosnippet>901</a>            env::remove_var(env_var_name.clone());
+<a href=#902 id=902 data-nosnippet>902</a>        }
 <a href=#903 id=903 data-nosnippet>903</a>        <span class="macro">assert_eq!</span>(
-<a href=#904 id=904 data-nosnippet>904</a>            LibC::detect_with_fallback(<span class="kw-2">&amp;</span>Override::String(v.to_string()), || <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>))
+<a href=#904 id=904 data-nosnippet>904</a>            LibC::detect_with_fallback(<span class="kw-2">&amp;</span>Override::DefaultEnvVar, || <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(res.clone())))
 <a href=#905 id=905 data-nosnippet>905</a>                .unwrap()
 <a href=#906 id=906 data-nosnippet>906</a>                .unwrap(),
 <a href=#907 id=907 data-nosnippet>907</a>            res
 <a href=#908 id=908 data-nosnippet>908</a>        );
-<a href=#909 id=909 data-nosnippet>909</a>    }
-<a href=#910 id=910 data-nosnippet>910</a>
-<a href=#911 id=911 data-nosnippet>911</a>    <span class="attr">#[test]
-<a href=#912 id=912 data-nosnippet>912</a>    </span><span class="kw">fn </span>parse_libc_invalid_family_chars() {
-<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">let </span>libc = LibC {
-<a href=#914 id=914 data-nosnippet>914</a>            family: <span class="string">"glibc 2.34 (Ubuntu)"</span>.into(),
-<a href=#915 id=915 data-nosnippet>915</a>            version: Version::from_str(<span class="string">"2.34"</span>).unwrap(),
-<a href=#916 id=916 data-nosnippet>916</a>        };
-<a href=#917 id=917 data-nosnippet>917</a>        <span class="kw">let </span>pkg: GenericVirtualPackage = libc.into();
-<a href=#918 id=918 data-nosnippet>918</a>        <span class="macro">assert_eq!</span>(pkg.name.as_normalized(), <span class="string">"__glibc_2_34__ubuntu_"</span>);
-<a href=#919 id=919 data-nosnippet>919</a>    }
-<a href=#920 id=920 data-nosnippet>920</a>
-<a href=#921 id=921 data-nosnippet>921</a>    <span class="attr">#[test]
-<a href=#922 id=922 data-nosnippet>922</a>    </span><span class="kw">fn </span>parse_cuda() {
-<a href=#923 id=923 data-nosnippet>923</a>        <span class="kw">let </span>v = <span class="string">"1.234"</span>;
-<a href=#924 id=924 data-nosnippet>924</a>        <span class="kw">let </span>res = Cuda {
-<a href=#925 id=925 data-nosnippet>925</a>            version: Version::from_str(v).unwrap(),
-<a href=#926 id=926 data-nosnippet>926</a>        };
-<a href=#927 id=927 data-nosnippet>927</a>        <span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, Cuda::DEFAULT_ENV_NAME, <span class="string">"12345511231"</span>);
-<a href=#928 id=928 data-nosnippet>928</a>        env::set_var(env_var_name.clone(), v);
-<a href=#929 id=929 data-nosnippet>929</a>        <span class="macro">assert_eq!</span>(
-<a href=#930 id=930 data-nosnippet>930</a>            Cuda::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
-<a href=#931 id=931 data-nosnippet>931</a>                .unwrap()
-<a href=#932 id=932 data-nosnippet>932</a>                .unwrap(),
-<a href=#933 id=933 data-nosnippet>933</a>            res
-<a href=#934 id=934 data-nosnippet>934</a>        );
-<a href=#935 id=935 data-nosnippet>935</a>        <span class="macro">assert_eq!</span>(
-<a href=#936 id=936 data-nosnippet>936</a>            Cuda::detect(<span class="prelude-val">None</span>).map_err(|_x| <span class="number">1</span>),
-<a href=#937 id=937 data-nosnippet>937</a>            &lt;Cuda <span class="kw">as </span>EnvOverride&gt;::detect_from_host().map_err(|_x| <span class="number">1</span>)
-<a href=#938 id=938 data-nosnippet>938</a>        );
-<a href=#939 id=939 data-nosnippet>939</a>        env::remove_var(env_var_name.clone());
-<a href=#940 id=940 data-nosnippet>940</a>        <span class="macro">assert_eq!</span>(
-<a href=#941 id=941 data-nosnippet>941</a>            Cuda::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::String(v.to_string())))
-<a href=#942 id=942 data-nosnippet>942</a>                .unwrap()
-<a href=#943 id=943 data-nosnippet>943</a>                .unwrap(),
-<a href=#944 id=944 data-nosnippet>944</a>            res
-<a href=#945 id=945 data-nosnippet>945</a>        );
-<a href=#946 id=946 data-nosnippet>946</a>    }
-<a href=#947 id=947 data-nosnippet>947</a>
-<a href=#948 id=948 data-nosnippet>948</a>    <span class="attr">#[test]
-<a href=#949 id=949 data-nosnippet>949</a>    </span><span class="kw">fn </span>parse_osx() {
-<a href=#950 id=950 data-nosnippet>950</a>        <span class="kw">let </span>v = <span class="string">"2.345"</span>;
-<a href=#951 id=951 data-nosnippet>951</a>        <span class="kw">let </span>res = Osx {
-<a href=#952 id=952 data-nosnippet>952</a>            version: Version::from_str(v).unwrap(),
-<a href=#953 id=953 data-nosnippet>953</a>        };
-<a href=#954 id=954 data-nosnippet>954</a>        <span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, Osx::DEFAULT_ENV_NAME, <span class="string">"12345511231"</span>);
-<a href=#955 id=955 data-nosnippet>955</a>        env::set_var(env_var_name.clone(), v);
-<a href=#956 id=956 data-nosnippet>956</a>        <span class="macro">assert_eq!</span>(
-<a href=#957 id=957 data-nosnippet>957</a>            Osx::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
-<a href=#958 id=958 data-nosnippet>958</a>                .unwrap()
-<a href=#959 id=959 data-nosnippet>959</a>                .unwrap(),
-<a href=#960 id=960 data-nosnippet>960</a>            res
-<a href=#961 id=961 data-nosnippet>961</a>        );
-<a href=#962 id=962 data-nosnippet>962</a>    }
-<a href=#963 id=963 data-nosnippet>963</a>
-<a href=#964 id=964 data-nosnippet>964</a>    <span class="attr">#[test]
-<a href=#965 id=965 data-nosnippet>965</a>    </span><span class="kw">fn </span>test_cross_platform_virtual_packages() {
-<a href=#966 id=966 data-nosnippet>966</a>        <span class="comment">// Test that cross-platform detection works for different platforms
-<a href=#967 id=967 data-nosnippet>967</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
-<a href=#968 id=968 data-nosnippet>968</a>
-<a href=#969 id=969 data-nosnippet>969</a>        <span class="comment">// Test Linux 64-bit
-<a href=#970 id=970 data-nosnippet>970</a>        </span><span class="kw">let </span>linux_packages =
-<a href=#971 id=971 data-nosnippet>971</a>            VirtualPackages::detect_for_platform(Platform::Linux64, <span class="kw-2">&amp;</span>overrides).unwrap();
-<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">let </span>linux_names: Vec&lt;String&gt; = linux_packages
-<a href=#973 id=973 data-nosnippet>973</a>            .into_generic_virtual_packages()
-<a href=#974 id=974 data-nosnippet>974</a>            .map(|pkg| pkg.name.as_normalized().to_string())
-<a href=#975 id=975 data-nosnippet>975</a>            .collect();
-<a href=#976 id=976 data-nosnippet>976</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__linux"</span>.to_string()));
-<a href=#977 id=977 data-nosnippet>977</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__glibc"</span>.to_string()));
-<a href=#978 id=978 data-nosnippet>978</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
-<a href=#979 id=979 data-nosnippet>979</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="macro">assert_eq!</span>(
+<a href=#910 id=910 data-nosnippet>910</a>            LibC::detect_with_fallback(<span class="kw-2">&amp;</span>Override::String(v.to_string()), || <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>))
+<a href=#911 id=911 data-nosnippet>911</a>                .unwrap()
+<a href=#912 id=912 data-nosnippet>912</a>                .unwrap(),
+<a href=#913 id=913 data-nosnippet>913</a>            res
+<a href=#914 id=914 data-nosnippet>914</a>        );
+<a href=#915 id=915 data-nosnippet>915</a>    }
+<a href=#916 id=916 data-nosnippet>916</a>
+<a href=#917 id=917 data-nosnippet>917</a>    <span class="attr">#[test]
+<a href=#918 id=918 data-nosnippet>918</a>    </span><span class="kw">fn </span>parse_libc_invalid_family_chars() {
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="kw">let </span>libc = LibC {
+<a href=#920 id=920 data-nosnippet>920</a>            family: <span class="string">"glibc 2.34 (Ubuntu)"</span>.into(),
+<a href=#921 id=921 data-nosnippet>921</a>            version: Version::from_str(<span class="string">"2.34"</span>).unwrap(),
+<a href=#922 id=922 data-nosnippet>922</a>        };
+<a href=#923 id=923 data-nosnippet>923</a>        <span class="kw">let </span>pkg: GenericVirtualPackage = libc.into();
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="macro">assert_eq!</span>(pkg.name.as_normalized(), <span class="string">"__glibc_2_34__ubuntu_"</span>);
+<a href=#925 id=925 data-nosnippet>925</a>    }
+<a href=#926 id=926 data-nosnippet>926</a>
+<a href=#927 id=927 data-nosnippet>927</a>    <span class="attr">#[test]
+<a href=#928 id=928 data-nosnippet>928</a>    </span><span class="kw">fn </span>parse_cuda() {
+<a href=#929 id=929 data-nosnippet>929</a>        <span class="kw">let </span>v = <span class="string">"1.234"</span>;
+<a href=#930 id=930 data-nosnippet>930</a>        <span class="kw">let </span>res = Cuda {
+<a href=#931 id=931 data-nosnippet>931</a>            version: Version::from_str(v).unwrap(),
+<a href=#932 id=932 data-nosnippet>932</a>        };
+<a href=#933 id=933 data-nosnippet>933</a>        <span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, Cuda::DEFAULT_ENV_NAME, <span class="string">"12345511231"</span>);
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="kw">unsafe </span>{
+<a href=#935 id=935 data-nosnippet>935</a>            env::set_var(env_var_name.clone(), v);
+<a href=#936 id=936 data-nosnippet>936</a>        }
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="macro">assert_eq!</span>(
+<a href=#938 id=938 data-nosnippet>938</a>            Cuda::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
+<a href=#939 id=939 data-nosnippet>939</a>                .unwrap()
+<a href=#940 id=940 data-nosnippet>940</a>                .unwrap(),
+<a href=#941 id=941 data-nosnippet>941</a>            res
+<a href=#942 id=942 data-nosnippet>942</a>        );
+<a href=#943 id=943 data-nosnippet>943</a>        <span class="macro">assert_eq!</span>(
+<a href=#944 id=944 data-nosnippet>944</a>            Cuda::detect(<span class="prelude-val">None</span>).map_err(|_x| <span class="number">1</span>),
+<a href=#945 id=945 data-nosnippet>945</a>            &lt;Cuda <span class="kw">as </span>EnvOverride&gt;::detect_from_host().map_err(|_x| <span class="number">1</span>)
+<a href=#946 id=946 data-nosnippet>946</a>        );
+<a href=#947 id=947 data-nosnippet>947</a>        <span class="kw">unsafe </span>{
+<a href=#948 id=948 data-nosnippet>948</a>            env::remove_var(env_var_name.clone());
+<a href=#949 id=949 data-nosnippet>949</a>        }
+<a href=#950 id=950 data-nosnippet>950</a>        <span class="macro">assert_eq!</span>(
+<a href=#951 id=951 data-nosnippet>951</a>            Cuda::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::String(v.to_string())))
+<a href=#952 id=952 data-nosnippet>952</a>                .unwrap()
+<a href=#953 id=953 data-nosnippet>953</a>                .unwrap(),
+<a href=#954 id=954 data-nosnippet>954</a>            res
+<a href=#955 id=955 data-nosnippet>955</a>        );
+<a href=#956 id=956 data-nosnippet>956</a>    }
+<a href=#957 id=957 data-nosnippet>957</a>
+<a href=#958 id=958 data-nosnippet>958</a>    <span class="attr">#[test]
+<a href=#959 id=959 data-nosnippet>959</a>    </span><span class="kw">fn </span>parse_osx() {
+<a href=#960 id=960 data-nosnippet>960</a>        <span class="kw">let </span>v = <span class="string">"2.345"</span>;
+<a href=#961 id=961 data-nosnippet>961</a>        <span class="kw">let </span>res = Osx {
+<a href=#962 id=962 data-nosnippet>962</a>            version: Version::from_str(v).unwrap(),
+<a href=#963 id=963 data-nosnippet>963</a>        };
+<a href=#964 id=964 data-nosnippet>964</a>        <span class="kw">let </span>env_var_name = <span class="macro">format!</span>(<span class="string">"{}_{}"</span>, Osx::DEFAULT_ENV_NAME, <span class="string">"12345511231"</span>);
+<a href=#965 id=965 data-nosnippet>965</a>        <span class="kw">unsafe </span>{
+<a href=#966 id=966 data-nosnippet>966</a>            env::set_var(env_var_name.clone(), v);
+<a href=#967 id=967 data-nosnippet>967</a>        }
+<a href=#968 id=968 data-nosnippet>968</a>        <span class="macro">assert_eq!</span>(
+<a href=#969 id=969 data-nosnippet>969</a>            Osx::detect(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Override::EnvVar(env_var_name.clone())))
+<a href=#970 id=970 data-nosnippet>970</a>                .unwrap()
+<a href=#971 id=971 data-nosnippet>971</a>                .unwrap(),
+<a href=#972 id=972 data-nosnippet>972</a>            res
+<a href=#973 id=973 data-nosnippet>973</a>        );
+<a href=#974 id=974 data-nosnippet>974</a>    }
+<a href=#975 id=975 data-nosnippet>975</a>
+<a href=#976 id=976 data-nosnippet>976</a>    <span class="attr">#[test]
+<a href=#977 id=977 data-nosnippet>977</a>    </span><span class="kw">fn </span>test_cross_platform_virtual_packages() {
+<a href=#978 id=978 data-nosnippet>978</a>        <span class="comment">// Test that cross-platform detection works for different platforms
+<a href=#979 id=979 data-nosnippet>979</a>        </span><span class="kw">let </span>overrides = VirtualPackageOverrides::default();
 <a href=#980 id=980 data-nosnippet>980</a>
-<a href=#981 id=981 data-nosnippet>981</a>        <span class="comment">// Test macOS ARM64
-<a href=#982 id=982 data-nosnippet>982</a>        </span><span class="kw">let </span>osx_packages =
-<a href=#983 id=983 data-nosnippet>983</a>            VirtualPackages::detect_for_platform(Platform::OsxArm64, <span class="kw-2">&amp;</span>overrides).unwrap();
-<a href=#984 id=984 data-nosnippet>984</a>        <span class="kw">let </span>osx_names: Vec&lt;String&gt; = osx_packages
+<a href=#981 id=981 data-nosnippet>981</a>        <span class="comment">// Test Linux 64-bit
+<a href=#982 id=982 data-nosnippet>982</a>        </span><span class="kw">let </span>linux_packages =
+<a href=#983 id=983 data-nosnippet>983</a>            VirtualPackages::detect_for_platform(Platform::Linux64, <span class="kw-2">&amp;</span>overrides).unwrap();
+<a href=#984 id=984 data-nosnippet>984</a>        <span class="kw">let </span>linux_names: Vec&lt;String&gt; = linux_packages
 <a href=#985 id=985 data-nosnippet>985</a>            .into_generic_virtual_packages()
 <a href=#986 id=986 data-nosnippet>986</a>            .map(|pkg| pkg.name.as_normalized().to_string())
 <a href=#987 id=987 data-nosnippet>987</a>            .collect();
-<a href=#988 id=988 data-nosnippet>988</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__osx"</span>.to_string()));
-<a href=#989 id=989 data-nosnippet>989</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
-<a href=#990 id=990 data-nosnippet>990</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
-<a href=#991 id=991 data-nosnippet>991</a>
-<a href=#992 id=992 data-nosnippet>992</a>        <span class="comment">// Test Windows 64-bit
-<a href=#993 id=993 data-nosnippet>993</a>        </span><span class="kw">let </span>win_packages =
-<a href=#994 id=994 data-nosnippet>994</a>            VirtualPackages::detect_for_platform(Platform::Win64, <span class="kw-2">&amp;</span>overrides).unwrap();
-<a href=#995 id=995 data-nosnippet>995</a>        <span class="kw">let </span>win_names: Vec&lt;String&gt; = win_packages
-<a href=#996 id=996 data-nosnippet>996</a>            .into_generic_virtual_packages()
-<a href=#997 id=997 data-nosnippet>997</a>            .map(|pkg| pkg.name.as_normalized().to_string())
-<a href=#998 id=998 data-nosnippet>998</a>            .collect();
-<a href=#999 id=999 data-nosnippet>999</a>        <span class="macro">assert!</span>(win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__win"</span>.to_string()));
-<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="macro">assert!</span>(!win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
-<a href=#1001 id=1001 data-nosnippet>1001</a>        <span class="macro">assert!</span>(win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
-<a href=#1002 id=1002 data-nosnippet>1002</a>    }
-<a href=#1003 id=1003 data-nosnippet>1003</a>}
+<a href=#988 id=988 data-nosnippet>988</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__linux"</span>.to_string()));
+<a href=#989 id=989 data-nosnippet>989</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__glibc"</span>.to_string()));
+<a href=#990 id=990 data-nosnippet>990</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
+<a href=#991 id=991 data-nosnippet>991</a>        <span class="macro">assert!</span>(linux_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#992 id=992 data-nosnippet>992</a>
+<a href=#993 id=993 data-nosnippet>993</a>        <span class="comment">// Test macOS ARM64
+<a href=#994 id=994 data-nosnippet>994</a>        </span><span class="kw">let </span>osx_packages =
+<a href=#995 id=995 data-nosnippet>995</a>            VirtualPackages::detect_for_platform(Platform::OsxArm64, <span class="kw-2">&amp;</span>overrides).unwrap();
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let </span>osx_names: Vec&lt;String&gt; = osx_packages
+<a href=#997 id=997 data-nosnippet>997</a>            .into_generic_virtual_packages()
+<a href=#998 id=998 data-nosnippet>998</a>            .map(|pkg| pkg.name.as_normalized().to_string())
+<a href=#999 id=999 data-nosnippet>999</a>            .collect();
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__osx"</span>.to_string()));
+<a href=#1001 id=1001 data-nosnippet>1001</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
+<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="macro">assert!</span>(osx_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#1003 id=1003 data-nosnippet>1003</a>
+<a href=#1004 id=1004 data-nosnippet>1004</a>        <span class="comment">// Test Windows 64-bit
+<a href=#1005 id=1005 data-nosnippet>1005</a>        </span><span class="kw">let </span>win_packages =
+<a href=#1006 id=1006 data-nosnippet>1006</a>            VirtualPackages::detect_for_platform(Platform::Win64, <span class="kw-2">&amp;</span>overrides).unwrap();
+<a href=#1007 id=1007 data-nosnippet>1007</a>        <span class="kw">let </span>win_names: Vec&lt;String&gt; = win_packages
+<a href=#1008 id=1008 data-nosnippet>1008</a>            .into_generic_virtual_packages()
+<a href=#1009 id=1009 data-nosnippet>1009</a>            .map(|pkg| pkg.name.as_normalized().to_string())
+<a href=#1010 id=1010 data-nosnippet>1010</a>            .collect();
+<a href=#1011 id=1011 data-nosnippet>1011</a>        <span class="macro">assert!</span>(win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__win"</span>.to_string()));
+<a href=#1012 id=1012 data-nosnippet>1012</a>        <span class="macro">assert!</span>(!win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__unix"</span>.to_string()));
+<a href=#1013 id=1013 data-nosnippet>1013</a>        <span class="macro">assert!</span>(win_names.contains(<span class="kw-2">&amp;</span><span class="string">"__archspec"</span>.to_string()));
+<a href=#1014 id=1014 data-nosnippet>1014</a>    }
+<a href=#1015 id=1015 data-nosnippet>1015</a>}
 </code></pre></div></section></main></body></html>

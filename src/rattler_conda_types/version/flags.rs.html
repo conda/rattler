@@ -80,41 +80,43 @@
 <a href=#78 id=78 data-nosnippet>78</a>    </span><span class="kw">fn </span>test_epoch() {
 <a href=#79 id=79 data-nosnippet>79</a>        <span class="macro">assert!</span>(!Flags::default().has_epoch());
 <a href=#80 id=80 data-nosnippet>80</a>        <span class="macro">assert!</span>(Flags::default().with_has_epoch(<span class="bool-val">true</span>).has_epoch());
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="macro">assert!</span>(!Flags::default()
-<a href=#82 id=82 data-nosnippet>82</a>            .with_has_epoch(<span class="bool-val">true</span>)
-<a href=#83 id=83 data-nosnippet>83</a>            .with_has_epoch(<span class="bool-val">false</span>)
-<a href=#84 id=84 data-nosnippet>84</a>            .has_epoch(),);
-<a href=#85 id=85 data-nosnippet>85</a>    }
-<a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="attr">#[test]
-<a href=#88 id=88 data-nosnippet>88</a>    </span><span class="kw">fn </span>test_local_segment_idx() {
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="macro">assert_eq!</span>(Flags::default().local_segment_index(), <span class="number">0</span>);
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="macro">assert_eq!</span>(
-<a href=#91 id=91 data-nosnippet>91</a>            Flags::default()
-<a href=#92 id=92 data-nosnippet>92</a>                .with_local_segment_index(<span class="number">42</span>)
-<a href=#93 id=93 data-nosnippet>93</a>                .unwrap()
-<a href=#94 id=94 data-nosnippet>94</a>                .local_segment_index(),
-<a href=#95 id=95 data-nosnippet>95</a>            <span class="number">42
-<a href=#96 id=96 data-nosnippet>96</a>        </span>);
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="macro">assert_eq!</span>(
-<a href=#98 id=98 data-nosnippet>98</a>            Flags::default()
-<a href=#99 id=99 data-nosnippet>99</a>                .with_local_segment_index(<span class="number">127</span>)
-<a href=#100 id=100 data-nosnippet>100</a>                .unwrap()
-<a href=#101 id=101 data-nosnippet>101</a>                .local_segment_index(),
-<a href=#102 id=102 data-nosnippet>102</a>            <span class="number">127
-<a href=#103 id=103 data-nosnippet>103</a>        </span>);
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="macro">assert_eq!</span>(Flags::default().with_local_segment_index(<span class="number">128</span>), <span class="prelude-val">None</span>);
-<a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="attr">#[test]
-<a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">fn </span>test_all_elements() {
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let </span>flags = Flags::default()
-<a href=#110 id=110 data-nosnippet>110</a>            .with_has_epoch(<span class="bool-val">true</span>)
-<a href=#111 id=111 data-nosnippet>111</a>            .with_local_segment_index(<span class="number">101</span>)
-<a href=#112 id=112 data-nosnippet>112</a>            .unwrap();
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="macro">assert!</span>(flags.has_epoch());
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="macro">assert_eq!</span>(flags.local_segment_index(), <span class="number">101</span>);
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>}
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="macro">assert!</span>(
+<a href=#82 id=82 data-nosnippet>82</a>            !Flags::default()
+<a href=#83 id=83 data-nosnippet>83</a>                .with_has_epoch(<span class="bool-val">true</span>)
+<a href=#84 id=84 data-nosnippet>84</a>                .with_has_epoch(<span class="bool-val">false</span>)
+<a href=#85 id=85 data-nosnippet>85</a>                .has_epoch(),
+<a href=#86 id=86 data-nosnippet>86</a>        );
+<a href=#87 id=87 data-nosnippet>87</a>    }
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="attr">#[test]
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">fn </span>test_local_segment_idx() {
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="macro">assert_eq!</span>(Flags::default().local_segment_index(), <span class="number">0</span>);
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">assert_eq!</span>(
+<a href=#93 id=93 data-nosnippet>93</a>            Flags::default()
+<a href=#94 id=94 data-nosnippet>94</a>                .with_local_segment_index(<span class="number">42</span>)
+<a href=#95 id=95 data-nosnippet>95</a>                .unwrap()
+<a href=#96 id=96 data-nosnippet>96</a>                .local_segment_index(),
+<a href=#97 id=97 data-nosnippet>97</a>            <span class="number">42
+<a href=#98 id=98 data-nosnippet>98</a>        </span>);
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="macro">assert_eq!</span>(
+<a href=#100 id=100 data-nosnippet>100</a>            Flags::default()
+<a href=#101 id=101 data-nosnippet>101</a>                .with_local_segment_index(<span class="number">127</span>)
+<a href=#102 id=102 data-nosnippet>102</a>                .unwrap()
+<a href=#103 id=103 data-nosnippet>103</a>                .local_segment_index(),
+<a href=#104 id=104 data-nosnippet>104</a>            <span class="number">127
+<a href=#105 id=105 data-nosnippet>105</a>        </span>);
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="macro">assert_eq!</span>(Flags::default().with_local_segment_index(<span class="number">128</span>), <span class="prelude-val">None</span>);
+<a href=#107 id=107 data-nosnippet>107</a>    }
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="attr">#[test]
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">fn </span>test_all_elements() {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>flags = Flags::default()
+<a href=#112 id=112 data-nosnippet>112</a>            .with_has_epoch(<span class="bool-val">true</span>)
+<a href=#113 id=113 data-nosnippet>113</a>            .with_local_segment_index(<span class="number">101</span>)
+<a href=#114 id=114 data-nosnippet>114</a>            .unwrap();
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="macro">assert!</span>(flags.has_epoch());
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="macro">assert_eq!</span>(flags.local_segment_index(), <span class="number">101</span>);
+<a href=#118 id=118 data-nosnippet>118</a>    }
+<a href=#119 id=119 data-nosnippet>119</a>}
 </code></pre></div></section></main></body></html>

@@ -9,7 +9,7 @@
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use super</span>::{given_verbatim_url::GivenVerbatimUrl, package_selector::PackageSelector};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use crate</span>::{
-<a href=#10 id=10 data-nosnippet>10</a>    parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
+<a href=#10 id=10 data-nosnippet>10</a>    PackageHashes, PypiPackageData, UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw,
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
@@ -144,9 +144,9 @@
 <a href=#142 id=142 data-nosnippet>142</a>
 <a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">use </span>typed_path::Utf8TypedPathBuf;
 <a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">use crate</span>::{parse::deserialize::PypiPackageDataRaw, UrlOrPath, Verbatim};
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">use crate</span>::{UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw};
 <a href=#146 id=146 data-nosnippet>146</a>
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">use super</span>::{PypiPackageDataModel, PYPI_URL};
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">use super</span>::{PYPI_URL, PypiPackageDataModel};
 <a href=#148 id=148 data-nosnippet>148</a>
 <a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">fn </span>url_location(url: <span class="kw-2">&amp;</span>str) -&gt; Verbatim&lt;UrlOrPath&gt; {
 <a href=#150 id=150 data-nosnippet>150</a>        Verbatim::new(UrlOrPath::Url(url::Url::parse(url).unwrap()))

@@ -20,8 +20,8 @@
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>url::Url;
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use crate</span>::{
-<a href=#21 id=21 data-nosnippet>21</a>    sha::{GitOid, GitSha},
-<a href=#22 id=22 data-nosnippet>22</a>    GitError,
+<a href=#21 id=21 data-nosnippet>21</a>    GitError,
+<a href=#22 id=22 data-nosnippet>22</a>    sha::{GitOid, GitSha},
 <a href=#23 id=23 data-nosnippet>23</a>};
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="doccomment">/// A file indicates that if present, `git reset` has been done and a repo
@@ -763,10 +763,10 @@
 <a href=#761 id=761 data-nosnippet>761</a>            // but is not a short hash of the found object, it's probably a
 <a href=#762 id=762 data-nosnippet>762</a>            // branch and we also need to get a hash from GitHub, in case
 <a href=#763 id=763 data-nosnippet>763</a>            // the branch has moved.
-<a href=#764 id=764 data-nosnippet>764</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>local_object) = local_object {
-<a href=#765 id=765 data-nosnippet>765</a>                <span class="kw">if </span>is_short_hash_of(rev, <span class="kw-2">*</span>local_object) {
-<a href=#766 id=766 data-nosnippet>766</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(FastPathRev::UpToDate);
-<a href=#767 id=767 data-nosnippet>767</a>                }
+<a href=#764 id=764 data-nosnippet>764</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>local_object) = local_object
+<a href=#765 id=765 data-nosnippet>765</a>                &amp;&amp; is_short_hash_of(rev, <span class="kw-2">*</span>local_object)
+<a href=#766 id=766 data-nosnippet>766</a>            {
+<a href=#767 id=767 data-nosnippet>767</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(FastPathRev::UpToDate);
 <a href=#768 id=768 data-nosnippet>768</a>            }
 <a href=#769 id=769 data-nosnippet>769</a>            rev
 <a href=#770 id=770 data-nosnippet>770</a>        }

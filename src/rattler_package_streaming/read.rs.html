@@ -4,11 +4,11 @@
 <a href=#2 id=2 data-nosnippet>2</a>//! [`std::io::Read`] trait.
 <a href=#3 id=3 data-nosnippet>3</a>
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use super</span>::{ExtractError, ExtractResult};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::io::{copy, Seek, SeekFrom};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::io::{Seek, SeekFrom, copy};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>std::mem::ManuallyDrop;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>std::{ffi::OsStr, io::Read, path::Path};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>tempfile::SpooledTempFile;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zip::read::{ZipArchive, ZipFile, read_zipfile_from_stream};
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a><span class="doccomment">/// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
 <a href=#12 id=12 data-nosnippet>12</a>/// extract the files from it, or perform introspection.

@@ -9,7 +9,7 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>bytes::Buf;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>coalesced_map::CoalescedMap;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>http::StatusCode;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_conda_types::{package::RunExportsJson, RepoDataRecord, SubdirRunExportsJson};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>rattler_networking::LazyClient;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>reqwest_middleware::ClientWithMiddleware;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>thiserror::Error;
@@ -209,7 +209,7 @@
 <a href=#207 id=207 data-nosnippet>207</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(RunExportExtractorError::DecodeRunExports(
 <a href=#208 id=208 data-nosnippet>208</a>                            url.to_string(),
 <a href=#209 id=209 data-nosnippet>209</a>                            err,
-<a href=#210 id=210 data-nosnippet>210</a>                        ))
+<a href=#210 id=210 data-nosnippet>210</a>                        ));
 <a href=#211 id=211 data-nosnippet>211</a>                    }
 <a href=#212 id=212 data-nosnippet>212</a>                };
 <a href=#213 id=213 data-nosnippet>213</a>                <span class="kw">let </span>run_exports = <span class="kw">match </span>serde_json::from_slice(<span class="kw-2">&amp;</span>decoded) {
@@ -218,7 +218,7 @@
 <a href=#216 id=216 data-nosnippet>216</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(RunExportExtractorError::DecodeRunExports(
 <a href=#217 id=217 data-nosnippet>217</a>                            url.to_string(),
 <a href=#218 id=218 data-nosnippet>218</a>                            e.into(),
-<a href=#219 id=219 data-nosnippet>219</a>                        ))
+<a href=#219 id=219 data-nosnippet>219</a>                        ));
 <a href=#220 id=220 data-nosnippet>220</a>                    }
 <a href=#221 id=221 data-nosnippet>221</a>                };
 <a href=#222 id=222 data-nosnippet>222</a>
@@ -267,7 +267,7 @@
 <a href=#265 id=265 data-nosnippet>265</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(RunExportExtractorError::DecodeRunExports(
 <a href=#266 id=266 data-nosnippet>266</a>                            url.to_string(),
 <a href=#267 id=267 data-nosnippet>267</a>                            e.into(),
-<a href=#268 id=268 data-nosnippet>268</a>                        ))
+<a href=#268 id=268 data-nosnippet>268</a>                        ));
 <a href=#269 id=269 data-nosnippet>269</a>                    }
 <a href=#270 id=270 data-nosnippet>270</a>                };
 <a href=#271 id=271 data-nosnippet>271</a>                <span class="prelude-val">Ok</span>(run_exports)

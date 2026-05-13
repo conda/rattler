@@ -75,7 +75,7 @@
 <a href=#73 id=73 data-nosnippet>73</a>    sync::{Arc, Weak},
 <a href=#74 id=74 data-nosnippet>74</a>};
 <a href=#75 id=75 data-nosnippet>75</a>
-<a href=#76 id=76 data-nosnippet>76</a><span class="kw">use </span>dashmap::{mapref::entry::Entry, DashMap};
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">use </span>dashmap::{DashMap, mapref::entry::Entry};
 <a href=#77 id=77 data-nosnippet>77</a><span class="kw">use </span>tokio::sync::broadcast;
 <a href=#78 id=78 data-nosnippet>78</a>
 <a href=#79 id=79 data-nosnippet>79</a><span class="doccomment">/// Error type returned by [`CoalescedMap::get_or_try_init`].
@@ -306,8 +306,8 @@
 <a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">use </span>std::{
 <a href=#305 id=305 data-nosnippet>305</a>        future::pending,
 <a href=#306 id=306 data-nosnippet>306</a>        sync::{
-<a href=#307 id=307 data-nosnippet>307</a>            atomic::{AtomicUsize, Ordering},
-<a href=#308 id=308 data-nosnippet>308</a>            Arc,
+<a href=#307 id=307 data-nosnippet>307</a>            Arc,
+<a href=#308 id=308 data-nosnippet>308</a>            atomic::{AtomicUsize, Ordering},
 <a href=#309 id=309 data-nosnippet>309</a>        },
 <a href=#310 id=310 data-nosnippet>310</a>    };
 <a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">use </span>tokio::task::JoinHandle;
@@ -536,10 +536,10 @@
 <a href=#534 id=534 data-nosnippet>534</a>
 <a href=#535 id=535 data-nosnippet>535</a>        <span class="comment">// Retain only keys with even numbers
 <a href=#536 id=536 data-nosnippet>536</a>        </span>map.retain(|key, <span class="kw">_</span>| {
-<a href=#537 id=537 data-nosnippet>537</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(num_str) = key.strip_prefix(<span class="string">"key_"</span>) {
-<a href=#538 id=538 data-nosnippet>538</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(num) = num_str.parse::&lt;i32&gt;() {
-<a href=#539 id=539 data-nosnippet>539</a>                    <span class="kw">return </span>num % <span class="number">2 </span>== <span class="number">0</span>;
-<a href=#540 id=540 data-nosnippet>540</a>                }
+<a href=#537 id=537 data-nosnippet>537</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(num_str) = key.strip_prefix(<span class="string">"key_"</span>)
+<a href=#538 id=538 data-nosnippet>538</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Ok</span>(num) = num_str.parse::&lt;i32&gt;()
+<a href=#539 id=539 data-nosnippet>539</a>            {
+<a href=#540 id=540 data-nosnippet>540</a>                <span class="kw">return </span>num % <span class="number">2 </span>== <span class="number">0</span>;
 <a href=#541 id=541 data-nosnippet>541</a>            }
 <a href=#542 id=542 data-nosnippet>542</a>            <span class="bool-val">false
 <a href=#543 id=543 data-nosnippet>543</a>        </span>});

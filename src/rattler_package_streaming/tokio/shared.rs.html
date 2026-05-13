@@ -66,24 +66,24 @@
 <a href=#64 id=64 data-nosnippet>64</a>                <span class="kw">let </span>mode = file.header().mode().map_err(ExtractError::IoError)<span class="question-mark">?</span>;
 <a href=#65 id=65 data-nosnippet>65</a>                <span class="kw">let </span>has_any_executable_bit = mode &amp; EXECUTABLE_MODE_BITS;
 <a href=#66 id=66 data-nosnippet>66</a>
-<a href=#67 id=67 data-nosnippet>67</a>                <span class="kw">if </span><span class="macro">has_any_executable_bit !</span>= <span class="number">0 </span>{
-<a href=#68 id=68 data-nosnippet>68</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = unpacked_path {
-<a href=#69 id=69 data-nosnippet>69</a>                        <span class="kw">let </span>metadata = tokio::fs::metadata(<span class="kw-2">&amp;</span>path)
-<a href=#70 id=70 data-nosnippet>70</a>                            .<span class="kw">await
-<a href=#71 id=71 data-nosnippet>71</a>                            </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#72 id=72 data-nosnippet>72</a>                        <span class="kw">let </span>permissions = metadata.permissions();
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a>                        <span class="comment">// Only update if not already executable
-<a href=#75 id=75 data-nosnippet>75</a>                        </span><span class="kw">if </span>permissions.mode() &amp; <span class="macro">EXECUTABLE_MODE_BITS !</span>= EXECUTABLE_MODE_BITS {
-<a href=#76 id=76 data-nosnippet>76</a>                            tokio::fs::set_permissions(
-<a href=#77 id=77 data-nosnippet>77</a>                                <span class="kw-2">&amp;</span>path,
-<a href=#78 id=78 data-nosnippet>78</a>                                std::fs::Permissions::from_mode(
-<a href=#79 id=79 data-nosnippet>79</a>                                    permissions.mode() | EXECUTABLE_MODE_BITS,
-<a href=#80 id=80 data-nosnippet>80</a>                                ),
-<a href=#81 id=81 data-nosnippet>81</a>                            )
-<a href=#82 id=82 data-nosnippet>82</a>                            .<span class="kw">await
-<a href=#83 id=83 data-nosnippet>83</a>                            </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
-<a href=#84 id=84 data-nosnippet>84</a>                        }
+<a href=#67 id=67 data-nosnippet>67</a>                <span class="kw">if </span><span class="macro">has_any_executable_bit !</span>= <span class="number">0
+<a href=#68 id=68 data-nosnippet>68</a>                    </span>&amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(path) = unpacked_path
+<a href=#69 id=69 data-nosnippet>69</a>                {
+<a href=#70 id=70 data-nosnippet>70</a>                    <span class="kw">let </span>metadata = tokio::fs::metadata(<span class="kw-2">&amp;</span>path)
+<a href=#71 id=71 data-nosnippet>71</a>                        .<span class="kw">await
+<a href=#72 id=72 data-nosnippet>72</a>                        </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
+<a href=#73 id=73 data-nosnippet>73</a>                    <span class="kw">let </span>permissions = metadata.permissions();
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>                    <span class="comment">// Only update if not already executable
+<a href=#76 id=76 data-nosnippet>76</a>                    </span><span class="kw">if </span>permissions.mode() &amp; <span class="macro">EXECUTABLE_MODE_BITS !</span>= EXECUTABLE_MODE_BITS {
+<a href=#77 id=77 data-nosnippet>77</a>                        tokio::fs::set_permissions(
+<a href=#78 id=78 data-nosnippet>78</a>                            <span class="kw-2">&amp;</span>path,
+<a href=#79 id=79 data-nosnippet>79</a>                            std::fs::Permissions::from_mode(
+<a href=#80 id=80 data-nosnippet>80</a>                                permissions.mode() | EXECUTABLE_MODE_BITS,
+<a href=#81 id=81 data-nosnippet>81</a>                            ),
+<a href=#82 id=82 data-nosnippet>82</a>                        )
+<a href=#83 id=83 data-nosnippet>83</a>                        .<span class="kw">await
+<a href=#84 id=84 data-nosnippet>84</a>                        </span>.map_err(ExtractError::IoError)<span class="question-mark">?</span>;
 <a href=#85 id=85 data-nosnippet>85</a>                    }
 <a href=#86 id=86 data-nosnippet>86</a>                }
 <a href=#87 id=87 data-nosnippet>87</a>            }

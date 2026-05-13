@@ -3,8 +3,8 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_package_streaming/</div>seek.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Functionality to stream parts of a `.conda` archive for objects that implement both
 <a href=#2 id=2 data-nosnippet>2</a>//! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor&lt;T&gt;`].
 <a href=#3 id=3 data-nosnippet>3</a>
-<a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span><span class="kw">crate</span>::read::{stream_tar_bz2, stream_tar_zst};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::ExtractError;
+<a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span><span class="kw">crate</span>::ExtractError;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::read::{stream_tar_bz2, stream_tar_zst};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::package::CondaArchiveType;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>rattler_conda_types::package::PackageFile;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>std::fs::File;
@@ -16,10 +16,10 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>tar::Archive;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>zip::CompressionMethod;
 <a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">fn </span>stream_conda_zip_entry&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw-2">mut </span>archive: zip::ZipArchive&lt;<span class="kw">impl </span>Read + Seek + <span class="lifetime">'a</span>&gt;,
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">fn </span>stream_conda_zip_entry&lt;<span class="lifetime">'a</span>, R: Read + Seek + <span class="lifetime">'a</span>&gt;(
+<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw-2">mut </span>archive: zip::ZipArchive&lt;R&gt;,
 <a href=#19 id=19 data-nosnippet>19</a>    file_name: <span class="kw-2">&amp;</span>str,
-<a href=#20 id=20 data-nosnippet>20</a>) -&gt; <span class="prelude-ty">Result</span>&lt;tar::Archive&lt;<span class="kw">impl </span>Read + Sized + <span class="lifetime">'a</span>&gt;, ExtractError&gt; {
+<a href=#20 id=20 data-nosnippet>20</a>) -&gt; <span class="prelude-ty">Result</span>&lt;tar::Archive&lt;<span class="kw">impl </span>Read + Sized + <span class="kw">use</span>&lt;<span class="lifetime">'a</span>, R&gt;&gt;, ExtractError&gt; {
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="comment">// Find the offset and size of the file in the zip.
 <a href=#22 id=22 data-nosnippet>22</a>    </span><span class="kw">let </span>(offset, size) = {
 <a href=#23 id=23 data-nosnippet>23</a>        <span class="kw">let </span>entry = archive.by_name(file_name)<span class="question-mark">?</span>;

@@ -70,22 +70,24 @@
 <a href=#68 id=68 data-nosnippet>68</a><span class="kw">impl </span>From&lt;S3CredentialsOpts&gt; <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;S3Credentials&gt; {
 <a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">fn </span>from(<span class="kw-2">mut </span>value: S3CredentialsOpts) -&gt; <span class="self">Self </span>{
 <a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">if </span>value.force_path_style.is_some() {
-<a href=#71 id=71 data-nosnippet>71</a>            <span class="macro">tracing::warn!</span>(<span class="string">"The `--force-path-style` option is deprecated, please use `--addressing-style=path` instead."</span>);
-<a href=#72 id=72 data-nosnippet>72</a>            value.addressing_style = S3AddressingStyleOpts::Path;
-<a href=#73 id=73 data-nosnippet>73</a>        }
-<a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(endpoint_url), <span class="prelude-val">Some</span>(region)) = (value.endpoint_url, value.region) {
-<a href=#76 id=76 data-nosnippet>76</a>            <span class="prelude-val">Some</span>(S3Credentials {
-<a href=#77 id=77 data-nosnippet>77</a>                endpoint_url,
-<a href=#78 id=78 data-nosnippet>78</a>                region,
-<a href=#79 id=79 data-nosnippet>79</a>                access_key_id: value.access_key_id,
-<a href=#80 id=80 data-nosnippet>80</a>                secret_access_key: value.secret_access_key,
-<a href=#81 id=81 data-nosnippet>81</a>                session_token: value.session_token,
-<a href=#82 id=82 data-nosnippet>82</a>                addressing_style: value.addressing_style.into(),
-<a href=#83 id=83 data-nosnippet>83</a>            })
-<a href=#84 id=84 data-nosnippet>84</a>        } <span class="kw">else </span>{
-<a href=#85 id=85 data-nosnippet>85</a>            <span class="prelude-val">None
-<a href=#86 id=86 data-nosnippet>86</a>        </span>}
-<a href=#87 id=87 data-nosnippet>87</a>    }
-<a href=#88 id=88 data-nosnippet>88</a>}
+<a href=#71 id=71 data-nosnippet>71</a>            <span class="macro">tracing::warn!</span>(
+<a href=#72 id=72 data-nosnippet>72</a>                <span class="string">"The `--force-path-style` option is deprecated, please use `--addressing-style=path` instead."
+<a href=#73 id=73 data-nosnippet>73</a>            </span>);
+<a href=#74 id=74 data-nosnippet>74</a>            value.addressing_style = S3AddressingStyleOpts::Path;
+<a href=#75 id=75 data-nosnippet>75</a>        }
+<a href=#76 id=76 data-nosnippet>76</a>
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(endpoint_url), <span class="prelude-val">Some</span>(region)) = (value.endpoint_url, value.region) {
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="prelude-val">Some</span>(S3Credentials {
+<a href=#79 id=79 data-nosnippet>79</a>                endpoint_url,
+<a href=#80 id=80 data-nosnippet>80</a>                region,
+<a href=#81 id=81 data-nosnippet>81</a>                access_key_id: value.access_key_id,
+<a href=#82 id=82 data-nosnippet>82</a>                secret_access_key: value.secret_access_key,
+<a href=#83 id=83 data-nosnippet>83</a>                session_token: value.session_token,
+<a href=#84 id=84 data-nosnippet>84</a>                addressing_style: value.addressing_style.into(),
+<a href=#85 id=85 data-nosnippet>85</a>            })
+<a href=#86 id=86 data-nosnippet>86</a>        } <span class="kw">else </span>{
+<a href=#87 id=87 data-nosnippet>87</a>            <span class="prelude-val">None
+<a href=#88 id=88 data-nosnippet>88</a>        </span>}
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>}
 </code></pre></div></section></main></body></html>

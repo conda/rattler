@@ -10,14 +10,14 @@
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>tracing::debug;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use crate</span>::{
-<a href=#11 id=11 data-nosnippet>11</a>    git::{CheckoutOptions, GitReference},
-<a href=#12 id=12 data-nosnippet>12</a>    sha::GitSha,
-<a href=#13 id=13 data-nosnippet>13</a>    source::{cache_digest, Fetch, GitSource},
-<a href=#14 id=14 data-nosnippet>14</a>    url::RepositoryUrl,
-<a href=#15 id=15 data-nosnippet>15</a>    GitError, GitUrl, Reporter,
+<a href=#11 id=11 data-nosnippet>11</a>    GitError, GitUrl, Reporter,
+<a href=#12 id=12 data-nosnippet>12</a>    git::{CheckoutOptions, GitReference},
+<a href=#13 id=13 data-nosnippet>13</a>    sha::GitSha,
+<a href=#14 id=14 data-nosnippet>14</a>    source::{Fetch, GitSource, cache_digest},
+<a href=#15 id=15 data-nosnippet>15</a>    url::RepositoryUrl,
 <a href=#16 id=16 data-nosnippet>16</a>};
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>dashmap::mapref::one::Ref;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>dashmap::DashMap;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>dashmap::DashMap;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>dashmap::mapref::one::Ref;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>reqwest_middleware::ClientWithMiddleware;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>serde::Serialize;
 <a href=#21 id=21 data-nosnippet>21</a>

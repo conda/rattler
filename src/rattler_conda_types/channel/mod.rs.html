@@ -427,22 +427,22 @@
 <a href=#425 id=425 data-nosnippet>425</a><span class="doccomment">/// Extract the platforms from the given human readable channel.
 <a href=#426 id=426 data-nosnippet>426</a></span><span class="attr">#[allow(clippy::type_complexity)]
 <a href=#427 id=427 data-nosnippet>427</a></span><span class="kw">fn </span>parse_platforms(channel: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="prelude-ty">Option</span>&lt;Vec&lt;Platform&gt;&gt;, <span class="kw-2">&amp;</span>str), ParsePlatformError&gt; {
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">if </span>channel.rfind(<span class="string">']'</span>).is_some() {
-<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(start_platform_idx) = channel.find(<span class="string">'['</span>) {
-<a href=#430 id=430 data-nosnippet>430</a>            <span class="kw">let </span>platform_part = <span class="kw-2">&amp;</span>channel[start_platform_idx + <span class="number">1</span>..channel.len() - <span class="number">1</span>];
-<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">let </span>platforms = platform_part
-<a href=#432 id=432 data-nosnippet>432</a>                .split(<span class="string">','</span>)
-<a href=#433 id=433 data-nosnippet>433</a>                .map(str::trim)
-<a href=#434 id=434 data-nosnippet>434</a>                .filter(|s| !s.is_empty())
-<a href=#435 id=435 data-nosnippet>435</a>                .map(FromStr::from_str)
-<a href=#436 id=436 data-nosnippet>436</a>                .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
-<a href=#437 id=437 data-nosnippet>437</a>            <span class="kw">let </span>platforms = <span class="kw">if </span>platforms.is_empty() {
-<a href=#438 id=438 data-nosnippet>438</a>                <span class="prelude-val">None
-<a href=#439 id=439 data-nosnippet>439</a>            </span>} <span class="kw">else </span>{
-<a href=#440 id=440 data-nosnippet>440</a>                <span class="prelude-val">Some</span>(platforms)
-<a href=#441 id=441 data-nosnippet>441</a>            };
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>((platforms, <span class="kw-2">&amp;</span>channel[<span class="number">0</span>..start_platform_idx]));
-<a href=#443 id=443 data-nosnippet>443</a>        }
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">if </span>channel.rfind(<span class="string">']'</span>).is_some()
+<a href=#429 id=429 data-nosnippet>429</a>        &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(start_platform_idx) = channel.find(<span class="string">'['</span>)
+<a href=#430 id=430 data-nosnippet>430</a>    {
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">let </span>platform_part = <span class="kw-2">&amp;</span>channel[start_platform_idx + <span class="number">1</span>..channel.len() - <span class="number">1</span>];
+<a href=#432 id=432 data-nosnippet>432</a>        <span class="kw">let </span>platforms = platform_part
+<a href=#433 id=433 data-nosnippet>433</a>            .split(<span class="string">','</span>)
+<a href=#434 id=434 data-nosnippet>434</a>            .map(str::trim)
+<a href=#435 id=435 data-nosnippet>435</a>            .filter(|s| !s.is_empty())
+<a href=#436 id=436 data-nosnippet>436</a>            .map(FromStr::from_str)
+<a href=#437 id=437 data-nosnippet>437</a>            .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span>platforms = <span class="kw">if </span>platforms.is_empty() {
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="prelude-val">None
+<a href=#440 id=440 data-nosnippet>440</a>        </span>} <span class="kw">else </span>{
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="prelude-val">Some</span>(platforms)
+<a href=#442 id=442 data-nosnippet>442</a>        };
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>((platforms, <span class="kw-2">&amp;</span>channel[<span class="number">0</span>..start_platform_idx]));
 <a href=#444 id=444 data-nosnippet>444</a>    }
 <a href=#445 id=445 data-nosnippet>445</a>
 <a href=#446 id=446 data-nosnippet>446</a>    <span class="prelude-val">Ok</span>((<span class="prelude-val">None</span>, channel))

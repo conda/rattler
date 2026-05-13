@@ -68,7 +68,7 @@
 <a href=#66 id=66 data-nosnippet>66</a></span><span class="kw">type </span>BoxedLogCallback = Box&lt;<span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;</span>str, i32) + <span class="lifetime">'static</span>&gt;;
 <a href=#67 id=67 data-nosnippet>67</a>
 <a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// The callback that is actually registered on the pool (it must be a function pointer)
-<a href=#69 id=69 data-nosnippet>69</a></span><span class="attr">#[no_mangle]
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="attr">#[<span class="kw">unsafe</span>(no_mangle)]
 <a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">extern </span><span class="string">"C" </span><span class="kw">fn </span>log_callback(
 <a href=#71 id=71 data-nosnippet>71</a>    _pool: <span class="kw-2">*mut </span>ffi::Pool,
 <a href=#72 id=72 data-nosnippet>72</a>    user_data: <span class="kw-2">*mut </span>c_void,
@@ -337,41 +337,42 @@
 <a href=#335 id=335 data-nosnippet>335</a>            <span class="string">"イロハニホヘト チリヌルヲ ワカヨタレソ ツネナラム ウヰノオクヤマ ケフコエテ アサキユメミシ ヱヒモセスン"</span>,
 <a href=#336 id=336 data-nosnippet>336</a>            <span class="string">"Pchnąć w tę łódź jeża lub ośm skrzyń fig"</span>,
 <a href=#337 id=337 data-nosnippet>337</a>            <span class="string">"В чащах юга жил бы цитрус? Да, но фальшивый экземпляр!"</span>,
-<a href=#338 id=338 data-nosnippet>338</a>            <span class="string">"Съешь же ещё этих мягких французских булок да выпей чаю"</span>];
-<a href=#339 id=339 data-nosnippet>339</a>
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>pool = Pool::default();
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">for </span>in_s <span class="kw">in </span>strings {
-<a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">let </span>id = pool.intern_str(in_s);
-<a href=#343 id=343 data-nosnippet>343</a>            <span class="kw">let </span>outcome = id.resolve(<span class="kw-2">&amp;</span>pool);
-<a href=#344 id=344 data-nosnippet>344</a>            <span class="macro">assert_eq!</span>(in_s, outcome.unwrap());
-<a href=#345 id=345 data-nosnippet>345</a>        }
-<a href=#346 id=346 data-nosnippet>346</a>    }
-<a href=#347 id=347 data-nosnippet>347</a>
-<a href=#348 id=348 data-nosnippet>348</a>    <span class="attr">#[test]
-<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">fn </span>test_matchspec_interning() {
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="comment">// Create a matchspec
-<a href=#351 id=351 data-nosnippet>351</a>        </span><span class="kw">let </span>spec = MatchSpec::from_str(<span class="string">"foo=1.0=py27_0"</span>, ParseStrictness::Lenient).unwrap();
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="comment">// Intern it into the pool
-<a href=#353 id=353 data-nosnippet>353</a>        </span><span class="kw">let </span>pool = Pool::default();
-<a href=#354 id=354 data-nosnippet>354</a>        pool.intern_matchspec(<span class="kw-2">&amp;</span>spec);
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="comment">// Don't think libsolv has an API to get it back
-<a href=#356 id=356 data-nosnippet>356</a>    </span>}
-<a href=#357 id=357 data-nosnippet>357</a>
-<a href=#358 id=358 data-nosnippet>358</a>    <span class="attr">#[test]
-<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="kw">fn </span>test_pool_callback() {
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>pool = Pool::default();
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>(tx, rx) = std::sync::mpsc::sync_channel(<span class="number">10</span>);
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="comment">// Set the debug level
-<a href=#363 id=363 data-nosnippet>363</a>        </span>pool.set_debug_level(<span class="kw">super</span>::Verbosity::Extreme);
-<a href=#364 id=364 data-nosnippet>364</a>        pool.set_debug_callback(<span class="kw">move </span>|msg, _level| {
-<a href=#365 id=365 data-nosnippet>365</a>            tx.send(msg.to_owned()).unwrap();
-<a href=#366 id=366 data-nosnippet>366</a>        });
-<a href=#367 id=367 data-nosnippet>367</a>
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="comment">// Log something in the pool
-<a href=#369 id=369 data-nosnippet>369</a>        </span><span class="kw">let </span>msg = CString::new(<span class="string">"foo"</span>).unwrap();
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">unsafe </span>{ <span class="kw">super</span>::ffi::pool_debug(pool.<span class="number">0</span>.as_ptr(), <span class="number">1 </span>&lt;&lt; <span class="number">5</span>, msg.as_ptr()) };
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="macro">assert_eq!</span>(rx.recv().unwrap(), <span class="string">"foo"</span>);
-<a href=#373 id=373 data-nosnippet>373</a>    }
-<a href=#374 id=374 data-nosnippet>374</a>}
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="string">"Съешь же ещё этих мягких французских булок да выпей чаю"</span>,
+<a href=#339 id=339 data-nosnippet>339</a>        ];
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>pool = Pool::default();
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">for </span>in_s <span class="kw">in </span>strings {
+<a href=#343 id=343 data-nosnippet>343</a>            <span class="kw">let </span>id = pool.intern_str(in_s);
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">let </span>outcome = id.resolve(<span class="kw-2">&amp;</span>pool);
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="macro">assert_eq!</span>(in_s, outcome.unwrap());
+<a href=#346 id=346 data-nosnippet>346</a>        }
+<a href=#347 id=347 data-nosnippet>347</a>    }
+<a href=#348 id=348 data-nosnippet>348</a>
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="attr">#[test]
+<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">fn </span>test_matchspec_interning() {
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="comment">// Create a matchspec
+<a href=#352 id=352 data-nosnippet>352</a>        </span><span class="kw">let </span>spec = MatchSpec::from_str(<span class="string">"foo=1.0=py27_0"</span>, ParseStrictness::Lenient).unwrap();
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="comment">// Intern it into the pool
+<a href=#354 id=354 data-nosnippet>354</a>        </span><span class="kw">let </span>pool = Pool::default();
+<a href=#355 id=355 data-nosnippet>355</a>        pool.intern_matchspec(<span class="kw-2">&amp;</span>spec);
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="comment">// Don't think libsolv has an API to get it back
+<a href=#357 id=357 data-nosnippet>357</a>    </span>}
+<a href=#358 id=358 data-nosnippet>358</a>
+<a href=#359 id=359 data-nosnippet>359</a>    <span class="attr">#[test]
+<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">fn </span>test_pool_callback() {
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>pool = Pool::default();
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>(tx, rx) = std::sync::mpsc::sync_channel(<span class="number">10</span>);
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="comment">// Set the debug level
+<a href=#364 id=364 data-nosnippet>364</a>        </span>pool.set_debug_level(<span class="kw">super</span>::Verbosity::Extreme);
+<a href=#365 id=365 data-nosnippet>365</a>        pool.set_debug_callback(<span class="kw">move </span>|msg, _level| {
+<a href=#366 id=366 data-nosnippet>366</a>            tx.send(msg.to_owned()).unwrap();
+<a href=#367 id=367 data-nosnippet>367</a>        });
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="comment">// Log something in the pool
+<a href=#370 id=370 data-nosnippet>370</a>        </span><span class="kw">let </span>msg = CString::new(<span class="string">"foo"</span>).unwrap();
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">unsafe </span>{ <span class="kw">super</span>::ffi::pool_debug(pool.<span class="number">0</span>.as_ptr(), <span class="number">1 </span>&lt;&lt; <span class="number">5</span>, msg.as_ptr()) };
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="macro">assert_eq!</span>(rx.recv().unwrap(), <span class="string">"foo"</span>);
+<a href=#374 id=374 data-nosnippet>374</a>    }
+<a href=#375 id=375 data-nosnippet>375</a>}
 </code></pre></div></section></main></body></html>

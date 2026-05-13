@@ -24,11 +24,11 @@
 <a href=#22 id=22 data-nosnippet>22</a>//! logic is retained here for parsing older format versions.
 <a href=#23 id=23 data-nosnippet>23</a>
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">use crate</span>::{
-<a href=#25 id=25 data-nosnippet>25</a>    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, SourceMetadata, VariantValue},
-<a href=#26 id=26 data-nosnippet>26</a>    source::SourceLocation,
-<a href=#27 id=27 data-nosnippet>27</a>    CondaPackageData, UrlOrPath,
+<a href=#25 id=25 data-nosnippet>25</a>    CondaPackageData, UrlOrPath,
+<a href=#26 id=26 data-nosnippet>26</a>    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, SourceMetadata, VariantValue},
+<a href=#27 id=27 data-nosnippet>27</a>    source::SourceLocation,
 <a href=#28 id=28 data-nosnippet>28</a>};
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>rattler_conda_types::{package::DistArchiveIdentifier, ChannelUrl, PackageRecord};
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>rattler_conda_types::{ChannelUrl, PackageRecord, package::DistArchiveIdentifier};
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>std::{borrow::Cow, collections::BTreeMap};
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Intermediate representation of a conda package during legacy deserialization.

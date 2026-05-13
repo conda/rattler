@@ -6,8 +6,8 @@
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#7 id=7 data-nosnippet>7</a>    package::RunExportsJson, BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl,
-<a href=#8 id=8 data-nosnippet>8</a>    VersionWithSource,
+<a href=#7 id=7 data-nosnippet>7</a>    BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
+<a href=#8 id=8 data-nosnippet>8</a>    package::RunExportsJson,
 <a href=#9 id=9 data-nosnippet>9</a>};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>serde_with::serde_as;
@@ -17,12 +17,12 @@
 <a href=#15 id=15 data-nosnippet>15</a>    source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use crate</span>::{
-<a href=#18 id=18 data-nosnippet>18</a>    conda::{
-<a href=#19 id=19 data-nosnippet>19</a>        CondaSourceData, PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
-<a href=#20 id=20 data-nosnippet>20</a>    },
-<a href=#21 id=21 data-nosnippet>21</a>    source::SourceLocation,
-<a href=#22 id=22 data-nosnippet>22</a>    utils::derived_fields,
-<a href=#23 id=23 data-nosnippet>23</a>    CondaPackageData, ConversionError, SourceIdentifier,
+<a href=#18 id=18 data-nosnippet>18</a>    CondaPackageData, ConversionError, SourceIdentifier,
+<a href=#19 id=19 data-nosnippet>19</a>    conda::{
+<a href=#20 id=20 data-nosnippet>20</a>        CondaSourceData, PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
+<a href=#21 id=21 data-nosnippet>21</a>    },
+<a href=#22 id=22 data-nosnippet>22</a>    source::SourceLocation,
+<a href=#23 id=23 data-nosnippet>23</a>    utils::derived_fields,
 <a href=#24 id=24 data-nosnippet>24</a>};
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="doccomment">/// A model struct for source packages in V7 lock files.

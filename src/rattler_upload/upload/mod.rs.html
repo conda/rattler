@@ -3,12 +3,12 @@
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_upload/upload/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! The upload module provides the package upload functionality.
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use crate</span>::{
-<a href=#4 id=4 data-nosnippet>4</a>    tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, CloudsmithData, QuetzData,
+<a href=#4 id=4 data-nosnippet>4</a>    AnacondaData, ArtifactoryData, CloudsmithData, QuetzData, tool_configuration::APP_USER_AGENT,
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>fs_err::tokio <span class="kw">as </span>fs;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>futures::TryStreamExt;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>indicatif::{style::TemplateError, HumanBytes, ProgressState};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>indicatif::{HumanBytes, ProgressState, style::TemplateError};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>std::{
 <a href=#11 id=11 data-nosnippet>11</a>    fmt::Write,
 <a href=#12 id=12 data-nosnippet>12</a>    path::{Path, PathBuf},
@@ -23,7 +23,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>tracing::{info, warn};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>url::Url;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::upload::package::{sha256_sum, ExtractedPackage};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::upload::package::{ExtractedPackage, sha256_sum};
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="attr">#[cfg(test)]
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>test_utils;
@@ -44,7 +44,7 @@
 <a href=#42 id=42 data-nosnippet>42</a>
 <a href=#43 id=43 data-nosnippet>43</a><span class="kw">pub use </span>anaconda::AnacondaError;
 <a href=#44 id=44 data-nosnippet>44</a><span class="kw">pub use </span>cloudsmith::CloudsmithError;
-<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub use </span>prefix::{upload_package_to_prefix, PrefixUploadError};
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub use </span>prefix::{PrefixUploadError, upload_package_to_prefix};
 <a href=#46 id=46 data-nosnippet>46</a>
 <a href=#47 id=47 data-nosnippet>47</a><span class="doccomment">/// Returns the style to use for a progress bar that is currently in progress.
 <a href=#48 id=48 data-nosnippet>48</a></span><span class="kw">fn </span>default_bytes_style() -&gt; <span class="prelude-ty">Result</span>&lt;indicatif::ProgressStyle, TemplateError&gt; {
@@ -475,7 +475,7 @@
 <a href=#473 id=473 data-nosnippet>473</a>
 <a href=#474 id=474 data-nosnippet>474</a><span class="attr">#[cfg(test)]
 <a href=#475 id=475 data-nosnippet>475</a></span><span class="kw">mod </span>test {
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">use </span>axum::{http::StatusCode, Router};
+<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">use </span>axum::{Router, http::StatusCode};
 <a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">use </span>rattler_networking::AuthenticationStorage;
 <a href=#478 id=478 data-nosnippet>478</a>
 <a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">use </span><span class="kw">crate</span>::upload::opt::{ArtifactoryData, QuetzData};

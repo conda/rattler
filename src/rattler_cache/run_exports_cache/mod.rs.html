@@ -147,10 +147,10 @@
 <a href=#145 id=145 data-nosnippet>145</a>            .<span class="kw">await
 <a href=#146 id=146 data-nosnippet>146</a>            </span>.map_err(|e| RunExportsCacheError::Fetch(Arc::new(e)))<span class="question-mark">?</span>;
 <a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent_dir) = cache_path.parent() {
-<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">if </span>!parent_dir.exists() {
-<a href=#150 id=150 data-nosnippet>150</a>                tokio_fs::create_dir_all(parent_dir).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#151 id=151 data-nosnippet>151</a>            }
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent_dir) = cache_path.parent()
+<a href=#149 id=149 data-nosnippet>149</a>            &amp;&amp; !parent_dir.exists()
+<a href=#150 id=150 data-nosnippet>150</a>        {
+<a href=#151 id=151 data-nosnippet>151</a>            tokio_fs::create_dir_all(parent_dir).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#152 id=152 data-nosnippet>152</a>        }
 <a href=#153 id=153 data-nosnippet>153</a>
 <a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>run_exports = <span class="kw">if let </span><span class="prelude-val">Some</span>(file) = run_exports_file {
@@ -387,18 +387,18 @@
 <a href=#385 id=385 data-nosnippet>385</a>
 <a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">use </span>assert_matches::assert_matches;
 <a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">use </span>axum::{
-<a href=#388 id=388 data-nosnippet>388</a>        body::Body,
-<a href=#389 id=389 data-nosnippet>389</a>        extract::State,
-<a href=#390 id=390 data-nosnippet>390</a>        http::{Request, StatusCode},
-<a href=#391 id=391 data-nosnippet>391</a>        middleware,
-<a href=#392 id=392 data-nosnippet>392</a>        middleware::Next,
-<a href=#393 id=393 data-nosnippet>393</a>        response::{Redirect, Response},
-<a href=#394 id=394 data-nosnippet>394</a>        routing::get,
-<a href=#395 id=395 data-nosnippet>395</a>        Router,
+<a href=#388 id=388 data-nosnippet>388</a>        Router,
+<a href=#389 id=389 data-nosnippet>389</a>        body::Body,
+<a href=#390 id=390 data-nosnippet>390</a>        extract::State,
+<a href=#391 id=391 data-nosnippet>391</a>        http::{Request, StatusCode},
+<a href=#392 id=392 data-nosnippet>392</a>        middleware,
+<a href=#393 id=393 data-nosnippet>393</a>        middleware::Next,
+<a href=#394 id=394 data-nosnippet>394</a>        response::{Redirect, Response},
+<a href=#395 id=395 data-nosnippet>395</a>        routing::get,
 <a href=#396 id=396 data-nosnippet>396</a>    };
 <a href=#397 id=397 data-nosnippet>397</a>
 <a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">use </span>rattler_conda_types::{PackageName, PackageRecord, Version};
-<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">use </span>rattler_digest::{parse_digest_from_hex, Sha256};
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">use </span>rattler_digest::{Sha256, parse_digest_from_hex};
 <a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">use </span>rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
 <a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">use </span>reqwest::Client;
 <a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">use </span>reqwest_middleware::{ClientBuilder, ClientWithMiddleware};

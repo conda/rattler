@@ -297,59 +297,58 @@
 <a href=#295 id=295 data-nosnippet>295</a>        .unwrap();
 <a href=#296 id=296 data-nosnippet>296</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
 <a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(PathsJson::from_deprecated_package_directory(
-<a href=#299 id=299 data-nosnippet>299</a>            package_dir.path()
-<a href=#300 id=300 data-nosnippet>300</a>        )
-<a href=#301 id=301 data-nosnippet>301</a>        .unwrap());
-<a href=#302 id=302 data-nosnippet>302</a>    }
-<a href=#303 id=303 data-nosnippet>303</a>
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="attr">#[test]
-<a href=#305 id=305 data-nosnippet>305</a>    #[cfg(unix)]
-<a href=#306 id=306 data-nosnippet>306</a>    </span><span class="kw">pub fn </span>test_reconstruct_paths_json_with_symlinks() {
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>package_dir = tempfile::tempdir().unwrap();
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file(
-<a href=#310 id=310 data-nosnippet>310</a>            <span class="string">"https://conda.anaconda.org/conda-forge/linux-64/zlib-1.2.8-3.tar.bz2"
-<a href=#311 id=311 data-nosnippet>311</a>                </span>.parse()
-<a href=#312 id=312 data-nosnippet>312</a>                .unwrap(),
-<a href=#313 id=313 data-nosnippet>313</a>            <span class="string">"85fcb6906b8686fe6341db89b4e6fc2631ad69ee6eab2f4823bfd64ae0b20ac8"</span>,
-<a href=#314 id=314 data-nosnippet>314</a>        )
-<a href=#315 id=315 data-nosnippet>315</a>        .unwrap();
-<a href=#316 id=316 data-nosnippet>316</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
-<a href=#317 id=317 data-nosnippet>317</a>
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>package_dir = package_dir.keep();
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, package_dir.display());
-<a href=#320 id=320 data-nosnippet>320</a>
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(
-<a href=#322 id=322 data-nosnippet>322</a>            PathsJson::from_deprecated_package_directory(<span class="kw-2">&amp;</span>package_dir).unwrap()
-<a href=#323 id=323 data-nosnippet>323</a>        );
-<a href=#324 id=324 data-nosnippet>324</a>    }
-<a href=#325 id=325 data-nosnippet>325</a>
-<a href=#326 id=326 data-nosnippet>326</a>    <span class="attr">#[test]
-<a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">pub fn </span>test_paths_sorted() {
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">use </span>rand::seq::SliceRandom;
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a>        <span class="comment">// create some fake data
-<a href=#331 id=331 data-nosnippet>331</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>paths = <span class="macro">vec!</span>[];
-<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">15 </span>{
-<a href=#333 id=333 data-nosnippet>333</a>            paths.push(PathsEntry {
-<a href=#334 id=334 data-nosnippet>334</a>                relative_path: <span class="macro">format!</span>(<span class="string">"rel\\path_{i}"</span>).into(),
-<a href=#335 id=335 data-nosnippet>335</a>                path_type: <span class="kw">super</span>::PathType::HardLink,
-<a href=#336 id=336 data-nosnippet>336</a>                prefix_placeholder: <span class="prelude-val">None</span>,
-<a href=#337 id=337 data-nosnippet>337</a>                no_link: <span class="bool-val">false</span>,
-<a href=#338 id=338 data-nosnippet>338</a>                sha256: <span class="prelude-val">None</span>,
-<a href=#339 id=339 data-nosnippet>339</a>                size_in_bytes: <span class="prelude-val">Some</span>(<span class="number">0</span>),
-<a href=#340 id=340 data-nosnippet>340</a>            });
-<a href=#341 id=341 data-nosnippet>341</a>        }
-<a href=#342 id=342 data-nosnippet>342</a>
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="comment">// shuffle the data
-<a href=#344 id=344 data-nosnippet>344</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>rng = rand::rng();
-<a href=#345 id=345 data-nosnippet>345</a>        paths.shuffle(<span class="kw-2">&amp;mut </span>rng);
-<a href=#346 id=346 data-nosnippet>346</a>
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(PathsJson {
-<a href=#348 id=348 data-nosnippet>348</a>            paths,
-<a href=#349 id=349 data-nosnippet>349</a>            paths_version: <span class="number">1
-<a href=#350 id=350 data-nosnippet>350</a>        </span>});
-<a href=#351 id=351 data-nosnippet>351</a>    }
-<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(
+<a href=#299 id=299 data-nosnippet>299</a>            PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()
+<a href=#300 id=300 data-nosnippet>300</a>        );
+<a href=#301 id=301 data-nosnippet>301</a>    }
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="attr">#[test]
+<a href=#304 id=304 data-nosnippet>304</a>    #[cfg(unix)]
+<a href=#305 id=305 data-nosnippet>305</a>    </span><span class="kw">pub fn </span>test_reconstruct_paths_json_with_symlinks() {
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>package_dir = tempfile::tempdir().unwrap();
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>package_path = tools::download_and_cache_file(
+<a href=#309 id=309 data-nosnippet>309</a>            <span class="string">"https://conda.anaconda.org/conda-forge/linux-64/zlib-1.2.8-3.tar.bz2"
+<a href=#310 id=310 data-nosnippet>310</a>                </span>.parse()
+<a href=#311 id=311 data-nosnippet>311</a>                .unwrap(),
+<a href=#312 id=312 data-nosnippet>312</a>            <span class="string">"85fcb6906b8686fe6341db89b4e6fc2631ad69ee6eab2f4823bfd64ae0b20ac8"</span>,
+<a href=#313 id=313 data-nosnippet>313</a>        )
+<a href=#314 id=314 data-nosnippet>314</a>        .unwrap();
+<a href=#315 id=315 data-nosnippet>315</a>        rattler_package_streaming::fs::extract(<span class="kw-2">&amp;</span>package_path, package_dir.path()).unwrap();
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span>package_dir = package_dir.keep();
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, package_dir.display());
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(
+<a href=#321 id=321 data-nosnippet>321</a>            PathsJson::from_deprecated_package_directory(<span class="kw-2">&amp;</span>package_dir).unwrap()
+<a href=#322 id=322 data-nosnippet>322</a>        );
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="attr">#[test]
+<a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">pub fn </span>test_paths_sorted() {
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">use </span>rand::seq::SliceRandom;
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="comment">// create some fake data
+<a href=#330 id=330 data-nosnippet>330</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>paths = <span class="macro">vec!</span>[];
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">15 </span>{
+<a href=#332 id=332 data-nosnippet>332</a>            paths.push(PathsEntry {
+<a href=#333 id=333 data-nosnippet>333</a>                relative_path: <span class="macro">format!</span>(<span class="string">"rel\\path_{i}"</span>).into(),
+<a href=#334 id=334 data-nosnippet>334</a>                path_type: <span class="kw">super</span>::PathType::HardLink,
+<a href=#335 id=335 data-nosnippet>335</a>                prefix_placeholder: <span class="prelude-val">None</span>,
+<a href=#336 id=336 data-nosnippet>336</a>                no_link: <span class="bool-val">false</span>,
+<a href=#337 id=337 data-nosnippet>337</a>                sha256: <span class="prelude-val">None</span>,
+<a href=#338 id=338 data-nosnippet>338</a>                size_in_bytes: <span class="prelude-val">Some</span>(<span class="number">0</span>),
+<a href=#339 id=339 data-nosnippet>339</a>            });
+<a href=#340 id=340 data-nosnippet>340</a>        }
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="comment">// shuffle the data
+<a href=#343 id=343 data-nosnippet>343</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>rng = rand::rng();
+<a href=#344 id=344 data-nosnippet>344</a>        paths.shuffle(<span class="kw-2">&amp;mut </span>rng);
+<a href=#345 id=345 data-nosnippet>345</a>
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(PathsJson {
+<a href=#347 id=347 data-nosnippet>347</a>            paths,
+<a href=#348 id=348 data-nosnippet>348</a>            paths_version: <span class="number">1
+<a href=#349 id=349 data-nosnippet>349</a>        </span>});
+<a href=#350 id=350 data-nosnippet>350</a>    }
+<a href=#351 id=351 data-nosnippet>351</a>}
 </code></pre></div></section></main></body></html>

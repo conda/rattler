@@ -5,26 +5,26 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use super</span>::{
-<a href=#6 id=6 data-nosnippet>6</a>    models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
-<a href=#7 id=7 data-nosnippet>7</a>    ParseCondaLockError,
+<a href=#6 id=6 data-nosnippet>6</a>    ParseCondaLockError,
+<a href=#7 id=7 data-nosnippet>7</a>    models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
 <a href=#8 id=8 data-nosnippet>8</a>};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use crate</span>::{
-<a href=#10 id=10 data-nosnippet>10</a>    file_format_version::FileFormatVersion,
-<a href=#11 id=11 data-nosnippet>11</a>    platform::PlatformName,
-<a href=#12 id=12 data-nosnippet>12</a>    utils::derived_fields::{
-<a href=#13 id=13 data-nosnippet>13</a>        derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
-<a href=#14 id=14 data-nosnippet>14</a>        LocationDerivedFields,
-<a href=#15 id=15 data-nosnippet>15</a>    },
-<a href=#16 id=16 data-nosnippet>16</a>    Channel, EnvironmentData, EnvironmentIndex, EnvironmentPackages, LockFile, LockFileInner,
-<a href=#17 id=17 data-nosnippet>17</a>    LockedPackage, PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
-<a href=#18 id=18 data-nosnippet>18</a>    PypiPackageData, SolveOptions, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
+<a href=#10 id=10 data-nosnippet>10</a>    Channel, DEFAULT_ENVIRONMENT_NAME, EnvironmentData, EnvironmentIndex, EnvironmentPackages,
+<a href=#11 id=11 data-nosnippet>11</a>    LockFile, LockFileInner, LockedPackage, PackageHashes, PackageIndex, PlatformData,
+<a href=#12 id=12 data-nosnippet>12</a>    PlatformIndex, PypiDistributionData, PypiPackageData, SolveOptions, UrlOrPath, Verbatim,
+<a href=#13 id=13 data-nosnippet>13</a>    file_format_version::FileFormatVersion,
+<a href=#14 id=14 data-nosnippet>14</a>    platform::PlatformName,
+<a href=#15 id=15 data-nosnippet>15</a>    utils::derived_fields::{
+<a href=#16 id=16 data-nosnippet>16</a>        LocationDerivedFields, derive_arch_and_platform, derive_build_number_from_build,
+<a href=#17 id=17 data-nosnippet>17</a>        derive_noarch_type,
+<a href=#18 id=18 data-nosnippet>18</a>    },
 <a href=#19 id=19 data-nosnippet>19</a>};
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>indexmap::IndexSet;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>pep440_rs::VersionSpecifiers;
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>pep508_rs::Requirement;
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>serde::Deserialize;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>serde_with::{serde_as, skip_serializing_none, OneOrMany};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>serde_with::{OneOrMany, serde_as, skip_serializing_none};
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>url::Url;
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="attr">#[derive(Deserialize)]

@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_networking/authentication_storage/</div>storage.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Storage and access of authentication information
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>anyhow::{anyhow, <span class="prelude-ty">Result</span>};
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>anyhow::{<span class="prelude-ty">Result</span>, anyhow};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>reqwest::IntoUrl;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::{
 <a href=#6 id=6 data-nosnippet>6</a>    collections::HashMap,
@@ -10,9 +10,9 @@
 <a href=#8 id=8 data-nosnippet>8</a>};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>url::Url;
 <a href=#10 id=10 data-nosnippet>10</a>
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::authentication_storage::{backends::file::FileStorage, AuthenticationStorageError};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::authentication_storage::{AuthenticationStorageError, backends::file::FileStorage};
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use super</span>::{authentication::Authentication, StorageBackend};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use super</span>::{StorageBackend, authentication::Authentication};
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[cfg(feature = <span class="string">"netrc-rs"</span>)]
 <a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">use </span><span class="kw">super</span>::backends::netrc::NetRcStorage;

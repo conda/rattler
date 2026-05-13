@@ -2,14 +2,14 @@
 
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_solve/resolvo/</div>conda_sorting.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::{
 <a href=#2 id=2 data-nosnippet>2</a>    cmp::Ordering,
-<a href=#3 id=3 data-nosnippet>3</a>    collections::{hash_map::Entry, HashMap},
+<a href=#3 id=3 data-nosnippet>3</a>    collections::{HashMap, hash_map::Entry},
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>futures::future::FutureExt;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>itertools::Itertools;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>rattler_conda_types::Version;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>resolvo::{
-<a href=#10 id=10 data-nosnippet>10</a>    utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+<a href=#10 id=10 data-nosnippet>10</a>    Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId, utils::Pool,
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use super</span>::{NameType, SolverMatchSpec, SolverPackageRecord};
