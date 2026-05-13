@@ -85,7 +85,7 @@ jobs:
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --no-default-features --features rustls-tls
+          args: --release --out dist --no-default-features --features rustls
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
@@ -121,7 +121,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -158,7 +158,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: "2_28"
-          args: --release --out dist  --no-default-features --features rustls-tls,pty
+          args: --release --out dist  --no-default-features --features rustls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -244,14 +244,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - name: "Build wheels (rustls-tls)"
+      - name: "Build wheels (rustls)"
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
@@ -301,7 +301,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: Test wheel
         with:
@@ -335,7 +335,7 @@ jobs:
         with:
           working-directory: py-rattler
           target: x86_64
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Test wheel - x86_64"
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
@@ -360,7 +360,7 @@ jobs:
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
-          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls-tls,pty
+          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls,pty
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |

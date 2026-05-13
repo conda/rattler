@@ -12,18 +12,19 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls-tls", "s3", "rattler_config"]
+default = ["rustls", "s3", "rattler_config"]
 native-tls = [
   "reqwest/native-tls",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
   "rattler_s3?/native-tls",
 ]
-rustls-tls = [
+rustls = [
   "reqwest/rustls",
-  "rattler_package_streaming/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_s3?/rustls-tls",
+  "rattler_package_streaming/rustls",
+  "rattler_networking/rustls",
+  "rattler_s3?/rustls",
+  "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
 rattler_config = ["dep:rattler_config"]
@@ -38,7 +39,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
@@ -47,6 +48,7 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = [
   "services-fs",
+  "layers-retry",
 ], default-features = false }
 rattler_config = { workspace = true, optional = true }
 rattler_networking = { workspace = true, default-features = false, features = [

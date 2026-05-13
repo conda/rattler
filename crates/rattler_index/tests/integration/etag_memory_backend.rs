@@ -428,7 +428,7 @@ impl Access for ETagMemoryBackend {
             Some(format!("{prefix}/"))
         };
 
-        let mut entries: Vec<(String, bool)> = Vec::new();
+        let mut entries: Vec<ListEntry> = Vec::new();
         let mut seen = HashSet::new();
 
         // Add direct child directories
@@ -437,7 +437,7 @@ impl Access for ETagMemoryBackend {
                 // List root level directories
                 if let Some(first) = dir.split('/').next() {
                     if !first.is_empty() && seen.insert(first) {
-                        entries.push((format!("{first}/"), true));
+                        entries.push(ListEntry::dir(format!("{first}/")));
                     }
                 }
             } else if let Some(ps) = &prefix_slash {
@@ -445,7 +445,7 @@ impl Access for ETagMemoryBackend {
                     // List subdirectories under prefix
                     if let Some(first) = stripped.split('/').next() {
                         if !first.is_empty() && seen.insert(first) {
-                            entries.push((format!("{first}/"), true));
+                            entries.push(ListEntry::dir(format!("{first}/")));
                         }
                     }
                 }
@@ -453,20 +453,29 @@ impl Access for ETagMemoryBackend {
         }
 
         // Add direct child files
-        for key in storage.keys() {
-            if prefix.is_empty() {
-                // List root level files (no / in path)
-                if !key.contains('/') {
-                    entries.push((key.clone(), false));
+        for (key, entry_lock) in storage.iter() {
+            let name = if prefix.is_empty() {
+                if key.contains('/') {
+                    continue;
                 }
-            } else if let Some(ps) = &prefix_slash {
-                if let Some(stripped) = key.strip_prefix(ps) {
-                    // List files directly under prefix (no further / in stripped path)
-                    if !stripped.contains('/') {
-                        entries.push((stripped.to_owned(), false));
-                    }
+                key.clone()
+            } else if let Some(stripped) =
+                prefix_slash.as_deref().and_then(|ps| key.strip_prefix(ps))
+            {
+                if stripped.contains('/') {
+                    continue;
                 }
-            }
+                stripped.to_owned()
+            } else {
+                continue;
+            };
+
+            let content_length = entry_lock.read().await.content_length;
+            entries.push(ListEntry {
+                path: name,
+                is_dir: false,
+                content_length,
+            });
         }
 
         drop(storage);
@@ -476,6 +485,24 @@ impl Access for ETagMemoryBackend {
             RpList::default(),
             oio::HierarchyLister::new(ETagMemoryLister { entries, index: 0 }, "/", false),
         ))
+    }
+}
+
+/// A single entry produced by the listing helpers, carrying the metadata that
+/// opendal's `CompleteLister` requires for file entries.
+struct ListEntry {
+    path: String,
+    is_dir: bool,
+    content_length: u64,
+}
+
+impl ListEntry {
+    fn dir(path: String) -> Self {
+        Self {
+            path,
+            is_dir: true,
+            content_length: 0,
+        }
     }
 }
 
@@ -533,7 +560,7 @@ impl oio::OneShotDelete for ETagMemoryDeleter {
 
 /// Lister for `ETag` memory backend
 pub struct ETagMemoryLister {
-    entries: Vec<(String, bool)>, // (path, is_dir)
+    entries: Vec<ListEntry>,
     index: usize,
 }
 
@@ -543,16 +570,18 @@ impl oio::List for ETagMemoryLister {
             return Ok(None);
         }
 
-        let (path, is_dir) = self.entries[self.index].clone();
+        let entry = &self.entries[self.index];
         self.index += 1;
 
-        let mode = if is_dir {
-            EntryMode::DIR
+        // opendal 0.56's CompleteLister silently drops file entries whose
+        // content_length isn't set by issuing an extra stat() that may miss in
+        // this stripped-path lister, so we populate it inline.
+        let metadata = if entry.is_dir {
+            Metadata::new(EntryMode::DIR)
         } else {
-            EntryMode::FILE
+            Metadata::new(EntryMode::FILE).with_content_length(entry.content_length)
         };
-        let entry = oio::Entry::new(&path, Metadata::new(mode));
-        Ok(Some(entry))
+        Ok(Some(oio::Entry::new(&entry.path, metadata)))
     }
 }
 

@@ -332,7 +332,7 @@ mod tests {
     use crate::OciMiddleware;
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
         let client = reqwest::Client::new();
@@ -365,7 +365,7 @@ mod tests {
     }
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
         let client = reqwest::Client::new();

@@ -14,7 +14,7 @@ FORBIDDEN_CRATE="rustls"
 # Features to exclude when testing (space-separated)
 # These features will NOT be enabled during the check
 # Note: Auto-generated features for optional deps (dep:X) are automatically excluded
-EXCLUDE_FEATURES="rustls-tls default s3 gcs"
+EXCLUDE_FEATURES="rustls default s3 gcs"
 
 # Packages to skip entirely (space-separated)
 # Use this for packages that are known to require the forbidden crate

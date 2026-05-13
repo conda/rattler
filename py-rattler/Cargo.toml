@@ -10,14 +10,14 @@ name = "rattler"
 crate-type = ["cdylib"]
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 native-tls = [
     "rattler_networking/native-tls",
     "rattler_repodata_gateway/native-tls",
 ]
-rustls-tls = [
-    "rattler_networking/rustls-tls",
-    "rattler_repodata_gateway/rustls-tls",
+rustls = [
+    "rattler_networking/rustls",
+    "rattler_repodata_gateway/rustls",
     "reqwest/rustls",
 ]
 vendored-openssl = ["openssl", "openssl/vendored"]

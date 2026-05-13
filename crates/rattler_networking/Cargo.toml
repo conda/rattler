@@ -11,9 +11,9 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls", "system-integration"]
+default = ["rustls", "system-integration"]
 native-tls = ["reqwest/native-tls"]
-rustls-tls = ["reqwest/rustls"]
+rustls = ["reqwest/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
