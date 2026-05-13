@@ -11,9 +11,9 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
-native-tls = ["reqwest/native-tls", "reqwest/native-tls-alpn"]
-rustls-tls = ["reqwest/rustls-tls", "reqwest/rustls-tls-native-roots"]
+default = ["rustls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]
 
 [dependencies]
 url = { workspace = true }

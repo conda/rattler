@@ -10,8 +10,8 @@ edition = { workspace = true }
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
-rustls-tls = ["reqwest/rustls-tls", "reqwest-middleware/rustls-tls", "rattler_networking/rustls-tls", "rattler_package_streaming/rustls-tls"]
+default = ["rustls"]
+rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rustls", "rattler_package_streaming/rustls"]
 native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
 
 [dependencies]
@@ -31,7 +31,7 @@ rattler_digest = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }

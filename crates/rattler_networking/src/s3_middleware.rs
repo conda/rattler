@@ -5,7 +5,6 @@ use anyhow::{Context, Error};
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::config::SharedHttpClient;
 use aws_sdk_s3::presigning::PresigningConfig;
 use http::Method;
 use reqwest::{Request, Response};
@@ -88,23 +87,6 @@ impl S3 {
         }
     }
 
-    /// Returns the default HTTP client.
-    fn default_http_client() -> SharedHttpClient {
-        use aws_smithy_http_client::{
-            tls::{self, rustls_provider::CryptoMode},
-            Builder,
-        };
-
-        static CLIENT: std::sync::OnceLock<SharedHttpClient> = std::sync::OnceLock::new();
-        CLIENT
-            .get_or_init(|| {
-                Builder::new()
-                    .tls_provider(tls::Provider::Rustls(CryptoMode::Ring))
-                    .build_https()
-            })
-            .clone()
-    }
-
     /// Create an S3 client.
     ///
     /// # Arguments
@@ -115,11 +97,7 @@ impl S3 {
     pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
         let sdk_config = self
             .default_client
-            .get_or_init(
-                aws_config::defaults(BehaviorVersion::latest())
-                    .http_client(Self::default_http_client())
-                    .load(),
-            )
+            .get_or_init(aws_config::defaults(BehaviorVersion::latest()).load())
             .await;
 
         let bucket_name = url
@@ -275,6 +253,37 @@ mod tests {
 
     use super::*;
     use crate::authentication_storage::backends::file::FileStorage;
+
+    /// Guard against regressions in the AWS SDK / reqwest crypto provider
+    /// alignment.
+    ///
+    /// `reqwest` 0.13's `rustls` feature uses `aws-lc-rs` as its rustls
+    /// crypto backend. We rely on `aws-smithy-http-client/rustls-aws-lc`
+    /// (plus `default-https-client` on `aws-config` and `aws-sdk-s3`) to
+    /// make the AWS SDK pick the same backend, so the process only pulls
+    /// in one rustls crypto crate and we don't have to hand-build an HTTP
+    /// client to align them.
+    ///
+    /// Without those features, building an SDK operation panics with
+    /// "a `http_client` is required". This exercises that path so a
+    /// regression surfaces here, alongside reqwest, in the same process.
+    #[tokio::test]
+    async fn aws_sdk_and_reqwest_share_default_https_client() {
+        // Force reqwest to initialize its rustls stack (uses aws-lc-rs via
+        // the `rustls` feature in reqwest 0.13).
+        let _reqwest_client = reqwest::Client::builder()
+            .build()
+            .expect("reqwest client builds");
+
+        // Force the AWS SDK to initialize its default HTTPS client and
+        // build an operation. If `default-https-client` /
+        // `rustls-aws-lc` are not wired up, this panics.
+        let s3 = S3::new(HashMap::new(), AuthenticationStorage::empty());
+        let _ = s3
+            .create_s3_client(Url::parse("s3://example-bucket/key").unwrap())
+            .await
+            .expect("S3 client builds");
+    }
 
     #[tokio::test]
     async fn test_presigned_s3_request_endpoint_url() {

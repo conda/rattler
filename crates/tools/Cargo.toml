@@ -5,9 +5,9 @@ edition = "2021"
 publish = false
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 native-tls = ["reqwest/native-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
+rustls = ["reqwest/rustls"]
 
 [dependencies]
 anyhow = { workspace = true }

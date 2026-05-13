@@ -10,15 +10,15 @@ name = "rattler"
 crate-type = ["cdylib"]
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 native-tls = [
     "rattler_networking/native-tls",
     "rattler_repodata_gateway/native-tls",
 ]
-rustls-tls = [
-    "rattler_networking/rustls-tls",
-    "rattler_repodata_gateway/rustls-tls",
-    "reqwest/rustls-tls-native-roots",
+rustls = [
+    "rattler_networking/rustls",
+    "rattler_repodata_gateway/rustls",
+    "reqwest/rustls",
 ]
 vendored-openssl = ["openssl", "openssl/vendored"]
 pty = ["rattler_pty", "nix"]
@@ -65,9 +65,9 @@ pyo3-async-runtimes = { version = "0.25.0", features = ["tokio-runtime"] }
 pythonize = "0.25.0"
 tokio = { version = "1.46.1" }
 
-reqwest = { version = "0.12.15", default-features = false }
-reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.4.2" }
-reqwest-retry = { package = "astral-reqwest-retry", version = "0.8.0" }
+reqwest = { version = "0.13.3", default-features = false }
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
+reqwest-retry = { package = "astral-reqwest-retry", version = "0.9.1" }
 async-trait = "0.1"
 http = "1.2"
 
