@@ -11,6 +11,7 @@ version = "0.1.0"
 
 [dependencies]
 fs-err = { workspace = true, features = ["tokio"] }
+rattler_fs_safety = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "rt"] }
@@ -23,3 +24,7 @@ windows-sys = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
 ] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

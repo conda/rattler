@@ -1,0 +1,33 @@
+[package]
+name = "rattler_fs_safety"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Tobias Hunger <tobias.hunger@prefix.dev>"]
+description = "Symlink-resistant filesystem helpers shared across rattler crates."
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+# Capability-based filesystem access. The helpers in this crate
+# operate against an open `Dir` capability, so symlink swaps of
+# intermediate path components can't redirect us between calls.
+# cap-std covers Linux, macOS, FreeBSD, and Windows — the full
+# intersection of rattler's CI matrix.
+cap-std = { workspace = true }
+# Exposes the `OpenOptionsFollowExt` trait so `open_no_follow_in`
+# can push `O_NOFOLLOW` (and the Windows reparse-point equivalent)
+# into the kernel open syscall itself, instead of doing a separate
+# lstat-then-open pair that would race a symlink swap.
+cap-fs-ext = "3.4"
+
+[target.'cfg(unix)'.dependencies]
+# Used by `open_no_follow_in` to recognize the kernel's
+# `O_NOFOLLOW`-tripped error codes (`ELOOP` / `EMLINK` / `EFTYPE`)
+# and remap them to a stable `PermissionDenied` for callers.
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

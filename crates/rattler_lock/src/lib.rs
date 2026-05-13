@@ -604,10 +604,18 @@ impl LockFile {
         parse::from_str_with_base_directory(source, base_dir)
     }
 
-    /// Writes the conda lock to a file
+    /// Writes the conda lock to a file via a temporary-file +
+    /// rename, so a concurrent reader never sees a torn YAML
+    /// document.
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
-        let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
+        let parent = path
+            .parent()
+            .ok_or_else(|| std::io::Error::other("lockfile path has no parent"))?;
+        let name = path
+            .file_name()
+            .ok_or_else(|| std::io::Error::other("lockfile path has no final component"))?;
+        let bytes = serde_yaml::to_string(self).map_err(std::io::Error::other)?;
+        rattler_fs_safety::atomic_write_in_dir(parent, name, bytes.as_bytes(), None)
     }
 
     /// Writes the conda lock to a string
