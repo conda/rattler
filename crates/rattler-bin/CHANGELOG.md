@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10](https://github.com/conda/rattler/compare/rattler-bin-v0.1.9...rattler-bin-v0.1.10) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+- preserve Arc when crossing the Python custom-source boundary ([#2400](https://github.com/conda/rattler/pull/2400))
+
 ## [0.1.9](https://github.com/conda/rattler/compare/rattler-bin-v0.1.8...rattler-bin-v0.1.9) - 2026-05-07
 
 ### Added

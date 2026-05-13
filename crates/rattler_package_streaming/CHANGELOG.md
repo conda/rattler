@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.25.1...rattler_package_streaming-v0.26.0) - 2026-05-13
+
+### Fixed
+
+- handle missing symlinks on Windows install path ([#2399](https://github.com/conda/rattler/pull/2399))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+
 ## [0.25.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.25.0...rattler_package_streaming-v0.25.1) - 2026-05-07
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/conda/rattler/compare/coalesced_map-v0.1.2...coalesced_map-v0.1.3) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
 ## [0.1.2](https://github.com/conda/rattler/compare/coalesced_map-v0.1.1...coalesced_map-v0.1.2) - 2025-09-05
 
 ### Added
