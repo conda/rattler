@@ -12,13 +12,18 @@
 //!    bearer token usable against the server (read or write, depending on
 //!    server policy).
 
-use std::{env, env::VarError, ffi::OsString};
+use std::{env, env::VarError, ffi::OsString, sync::Arc};
 
-use reqwest::StatusCode;
+use async_once_cell::OnceCell;
+use reqwest::{Client, StatusCode};
 use reqwest_middleware::{ClientWithMiddleware, Middleware, Next};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
+
+/// User-agent string used by the lazy bootstrap client when the middleware
+/// performs the OIDC token exchange on first use.
+const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// Environment-variable names used by the trusted-publishing flow. Kept
 /// private — callers should not need to read these directly.
@@ -432,16 +437,80 @@ async fn get_publish_token(
 #[derive(Clone, Debug)]
 pub struct TrustedPublishingMiddleware {
     host: String,
-    token: TrustedPublishingToken,
+    state: TrustedPublishingState,
+}
+
+#[derive(Clone, Debug)]
+enum TrustedPublishingState {
+    /// Caller supplied an already-minted token.
+    Token(TrustedPublishingToken),
+    /// Token will be minted on the first matching request.
+    Lazy {
+        server_url: Url,
+        options: TrustedPublishingOptions,
+        token: Arc<OnceCell<Option<TrustedPublishingToken>>>,
+    },
 }
 
 impl TrustedPublishingMiddleware {
-    /// Create a new middleware that injects `token` on requests whose URL
-    /// host equals the host portion of `server_url`.
-    pub fn new(server_url: &Url, token: TrustedPublishingToken) -> Self {
+    /// Create a middleware that will mint a token lazily on the first
+    /// matching request using `options`.
+    pub fn new(server_url: Url, options: TrustedPublishingOptions) -> Self {
+        let host = server_url.host_str().unwrap_or_default().to_string();
+        Self {
+            host,
+            state: TrustedPublishingState::Lazy {
+                server_url,
+                options,
+                token: Arc::new(OnceCell::new()),
+            },
+        }
+    }
+
+    /// Create a middleware that injects an already-minted `token` on
+    /// requests whose URL host equals the host portion of `server_url`.
+    pub fn with_token(server_url: &Url, token: TrustedPublishingToken) -> Self {
         Self {
             host: server_url.host_str().unwrap_or_default().to_string(),
-            token,
+            state: TrustedPublishingState::Token(token),
+        }
+    }
+
+    /// Resolve the token to inject, performing (and caching) the OIDC
+    /// exchange on demand for the `Lazy` variant.
+    async fn token(&self) -> Option<TrustedPublishingToken> {
+        match &self.state {
+            TrustedPublishingState::Token(token) => Some(token.clone()),
+            TrustedPublishingState::Lazy {
+                server_url,
+                options,
+                token,
+            } => token
+                .get_or_init(async {
+                    let bootstrap_client = ClientWithMiddleware::from(
+                        Client::builder()
+                            .user_agent(USER_AGENT)
+                            .build()
+                            .expect("failed to build reqwest client for OIDC mint"),
+                    );
+                    match check_trusted_publishing(&bootstrap_client, server_url, options).await {
+                        TrustedPublishResult::Configured(token) => Some(token),
+                        TrustedPublishResult::Skipped => {
+                            tracing::debug!(
+                                "TrustedPublishingMiddleware: no CI provider detected, skipping OIDC token exchange"
+                            );
+                            None
+                        }
+                        TrustedPublishResult::Ignored(err) => {
+                            tracing::warn!(
+                                "TrustedPublishingMiddleware: trusted publishing failed: {err}"
+                            );
+                            None
+                        }
+                    }
+                })
+                .await
+                .clone(),
         }
     }
 }
@@ -455,10 +524,11 @@ impl Middleware for TrustedPublishingMiddleware {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
-        if req.headers().get(reqwest::header::AUTHORIZATION).is_none() {
-            let matches = req.url().host_str() == Some(self.host.as_str());
-            if matches {
-                let bearer_auth = format!("Bearer {}", self.token.secret());
+        if req.headers().get(reqwest::header::AUTHORIZATION).is_none()
+            && req.url().host_str() == Some(self.host.as_str())
+        {
+            if let Some(token) = self.token().await {
+                let bearer_auth = format!("Bearer {}", token.secret());
                 let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
                     .map_err(reqwest_middleware::Error::middleware)?;
                 header_value.set_sensitive(true);
@@ -511,7 +581,7 @@ mod tests {
 
         let server_url = Url::parse(&format!("http://{addr}")).unwrap();
         let token = TrustedPublishingToken::new("abc123".to_string());
-        let middleware = TrustedPublishingMiddleware::new(&server_url, token);
+        let middleware = TrustedPublishingMiddleware::with_token(&server_url, token);
 
         let client = ClientBuilder::new(reqwest::Client::new())
             .with_arc(Arc::new(middleware))
@@ -550,7 +620,7 @@ mod tests {
         // Middleware is configured for a different host than the one we hit.
         let other_url = Url::parse("https://example.invalid").unwrap();
         let token = TrustedPublishingToken::new("abc123".to_string());
-        let middleware = TrustedPublishingMiddleware::new(&other_url, token);
+        let middleware = TrustedPublishingMiddleware::with_token(&other_url, token);
 
         let client = ClientBuilder::new(reqwest::Client::new())
             .with_arc(Arc::new(middleware))

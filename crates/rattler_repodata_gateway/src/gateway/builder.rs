@@ -4,10 +4,7 @@ use coalesced_map::CoalescedMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_networking::{
-    trusted_publishing::{
-        check_trusted_publishing, TrustedPublishResult, TrustedPublishingError,
-        TrustedPublishingMiddleware, TrustedPublishingOptions, TrustedPublishingToken,
-    },
+    trusted_publishing::{TrustedPublishingMiddleware, TrustedPublishingOptions},
     LazyClient,
 };
 use reqwest::Client;
@@ -56,10 +53,7 @@ pub struct GatewayBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
     max_concurrent_requests: MaxConcurrency,
-    /// `(channel_url, minted_token)` when [`Self::with_trusted_publishing`]
-    /// successfully exchanged an OIDC ID token. The token is host-scoped to
-    /// `channel_url` by the middleware installed in [`Self::finish`].
-    trusted_publishing: Option<(Url, TrustedPublishingToken)>,
+    trusted_publishing: Option<(Url, TrustedPublishingOptions)>,
 }
 
 impl GatewayBuilder {
@@ -144,36 +138,16 @@ impl GatewayBuilder {
         self
     }
 
-    /// Bootstrap authentication for `channel_url` using
-    /// [trusted publishing](rattler_networking::trusted_publishing)
-    pub async fn with_trusted_publishing(
+    /// Configure [trusted publishing](rattler_networking::trusted_publishing)
+    /// for `channel_url`.
+    #[must_use]
+    pub fn with_trusted_publishing(
         mut self,
         channel_url: Url,
         options: TrustedPublishingOptions,
-    ) -> Result<Self, TrustedPublishingError> {
-        // Use a temporary plain client just for the OIDC token exchange. The
-        // mint endpoints (GitHub OIDC, Google metadata server, prefix.dev mint
-        // route) don't need any of our channel-specific middleware.
-        let bootstrap_client = ClientWithMiddleware::from(
-            Client::builder()
-                .user_agent(USER_AGENT)
-                .build()
-                .map_err(|err| TrustedPublishingError::Reqwest(channel_url.clone(), err))?,
-        );
-
-        match check_trusted_publishing(&bootstrap_client, &channel_url, &options).await {
-            TrustedPublishResult::Configured(token) => {
-                self.trusted_publishing = Some((channel_url, token));
-                Ok(self)
-            }
-            TrustedPublishResult::Skipped => {
-                tracing::debug!(
-                    "with_trusted_publishing: no CI provider detected, skipping OIDC token exchange"
-                );
-                Ok(self)
-            }
-            TrustedPublishResult::Ignored(err) => Err(err),
-        }
+    ) -> Self {
+        self.trusted_publishing = Some((channel_url, options));
+        self
     }
 
     /// Finish the construction of the gateway returning a constructed gateway.
@@ -190,10 +164,10 @@ impl GatewayBuilder {
                 }
                 client
             }
-            (None, Some((channel_url, token))) => LazyClient::new(move || {
+            (None, Some((channel_url, options))) => LazyClient::new(move || {
                 let base = Client::builder().user_agent(USER_AGENT).build().unwrap();
                 reqwest_middleware::ClientBuilder::new(base)
-                    .with(TrustedPublishingMiddleware::new(&channel_url, token))
+                    .with(TrustedPublishingMiddleware::new(channel_url, options))
                     .build()
             }),
             (None, None) => LazyClient::new(|| {
