@@ -4,8 +4,8 @@ use keyring::Entry;
 use std::str::FromStr;
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
 #[derive(Clone, Debug)]

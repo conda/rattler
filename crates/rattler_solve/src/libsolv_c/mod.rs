@@ -9,10 +9,10 @@ use std::{
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_condition};
 pub use libc_byte_slice::LibcByteSlice;
-use output::{get_required_packages, SolverOutput};
+use output::{SolverOutput, get_required_packages};
 use rattler_conda_types::{
-    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, MatchSpecCondition,
-    NamelessMatchSpec, RepoDataRecord, SolverResult,
+    MatchSpec, MatchSpecCondition, NamelessMatchSpec, RepoDataRecord, SolverResult,
+    match_spec::package_name_matcher::PackageNameMatcher,
 };
 use wrapper::{
     flags::SolverFlag,
@@ -129,13 +129,13 @@ impl super::SolverImpl for Solver {
     ) -> Result<SolverResult, SolveError> {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
-                "timeout".to_string()
+                "timeout".to_string(),
             ]));
         }
 
         if task.strategy != SolveStrategy::Highest {
             return Err(SolveError::UnsupportedOperations(vec![
-                "strategy".to_string()
+                "strategy".to_string(),
             ]));
         }
 

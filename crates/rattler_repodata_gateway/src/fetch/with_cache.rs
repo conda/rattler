@@ -6,29 +6,29 @@ use std::{
 };
 
 use cache_control::{Cachability, CacheControl};
-use futures::{future::ready, FutureExt, TryStreamExt};
-use humansize::{SizeFormatter, DECIMAL};
-use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
+use futures::{FutureExt, TryStreamExt, future::ready};
+use humansize::{DECIMAL, SizeFormatter};
+use rattler_digest::{Blake2b256, HashingWriter, compute_file_digest};
+use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rattler_redaction::Redact;
 use reqwest::{
-    header::{HeaderMap, HeaderValue},
     Response, StatusCode,
+    header::{HeaderMap, HeaderValue},
 };
 use retry_policies::{RetryDecision, RetryPolicy};
 use tempfile::NamedTempFile;
 use tokio_util::io::StreamReader;
-use tracing::{instrument, Level};
+use tracing::{Level, instrument};
 use url::Url;
 
 use crate::{
+    Reporter,
     fetch::{
-        cache::{CacheHeaders, Expiring, RepoDataState},
         CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
+        cache::{CacheHeaders, Expiring, RepoDataState},
     },
     reporter::{DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
-    Reporter,
 };
 
 /// Additional knobs that allow you to tweak the behavior of
@@ -447,7 +447,7 @@ pub async fn fetch_repo_data(
                         match retry_behavior.should_retry(request_start_time, retry_count) {
                             RetryDecision::Retry { execute_after } => execute_after,
                             RetryDecision::DoNotRetry => {
-                                return Err(FetchRepoDataError::FailedToDownload(url, err))
+                                return Err(FetchRepoDataError::FailedToDownload(url, err));
                             }
                         };
                     let duration = execute_after
@@ -826,7 +826,9 @@ fn validate_cached_state(
     // Determine last modified date of the repodata.json file.
     let cache_last_modified = match json_metadata.modified() {
         Err(_) => {
-            tracing::warn!("could not determine last modified date of repodata.json file. Ignoring cached files...");
+            tracing::warn!(
+                "could not determine last modified date of repodata.json file. Ignoring cached files..."
+            );
             return ValidatedCacheState::Mismatched(cache_state);
         }
         Ok(last_modified) => last_modified,
@@ -860,7 +862,9 @@ fn validate_cached_state(
         if json_metadata.len() != cache_state.cache_size
             || Some(cache_last_modified) != json_metadata.modified().ok()
         {
-            tracing::warn!("repodata cache state mismatches the existing repodatajson file. Ignoring cached files...");
+            tracing::warn!(
+                "repodata cache state mismatches the existing repodatajson file. Ignoring cached files..."
+            );
             return ValidatedCacheState::Mismatched(cache_state);
         }
     }
@@ -880,8 +884,8 @@ fn validate_cached_state(
         match CacheControl::from_value(cache_control) {
             None => {
                 tracing::warn!(
-                "could not parse cache_control from repodata cache state. Ignoring cached files..."
-            );
+                    "could not parse cache_control from repodata cache state. Ignoring cached files..."
+                );
                 return ValidatedCacheState::Mismatched(cache_state);
             }
             Some(CacheControl {
@@ -924,13 +928,14 @@ mod test {
         net::SocketAddr,
         path::{Path, PathBuf},
         sync::{
-            atomic::{AtomicUsize, Ordering},
             Arc,
+            atomic::{AtomicUsize, Ordering},
         },
     };
 
     use assert_matches::assert_matches;
     use axum::{
+        Router,
         body::Body,
         extract::State,
         http::{Request, StatusCode},
@@ -938,11 +943,10 @@ mod test {
         middleware::Next,
         response::{IntoResponse, Response},
         routing::get,
-        Router,
     };
     use bytes::Bytes;
     use fs_err::tokio as tokio_fs;
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use hex_literal::hex;
     use rattler_networking::{AuthenticationMiddleware, LazyClient};
     use reqwest::Client;
@@ -952,12 +956,12 @@ mod test {
     use url::Url;
 
     use crate::{
-        fetch::{
-            with_cache::{fetch_repo_data, CacheResult, CachedRepoData, FetchRepoDataOptions},
-            FetchRepoDataError, RepoDataNotFoundError,
-        },
-        utils::{simple_channel_server::SimpleChannelServer, Encoding},
         DownloadReporter, Reporter,
+        fetch::{
+            FetchRepoDataError, RepoDataNotFoundError,
+            with_cache::{CacheResult, CachedRepoData, FetchRepoDataOptions, fetch_repo_data},
+        },
+        utils::{Encoding, simple_channel_server::SimpleChannelServer},
     };
 
     async fn write_encoded(

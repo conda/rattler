@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
 use itertools::Itertools;
 use rattler_conda_types::{
     Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform, RepoDataRecord,
@@ -12,9 +12,9 @@ use rattler_conda_types::{
 use url::Url;
 
 use super::{
+    BarrierCell, GatewayError, GatewayInner, RepoData,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData},
-    BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
 
@@ -297,13 +297,13 @@ impl QueryExecutor {
                     .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
 
                 // Check if record actually has the same name
-                if let Some(record) = records.first() {
-                    if record.package_record.name != name {
-                        return Err(GatewayError::UrlRecordNameMismatch(
-                            record.package_record.name.as_source().to_string(),
-                            name.as_source().to_string(),
-                        ));
-                    }
+                if let Some(record) = records.first()
+                    && record.package_record.name != name
+                {
+                    return Err(GatewayError::UrlRecordNameMismatch(
+                        record.package_record.name.as_source().to_string(),
+                        name.as_source().to_string(),
+                    ));
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic

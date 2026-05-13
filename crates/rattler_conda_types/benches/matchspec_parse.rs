@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::hint::black_box;
 use std::path::Path;
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rattler_conda_types::{MatchSpec, NamelessMatchSpec, ParseStrictness, RepoData};
 
 /// Load repodata and collect all unique dependency/constraint strings.

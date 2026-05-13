@@ -2,10 +2,10 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use super::super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData};
 use crate::{
+    UrlOrPath,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
     },
-    UrlOrPath,
 };
 use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
@@ -14,7 +14,7 @@ use rattler_conda_types::{
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
 };
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::Deserialize;
 use serde_with::serde_as;
 use url::Url;

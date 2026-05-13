@@ -145,10 +145,10 @@ impl RunExportsCache {
             .await
             .map_err(|e| RunExportsCacheError::Fetch(Arc::new(e)))?;
 
-        if let Some(parent_dir) = cache_path.parent() {
-            if !parent_dir.exists() {
-                tokio_fs::create_dir_all(parent_dir).await?;
-            }
+        if let Some(parent_dir) = cache_path.parent()
+            && !parent_dir.exists()
+        {
+            tokio_fs::create_dir_all(parent_dir).await?;
         }
 
         let run_exports = if let Some(file) = run_exports_file {
@@ -385,6 +385,7 @@ mod test {
 
     use assert_matches::assert_matches;
     use axum::{
+        Router,
         body::Body,
         extract::State,
         http::{Request, StatusCode},
@@ -392,11 +393,10 @@ mod test {
         middleware::Next,
         response::{Redirect, Response},
         routing::get,
-        Router,
     };
 
     use rattler_conda_types::{PackageName, PackageRecord, Version};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, parse_digest_from_hex};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};

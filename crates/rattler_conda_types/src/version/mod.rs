@@ -12,7 +12,7 @@ use std::{
 
 use itertools::{Either, EitherOrBoth, Itertools};
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use smallvec::SmallVec;
 
 mod flags;
@@ -1017,7 +1017,7 @@ impl<'v> SegmentIter<'v> {
     }
 
     /// Returns an iterator over the components of this segment.
-    pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> {
+    pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> + use<'v> {
         static IMPLICIT_DEFAULT: Component = Component::Numeral(0);
 
         let version = self.version;
@@ -1391,9 +1391,11 @@ mod test {
 
     #[test]
     fn starts_with() {
-        assert!(Version::from_str("1.2.3")
-            .unwrap()
-            .starts_with(&Version::from_str("1.2").unwrap()));
+        assert!(
+            Version::from_str("1.2.3")
+                .unwrap()
+                .starts_with(&Version::from_str("1.2").unwrap())
+        );
     }
 
     #[test]
@@ -1413,64 +1415,88 @@ mod test {
         // components should match the prefix.
         let version = Version::from_str("1.0.0_version").unwrap();
         // "1.0.0_version1" starts with "1.0.0_version" (extra component "1")
-        assert!(Version::from_str("1.0.0_version1")
-            .unwrap()
-            .starts_with(&version));
+        assert!(
+            Version::from_str("1.0.0_version1")
+                .unwrap()
+                .starts_with(&version)
+        );
         // "1.0.0_version0" starts with "1.0.0_version" (extra component "0")
-        assert!(Version::from_str("1.0.0_version0")
-            .unwrap()
-            .starts_with(&version));
+        assert!(
+            Version::from_str("1.0.0_version0")
+                .unwrap()
+                .starts_with(&version)
+        );
         // "1.0.0_version0foo" starts with "1.0.0_version" (extra components "0", "foo")
-        assert!(Version::from_str("1.0.0_version0foo")
-            .unwrap()
-            .starts_with(&version));
+        assert!(
+            Version::from_str("1.0.0_version0foo")
+                .unwrap()
+                .starts_with(&version)
+        );
 
         // But different base components should NOT match
-        assert!(!Version::from_str("1.0.0_other")
-            .unwrap()
-            .starts_with(&version));
-        assert!(!Version::from_str("1.0.0_ver")
-            .unwrap()
-            .starts_with(&version));
+        assert!(
+            !Version::from_str("1.0.0_other")
+                .unwrap()
+                .starts_with(&version)
+        );
+        assert!(
+            !Version::from_str("1.0.0_ver")
+                .unwrap()
+                .starts_with(&version)
+        );
 
         // Different segment structure should NOT match (PR #1791)
         // "1.0.0_version1" has segment [version, 1]
         // "1.0.0_version_2" has segments [version], [2]
         // This ensures "1.0.0_version_2*" does NOT match "1.0.0_version1"
         let version_with_extra_segment = Version::from_str("1.0.0_version_2").unwrap();
-        assert!(!Version::from_str("1.0.0_version1")
-            .unwrap()
-            .starts_with(&version_with_extra_segment));
+        assert!(
+            !Version::from_str("1.0.0_version1")
+                .unwrap()
+                .starts_with(&version_with_extra_segment)
+        );
 
         // Different component values should NOT match
         let version1 = Version::from_str("1.0.0_version1").unwrap();
-        assert!(!Version::from_str("1.0.0_version0")
-            .unwrap()
-            .starts_with(&version1));
+        assert!(
+            !Version::from_str("1.0.0_version0")
+                .unwrap()
+                .starts_with(&version1)
+        );
 
         // Extra components after matching prefix should match
-        assert!(Version::from_str("1.0.0_version1a")
-            .unwrap()
-            .starts_with(&version1));
-        assert!(Version::from_str("1.0.0_version0a")
-            .unwrap()
-            .starts_with(&version));
+        assert!(
+            Version::from_str("1.0.0_version1a")
+                .unwrap()
+                .starts_with(&version1)
+        );
+        assert!(
+            Version::from_str("1.0.0_version0a")
+                .unwrap()
+                .starts_with(&version)
+        );
 
         // Extra components in INTERMEDIATE segments should NOT match
         // "1.1c.1" has segment [1, c] where "1.1.1" has segment [1]
         // This is a structure mismatch, not just extra components at the end
-        assert!(!Version::from_str("1.1c.1")
-            .unwrap()
-            .starts_with(&Version::from_str("1.1.1").unwrap()));
-        assert!(!Version::from_str("1.1c1.1")
-            .unwrap()
-            .starts_with(&Version::from_str("1.1c.1").unwrap()));
+        assert!(
+            !Version::from_str("1.1c.1")
+                .unwrap()
+                .starts_with(&Version::from_str("1.1.1").unwrap())
+        );
+        assert!(
+            !Version::from_str("1.1c1.1")
+                .unwrap()
+                .starts_with(&Version::from_str("1.1c.1").unwrap())
+        );
 
         // BUT zero components in prefix are treated as "no component" (implicit zeros)
         // So "1.1c.1" starts with "1.1c0.1" because c0 == c (trailing zero)
-        assert!(Version::from_str("1.1c.1")
-            .unwrap()
-            .starts_with(&Version::from_str("1.1c0.1").unwrap()));
+        assert!(
+            Version::from_str("1.1c.1")
+                .unwrap()
+                .starts_with(&Version::from_str("1.1c0.1").unwrap())
+        );
     }
 
     /// Test for <https://github.com/conda/rattler/issues/1914>

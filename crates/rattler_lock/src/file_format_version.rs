@@ -62,7 +62,7 @@ impl TryFrom<u64> for FileFormatVersion {
             0 => {
                 return Err(ParseCondaLockError::ParseError(serde_yaml::Error::custom(
                     "`version` field in lock file is not an integer",
-                )))
+                )));
             }
             1 => Self::V1,
             2 => Self::V2,
@@ -75,7 +75,7 @@ impl TryFrom<u64> for FileFormatVersion {
                 return Err(ParseCondaLockError::IncompatibleVersion {
                     lock_file_version: value,
                     max_supported_version: FileFormatVersion::LATEST,
-                })
+                });
             }
         })
     }

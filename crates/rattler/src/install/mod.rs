@@ -31,7 +31,7 @@ mod test_utils;
 
 use std::{
     cmp::Ordering,
-    collections::{binary_heap::PeekMut, BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet, binary_heap::PeekMut},
     fs,
     future::ready,
     io::ErrorKind,
@@ -43,23 +43,23 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use clobber_registry::ClobberMode;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-pub use installer::{
-    result_record::InstallationResultRecord, Installer, InstallerError, LinkOptions, Reporter,
-};
+use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
+pub use installer::{
+    Installer, InstallerError, LinkOptions, Reporter, result_record::InstallationResultRecord,
+};
 use itertools::Itertools;
-pub use link::{link_file, LinkFileError, LinkMethod};
+pub use link::{LinkFileError, LinkMethod, link_file};
 pub use python::PythonInfo;
 use rattler_conda_types::{
+    Platform,
     package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
     prefix_record::{self, LinkType},
-    Platform,
 };
 use rayon::{
     iter::Either,
@@ -73,7 +73,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
+    clobber_registry::{CLOBBERS_DIR_NAME, ClobberRegistry},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -1251,12 +1251,12 @@ mod test {
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
+        install::{InstallDriver, InstallOptions, Prefix, PythonInfo, link_package},
         package_cache::PackageCache,
     };
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use rattler_conda_types::{
-        package::CondaArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+        ExplicitEnvironmentSpec, Platform, Version, package::CondaArchiveIdentifier,
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;

@@ -8,10 +8,10 @@ use rattler_conda_types::Platform;
 #[cfg(feature = "rattler_config")]
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
-    index_fs, IndexFsConfig, PackageRevisionAssignment, RepodataRevision, RepodataRevisionInfo,
+    IndexFsConfig, PackageRevisionAssignment, RepodataRevision, RepodataRevisionInfo, index_fs,
 };
 #[cfg(feature = "s3")]
-use rattler_index::{index_s3, IndexS3Config, PreconditionChecks};
+use rattler_index::{IndexS3Config, PreconditionChecks, index_s3};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]

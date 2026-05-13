@@ -1,7 +1,7 @@
 //! Serde utilities for conda types.
 
 use indexmap::IndexMap;
-use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _, ser::Error};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};

@@ -3,13 +3,13 @@ use std::{path::Path, sync::Arc};
 use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo};
 
 use crate::{
+    Reporter,
     gateway::{
-        error::SubdirNotFoundError,
-        subdir::{extract_unique_deps, PackageRecords, SubdirClient},
         GatewayError,
+        error::SubdirNotFoundError,
+        subdir::{PackageRecords, SubdirClient, extract_unique_deps},
     },
     sparse::{PackageFormatSelection, SparseRepoData},
-    Reporter,
 };
 
 /// A client that can be used to fetch repodata for a specific subdirectory from

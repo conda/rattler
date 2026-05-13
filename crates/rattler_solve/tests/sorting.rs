@@ -8,7 +8,7 @@ use rattler_conda_types::{
     Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
-use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
+use rattler_solve::{ChannelPriority, SolveStrategy, resolvo::CondaDependencyProvider};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
 

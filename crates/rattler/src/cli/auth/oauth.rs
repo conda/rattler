@@ -11,15 +11,15 @@ use std::{
 
 use oauth2_reqwest::ReqwestClient;
 use openidconnect::{
+    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
         CoreResponseType, CoreSubjectIdentifierType,
     },
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -622,10 +622,10 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     if let Some(username) = claims.preferred_username() {
         return username.to_string();
     }
-    if let Some(name) = claims.name() {
-        if let Some(n) = name.get(None) {
-            return n.to_string();
-        }
+    if let Some(name) = claims.name()
+        && let Some(n) = name.get(None)
+    {
+        return n.to_string();
     }
     claims.subject().to_string()
 }

@@ -10,6 +10,7 @@ use super::add_trailing_slash;
 mod index;
 
 use crate::{
+    GatewayError, Reporter,
     fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
@@ -19,7 +20,6 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    GatewayError, Reporter,
 };
 
 pub struct ShardedSubdir {

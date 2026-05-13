@@ -4,12 +4,12 @@ use crate::platform::PyPlatform;
 use crate::version::PyVersion;
 use crate::{error::PyRattlerError, record::PyRecord};
 use pep508_rs::Requirement;
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
-    Channel, CondaPackageData, Environment, LockFile, LockedPackage, OwnedEnvironment,
-    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiDistributionData,
-    PypiPackageData, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
+    Channel, CondaPackageData, DEFAULT_ENVIRONMENT_NAME, Environment, LockFile, LockedPackage,
+    OwnedEnvironment, OwnedPlatform, PackageHashes, PlatformData, PlatformName,
+    PypiDistributionData, PypiPackageData, UrlOrPath, Verbatim,
 };
 use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Mutex};
 
@@ -349,7 +349,9 @@ impl PyLockPlatform {
         match &self.inner {
             LockPlatformInner::Owned(owned) => owned.as_ref(),
             LockPlatformInner::Standalone(_) => {
-                panic!("Cannot get platform reference from standalone platform - use an owned platform from the lock file")
+                panic!(
+                    "Cannot get platform reference from standalone platform - use an owned platform from the lock file"
+                )
             }
         }
     }

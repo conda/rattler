@@ -19,7 +19,7 @@ mod subdir_builder;
 use std::{collections::HashSet, sync::Arc};
 
 use crate::reporter::report_unsupported_repodata_revisions;
-use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
+use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -37,7 +37,7 @@ use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
-use tracing::{instrument, Level};
+use tracing::{Level, instrument};
 use url::Url;
 
 /// Central access point for high level queries about
@@ -391,9 +391,9 @@ mod test {
     use url::Url;
 
     use crate::{
-        fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
         DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
-        UnsupportedRepodataRevision,
+        UnsupportedRepodataRevision, fetch::CacheAction, gateway::Gateway,
+        utils::simple_channel_server::SimpleChannelServer,
     };
     use rattler_conda_types::RepodataRevision;
 
@@ -1026,7 +1026,7 @@ mod test {
     #[test]
     fn test_clear_sharded_disk_cache() {
         use crate::gateway::sharded_subdir::{
-            ShardedSubdir, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX,
+            REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedSubdir,
         };
 
         let cache_dir = tempfile::tempdir().unwrap();
@@ -1451,7 +1451,7 @@ mod test {
 
     fn make_test_record(name: &str, version: &str, subdir: &str) -> RepoDataRecord {
         use rattler_conda_types::{
-            package::DistArchiveIdentifier, PackageRecord, VersionWithSource,
+            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
         };
 
         let package_record = PackageRecord {

@@ -64,24 +64,24 @@ pub(super) async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
                 let mode = file.header().mode().map_err(ExtractError::IoError)?;
                 let has_any_executable_bit = mode & EXECUTABLE_MODE_BITS;
 
-                if has_any_executable_bit != 0 {
-                    if let Some(path) = unpacked_path {
-                        let metadata = tokio::fs::metadata(&path)
-                            .await
-                            .map_err(ExtractError::IoError)?;
-                        let permissions = metadata.permissions();
+                if has_any_executable_bit != 0
+                    && let Some(path) = unpacked_path
+                {
+                    let metadata = tokio::fs::metadata(&path)
+                        .await
+                        .map_err(ExtractError::IoError)?;
+                    let permissions = metadata.permissions();
 
-                        // Only update if not already executable
-                        if permissions.mode() & EXECUTABLE_MODE_BITS != EXECUTABLE_MODE_BITS {
-                            tokio::fs::set_permissions(
-                                &path,
-                                std::fs::Permissions::from_mode(
-                                    permissions.mode() | EXECUTABLE_MODE_BITS,
-                                ),
-                            )
-                            .await
-                            .map_err(ExtractError::IoError)?;
-                        }
+                    // Only update if not already executable
+                    if permissions.mode() & EXECUTABLE_MODE_BITS != EXECUTABLE_MODE_BITS {
+                        tokio::fs::set_permissions(
+                            &path,
+                            std::fs::Permissions::from_mode(
+                                permissions.mode() | EXECUTABLE_MODE_BITS,
+                            ),
+                        )
+                        .await
+                        .map_err(ExtractError::IoError)?;
                     }
                 }
             }

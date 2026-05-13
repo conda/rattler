@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, Flag, MatchSpec, NoArchType, PackageName, PackageRecord,
     ParseChannelError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use reqwest::Client;
@@ -185,10 +185,10 @@ pub async fn simple_solve(
             &records.package_record.build,
         );
 
-        if records.package_record.depends.is_empty() {
-            if let Some(deps) = repodata_keys.get(&key) {
-                records.package_record.depends = (*deps).clone();
-            }
+        if records.package_record.depends.is_empty()
+            && let Some(deps) = repodata_keys.get(&key)
+        {
+            records.package_record.depends = (*deps).clone();
         }
     }
 

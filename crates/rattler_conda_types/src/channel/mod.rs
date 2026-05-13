@@ -425,22 +425,22 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    if channel.rfind(']').is_some() {
-        if let Some(start_platform_idx) = channel.find('[') {
-            let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms = platform_part
-                .split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(FromStr::from_str)
-                .collect::<Result<Vec<_>, _>>()?;
-            let platforms = if platforms.is_empty() {
-                None
-            } else {
-                Some(platforms)
-            };
-            return Ok((platforms, &channel[0..start_platform_idx]));
-        }
+    if channel.rfind(']').is_some()
+        && let Some(start_platform_idx) = channel.find('[')
+    {
+        let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
+        let platforms = platform_part
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
+        let platforms = if platforms.is_empty() {
+            None
+        } else {
+            Some(platforms)
+        };
+        return Ok((platforms, &channel[0..start_platform_idx]));
     }
 
     Ok((None, channel))

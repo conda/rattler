@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+use crate::PrefixRecord;
 use crate::package::ArchiveIdentifier;
 use crate::package_name::PackageName;
-use crate::PrefixRecord;
 
 /// An error that can occur when loading a prefix record
 #[derive(Debug, Clone, thiserror::Error)]
@@ -74,20 +74,18 @@ impl PrefixData {
                 continue;
             }
 
-            if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                if let Some(base_name) = filename.strip_suffix(".json") {
-                    if let Ok(archive_id) = base_name.parse::<ArchiveIdentifier>() {
-                        if let Ok(package_name) = PackageName::try_from(archive_id.name) {
-                            records.insert(
-                                package_name,
-                                LazyRecordEntry {
-                                    path,
-                                    record: OnceLock::new(),
-                                },
-                            );
-                        }
-                    }
-                }
+            if let Some(filename) = path.file_name().and_then(|s| s.to_str())
+                && let Some(base_name) = filename.strip_suffix(".json")
+                && let Ok(archive_id) = base_name.parse::<ArchiveIdentifier>()
+                && let Ok(package_name) = PackageName::try_from(archive_id.name)
+            {
+                records.insert(
+                    package_name,
+                    LazyRecordEntry {
+                        path,
+                        record: OnceLock::new(),
+                    },
+                );
             }
         }
         Ok(Self {

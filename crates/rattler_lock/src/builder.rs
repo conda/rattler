@@ -6,12 +6,11 @@ use indexmap::IndexMap;
 use rattler_conda_types::Version;
 
 use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentIndex, EnvironmentPackages,
-    InconsistentInsertError, InvalidPackageHandleError, LockFile, LockFileInner, PackageHandle,
-    PackageIndex, ParseCondaLockError, PlatformData, PlatformIndex, PypiIndexes, PypiPackageData,
-    PypiPrereleaseMode, PypiSourceData, SolveOptions, SourceData, SourceIdentifier, UrlOrPath,
-    Verbatim,
+    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
+    EnvironmentPackages, InconsistentInsertError, InvalidPackageHandleError, LockFile,
+    LockFileInner, PackageHandle, PackageIndex, ParseCondaLockError, PlatformData, PlatformIndex,
+    PypiIndexes, PypiPackageData, PypiPrereleaseMode, PypiSourceData, SolveOptions, SourceData,
+    SourceIdentifier, UrlOrPath, Verbatim, file_format_version::FileFormatVersion,
 };
 
 /// Information about a single locked package in an environment.
@@ -363,10 +362,9 @@ impl LockFileBuilder {
                     // Merge with existing package
                     if let LockedPackage::Conda(CondaPackageData::Binary(existing)) =
                         &mut self.packages[existing_idx.0]
+                        && let Cow::Owned(merged) = existing.merge(binary_data.as_ref())
                     {
-                        if let Cow::Owned(merged) = existing.merge(binary_data.as_ref()) {
-                            **existing = merged;
-                        }
+                        **existing = merged;
                     }
                     existing_idx
                 } else {
@@ -377,7 +375,7 @@ impl LockFileBuilder {
                     index
                 }
             }
-            CondaPackageData::Source(ref source_data) => {
+            CondaPackageData::Source(source_data) => {
                 let identifier = SourceIdentifier::from_source_data(source_data);
                 if let Some(&existing_idx) = self.source_package_indices.get(&identifier) {
                     existing_idx
@@ -576,14 +574,14 @@ mod test {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, MatchSpec, PackageName, PackageRecord,
-        ParseMatchSpecOptions, ParseStrictness::Strict, Platform, RepodataRevision, Version,
+        MatchSpec, PackageName, PackageRecord, ParseMatchSpecOptions, ParseStrictness::Strict,
+        Platform, RepodataRevision, Version, package::DistArchiveIdentifier,
     };
     use url::Url;
 
     use crate::{
-        platform::PlatformName, CondaBinaryData, CondaPackageData, LockFile, PlatformData,
-        PypiPrereleaseMode,
+        CondaBinaryData, CondaPackageData, LockFile, PlatformData, PypiPrereleaseMode,
+        platform::PlatformName,
     };
 
     #[test]

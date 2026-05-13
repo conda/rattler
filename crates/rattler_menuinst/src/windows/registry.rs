@@ -1,5 +1,5 @@
 use crate::MenuMode;
-use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FileExtension<'a> {

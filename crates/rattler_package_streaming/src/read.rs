@@ -2,11 +2,11 @@
 //! [`std::io::Read`] trait.
 
 use super::{ExtractError, ExtractResult};
-use std::io::{copy, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom, copy};
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
 use tempfile::SpooledTempFile;
-use zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
+use zip::read::{ZipArchive, ZipFile, read_zipfile_from_stream};
 
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
 /// extract the files from it, or perform introspection.

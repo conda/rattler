@@ -2,26 +2,26 @@ use std::sync::Arc;
 
 use chrono::DateTime;
 use pyo3::{
-    exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
-    FromPyObject, PyAny, PyErr, PyResult, Python,
+    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
+    pybacked::PyBackedStr, pyfunction, types::PyAnyMethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
-    resolvo::Solver, ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask,
+    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
 };
 use tokio::task::JoinError;
 
 use crate::{
+    PyPackageFormatSelection, PySparseRepoData, Wrap,
     channel::PyChannelPriority,
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
     platform::PyPlatform,
     record::PyRecord,
-    repo_data::gateway::{py_object_to_source, PyGateway},
-    PyPackageFormatSelection, PySparseRepoData, Wrap,
+    repo_data::gateway::{PyGateway, py_object_to_source},
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -34,7 +34,7 @@ impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'highest', 'lowest', 'lowest-direct'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))

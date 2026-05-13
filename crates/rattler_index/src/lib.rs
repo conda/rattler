@@ -20,21 +20,21 @@ use std::{
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, stream::FuturesUnordered};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[cfg(feature = "s3")]
 use opendal::layers::RetryLayer;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
-use opendal::{services::FsConfig, Configurator, Operator};
+use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
+    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
+    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
-    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
-    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
 };
 pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 use rattler_digest::Sha256Hash;
@@ -44,7 +44,7 @@ use rattler_package_streaming::{
 };
 #[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
-use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
+use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
@@ -732,7 +732,9 @@ async fn index_subdir_inner(
                 Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
                     Ok(repodata) => package_records_from_repodata(repodata),
                     Err(err) => {
-                        tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+                        tracing::warn!(
+                            "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
+                        );
                         HashMap::default()
                     }
                 },
@@ -1541,7 +1543,7 @@ pub async fn index(
             | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
-                ))
+                ));
             }
         }
         let repodata_patch_path = format!("noarch/{path}");
@@ -1687,7 +1689,7 @@ mod tests {
     use indexmap::IndexMap;
     use rattler_conda_types::Version;
     use rattler_conda_types::{
-        package::ArchiveIdentifier, PackageName, UrlOrPath, WhlPackageRecord,
+        PackageName, UrlOrPath, WhlPackageRecord, package::ArchiveIdentifier,
     };
 
     use super::*;

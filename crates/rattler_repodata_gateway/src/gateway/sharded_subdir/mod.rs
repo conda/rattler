@@ -4,16 +4,16 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
     ChannelUrl, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
+    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
 };
 use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    fetch::FetchRepoDataError,
-    gateway::subdir::{extract_unique_deps, PackageRecords},
     GatewayError,
+    fetch::FetchRepoDataError,
+    gateway::subdir::{PackageRecords, extract_unique_deps},
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -175,13 +175,13 @@ mod tests {
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
     use axum::{
+        Router,
         body::Body,
         http::{Response, StatusCode},
         routing::get,
-        Router,
     };
     use rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use tokio::sync::oneshot;

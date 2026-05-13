@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use pyo3::{exceptions::PyTypeError, pyfunction, Bound, PyAny, PyObject, PyResult, Python};
+use pyo3::{Bound, PyAny, PyObject, PyResult, Python, exceptions::PyTypeError, pyfunction};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler::{
     install::{IndicatifReporter, Installer, Reporter, Transaction},

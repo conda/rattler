@@ -5,7 +5,7 @@ use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
+use crate::{PackageHashes, UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw};
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
 /// allows for easy conversion between the two.

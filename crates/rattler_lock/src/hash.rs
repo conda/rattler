@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use serde_with::skip_serializing_none;
 
 /// This implementation of the `Deserialize` trait for the `PackageHashes` struct
@@ -123,7 +123,7 @@ impl<'de> Deserialize<'de> for PackageHashes {
             _ => {
                 return Err(D::Error::custom(
                     "Expected `sha256` field `md5` field or both",
-                ))
+                ));
             }
         })
     }

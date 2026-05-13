@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -666,8 +666,8 @@ mod libsolv_c {
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
@@ -787,16 +787,16 @@ mod libsolv_c {
 #[cfg(feature = "resolvo")]
 mod resolvo {
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord,
-        VersionWithSource,
+        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
+        package::DistArchiveIdentifier,
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);

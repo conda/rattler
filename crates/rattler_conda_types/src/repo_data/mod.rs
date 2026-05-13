@@ -15,27 +15,27 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::{serde_as, skip_serializing_none, DeserializeFromStr, SerializeDisplay};
+use serde_with::{DeserializeFromStr, SerializeDisplay, serde_as, skip_serializing_none};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
+    Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
+    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
     build_spec::BuildNumber,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
         WheelArchiveType,
     },
     utils::{
-        serde::{
-            sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
-        },
         TimestampMs, UrlWithTrailingSlash,
+        serde::{
+            DeserializeFromStrUnchecked, sort_index_map_alphabetically, sort_map_alphabetically,
+        },
     },
-    Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
-    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -926,7 +926,8 @@ pub enum ValidatePackageRecordsError {
         dependency: String,
     },
     /// A package constraint is not met in the environment.
-    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
+    #[error(
+        "package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
     )]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
@@ -1047,10 +1048,10 @@ mod test {
     use indexmap::IndexMap;
 
     use crate::{
-        package::DistArchiveIdentifier,
-        repo_data::{compute_package_url, determine_subdir},
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, ExperimentalV3Packages,
         PackageRecord, RepoData, RepodataRevision,
+        package::DistArchiveIdentifier,
+        repo_data::{compute_package_url, determine_subdir},
     };
 
     // isl-0.12.2-1.tar.bz2

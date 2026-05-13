@@ -178,10 +178,10 @@ impl Write for LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if self.state != State::Unlocked {
-            if let Some(f) = self.f.take() {
-                let _ = unlock(&f);
-            }
+        if self.state != State::Unlocked
+            && let Some(f) = self.f.take()
+        {
+            let _ = unlock(&f);
         }
     }
 }
@@ -364,7 +364,7 @@ mod sys {
     use windows_sys::Win32::Foundation::HANDLE;
     use windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_LOCK_VIOLATION};
     use windows_sys::Win32::Storage::FileSystem::{
-        LockFileEx, UnlockFile, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY,
+        LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFile,
     };
 
     pub(super) fn lock_shared(file: &File) -> Result<()> {

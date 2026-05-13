@@ -73,10 +73,10 @@ impl MimeConfig {
             }
 
             // Remove empty sections
-            if let Some(section_map) = self.config.get_map_ref().get(*section) {
-                if section_map.is_empty() {
-                    self.config.remove_section(section);
-                }
+            if let Some(section_map) = self.config.get_map_ref().get(*section)
+                && section_map.is_empty()
+            {
+                self.config.remove_section(section);
             }
         }
     }

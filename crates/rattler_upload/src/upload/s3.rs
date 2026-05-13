@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
-use opendal::{services::S3Config, Configurator, ErrorKind, Operator};
+use opendal::{Configurator, ErrorKind, Operator, services::S3Config};
 use rattler_digest::{HashingReader, Md5, Sha256};
 use rattler_s3::ResolvedS3Credentials;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
