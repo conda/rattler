@@ -12,9 +12,18 @@
 //!    bearer token usable against the server (read or write, depending on
 //!    server policy).
 
-use std::{env, env::VarError, ffi::OsString, sync::Arc};
+use std::{
+    env,
+    env::VarError,
+    ffi::OsString,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use async_once_cell::OnceCell;
+use base64::{
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use reqwest::{Client, StatusCode};
 use reqwest_middleware::{ClientWithMiddleware, Middleware, Next};
 use serde::{Deserialize, Serialize};
@@ -24,6 +33,10 @@ use url::Url;
 /// User-agent string used by the lazy bootstrap client when the middleware
 /// performs the OIDC token exchange on first use.
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+/// Refresh minted JWT tokens before they expire to avoid sending a token that
+/// becomes invalid while a request is in flight.
+const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
 /// Environment-variable names used by the trusted-publishing flow. Kept
 /// private — callers should not need to read these directly.
@@ -220,6 +233,30 @@ struct OidcToken {
 #[derive(Serialize)]
 struct MintTokenRequest {
     token: String,
+}
+
+#[derive(Deserialize)]
+struct JwtClaims {
+    exp: Option<u64>,
+}
+
+fn jwt_expiration(token: &str) -> Option<SystemTime> {
+    let mut parts = token.split('.');
+    let _header = parts.next()?;
+    let payload = parts.next()?;
+    let _signature = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+
+    let payload = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    let claims: JwtClaims = serde_json::from_slice(&payload).ok()?;
+    claims
+        .exp
+        .and_then(|exp| UNIX_EPOCH.checked_add(Duration::from_secs(exp)))
 }
 
 /// If applicable, attempt to obtain a bearer token via trusted publishing.
@@ -448,8 +485,34 @@ enum TrustedPublishingState {
     Lazy {
         server_url: Url,
         options: TrustedPublishingOptions,
-        token: Arc<OnceCell<Option<TrustedPublishingToken>>>,
+        cache: Arc<Mutex<TrustedPublishingCache>>,
     },
+}
+
+#[derive(Debug, Default)]
+enum TrustedPublishingCache {
+    #[default]
+    Empty,
+    Disabled,
+    Token(CachedTrustedPublishingToken),
+}
+
+#[derive(Clone, Debug)]
+struct CachedTrustedPublishingToken {
+    token: TrustedPublishingToken,
+    expires_at: Option<SystemTime>,
+}
+
+impl CachedTrustedPublishingToken {
+    fn new(token: TrustedPublishingToken) -> Self {
+        let expires_at = jwt_expiration(token.secret());
+        Self { token, expires_at }
+    }
+
+    fn is_fresh(&self, now: SystemTime) -> bool {
+        self.expires_at
+            .is_none_or(|expires_at| now + TOKEN_REFRESH_MARGIN < expires_at)
+    }
 }
 
 impl TrustedPublishingMiddleware {
@@ -462,7 +525,7 @@ impl TrustedPublishingMiddleware {
             state: TrustedPublishingState::Lazy {
                 server_url,
                 options,
-                token: Arc::new(OnceCell::new()),
+                cache: Arc::new(Mutex::new(TrustedPublishingCache::Empty)),
             },
         }
     }
@@ -484,33 +547,56 @@ impl TrustedPublishingMiddleware {
             TrustedPublishingState::Lazy {
                 server_url,
                 options,
-                token,
-            } => token
-                .get_or_init(async {
-                    let bootstrap_client = ClientWithMiddleware::from(
-                        Client::builder()
-                            .user_agent(USER_AGENT)
-                            .build()
-                            .expect("failed to build reqwest client for OIDC mint"),
-                    );
-                    match check_trusted_publishing(&bootstrap_client, server_url, options).await {
-                        TrustedPublishResult::Configured(token) => Some(token),
-                        TrustedPublishResult::Skipped => {
-                            tracing::debug!(
-                                "TrustedPublishingMiddleware: no CI provider detected, skipping OIDC token exchange"
-                            );
-                            None
+                cache,
+            } => {
+                {
+                    let cache = cache.lock().expect("trusted publishing cache poisoned");
+                    match &*cache {
+                        TrustedPublishingCache::Token(token)
+                            if token.is_fresh(SystemTime::now()) =>
+                        {
+                            return Some(token.token.clone());
                         }
-                        TrustedPublishResult::Ignored(err) => {
-                            tracing::warn!(
-                                "TrustedPublishingMiddleware: trusted publishing failed: {err}"
-                            );
-                            None
-                        }
+                        TrustedPublishingCache::Disabled => return None,
+                        TrustedPublishingCache::Empty | TrustedPublishingCache::Token(_) => {}
                     }
-                })
-                .await
-                .clone(),
+                }
+
+                let bootstrap_client = ClientWithMiddleware::from(
+                    Client::builder()
+                        .user_agent(USER_AGENT)
+                        .build()
+                        .expect("failed to build reqwest client for OIDC mint"),
+                );
+                let token = match check_trusted_publishing(&bootstrap_client, server_url, options)
+                    .await
+                {
+                    TrustedPublishResult::Configured(token) => Some(token),
+                    TrustedPublishResult::Skipped => {
+                        tracing::debug!(
+                            "TrustedPublishingMiddleware: no CI provider detected, skipping OIDC token exchange"
+                        );
+                        None
+                    }
+                    TrustedPublishResult::Ignored(err) => {
+                        tracing::warn!(
+                            "TrustedPublishingMiddleware: trusted publishing failed: {err}"
+                        );
+                        None
+                    }
+                };
+
+                let mut cache = cache.lock().expect("trusted publishing cache poisoned");
+                if let Some(token) = token {
+                    let token = CachedTrustedPublishingToken::new(token);
+                    let result = token.token.clone();
+                    *cache = TrustedPublishingCache::Token(token);
+                    Some(result)
+                } else {
+                    *cache = TrustedPublishingCache::Disabled;
+                    None
+                }
+            }
         }
     }
 }
@@ -558,6 +644,29 @@ mod tests {
         let formatted = format!("{token:?}");
         assert!(!formatted.contains("supersecret"));
         assert!(formatted.contains("redacted"));
+    }
+
+    fn unsigned_jwt_with_exp(exp: u64) -> String {
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(format!(r#"{{"exp":{exp}}}"#));
+        format!("{header}.{payload}.")
+    }
+
+    #[test]
+    fn jwt_expiration_reads_exp_claim() {
+        let token = unsigned_jwt_with_exp(1_700_000_000);
+        assert_eq!(
+            jwt_expiration(&token),
+            UNIX_EPOCH.checked_add(Duration::from_secs(1_700_000_000))
+        );
+    }
+
+    #[test]
+    fn cached_jwt_is_stale_inside_refresh_margin() {
+        let token = TrustedPublishingToken::new(unsigned_jwt_with_exp(1_700_000_000));
+        let cached = CachedTrustedPublishingToken::new(token);
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 30);
+        assert!(!cached.is_fresh(now));
     }
 
     #[tokio::test]
