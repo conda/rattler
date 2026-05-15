@@ -3,13 +3,9 @@ use std::sync::Arc;
 use coalesced_map::CoalescedMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_networking::{
-    trusted_publishing::{TrustedPublishingMiddleware, TrustedPublishingOptions},
-    LazyClient,
-};
+use rattler_networking::LazyClient;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
-use url::Url;
 
 use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
 
@@ -53,7 +49,6 @@ pub struct GatewayBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
     max_concurrent_requests: MaxConcurrency,
-    trusted_publishing: Option<(Url, TrustedPublishingOptions)>,
 }
 
 impl GatewayBuilder {
@@ -138,44 +133,15 @@ impl GatewayBuilder {
         self
     }
 
-    /// Configure [trusted publishing](rattler_networking::trusted_publishing)
-    /// for `channel_url`.
-    #[must_use]
-    pub fn with_trusted_publishing(
-        mut self,
-        channel_url: Url,
-        options: TrustedPublishingOptions,
-    ) -> Self {
-        self.trusted_publishing = Some((channel_url, options));
-        self
-    }
-
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
-        let trusted_publishing = self.trusted_publishing;
-
-        let client = match (self.client, trusted_publishing) {
-            (Some(client), tp) => {
-                if tp.is_some() {
-                    tracing::warn!(
-                        "with_trusted_publishing was set alongside with_client; Build a client that includes \
-                        TrustedPublishingMiddleware yourself."
-                    );
-                }
-                client
-            }
-            (None, Some((channel_url, options))) => LazyClient::new(move || {
-                let base = Client::builder().user_agent(USER_AGENT).build().unwrap();
-                reqwest_middleware::ClientBuilder::new(base)
-                    .with(TrustedPublishingMiddleware::new(channel_url, options))
-                    .build()
-            }),
-            (None, None) => LazyClient::new(|| {
+        let client = self.client.unwrap_or_else(|| {
+            LazyClient::new(|| {
                 ClientWithMiddleware::from(
                     Client::builder().user_agent(USER_AGENT).build().unwrap(),
                 )
-            }),
-        };
+            })
+        });
 
         #[cfg(not(target_arch = "wasm32"))]
         let cache = self.cache.unwrap_or_else(|| {

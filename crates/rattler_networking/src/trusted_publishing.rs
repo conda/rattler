@@ -24,15 +24,11 @@ use base64::{
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
     Engine as _,
 };
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use reqwest_middleware::{ClientWithMiddleware, Middleware, Next};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-
-/// User-agent string used by the lazy bootstrap client when the middleware
-/// performs the OIDC token exchange on first use.
-const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// Refresh minted JWT tokens before they expire to avoid sending a token that
 /// becomes invalid while a request is in flight.
@@ -464,16 +460,17 @@ async fn get_publish_token(
 }
 
 /// `reqwest` middleware that injects a [`TrustedPublishingToken`] as a
-/// `Bearer` `Authorization` header for requests targeting a specific host.
+/// `Bearer` `Authorization` header for requests targeting a specific channel.
 ///
 /// Layered alongside [`crate::AuthenticationMiddleware`]: it only sets the
 /// header when no `Authorization` is already present and only when the
-/// request URL's host matches the configured host. This keeps the minted
-/// token scoped to the channel it was issued for, instead of leaking it to
-/// unrelated hosts the same client might also hit.
+/// request URL's host and path prefix match the configured channel. This
+/// keeps the minted token scoped to the channel it was issued for, instead
+/// of leaking it to unrelated channels (which may share a host, e.g.
+/// `https://prefix.dev/my-channel/` vs `https://prefix.dev/other-channel/`).
 #[derive(Clone, Debug)]
 pub struct TrustedPublishingMiddleware {
-    host: String,
+    channel_url: Url,
     state: TrustedPublishingState,
 }
 
@@ -485,6 +482,7 @@ enum TrustedPublishingState {
     Lazy {
         server_url: Url,
         options: TrustedPublishingOptions,
+        client: ClientWithMiddleware,
         cache: Arc<Mutex<TrustedPublishingCache>>,
     },
 }
@@ -517,24 +515,31 @@ impl CachedTrustedPublishingToken {
 
 impl TrustedPublishingMiddleware {
     /// Create a middleware that will mint a token lazily on the first
-    /// matching request using `options`.
-    pub fn new(server_url: Url, options: TrustedPublishingOptions) -> Self {
-        let host = server_url.host_str().unwrap_or_default().to_string();
+    /// matching request using `options`. `client` is used only for the OIDC
+    /// mint exchange; it must not itself layer in `TrustedPublishingMiddleware`
+    /// or the mint call will recurse.
+    pub fn new(
+        server_url: Url,
+        options: TrustedPublishingOptions,
+        client: ClientWithMiddleware,
+    ) -> Self {
+        let channel_url = normalize_channel_url(&server_url);
         Self {
-            host,
+            channel_url,
             state: TrustedPublishingState::Lazy {
                 server_url,
                 options,
+                client,
                 cache: Arc::new(Mutex::new(TrustedPublishingCache::Empty)),
             },
         }
     }
 
     /// Create a middleware that injects an already-minted `token` on
-    /// requests whose URL host equals the host portion of `server_url`.
+    /// requests whose URL host and path prefix match `server_url`.
     pub fn with_token(server_url: &Url, token: TrustedPublishingToken) -> Self {
         Self {
-            host: server_url.host_str().unwrap_or_default().to_string(),
+            channel_url: normalize_channel_url(server_url),
             state: TrustedPublishingState::Token(token),
         }
     }
@@ -547,6 +552,7 @@ impl TrustedPublishingMiddleware {
             TrustedPublishingState::Lazy {
                 server_url,
                 options,
+                client,
                 cache,
             } => {
                 {
@@ -562,15 +568,7 @@ impl TrustedPublishingMiddleware {
                     }
                 }
 
-                let bootstrap_client = ClientWithMiddleware::from(
-                    Client::builder()
-                        .user_agent(USER_AGENT)
-                        .build()
-                        .expect("failed to build reqwest client for OIDC mint"),
-                );
-                let token = match check_trusted_publishing(&bootstrap_client, server_url, options)
-                    .await
-                {
+                let token = match check_trusted_publishing(client, server_url, options).await {
                     TrustedPublishResult::Configured(token) => Some(token),
                     TrustedPublishResult::Skipped => {
                         tracing::debug!(
@@ -601,6 +599,17 @@ impl TrustedPublishingMiddleware {
     }
 }
 
+/// Normalize a channel URL so its path always ends with `/`. This avoids a
+/// prefix-collision bug where `/my-channel` would also match `/my-channel-evil`.
+fn normalize_channel_url(url: &Url) -> Url {
+    let mut url = url.clone();
+    if !url.path().ends_with('/') {
+        let new_path = format!("{}/", url.path());
+        url.set_path(&new_path);
+    }
+    url
+}
+
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Middleware for TrustedPublishingMiddleware {
@@ -611,7 +620,8 @@ impl Middleware for TrustedPublishingMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
         if req.headers().get(reqwest::header::AUTHORIZATION).is_none()
-            && req.url().host_str() == Some(self.host.as_str())
+            && req.url().host_str() == self.channel_url.host_str()
+            && req.url().path().starts_with(self.channel_url.path())
         {
             if let Some(token) = self.token().await {
                 let bearer_auth = format!("Bearer {}", token.secret());
@@ -705,6 +715,127 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(body, "Bearer abc123");
+    }
+
+    #[tokio::test]
+    async fn middleware_skips_same_host_different_channel() {
+        use reqwest_middleware::ClientBuilder;
+        use std::sync::Arc;
+
+        let server = axum::Router::new()
+            .route(
+                "/my-channel/check",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    if headers.contains_key("authorization") {
+                        "has-auth".to_string()
+                    } else {
+                        "no-auth".to_string()
+                    }
+                }),
+            )
+            .route(
+                "/other-channel/check",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    if headers.contains_key("authorization") {
+                        "has-auth".to_string()
+                    } else {
+                        "no-auth".to_string()
+                    }
+                }),
+            )
+            .route(
+                "/my-channel-evil/check",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    if headers.contains_key("authorization") {
+                        "has-auth".to_string()
+                    } else {
+                        "no-auth".to_string()
+                    }
+                }),
+            )
+            .route(
+                "/my-channel/subdir/check",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    if headers.contains_key("authorization") {
+                        "has-auth".to_string()
+                    } else {
+                        "no-auth".to_string()
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
+
+        // Middleware scoped to /my-channel/ on the test host.
+        let channel_url = Url::parse(&format!("http://{addr}/my-channel/")).unwrap();
+        let token = TrustedPublishingToken::new("abc123".to_string());
+        let middleware = TrustedPublishingMiddleware::with_token(&channel_url, token);
+
+        let client = ClientBuilder::new(reqwest::Client::new())
+            .with_arc(Arc::new(middleware))
+            .build();
+
+        // Same host, different channel: token must NOT be injected.
+        let body = client
+            .get(format!("http://{addr}/other-channel/check"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "no-auth");
+
+        // Prefix collision: /my-channel-evil must NOT match /my-channel/.
+        let body = client
+            .get(format!("http://{addr}/my-channel-evil/check"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "no-auth");
+
+        // Same channel: token IS injected.
+        let body = client
+            .get(format!("http://{addr}/my-channel/check"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "has-auth");
+
+        // Sub-path under the same channel: token IS injected.
+        let body = client
+            .get(format!("http://{addr}/my-channel/subdir/check"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "has-auth");
+    }
+
+    #[test]
+    fn normalize_channel_url_adds_trailing_slash() {
+        let with_path = Url::parse("https://prefix.dev/my-channel").unwrap();
+        assert_eq!(normalize_channel_url(&with_path).path(), "/my-channel/");
+
+        let already_trailing = Url::parse("https://prefix.dev/my-channel/").unwrap();
+        assert_eq!(
+            normalize_channel_url(&already_trailing).path(),
+            "/my-channel/"
+        );
+
+        // The url crate normalizes a host-only URL to path "/".
+        let host_only = Url::parse("https://prefix.dev").unwrap();
+        assert_eq!(host_only.path(), "/");
+        assert_eq!(normalize_channel_url(&host_only).path(), "/");
     }
 
     #[tokio::test]
