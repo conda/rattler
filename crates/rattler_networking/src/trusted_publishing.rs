@@ -1,19 +1,17 @@
 // This code has been adapted from uv under https://github.com/astral-sh/uv/blob/c5caf92edf539a9ebf24d375871178f8f8a0ab93/crates/uv-publish/src/trusted_publishing.rs
 // The original code is dual-licensed under Apache-2.0 and MIT
 
-//! Trusted publishing (via OIDC) with GitHub Actions, GitLab CI, and Google
-//! Cloud.
+//! Trusted publishing (via OIDC).
 //!
 //! The flow:
-//! 1. Detect which CI provider we are running on.
-//! 2. Ask the CI's OIDC provider for an ID token with the configured
-//!    `audience` claim.
-//! 3. Exchange that ID token at the server's mint endpoint for a short-lived
+//! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
+//!    claim. It owns CI-provider detection and returns `None` when no
+//!    supported provider is present.
+//! 2. Exchange that ID token at the server's mint endpoint for a short-lived
 //!    bearer token usable against the server (read or write, depending on
 //!    server policy).
 
 use std::{
-    env,
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -31,16 +29,6 @@ use url::Url;
 /// Refresh minted JWT tokens before they expire to avoid sending a token that
 /// becomes invalid while a request is in flight.
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
-
-/// Environment-variable names sniffed by [`detect_ci_provider`] to gate which
-/// CI providers we attempt trusted publishing on. Token retrieval itself is
-/// delegated to `ambient-id`, which owns the OIDC-specific env vars.
-mod consts {
-    pub const GITHUB_ACTIONS: &str = "GITHUB_ACTIONS";
-    pub const GITLAB_CI: &str = "GITLAB_CI";
-    pub const CLOUD_BUILD_ID: &str = "CLOUD_BUILD_ID";
-    pub const K_SERVICE: &str = "K_SERVICE";
-}
 
 /// Default audience for the OIDC ID token. Matches prefix.dev's expectation.
 pub const DEFAULT_AUDIENCE: &str = "prefix.dev";
@@ -78,28 +66,6 @@ impl Default for TrustedPublishingOptions {
     }
 }
 
-fn github_action_runner() -> bool {
-    env::var(consts::GITHUB_ACTIONS) == Ok("true".to_string())
-}
-
-fn gitlab_ci_runner() -> bool {
-    env::var(consts::GITLAB_CI) == Ok("true".to_string())
-}
-
-fn google_cloud_runner() -> bool {
-    env::var(consts::CLOUD_BUILD_ID).is_ok() || env::var(consts::K_SERVICE).is_ok()
-}
-
-/// Returns `true` if we're running on one of the CI providers supported for
-/// trusted publishing (GitHub Actions, GitLab CI, or Google Cloud).
-///
-/// This gates token retrieval: `ambient-id` also supports `CircleCI` and
-/// Buildkite, but we don't expose those here to keep the set of providers
-/// predictable for the server side.
-fn on_supported_ci() -> bool {
-    github_action_runner() || gitlab_ci_runner() || google_cloud_runner()
-}
-
 /// Outcome of an optional trusted-publishing attempt.
 pub enum TrustedPublishResult {
     /// We didn't check for trusted publishing (no CI provider detected).
@@ -130,15 +96,6 @@ pub enum TrustedPublishingError {
     /// Retrieving the OIDC ID token from the CI provider failed.
     #[error("Failed to retrieve an OIDC ID token from the CI provider")]
     OidcToken(#[from] ambient_id::Error),
-    /// We detected a supported CI environment but `ambient-id` returned no
-    /// token. This indicates a mismatch between our env-var gate and
-    /// `ambient-id`'s internal detection — most commonly, missing
-    /// provider-specific permissions (e.g., `id-token: write` on GitHub
-    /// Actions).
-    #[error(
-        "Detected a supported CI environment but no OIDC ID token was issued — check that the required permissions are configured (e.g. `id-token: write` on GitHub Actions)"
-    )]
-    NoOidcToken,
 }
 
 /// A short-lived bearer token minted by the server. The inner string is
@@ -201,25 +158,18 @@ fn jwt_expiration(token: &str) -> Option<SystemTime> {
 
 /// If applicable, attempt to obtain a bearer token via trusted publishing.
 ///
-/// Returns [`TrustedPublishResult::Skipped`] when no CI provider is detected
-/// (the common case outside CI). Errors during the flow are wrapped in
-/// [`TrustedPublishResult::Ignored`] so callers can fall back to other auth
-/// sources without unwinding.
+/// Returns [`TrustedPublishResult::Skipped`] when `ambient-id` reports no
+/// usable CI provider (the common case outside CI). Errors during the flow
+/// are wrapped in [`TrustedPublishResult::Ignored`] so callers can fall back
+/// to other auth sources without unwinding.
 pub async fn check_trusted_publishing(
     client: &ClientWithMiddleware,
     server_url: &Url,
     options: &TrustedPublishingOptions,
 ) -> TrustedPublishResult {
-    if !on_supported_ci() {
-        return TrustedPublishResult::Skipped;
-    }
-
-    tracing::debug!(
-        "Running on a supported CI environment without explicit credentials, checking for trusted publishing"
-    );
-
     match get_token(client, server_url, options).await {
-        Ok(token) => TrustedPublishResult::Configured(token),
+        Ok(Some(token)) => TrustedPublishResult::Configured(token),
+        Ok(None) => TrustedPublishResult::Skipped,
         Err(err) => {
             tracing::debug!("Could not obtain trusted publishing credentials, skipping: {err}");
             TrustedPublishResult::Ignored(err)
@@ -227,7 +177,8 @@ pub async fn check_trusted_publishing(
     }
 }
 
-/// Returns the short-lived token to use against `server_url`.
+/// Returns the short-lived token to use against `server_url`, or `None` when
+/// `ambient-id` reports no usable CI provider.
 ///
 /// Delegates OIDC ID-token retrieval to `ambient-id`; this function owns the
 /// mint exchange with `server_url`.
@@ -235,28 +186,21 @@ pub async fn get_token(
     client: &ClientWithMiddleware,
     server_url: &Url,
     options: &TrustedPublishingOptions,
-) -> Result<TrustedPublishingToken, TrustedPublishingError> {
+) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
     let detector = ambient_id::Detector::new_with_client(client.clone());
-    let oidc_token = match detector.detect(&options.audience).await? {
-        Some(token) => token,
-        None => return Err(TrustedPublishingError::NoOidcToken),
+    let Some(oidc_token) = detector.detect(&options.audience).await? else {
+        return Ok(None);
     };
 
-    let publish_token = get_publish_token(oidc_token.reveal(), server_url, client, options).await?;
+    let publish_token = get_publish_token(&oidc_token, server_url, client, options).await?;
 
     tracing::info!("Received OIDC token from CI provider, using trusted publishing");
 
-    // Mask the token in GitHub Actions logs so the bearer doesn't leak into
-    // CI output. The `::add-mask::` workflow command is a no-op outside GHA.
-    if github_action_runner() {
-        println!("::add-mask::{}", publish_token.secret());
-    }
-
-    Ok(publish_token)
+    Ok(Some(publish_token))
 }
 
 async fn get_publish_token(
-    oidc_token: &str,
+    oidc_token: &ambient_id::IdToken,
     server_url: &Url,
     client: &ClientWithMiddleware,
     options: &TrustedPublishingOptions,
@@ -264,7 +208,7 @@ async fn get_publish_token(
     let mint_token_url = server_url.join(&options.mint_path)?;
     tracing::info!("Querying the trusted publishing token from {mint_token_url}");
     let mint_token_payload = MintTokenRequest {
-        token: oidc_token.to_string(),
+        token: oidc_token.reveal().to_string(),
     };
 
     let response = client
