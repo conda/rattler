@@ -5463,6 +5463,7 @@ dependencies = [
 name = "rattler_networking"
 version = "0.26.12"
 dependencies = [
+ "ambient-id",
  "anyhow",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",

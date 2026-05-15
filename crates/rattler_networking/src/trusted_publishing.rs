@@ -14,8 +14,6 @@
 
 use std::{
     env,
-    env::VarError,
-    ffi::OsString,
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -34,21 +32,14 @@ use url::Url;
 /// becomes invalid while a request is in flight.
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// Environment-variable names used by the trusted-publishing flow. Kept
-/// private — callers should not need to read these directly.
+/// Environment-variable names sniffed by [`detect_ci_provider`] to gate which
+/// CI providers we attempt trusted publishing on. Token retrieval itself is
+/// delegated to `ambient-id`, which owns the OIDC-specific env vars.
 mod consts {
     pub const GITHUB_ACTIONS: &str = "GITHUB_ACTIONS";
-    pub const ACTIONS_ID_TOKEN_REQUEST_URL: &str = "ACTIONS_ID_TOKEN_REQUEST_URL";
-    pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
-
     pub const GITLAB_CI: &str = "GITLAB_CI";
-
     pub const CLOUD_BUILD_ID: &str = "CLOUD_BUILD_ID";
     pub const K_SERVICE: &str = "K_SERVICE";
-    pub const GCE_METADATA_HOST: &str = "GCE_METADATA_HOST";
-    pub const GCP_METADATA_HOST_DEFAULT: &str = "metadata.google.internal";
-    pub const GCP_METADATA_IDENTITY_PATH: &str =
-        "/computeMetadata/v1/instance/service-accounts/default/identity";
 }
 
 /// Default audience for the OIDC ID token. Matches prefix.dev's expectation.
@@ -58,12 +49,15 @@ pub const DEFAULT_AUDIENCE: &str = "prefix.dev";
 /// bearer token.
 pub const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
-/// Default name of the env var the user is expected to set in their
-/// `.gitlab-ci.yml` `id_tokens` block.
-pub const DEFAULT_GITLAB_ID_TOKEN_ENV: &str = "PREFIX_ID_TOKEN";
-
 /// Knobs for the trusted-publishing flow. Defaults target prefix.dev; override
 /// any field to point at a different server.
+///
+/// On GitLab CI, the OIDC ID token must be populated by the runner under an
+/// env var whose name is derived from [`audience`](Self::audience) by
+/// `ambient-id` (uppercasing the audience and replacing non-alphanumeric
+/// characters with `_`, then suffixing `_ID_TOKEN`). For the default audience
+/// `prefix.dev`, that resolves to `PREFIX_DEV_ID_TOKEN` — set this via the
+/// `id_tokens` block in `.gitlab-ci.yml`.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingOptions {
     /// The `aud` claim requested in the OIDC ID token. The server validates
@@ -73,9 +67,6 @@ pub struct TrustedPublishingOptions {
     /// Path on the server (joined onto `server_url`) where the ID token is
     /// exchanged for a bearer token.
     pub mint_path: String,
-    /// Name of the env var that GitLab CI populates via the `id_tokens` job
-    /// keyword. Users have to configure this in `.gitlab-ci.yml`.
-    pub gitlab_id_token_env: String,
 }
 
 impl Default for TrustedPublishingOptions {
@@ -83,28 +74,6 @@ impl Default for TrustedPublishingOptions {
         Self {
             audience: DEFAULT_AUDIENCE.to_string(),
             mint_path: DEFAULT_MINT_PATH.to_string(),
-            gitlab_id_token_env: DEFAULT_GITLAB_ID_TOKEN_ENV.to_string(),
-        }
-    }
-}
-
-/// Represents the CI provider being used for trusted publishing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CiProvider {
-    /// GitHub Actions.
-    GitHubActions,
-    /// GitLab CI.
-    GitLabCI,
-    /// Google Cloud (Cloud Build, Cloud Run, GCE, or GKE).
-    GoogleCloud,
-}
-
-impl std::fmt::Display for CiProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CiProvider::GitHubActions => write!(f, "GitHub Actions"),
-            CiProvider::GitLabCI => write!(f, "GitLab CI"),
-            CiProvider::GoogleCloud => write!(f, "Google Cloud"),
         }
     }
 }
@@ -121,17 +90,14 @@ fn google_cloud_runner() -> bool {
     env::var(consts::CLOUD_BUILD_ID).is_ok() || env::var(consts::K_SERVICE).is_ok()
 }
 
-/// Detects which CI provider is being used, if any.
-pub fn detect_ci_provider() -> Option<CiProvider> {
-    if github_action_runner() {
-        Some(CiProvider::GitHubActions)
-    } else if gitlab_ci_runner() {
-        Some(CiProvider::GitLabCI)
-    } else if google_cloud_runner() {
-        Some(CiProvider::GoogleCloud)
-    } else {
-        None
-    }
+/// Returns `true` if we're running on one of the CI providers supported for
+/// trusted publishing (GitHub Actions, GitLab CI, or Google Cloud).
+///
+/// This gates token retrieval: `ambient-id` also supports `CircleCI` and
+/// Buildkite, but we don't expose those here to keep the set of providers
+/// predictable for the server side.
+fn on_supported_ci() -> bool {
+    github_action_runner() || gitlab_ci_runner() || google_cloud_runner()
 }
 
 /// Outcome of an optional trusted-publishing attempt.
@@ -147,12 +113,6 @@ pub enum TrustedPublishResult {
 /// Errors that can occur during the trusted-publishing flow.
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
-    /// A required CI environment variable was not set.
-    #[error("Environment variable {0} not set, is the `id-token: write` permission missing?")]
-    MissingEnvVar(&'static str),
-    /// A required CI environment variable was set but not valid UTF-8.
-    #[error("Environment variable {0} is not valid UTF-8: `{1:?}`")]
-    InvalidEnvVar(&'static str, OsString),
     /// Failed to parse a URL.
     #[error(transparent)]
     Url(#[from] url::ParseError),
@@ -167,27 +127,18 @@ pub enum TrustedPublishingError {
         "Server returned error code {0} from the mint endpoint, is trusted publishing correctly configured?\nResponse: {1}"
     )]
     MintToken(StatusCode, String),
-    /// GitLab CI: the `id_tokens` env var was missing or empty.
+    /// Retrieving the OIDC ID token from the CI provider failed.
+    #[error("Failed to retrieve an OIDC ID token from the CI provider")]
+    OidcToken(#[from] ambient_id::Error),
+    /// We detected a supported CI environment but `ambient-id` returned no
+    /// token. This indicates a mismatch between our env-var gate and
+    /// `ambient-id`'s internal detection — most commonly, missing
+    /// provider-specific permissions (e.g., `id-token: write` on GitHub
+    /// Actions).
     #[error(
-        "GitLab CI OIDC token not found in env var `{0}`. Make sure you have configured `id_tokens` in your .gitlab-ci.yml:\n\n\
-        job_name:\n  \
-          id_tokens:\n    \
-            {0}:\n      \
-              aud: {1}\n"
+        "Detected a supported CI environment but no OIDC ID token was issued — check that the required permissions are configured (e.g. `id-token: write` on GitHub Actions)"
     )]
-    GitLabOidcTokenNotFound(String, String),
-    /// Google Cloud: the metadata server did not return a token.
-    #[error("Google Cloud OIDC token retrieval failed. Make sure you are running in a Google Cloud environment (Cloud Build, Cloud Run, GCE, or GKE) with a service account attached.")]
-    GoogleCloudOidcTokenNotFound,
-}
-
-impl TrustedPublishingError {
-    fn from_var_err(env_var: &'static str, err: VarError) -> Self {
-        match err {
-            VarError::NotPresent => Self::MissingEnvVar(env_var),
-            VarError::NotUnicode(os_string) => Self::InvalidEnvVar(env_var, os_string),
-        }
-    }
+    NoOidcToken,
 }
 
 /// A short-lived bearer token minted by the server. The inner string is
@@ -216,13 +167,6 @@ impl std::fmt::Debug for TrustedPublishingToken {
             .field(&"<redacted>")
             .finish()
     }
-}
-
-/// The response from querying GitHub's OIDC endpoint
-/// (`$ACTIONS_ID_TOKEN_REQUEST_URL&audience=...`).
-#[derive(Deserialize)]
-struct OidcToken {
-    value: String,
 }
 
 /// The body sent to the server's mint endpoint.
@@ -266,17 +210,15 @@ pub async fn check_trusted_publishing(
     server_url: &Url,
     options: &TrustedPublishingOptions,
 ) -> TrustedPublishResult {
-    let provider = match detect_ci_provider() {
-        Some(p) => p,
-        None => return TrustedPublishResult::Skipped,
-    };
+    if !on_supported_ci() {
+        return TrustedPublishResult::Skipped;
+    }
 
     tracing::debug!(
-        "Running on {} without explicit credentials, checking for trusted publishing",
-        provider
+        "Running on a supported CI environment without explicit credentials, checking for trusted publishing"
     );
 
-    match get_token(client, server_url, provider, options).await {
+    match get_token(client, server_url, options).await {
         Ok(token) => TrustedPublishResult::Configured(token),
         Err(err) => {
             tracing::debug!("Could not obtain trusted publishing credentials, skipping: {err}");
@@ -286,140 +228,31 @@ pub async fn check_trusted_publishing(
 }
 
 /// Returns the short-lived token to use against `server_url`.
+///
+/// Delegates OIDC ID-token retrieval to `ambient-id`; this function owns the
+/// mint exchange with `server_url`.
 pub async fn get_token(
     client: &ClientWithMiddleware,
     server_url: &Url,
-    provider: CiProvider,
     options: &TrustedPublishingOptions,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    let oidc_token = match provider {
-        CiProvider::GitHubActions => {
-            let oidc_token_request_token = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
-                .map_err(|err| {
-                    TrustedPublishingError::from_var_err(
-                        consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN,
-                        err,
-                    )
-                })?;
-            get_github_oidc_token(&oidc_token_request_token, client, options).await?
-        }
-        CiProvider::GitLabCI => get_gitlab_oidc_token(options)?,
-        CiProvider::GoogleCloud => get_google_cloud_oidc_token(client, options).await?,
+    let detector = ambient_id::Detector::new_with_client(client.clone());
+    let oidc_token = match detector.detect(&options.audience).await? {
+        Some(token) => token,
+        None => return Err(TrustedPublishingError::NoOidcToken),
     };
 
-    let publish_token = get_publish_token(&oidc_token, server_url, client, options).await?;
+    let publish_token = get_publish_token(oidc_token.reveal(), server_url, client, options).await?;
 
-    tracing::info!("Received token from {}, using trusted publishing", provider);
+    tracing::info!("Received OIDC token from CI provider, using trusted publishing");
 
-    // Mask the token in CI logs when the runner supports it.
-    if provider == CiProvider::GitHubActions {
+    // Mask the token in GitHub Actions logs so the bearer doesn't leak into
+    // CI output. The `::add-mask::` workflow command is a no-op outside GHA.
+    if github_action_runner() {
         println!("::add-mask::{}", publish_token.secret());
     }
 
     Ok(publish_token)
-}
-
-fn get_gitlab_oidc_token(
-    options: &TrustedPublishingOptions,
-) -> Result<String, TrustedPublishingError> {
-    let env_name = options.gitlab_id_token_env.as_str();
-    match env::var(env_name) {
-        Ok(token) if !token.is_empty() => {
-            tracing::info!("Found GitLab CI OIDC token in {env_name}");
-            Ok(token)
-        }
-        Ok(_) => {
-            tracing::warn!("{env_name} is set but empty");
-            Err(TrustedPublishingError::GitLabOidcTokenNotFound(
-                env_name.to_string(),
-                options.audience.clone(),
-            ))
-        }
-        Err(_) => {
-            tracing::debug!("{env_name} not found in environment");
-            Err(TrustedPublishingError::GitLabOidcTokenNotFound(
-                env_name.to_string(),
-                options.audience.clone(),
-            ))
-        }
-    }
-}
-
-async fn get_github_oidc_token(
-    oidc_token_request_token: &str,
-    client: &ClientWithMiddleware,
-    options: &TrustedPublishingOptions,
-) -> Result<String, TrustedPublishingError> {
-    let oidc_token_url = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
-        TrustedPublishingError::from_var_err(consts::ACTIONS_ID_TOKEN_REQUEST_URL, err)
-    })?;
-    let mut oidc_token_url = Url::parse(&oidc_token_url)?;
-    oidc_token_url
-        .query_pairs_mut()
-        .append_pair("audience", &options.audience);
-    tracing::info!("Querying the trusted publishing OIDC token from {oidc_token_url}");
-    let response = client
-        .get(oidc_token_url.clone())
-        .bearer_auth(oidc_token_request_token)
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;
-    let oidc_token: OidcToken = response
-        .error_for_status()
-        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?
-        .json()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?;
-    Ok(oidc_token.value)
-}
-
-async fn get_google_cloud_oidc_token(
-    client: &ClientWithMiddleware,
-    options: &TrustedPublishingOptions,
-) -> Result<String, TrustedPublishingError> {
-    let metadata_host = env::var(consts::GCE_METADATA_HOST)
-        .unwrap_or_else(|_| consts::GCP_METADATA_HOST_DEFAULT.to_string());
-
-    let metadata_url = format!(
-        "http://{}{}?audience={}",
-        metadata_host,
-        consts::GCP_METADATA_IDENTITY_PATH,
-        options.audience,
-    );
-    let url = Url::parse(&metadata_url)?;
-
-    tracing::info!(
-        "Querying the trusted publishing OIDC token from Google Cloud metadata server at {}",
-        metadata_host
-    );
-
-    let response = client
-        .get(url.clone())
-        .header("Metadata-Flavor", "Google")
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(url.clone(), err))?;
-
-    if !response.status().is_success() {
-        tracing::warn!(
-            "Google Cloud metadata server returned status {}",
-            response.status()
-        );
-        return Err(TrustedPublishingError::GoogleCloudOidcTokenNotFound);
-    }
-
-    let token = response
-        .text()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(url.clone(), err))?;
-
-    if token.is_empty() {
-        tracing::warn!("Google Cloud metadata server returned empty token");
-        return Err(TrustedPublishingError::GoogleCloudOidcTokenNotFound);
-    }
-
-    tracing::info!("Successfully obtained OIDC token from Google Cloud");
-    Ok(token)
 }
 
 async fn get_publish_token(
@@ -645,7 +478,6 @@ mod tests {
         let opts = TrustedPublishingOptions::default();
         assert_eq!(opts.audience, "prefix.dev");
         assert_eq!(opts.mint_path, "/api/oidc/mint_token");
-        assert_eq!(opts.gitlab_id_token_env, "PREFIX_ID_TOKEN");
     }
 
     #[test]
