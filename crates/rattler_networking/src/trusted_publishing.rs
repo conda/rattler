@@ -37,13 +37,14 @@ pub const DEFAULT_AUDIENCE: &str = "prefix.dev";
 /// bearer token.
 pub const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
-/// Knobs for the trusted-publishing flow. Defaults target prefix.dev; override
-/// any field to point at a different server.
+/// Knobs for the trusted-publishing flow. Use
+/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults, or
+/// construct directly to point at a different server.
 ///
 /// On GitLab CI, the OIDC ID token must be populated by the runner under an
 /// env var whose name is derived from [`audience`](Self::audience) by
 /// `ambient-id` (uppercasing the audience and replacing non-alphanumeric
-/// characters with `_`, then suffixing `_ID_TOKEN`). For the default audience
+/// characters with `_`, then suffixing `_ID_TOKEN`). For audience
 /// `prefix.dev`, that resolves to `PREFIX_DEV_ID_TOKEN` — set this via the
 /// `id_tokens` block in `.gitlab-ci.yml`.
 #[derive(Debug, Clone)]
@@ -57,8 +58,10 @@ pub struct TrustedPublishingOptions {
     pub mint_path: String,
 }
 
-impl Default for TrustedPublishingOptions {
-    fn default() -> Self {
+impl TrustedPublishingOptions {
+    /// Options preconfigured for prefix.dev: audience `prefix.dev`, mint path
+    /// `/api/oidc/mint_token`.
+    pub fn for_prefix_dev() -> Self {
         Self {
             audience: DEFAULT_AUDIENCE.to_string(),
             mint_path: DEFAULT_MINT_PATH.to_string(),
@@ -417,8 +420,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn options_defaults_match_prefix_dev() {
-        let opts = TrustedPublishingOptions::default();
+    fn for_prefix_dev_matches_prefix_dev() {
+        let opts = TrustedPublishingOptions::for_prefix_dev();
         assert_eq!(opts.audience, "prefix.dev");
         assert_eq!(opts.mint_path, "/api/oidc/mint_token");
     }

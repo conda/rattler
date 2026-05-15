@@ -214,7 +214,7 @@ pub async fn upload_package_to_prefix(
         None => match check_trusted_publishing(
             &client,
             &prefix_data.url,
-            &TrustedPublishingOptions::default(),
+            &TrustedPublishingOptions::for_prefix_dev(),
         )
         .await
         {
@@ -251,7 +251,7 @@ pub async fn upload_package_to_prefix(
         None => match check_trusted_publishing(
             &client,
             &prefix_data.url,
-            &TrustedPublishingOptions::default(),
+            &TrustedPublishingOptions::for_prefix_dev(),
         )
         .await
         {
