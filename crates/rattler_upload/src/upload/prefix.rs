@@ -2,10 +2,10 @@ use fs_err::tokio as tokio_fs;
 use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
 use rattler_networking::{
-    trusted_publishing::{
-        check_trusted_publishing, TrustedPublishResult, TrustedPublishingOptions,
-    },
     Authentication, AuthenticationStorage,
+    trusted_publishing::{
+        TrustedPublishResult, TrustedPublishingOptions, check_trusted_publishing,
+    },
 };
 use reqwest::{
     StatusCode,

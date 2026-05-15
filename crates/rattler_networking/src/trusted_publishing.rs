@@ -19,8 +19,8 @@ use std::{
 };
 
 use base64::{
-    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
     Engine as _,
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
 };
 use reqwest::StatusCode;
 use reqwest_middleware::{ClientWithMiddleware, Middleware, Next};
@@ -455,15 +455,14 @@ impl Middleware for TrustedPublishingMiddleware {
         if req.headers().get(reqwest::header::AUTHORIZATION).is_none()
             && req.url().host_str() == self.channel_url.host_str()
             && req.url().path().starts_with(self.channel_url.path())
+            && let Some(token) = self.token().await
         {
-            if let Some(token) = self.token().await {
-                let bearer_auth = format!("Bearer {}", token.secret());
-                let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
-                    .map_err(reqwest_middleware::Error::middleware)?;
-                header_value.set_sensitive(true);
-                req.headers_mut()
-                    .insert(reqwest::header::AUTHORIZATION, header_value);
-            }
+            let bearer_auth = format!("Bearer {}", token.secret());
+            let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                .map_err(reqwest_middleware::Error::middleware)?;
+            header_value.set_sensitive(true);
+            req.headers_mut()
+                .insert(reqwest::header::AUTHORIZATION, header_value);
         }
         next.run(req, extensions).await
     }
@@ -519,11 +518,10 @@ mod tests {
         let server = axum::Router::new().route(
             "/check",
             axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                let auth = headers
+                headers
                     .get("authorization")
                     .map(|v| v.to_str().unwrap().to_string())
-                    .unwrap_or_default();
-                auth
+                    .unwrap_or_default()
             }),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
