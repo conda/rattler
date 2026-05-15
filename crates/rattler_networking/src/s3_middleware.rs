@@ -249,7 +249,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use temp_env::async_with_vars;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use super::*;
     use crate::authentication_storage::backends::file::FileStorage;

@@ -51,13 +51,13 @@ mod tests {
         }
 
         fn validate(&self) -> Result<(), ValidationError> {
-            if let Some(numeric) = self.numeric_field {
-                if numeric > 100 {
-                    return Err(ValidationError::InvalidValue(
-                        "numeric_field".to_string(),
-                        "must be <= 100".to_string(),
-                    ));
-                }
+            if let Some(numeric) = self.numeric_field
+                && numeric > 100
+            {
+                return Err(ValidationError::InvalidValue(
+                    "numeric_field".to_string(),
+                    "must be <= 100".to_string(),
+                ));
             }
             Ok(())
         }

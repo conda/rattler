@@ -3,26 +3,26 @@
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
 use super::{
-    models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
     ParseCondaLockError,
+    models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
 };
 use crate::{
+    Channel, DEFAULT_ENVIRONMENT_NAME, EnvironmentData, EnvironmentIndex, EnvironmentPackages,
+    LockFile, LockFileInner, LockedPackage, PackageHashes, PackageIndex, PlatformData,
+    PlatformIndex, PypiDistributionData, PypiPackageData, SolveOptions, UrlOrPath, Verbatim,
     file_format_version::FileFormatVersion,
     platform::PlatformName,
     utils::derived_fields::{
-        derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
-        LocationDerivedFields,
+        LocationDerivedFields, derive_arch_and_platform, derive_build_number_from_build,
+        derive_noarch_type,
     },
-    Channel, EnvironmentData, EnvironmentIndex, EnvironmentPackages, LockFile, LockFileInner,
-    LockedPackage, PackageHashes, PackageIndex, PlatformData, PlatformIndex, PypiDistributionData,
-    PypiPackageData, SolveOptions, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::Requirement;
 use rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
 use serde::Deserialize;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 use url::Url;
 
 #[derive(Deserialize)]

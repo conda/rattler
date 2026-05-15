@@ -92,7 +92,7 @@ impl Config for S3OptionsMap {
                     return Err(ConfigEditError::UnknownKey {
                         key: key.to_string(),
                         supported_keys: "".to_string(),
-                    })
+                    });
                 }
             }
         } else {

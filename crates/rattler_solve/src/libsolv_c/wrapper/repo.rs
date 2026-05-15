@@ -110,7 +110,9 @@ impl Repo<'_> {
     ///
     /// The caller must ensure the solvable referenced by this id will not be used in the future
     pub unsafe fn free_solvable(&self, solvable_id: SolvableId) {
-        ffi::repo_free_solvable(self.raw_ptr(), solvable_id.into(), 1);
+        unsafe {
+            ffi::repo_free_solvable(self.raw_ptr(), solvable_id.into(), 1);
+        }
     }
 }
 

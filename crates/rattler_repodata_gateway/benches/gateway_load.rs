@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rattler_conda_types::{Channel, MatchSpec, ParseMatchSpecOptions, Platform};
 use rattler_repodata_gateway::{Gateway, RepoData};
 use url::Url;

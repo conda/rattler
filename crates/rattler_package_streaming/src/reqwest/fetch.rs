@@ -41,8 +41,8 @@ pub use super::full_download::{
     fetch_file_from_remote_full_download, fetch_package_file_full_download,
 };
 use super::sparse::fetch_package_file_sparse;
-use crate::reqwest::sparse::fetch_file_from_remote_sparse;
 use crate::ExtractError;
+use crate::reqwest::sparse::fetch_file_from_remote_sparse;
 
 /// Fetch and parse a specific [`PackageFile`] from a remote package.
 ///

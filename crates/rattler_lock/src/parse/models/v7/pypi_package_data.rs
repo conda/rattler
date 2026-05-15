@@ -7,7 +7,7 @@ use serde_with::{serde_as, skip_serializing_none};
 
 use super::{given_verbatim_url::GivenVerbatimUrl, package_selector::PackageSelector};
 use crate::{
-    parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
+    PackageHashes, PypiPackageData, UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw,
 };
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
@@ -142,9 +142,9 @@ mod tests {
 
     use typed_path::Utf8TypedPathBuf;
 
-    use crate::{parse::deserialize::PypiPackageDataRaw, UrlOrPath, Verbatim};
+    use crate::{UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw};
 
-    use super::{PypiPackageDataModel, PYPI_URL};
+    use super::{PYPI_URL, PypiPackageDataModel};
 
     fn url_location(url: &str) -> Verbatim<UrlOrPath> {
         Verbatim::new(UrlOrPath::Url(url::Url::parse(url).unwrap()))

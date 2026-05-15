@@ -1,9 +1,9 @@
 use crate::install::PythonInfo;
 use digest::Output;
 use rattler_conda_types::{
+    Platform,
     package::EntryPoint,
     prefix_record::{PathType, PathsEntry},
-    Platform,
 };
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;

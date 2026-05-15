@@ -881,19 +881,25 @@ mod test {
             family: "glibc".into(),
         };
         let env_var_name = format!("{}_{}", LibC::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             LibC::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
                 .unwrap(),
             res
         );
-        env::set_var(env_var_name.clone(), "");
+        unsafe {
+            env::set_var(env_var_name.clone(), "");
+        }
         assert_eq!(
             LibC::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap(),
             None
         );
-        env::remove_var(env_var_name.clone());
+        unsafe {
+            env::remove_var(env_var_name.clone());
+        }
         assert_eq!(
             LibC::detect_with_fallback(&Override::DefaultEnvVar, || Ok(Some(res.clone())))
                 .unwrap()
@@ -925,7 +931,9 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         let env_var_name = format!("{}_{}", Cuda::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             Cuda::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
@@ -936,7 +944,9 @@ mod test {
             Cuda::detect(None).map_err(|_x| 1),
             <Cuda as EnvOverride>::detect_from_host().map_err(|_x| 1)
         );
-        env::remove_var(env_var_name.clone());
+        unsafe {
+            env::remove_var(env_var_name.clone());
+        }
         assert_eq!(
             Cuda::detect(Some(&Override::String(v.to_string())))
                 .unwrap()
@@ -952,7 +962,9 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         let env_var_name = format!("{}_{}", Osx::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             Osx::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()

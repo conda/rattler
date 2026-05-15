@@ -171,7 +171,10 @@ pub async fn extract_conda(
         Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
             if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
-            tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
+            tracing::warn!(
+                "Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression",
+                url
+            );
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
             }

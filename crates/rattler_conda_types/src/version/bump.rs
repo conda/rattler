@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{Component, Version};
 
-use super::{segment::Segment, ComponentVec, SegmentVec};
+use super::{ComponentVec, SegmentVec, segment::Segment};
 
 /// `VersionBumpType` is used to specify the type of bump to perform on a version.
 #[derive(Clone)]

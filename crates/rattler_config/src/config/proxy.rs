@@ -166,7 +166,7 @@ impl Config for ProxyConfig {
             _ => {
                 return Err(ConfigEditError::UnknownKeyInner {
                     key: key.to_string(),
-                })
+                });
             }
         }
         Ok(())

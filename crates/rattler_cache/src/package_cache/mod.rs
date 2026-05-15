@@ -22,8 +22,8 @@ use parking_lot::Mutex;
 use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
-    retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
     LazyClient,
+    retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
 };
 use rattler_package_streaming::{DownloadReporter, ExtractError};
 use rattler_redaction::Redact;
@@ -32,7 +32,7 @@ use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
 
-use crate::validation::{validate_package_directory, ValidationMode};
+use crate::validation::{ValidationMode, validate_package_directory};
 
 mod cache_key;
 mod cache_lock;
@@ -528,8 +528,8 @@ impl PackageCache {
                                         total_size: result.total_size,
                                     });
                                 }
-                            }  else if let Some(md5) = md5 {
-                                if md5 != result.md5 {
+                            }  else if let Some(md5) = md5
+                                && md5 != result.md5 {
                                     // Delete the package if the hash does not match.
                                     // Failure here is non-fatal: the TempDir guard will
                                     // clean up on drop; log and continue so the retry
@@ -548,7 +548,6 @@ impl PackageCache {
                                         total_size: result.total_size,
                                     });
                                 }
-                            }
                             return Ok(());
                         }
                         Err(err) => err,
@@ -824,13 +823,14 @@ mod test {
         net::SocketAddr,
         path::{Path, PathBuf},
         sync::{
-            atomic::{AtomicBool, Ordering},
             Arc,
+            atomic::{AtomicBool, Ordering},
         },
     };
 
     use assert_matches::assert_matches;
     use axum::{
+        Router,
         body::Body,
         extract::State,
         http::{Request, StatusCode},
@@ -838,17 +838,16 @@ mod test {
         middleware::Next,
         response::{Redirect, Response},
         routing::get,
-        Router,
     };
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, compute_bytes_digest, parse_digest_from_hex};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
     use reqwest_retry::RetryTransientMiddleware;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
     use url::Url;
@@ -856,7 +855,7 @@ mod test {
     use super::PackageCache;
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
-        validation::{validate_package_directory, ValidationMode},
+        validation::{ValidationMode, validate_package_directory},
     };
 
     fn get_test_data_dir() -> PathBuf {

@@ -6,13 +6,13 @@ use std::{
 
 use itertools::Itertools;
 use serde::{Serialize, Serializer};
-use serde_with::{serde_as, SerializeAs};
+use serde_with::{SerializeAs, serde_as};
 
 use crate::{
-    file_format_version::FileFormatVersion,
-    parse::{models::v7, models::v7::PackageSelector, V7},
     Channel, CondaPackageData, EnvironmentData, LockFile, LockFileInner, LockedPackage,
     PackageIndex, PlatformData, PypiIndexes, PypiPackageData, SelectorId, SolveOptions,
+    file_format_version::FileFormatVersion,
+    parse::{V7, models::v7, models::v7::PackageSelector},
 };
 
 fn selector_ids_to_package_selectors(ids: Vec<SelectorId>) -> Vec<PackageSelector> {

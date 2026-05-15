@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5](https://github.com/conda/rattler/compare/rattler_digest-v1.2.4...rattler_digest-v1.2.5) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
 ## [1.2.4](https://github.com/conda/rattler/compare/rattler_digest-v1.2.3...rattler_digest-v1.2.4) - 2026-04-30
 
 ### Other

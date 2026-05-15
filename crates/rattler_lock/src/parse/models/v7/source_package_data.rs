@@ -4,8 +4,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::RunExportsJson, BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl,
-    VersionWithSource,
+    BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
+    package::RunExportsJson,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -15,12 +15,12 @@ use super::{
     source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
 };
 use crate::{
+    CondaPackageData, ConversionError, SourceIdentifier,
     conda::{
         CondaSourceData, PackageBuildSource, PartialSourceMetadata, SourceMetadata, VariantValue,
     },
     source::SourceLocation,
     utils::derived_fields,
-    CondaPackageData, ConversionError, SourceIdentifier,
 };
 
 /// A model struct for source packages in V7 lock files.

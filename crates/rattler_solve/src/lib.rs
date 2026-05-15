@@ -12,13 +12,13 @@ pub mod resolvo;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    utils::TimestampMs, GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
+    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
 };
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s

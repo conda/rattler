@@ -4,8 +4,8 @@
 use std::{cmp::Ordering, collections::HashMap};
 
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, DistArchiveType},
     GenericVirtualPackage, RepoDataRecord, RepodataRevision,
+    package::{ArchiveIdentifier, DistArchiveType},
 };
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
@@ -130,14 +130,14 @@ pub fn add_repodata_records<'a>(
     // Track all extras we encounter so we can create synthetic solvables for them
     let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
-        if let Some(config) = exclude_newer {
-            if config.is_excluded(
+        if let Some(config) = exclude_newer
+            && config.is_excluded(
                 &repo_data.package_record.name,
                 repo_data.channel.as_deref(),
                 repo_data.package_record.timestamp.as_ref(),
-            ) {
-                continue;
-            }
+            )
+        {
+            continue;
         }
 
         // Create a solvable for the package
@@ -171,23 +171,23 @@ pub fn add_repodata_records<'a>(
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
-            if let Some(match_spec) = parse_libsolv_match_spec(match_spec_str)? {
-                if let Some(condition) = match_spec.condition.as_ref() {
-                    // Create the dependency without the condition
-                    let mut dep_spec = match_spec.clone();
-                    dep_spec.condition = None;
-                    let dep_id = pool.conda_matchspec(&c_string(dep_spec.to_string()));
+            if let Some(match_spec) = parse_libsolv_match_spec(match_spec_str)?
+                && let Some(condition) = match_spec.condition.as_ref()
+            {
+                // Create the dependency without the condition
+                let mut dep_spec = match_spec.clone();
+                dep_spec.condition = None;
+                let dep_id = pool.conda_matchspec(&c_string(dep_spec.to_string()));
 
-                    // Parse the condition
-                    let condition_id = parse_condition(condition, pool);
+                // Parse the condition
+                let condition_id = parse_condition(condition, pool);
 
-                    // Create a conditional dependency
-                    let conditional_dep_id = pool.rel_cond(dep_id, condition_id);
+                // Create a conditional dependency
+                let conditional_dep_id = pool.rel_cond(dep_id, condition_id);
 
-                    // Add it to the list of requirements
-                    repo.add_requires(solvable, conditional_dep_id);
-                    continue;
-                }
+                // Add it to the list of requirements
+                repo.add_requires(solvable, conditional_dep_id);
+                continue;
             }
 
             // Regular dependency without condition

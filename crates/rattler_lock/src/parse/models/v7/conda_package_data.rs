@@ -4,20 +4,20 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::{DistArchiveIdentifier, RunExportsJson},
-    utils::TimestampMs,
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
+    package::{DistArchiveIdentifier, RunExportsJson},
+    utils::TimestampMs,
 };
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
 use crate::{
+    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
     conda::CondaBinaryData,
     utils::derived_fields::{self, LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
 };
 
 fn skip_variant_serialization(input: &Option<Cow<'_, BTreeMap<String, VariantValue>>>) -> bool {

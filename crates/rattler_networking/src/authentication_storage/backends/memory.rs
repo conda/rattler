@@ -2,8 +2,8 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
 /// A struct that implements storage and access of authentication

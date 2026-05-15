@@ -4,16 +4,16 @@ use file_url::url_to_path;
 use rattler_conda_types::{Channel, Platform};
 
 use crate::{
+    GatewayError, Reporter, SourceConfig,
     fetch::FetchRepoDataError,
     gateway,
     gateway::{
+        GatewayInner,
         error::SubdirNotFoundError,
         local_subdir::LocalSubdirClient,
         remote_subdir, sharded_subdir,
         subdir::{Subdir, SubdirData},
-        GatewayInner,
     },
-    GatewayError, Reporter, SourceConfig,
 };
 
 /// Builder for creating a `Subdir` instance.

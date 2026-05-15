@@ -1,5 +1,5 @@
 use crate::{error::PyRattlerError, version::PyVersion};
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_conda_types::{ParseStrictness, VersionSpec};
 use std::{
     collections::hash_map::DefaultHasher,

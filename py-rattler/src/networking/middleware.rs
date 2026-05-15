@@ -1,10 +1,9 @@
 use pyo3::{
-    pyclass, pymethods,
+    FromPyObject, Py, PyAny, PyResult, Python, pyclass, pymethods,
     types::{PyAnyMethods, PyDict, PyDictMethods, PyTypeMethods},
-    FromPyObject, Py, PyAny, PyResult, Python,
 };
 use rattler_networking::{
-    mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
+    GCSMiddleware, MirrorMiddleware, mirror_middleware::Mirror, s3_middleware::S3Config,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};

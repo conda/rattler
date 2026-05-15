@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_shell-v0.26.12...rattler_shell-v0.27.0) - 2026-05-13
+
+### Added
+
+- implement shell flavors and fix workspace-wide initialization ([#2259](https://github.com/conda/rattler/pull/2259))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
 ## [0.26.12](https://github.com/conda/rattler/compare/rattler_shell-v0.26.11...rattler_shell-v0.26.12) - 2026-05-07
 
 ### Other

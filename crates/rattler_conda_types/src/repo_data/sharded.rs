@@ -1,11 +1,11 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
+use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
 use crate::repo_data::{ChannelRelations, ExperimentalV3Packages, RepodataRevisionInfo};
-use crate::PackageRecord;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
-use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
+use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).

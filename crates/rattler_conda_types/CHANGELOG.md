@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.1...rattler_conda_types-v0.46.2) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+
 ## [0.46.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.0...rattler_conda_types-v0.46.1) - 2026-05-07
 
 ### Other

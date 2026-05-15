@@ -12,16 +12,16 @@ use std::{
     str::FromStr,
 };
 
-pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
+pub(crate) use constraint::is_start_of_version_constraint;
 pub use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use version_tree::VersionTree;
 
 use crate::{
-    version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
-    ParseStrictness::Lenient, ParseVersionError, Version,
+    ParseStrictness, ParseStrictness::Lenient, ParseVersionError, Version, version::StrictVersion,
+    version_spec::version_tree::ParseVersionTreeError,
 };
 
 /// An operator to compare two versions.
@@ -359,11 +359,11 @@ mod tests {
     use rstest::rstest;
 
     use crate::{
-        version_spec::{
-            parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
-            RangeOperator, StrictRangeOperator,
-        },
         ParseStrictness, StrictVersion, Version, VersionSpec,
+        version_spec::{
+            EqualityOperator, LogicalOperator, ParseVersionSpecError, RangeOperator,
+            StrictRangeOperator, parse::ParseConstraintError,
+        },
     };
 
     #[test]

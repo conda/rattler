@@ -21,13 +21,17 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     ParseError(#[from] serde_yaml::Error),
 
-    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported")]
+    #[error(
+        "found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported"
+    )]
     IncompatibleVersion {
         lock_file_version: u64,
         max_supported_version: FileFormatVersion,
     },
 
-    #[error("environment {environment} and platform {platform} refers to a package that does not exist: {location}")]
+    #[error(
+        "environment {environment} and platform {platform} refers to a package that does not exist: {location}"
+    )]
     MissingPackage {
         environment: String,
         platform: String,

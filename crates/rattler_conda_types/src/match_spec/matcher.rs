@@ -211,12 +211,16 @@ mod tests {
         assert!(StringMatcher::from_str("*oo*").unwrap().matches("foobar"));
 
         // Conda's glob doesn't care about escaping
-        assert!(StringMatcher::from_str("foo\\*bar")
-            .unwrap()
-            .matches("foo\\bazbar"));
-        assert!(!StringMatcher::from_str("foo\\*bar")
-            .unwrap()
-            .matches("foobazbar"));
+        assert!(
+            StringMatcher::from_str("foo\\*bar")
+                .unwrap()
+                .matches("foo\\bazbar")
+        );
+        assert!(
+            !StringMatcher::from_str("foo\\*bar")
+                .unwrap()
+                .matches("foobazbar")
+        );
 
         // Or any keywords other than '*'
         assert!(!StringMatcher::from_str("foo[a-z]").unwrap().matches("fooa"));
@@ -225,21 +229,31 @@ mod tests {
 
     #[test]
     fn test_string_matcher_matches_regex() {
-        assert!(StringMatcher::from_str("^foo.*$")
-            .unwrap()
-            .matches("foobar"));
-        assert!(StringMatcher::from_str("^.*[oo|bar].*$")
-            .unwrap()
-            .matches("foobar"));
-        assert!(!StringMatcher::from_str("^[not].*$")
-            .unwrap()
-            .matches("foobar"));
-        assert!(StringMatcher::from_str("^foo\\[bar\\].*$")
-            .unwrap()
-            .matches("foo[bar]"));
-        assert!(!StringMatcher::from_str("^foo\\[bar\\].*$")
-            .unwrap()
-            .matches("foobar"));
+        assert!(
+            StringMatcher::from_str("^foo.*$")
+                .unwrap()
+                .matches("foobar")
+        );
+        assert!(
+            StringMatcher::from_str("^.*[oo|bar].*$")
+                .unwrap()
+                .matches("foobar")
+        );
+        assert!(
+            !StringMatcher::from_str("^[not].*$")
+                .unwrap()
+                .matches("foobar")
+        );
+        assert!(
+            StringMatcher::from_str("^foo\\[bar\\].*$")
+                .unwrap()
+                .matches("foo[bar]")
+        );
+        assert!(
+            !StringMatcher::from_str("^foo\\[bar\\].*$")
+                .unwrap()
+                .matches("foobar")
+        );
     }
 
     #[test]
@@ -268,9 +282,11 @@ mod tests {
     fn test_special_characters_matches() {
         let special_characters = "~!@#$%^&*()_-+={}[]|;:'<>,.?/";
         for special_character in special_characters.chars() {
-            assert!(StringMatcher::from_str(&special_character.to_string())
-                .unwrap()
-                .matches(&special_character.to_string()));
+            assert!(
+                StringMatcher::from_str(&special_character.to_string())
+                    .unwrap()
+                    .matches(&special_character.to_string())
+            );
         }
     }
 
@@ -301,22 +317,30 @@ mod tests {
         // CEP-29 mandates that build string matching is case-insensitive.
 
         // Exact
-        assert!(StringMatcher::from_str("PyHash_0")
-            .unwrap()
-            .matches("pyhash_0"));
-        assert!(StringMatcher::from_str("pyhash_0")
-            .unwrap()
-            .matches("PYHASH_0"));
+        assert!(
+            StringMatcher::from_str("PyHash_0")
+                .unwrap()
+                .matches("pyhash_0")
+        );
+        assert!(
+            StringMatcher::from_str("pyhash_0")
+                .unwrap()
+                .matches("PYHASH_0")
+        );
 
         // Glob
         assert!(StringMatcher::from_str("Py*").unwrap().matches("py37_0"));
         assert!(StringMatcher::from_str("py*").unwrap().matches("Py37_0"));
-        assert!(StringMatcher::from_str("*PY39*")
-            .unwrap()
-            .matches("foo_py39_0"));
-        assert!(StringMatcher::from_str("*py39*")
-            .unwrap()
-            .matches("foo_PY39_0"));
+        assert!(
+            StringMatcher::from_str("*PY39*")
+                .unwrap()
+                .matches("foo_py39_0")
+        );
+        assert!(
+            StringMatcher::from_str("*py39*")
+                .unwrap()
+                .matches("foo_PY39_0")
+        );
 
         // Regex
         assert!(StringMatcher::from_str("^Py.*$").unwrap().matches("py37_0"));

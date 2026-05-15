@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{PackageFile, RunExportsJson};
 use rattler_package_streaming::seek::read_package_file;

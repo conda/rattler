@@ -841,7 +841,7 @@ mod tests {
     fn test_different_build_host_packages_produce_different_hashes() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{package::DistArchiveIdentifier, PackageRecord, Version};
+        use rattler_conda_types::{PackageRecord, Version, package::DistArchiveIdentifier};
 
         use crate::{CondaBinaryData, LockFile};
 

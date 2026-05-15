@@ -1,6 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_conda_types::{ExplicitEnvironmentEntry, ExplicitEnvironmentSpec};
 
 use crate::{error::PyRattlerError, platform::PyPlatform};
