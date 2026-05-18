@@ -70,6 +70,17 @@ struct PendingRequest {
     specs: SourceSpecs,
 }
 
+/// Records cached for a single package name across one or more subdirs.
+/// Used to re-walk extras whose activation happens after the first arrival
+/// of records for the name.
+struct FetchedEntry {
+    pkgs: Vec<PackageRecords>,
+    /// Spec source captured on first arrival. Used by the late-walk path so
+    /// Transitive and Input names follow the same filtering rules they did on
+    /// initial walk.
+    source: SourceSpecs,
+}
+
 /// A spec that references a package by direct URL.
 struct DirectUrlSpec {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -162,6 +173,12 @@ struct QueryExecutor {
     /// Per-name set of extras that are currently active. Grows monotonically
     /// as new extras are discovered via top-level specs and dep parsing.
     active_extras: ahash::HashMap<PackageName, ahash::HashSet<String>>,
+    /// Records cached by name across subdirs. Used to re-walk a name's
+    /// records when an extra activates after the first arrival.
+    fetched: ahash::HashMap<PackageName, FetchedEntry>,
+    /// Per-name set of extras whose deps have already been queued. Used to
+    /// avoid re-walking an extra during late activation.
+    walked_extras: ahash::HashMap<PackageName, ahash::HashSet<String>>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
@@ -301,6 +318,8 @@ impl QueryExecutor {
             seen,
             pending_package_specs,
             active_extras,
+            fetched: ahash::HashMap::default(),
+            walked_extras: ahash::HashMap::default(),
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
@@ -395,23 +414,31 @@ impl QueryExecutor {
         }
     }
 
-    /// Extract dependencies from records and queue them if not seen.
+    /// Extract dependencies from records and queue them if not seen. Base
+    /// deps are walked every arrival; `queue_dependency` dedupes by name so
+    /// re-walking is harmless. Extra deps are walked at most once per
+    /// (name, extra) pair so the late-walk path can pick up only newly
+    /// activated extras.
     fn queue_dependencies(&mut self, pkg: &PackageRecords, request: &PendingRequest) {
-        // Snapshot the set of active extras for this name so we walk only the
-        // deps the solver could actually pull in.
-        let active: Vec<String> = self
-            .active_extras
-            .get(&request.name)
-            .map(|set| set.iter().cloned().collect())
-            .unwrap_or_default();
+        let to_walk_extras: Vec<String> = {
+            let active = self
+                .active_extras
+                .get(&request.name)
+                .cloned()
+                .unwrap_or_default();
+            let walked = self.walked_extras.entry(request.name.clone()).or_default();
+            active
+                .into_iter()
+                .filter(|e| walked.insert(e.clone()))
+                .collect()
+        };
 
         match &request.specs {
             SourceSpecs::Transitive => {
-                // Use precomputed unique deps: base + only the active extras.
                 for dep in pkg.unique_base_deps.iter() {
                     self.queue_dependency(dep);
                 }
-                for extra in &active {
+                for extra in &to_walk_extras {
                     if let Some(deps) = pkg.unique_extra_deps.get(extra) {
                         for dep in deps.iter() {
                             self.queue_dependency(dep);
@@ -420,9 +447,8 @@ impl QueryExecutor {
                 }
             }
             SourceSpecs::Input(specs) => {
-                // For input specs, only process deps from matching records.
-                // A later increment scopes the per-extra walk here as well; for
-                // now we still iterate every extra on matching records.
+                // Input mode still walks every extra of matching records. A
+                // follow-up commit narrows this to the active set.
                 for record in &pkg.records {
                     if !specs.iter().any(|s| s.matches(record.as_ref())) {
                         continue;
@@ -438,6 +464,47 @@ impl QueryExecutor {
                     }
                 }
             }
+        }
+    }
+
+    /// Walk the deps of newly-active extras against records that have
+    /// already been fetched for `name`. Called when [`Self::queue_dependency`]
+    /// activates one or more extras for a name whose records have already
+    /// arrived. Input-mode names are skipped here; they are handled by a
+    /// follow-up commit.
+    fn late_walk(&mut self, name: &PackageName, new_extras: &[String]) {
+        // Collect deps to walk so the borrow on `self.fetched` is released
+        // before we recurse into queue_dependency.
+        let deps_to_walk: Vec<String> = {
+            let Some(entry) = self.fetched.get(name) else {
+                return;
+            };
+            if !matches!(entry.source, SourceSpecs::Transitive) {
+                return;
+            }
+            entry
+                .pkgs
+                .iter()
+                .flat_map(|pkg| {
+                    new_extras.iter().filter_map(move |ext| {
+                        pkg.unique_extra_deps
+                            .get(ext)
+                            .map(|deps| deps.iter().cloned())
+                    })
+                })
+                .flatten()
+                .collect()
+        };
+
+        {
+            let walked = self.walked_extras.entry(name.clone()).or_default();
+            for ext in new_extras {
+                walked.insert(ext.clone());
+            }
+        }
+
+        for dep in &deps_to_walk {
+            self.queue_dependency(dep);
         }
     }
 
@@ -470,15 +537,23 @@ impl QueryExecutor {
                 },
             );
         } else if !extras.is_empty() {
-            // Name has been seen, but the dep may activate new extras. Merge
-            // into the active set so any pending fetch picks them up when its
-            // records arrive. Late activation against already-fetched records
-            // is handled by a later increment.
+            // Name has been seen. Merge any extras the dep activates into the
+            // active set; if records already arrived, walk the new extras
+            // against them.
             let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-            self.active_extras
-                .entry(dependency_name)
-                .or_default()
-                .extend(extras);
+            let newly_added: Vec<String> = {
+                let existing = self
+                    .active_extras
+                    .entry(dependency_name.clone())
+                    .or_default();
+                extras
+                    .into_iter()
+                    .filter(|e| existing.insert(e.clone()))
+                    .collect()
+            };
+            if !newly_added.is_empty() && self.fetched.contains_key(&dependency_name) {
+                self.late_walk(&dependency_name, &newly_added);
+            }
         }
     }
 
@@ -578,6 +653,16 @@ impl QueryExecutor {
                     let (result_idx, request, pkg) = records?;
 
                     if self.recursive {
+                        // Cache for late activations, then walk deps.
+                        let entry =
+                            self.fetched.entry(request.name.clone()).or_insert_with(|| {
+                                FetchedEntry {
+                                    pkgs: Vec::new(),
+                                    source: request.specs.clone(),
+                                }
+                            });
+                        entry.pkgs.push(pkg.clone());
+
                         self.queue_dependencies(&pkg, &request);
                     }
 

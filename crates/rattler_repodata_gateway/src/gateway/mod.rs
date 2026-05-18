@@ -2053,6 +2053,121 @@ mod test {
         );
     }
 
+    /// `helper` depends on `aiohttp` (base) and on `tornado`, and `tornado`
+    /// in turn depends on `aiohttp[extras=[speedups]]`. The [speedups] extra
+    /// may activate after aiohttp's records have already arrived; when that
+    /// happens we must still walk it. `speedups_helper` is gated by the
+    /// speedups extra and must end up fetched.
+    #[tokio::test]
+    async fn extras_late_activation_walks_cached_records() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("helper", "1.0.0", "linux-64", &["aiohttp", "tornado"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "aiohttp",
+                "3.0.0",
+                "linux-64",
+                &[],
+                &[("speedups", &["speedups_helper >=1"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "tornado",
+                "6.0.0",
+                "linux-64",
+                &["aiohttp[extras=[speedups]]"],
+                &[],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("speedups_helper", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"helper".to_string()));
+        assert!(names.contains(&"aiohttp".to_string()));
+        assert!(names.contains(&"tornado".to_string()));
+        assert!(
+            names.contains(&"speedups_helper".to_string()),
+            "late activation of aiohttp[speedups] should walk the extra's deps; got {names:?}",
+        );
+    }
+
+    /// `pkg[full]` activates `pkg[a]` and `pkg[b]`, both of which add their
+    /// own deps. Chained activation on the same package must terminate and
+    /// fetch all of the involved deps.
+    #[tokio::test]
+    async fn extras_chained_activation_same_package() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("driver", "1.0.0", "linux-64", &["pkg[extras=[full]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[
+                    ("full", &["pkg[extras=[a]]", "pkg[extras=[b]]"]),
+                    ("a", &["dep_a >=1"]),
+                    ("b", &["dep_b >=1"]),
+                ],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_a", "1.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_b", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"dep_a".to_string()),
+            "[full] should chain to [a]; got {names:?}",
+        );
+        assert!(
+            names.contains(&"dep_b".to_string()),
+            "[full] should chain to [b]; got {names:?}",
+        );
+    }
+
     /// Black has two extras `d` and `jupyter`. A transitive activation of [d]
     /// must fetch aiohttp but not ipython.
     #[tokio::test]
