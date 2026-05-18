@@ -365,13 +365,18 @@ fn print_transaction(
             String::new()
         };
 
+        let build = r
+            .package_record
+            .build
+            .as_ref()
+            .map_or_else(String::new, ToString::to_string);
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
                 "{}[{}] {} {} {}",
                 r.package_record.name.as_normalized(),
                 features.join(", "),
                 r.package_record.version,
-                r.package_record.build,
+                build,
                 direct_url_print,
             )
         } else {
@@ -379,7 +384,7 @@ fn print_transaction(
                 "{} {} {} {}",
                 r.package_record.name.as_normalized(),
                 r.package_record.version,
-                r.package_record.build,
+                build,
                 direct_url_print,
             )
         }

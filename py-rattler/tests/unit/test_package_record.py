@@ -115,7 +115,7 @@ def test_package_record_setters_and_serialization() -> None:
 
 
 def test_extra_depends_default_empty() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(name="requests", version="2.28.0", build="py3_none_any", build_number=0, subdir="noarch")
     assert record.extra_depends == {}
 
 
@@ -123,7 +123,7 @@ def test_extra_depends_via_init() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build="py3_none_any",
         build_number=0,
         subdir="noarch",
         extra_depends={"security": ["cryptography >=3.0", "pyOpenSSL >=0.14"]},
@@ -132,13 +132,13 @@ def test_extra_depends_via_init() -> None:
 
 
 def test_extra_depends_setter() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(name="requests", version="2.28.0", build="py3_none_any", build_number=0, subdir="noarch")
     record.extra_depends = {"socks": ["PySocks >=1.5.6"]}
     assert record.extra_depends == {"socks": ["PySocks >=1.5.6"]}
 
 
 def test_extra_depends_multiple_conditions() -> None:
-    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record = PackageRecord(name="requests", version="2.28.0", build="py3_none_any", build_number=0, subdir="noarch")
     record.extra_depends = {
         "security": ["cryptography >=3.0"],
         "socks": ["PySocks >=1.5.6"],
@@ -152,7 +152,7 @@ def test_extra_depends_serialization() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build="py3_none_any",
         build_number=0,
         subdir="noarch",
         extra_depends={"security": ["cryptography >=3.0"]},

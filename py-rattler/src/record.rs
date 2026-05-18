@@ -190,13 +190,15 @@ impl PyRecord {
         platform: Option<String>,
         noarch: Option<PyNoArchType>,
         python_site_packages_path: Option<String>,
-    ) -> Self {
+    ) -> PyResult<Self> {
+        let build =
+            BuildString::new(build).map_err(|err| PyValueError::new_err(err.to_string()))?;
         let noarch = noarch.map(Into::into);
-        Self {
+        Ok(Self {
             inner: RecordInner::Package(Arc::new(PackageRecord {
                 name: name.into(),
                 version: VersionWithSource::new(version.0.inner.clone(), version.1),
-                build: BuildString::new_unchecked(build),
+                build,
                 build_number,
                 arch,
                 platform,
@@ -220,7 +222,7 @@ impl PyRecord {
                 timestamp: None,
                 track_features: Vec::new(),
             })),
-        }
+        })
     }
 
     #[staticmethod]
@@ -368,15 +370,21 @@ impl PyRecord {
         self.as_package_record_mut().arch = arch;
     }
 
-    /// The build string of the package.
+    /// The build string of the package. Returns an empty string when the
+    /// package has no build (e.g. a source package without a built artifact).
     #[getter]
     pub fn build(&self) -> String {
-        self.as_package_record().build.to_string()
+        self.as_package_record()
+            .build
+            .as_ref()
+            .map_or_else(String::new, BuildString::to_string)
     }
 
     #[setter]
-    pub fn set_build(&mut self, build: String) {
-        self.as_package_record_mut().build = BuildString::new_unchecked(build);
+    pub fn set_build(&mut self, build: String) -> PyResult<()> {
+        self.as_package_record_mut().build =
+            BuildString::new(build).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Ok(())
     }
 
     /// The build number of the package.

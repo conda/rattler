@@ -1,3 +1,4 @@
+use rattler_conda_types::package::BuildStringError;
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
     InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParsePlatformError,
@@ -32,6 +33,8 @@ pub enum JsError {
     Serde(#[from] serde_wasm_bindgen::Error),
     #[error(transparent)]
     PackageNameError(#[from] InvalidPackageNameError),
+    #[error(transparent)]
+    BuildString(#[from] BuildStringError),
     #[error("{0} is not a valid hex encoded MD5 hash")]
     InvalidHexMd5(String),
     #[error("{0} is not a valid hex encoded SHA256 hash")]
