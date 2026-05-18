@@ -277,6 +277,20 @@ struct CachedTrustedPublishingToken {
 impl CachedTrustedPublishingToken {
     fn new(token: TrustedPublishingToken) -> Self {
         let expires_at = jwt_expiration(token.secret());
+        match expires_at {
+            Some(expires_at) => {
+                tracing::debug!(
+                    "TrustedPublishingMiddleware: minted JWT expires at {:?}, refreshing with a {:?} margin",
+                    expires_at,
+                    TOKEN_REFRESH_MARGIN
+                );
+            }
+            None => {
+                tracing::debug!(
+                    "TrustedPublishingMiddleware: minted token has no readable JWT exp claim; reusing it for the client lifetime"
+                );
+            }
+        }
         Self { token, expires_at }
     }
 
