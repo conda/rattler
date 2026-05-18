@@ -1,16 +1,3 @@
-// This code has been adapted from uv under https://github.com/astral-sh/uv/blob/c5caf92edf539a9ebf24d375871178f8f8a0ab93/crates/uv-publish/src/trusted_publishing.rs
-// The original code is dual-licensed under Apache-2.0 and MIT
-
-//! Trusted publishing (via OIDC).
-//!
-//! The flow:
-//! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
-//!    claim. It owns CI-provider detection and returns `None` when no
-//!    supported provider is present.
-//! 2. Exchange that ID token at the server's mint endpoint for a short-lived
-//!    bearer token usable against the server (read or write, depending on
-//!    server policy).
-
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
