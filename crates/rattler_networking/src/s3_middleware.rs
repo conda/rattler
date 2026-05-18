@@ -74,6 +74,21 @@ impl S3Middleware {
             s3: S3::new(config, auth_storage),
         }
     }
+
+    /// Build an `S3Middleware` from the `s3-options` section of a
+    /// [`rattler_config::config::ConfigBase`], using the provided
+    /// authentication storage for credential lookup.
+    #[cfg(feature = "rattler_config")]
+    pub fn from_config<T>(
+        config: &rattler_config::config::ConfigBase<T>,
+        auth_storage: AuthenticationStorage,
+    ) -> Self
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        let s3_config = compute_s3_config(&config.s3_options.0);
+        Self::new(s3_config, auth_storage)
+    }
 }
 
 impl S3 {

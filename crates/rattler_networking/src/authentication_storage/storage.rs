@@ -73,6 +73,28 @@ impl AuthenticationStorage {
         Ok(storage)
     }
 
+    /// Create an authentication storage from a
+    /// [`rattler_config::config::ConfigBase`].
+    ///
+    /// If `authentication-override-file` is set in the config, it is used as
+    /// the primary file-backed credentials store; otherwise this falls back to
+    /// [`Self::from_env_and_defaults`].
+    #[cfg(feature = "rattler_config")]
+    pub fn from_config<T>(
+        config: &rattler_config::config::ConfigBase<T>,
+    ) -> Result<Self, AuthenticationStorageError>
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        if let Some(auth_file) = config.authentication_override_file.as_ref() {
+            let mut storage = Self::empty();
+            storage.add_backend(Arc::from(FileStorage::from_path(auth_file.clone())?));
+            Ok(storage)
+        } else {
+            Self::from_env_and_defaults()
+        }
+    }
+
     /// Add a new storage backend to the authentication storage
     /// (backends are tried in the order they are added)
     pub fn add_backend(&mut self, backend: Arc<dyn StorageBackend + Send + Sync>) {
@@ -340,5 +362,35 @@ mod tests {
                 .unwrap();
             assert_eq!(retrieved, Some(auth));
         }
+    }
+
+    /// When `authentication-override-file` is set in the config, the resulting
+    /// storage should pick up credentials from that file and have a single
+    /// (file-backed) backend.
+    #[cfg(feature = "rattler_config")]
+    #[test]
+    fn from_config_uses_override_file() {
+        use rattler_config::config::ConfigBase;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let auth_path = temp_dir.path().join("credentials.json");
+        std::fs::write(
+            &auth_path,
+            r#"{"example.com": {"BearerToken": "from-override-file"}}"#,
+        )
+        .unwrap();
+
+        let mut config = ConfigBase::<()>::default();
+        config.authentication_override_file = Some(auth_path);
+
+        let storage = AuthenticationStorage::from_config(&config).unwrap();
+        assert_eq!(storage.backends.len(), 1);
+
+        let (_, retrieved) = storage.get_by_url("https://example.com/foo").unwrap();
+        assert_eq!(
+            retrieved,
+            Some(Authentication::BearerToken("from-override-file".into()))
+        );
     }
 }

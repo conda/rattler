@@ -76,6 +76,36 @@ impl MirrorMiddleware {
     pub fn keys(&self) -> &[(String, Url)] {
         &self.sorted_keys
     }
+
+    /// Construct a `MirrorMiddleware` from the `mirrors` section of a
+    /// [`rattler_config::config::ConfigBase`].
+    ///
+    /// Each mirror URL is treated as a fully-featured mirror (zstd and bz2
+    /// enabled, no failure cap). Use [`MirrorMiddleware::from_map`] directly if
+    /// you need to tune per-mirror behavior.
+    #[cfg(feature = "rattler_config")]
+    pub fn from_config<T>(config: &rattler_config::config::ConfigBase<T>) -> Self
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        let mirror_map = config
+            .mirrors
+            .iter()
+            .map(|(channel, mirrors)| {
+                let mirrors = mirrors
+                    .iter()
+                    .map(|url| Mirror {
+                        url: url.clone(),
+                        no_zstd: false,
+                        no_bz2: false,
+                        max_failures: None,
+                    })
+                    .collect();
+                (channel.clone(), mirrors)
+            })
+            .collect();
+        Self::from_map(mirror_map)
+    }
 }
 
 fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
@@ -291,6 +321,26 @@ mod test {
         let res = client.get("http://bla.com/count").send().await.unwrap();
         assert!(res.status().is_success());
         assert!(res.text().await.unwrap() == "Hi from counter: server 2");
+    }
+
+    #[cfg(feature = "rattler_config")]
+    #[test]
+    fn test_from_config() {
+        use rattler_config::config::ConfigBase;
+
+        let mut config = ConfigBase::<()>::default();
+        config.mirrors.insert(
+            "https://conda.anaconda.org".parse().unwrap(),
+            vec![
+                "https://mirror1.example.com".parse().unwrap(),
+                "https://mirror2.example.com".parse().unwrap(),
+            ],
+        );
+
+        let middleware = MirrorMiddleware::from_config(&config);
+        let keys = middleware.keys();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].1.as_str(), "https://conda.anaconda.org/");
     }
 
     #[test]

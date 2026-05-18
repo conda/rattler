@@ -133,6 +133,24 @@ impl GatewayBuilder {
         self
     }
 
+    /// Apply the settings from a [`rattler_config::config::ConfigBase`] to the
+    /// builder.
+    ///
+    /// This wires up the `repodata-config` section to the gateway's channel
+    /// configuration and uses `concurrency.downloads` as the limit on
+    /// concurrent HTTP requests. Other builder fields (client, cache directory,
+    /// package cache) are left untouched and can still be set explicitly.
+    #[cfg(feature = "rattler_config")]
+    #[must_use]
+    pub fn with_config<T>(mut self, config: &rattler_config::config::ConfigBase<T>) -> Self
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        self.set_channel_config(ChannelConfig::from(config));
+        self.set_max_concurrent_requests(config.concurrency.downloads);
+        self
+    }
+
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
@@ -174,5 +192,60 @@ impl GatewayBuilder {
                 concurrent_requests_semaphore,
             }),
         }
+    }
+}
+
+#[cfg(all(test, feature = "rattler_config"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_config_applies_repodata_and_concurrency() {
+        use rattler_config::config::{
+            ConfigBase,
+            concurrency::ConcurrencyConfig,
+            repodata_config::{RepodataChannelConfig, RepodataConfig},
+        };
+
+        let channel_url: url::Url = "https://conda.anaconda.org/conda-forge/".parse().unwrap();
+        let config = ConfigBase::<()> {
+            repodata_config: RepodataConfig {
+                default: RepodataChannelConfig {
+                    disable_zstd: Some(true),
+                    disable_bzip2: Some(false),
+                    disable_sharded: Some(true),
+                    ..Default::default()
+                },
+                per_channel: [(
+                    channel_url.clone(),
+                    RepodataChannelConfig {
+                        disable_zstd: Some(false),
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            },
+            concurrency: ConcurrencyConfig {
+                solves: 1,
+                downloads: 7,
+            },
+            ..Default::default()
+        };
+
+        let builder = GatewayBuilder::new().with_config(&config);
+        assert!(matches!(
+            builder.max_concurrent_requests,
+            MaxConcurrency::Limited(7)
+        ));
+        assert!(!builder.channel_config.default.zstd_enabled);
+        assert!(builder.channel_config.default.bz2_enabled);
+        assert!(!builder.channel_config.default.sharded_enabled);
+        assert!(
+            builder
+                .channel_config
+                .per_channel
+                .contains_key(&channel_url)
+        );
     }
 }
