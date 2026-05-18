@@ -176,9 +176,6 @@ struct QueryExecutor {
     /// Records cached by name across subdirs. Used to re-walk a name's
     /// records when an extra activates after the first arrival.
     fetched: ahash::HashMap<PackageName, FetchedEntry>,
-    /// Per-name set of extras whose deps have already been queued. Used to
-    /// avoid re-walking an extra during late activation.
-    walked_extras: ahash::HashMap<PackageName, ahash::HashSet<String>>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
@@ -319,7 +316,6 @@ impl QueryExecutor {
             pending_package_specs,
             active_extras,
             fetched: ahash::HashMap::default(),
-            walked_extras: ahash::HashMap::default(),
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
@@ -414,31 +410,22 @@ impl QueryExecutor {
         }
     }
 
-    /// Extract dependencies from records and queue them if not seen. Base
-    /// deps are walked every arrival; `queue_dependency` dedupes by name so
-    /// re-walking is harmless. Extra deps are walked at most once per
-    /// (name, extra) pair so the late-walk path can pick up only newly
-    /// activated extras.
+    /// Extract dependencies from records and queue them if not seen.
+    /// `queue_dependency` dedupes by name so re-walking the same deps on
+    /// multi-subdir arrivals is harmless.
     fn queue_dependencies(&mut self, pkg: &PackageRecords, request: &PendingRequest) {
-        let to_walk_extras: Vec<String> = {
-            let active = self
-                .active_extras
-                .get(&request.name)
-                .cloned()
-                .unwrap_or_default();
-            let walked = self.walked_extras.entry(request.name.clone()).or_default();
-            active
-                .into_iter()
-                .filter(|e| walked.insert(e.clone()))
-                .collect()
-        };
+        let active: Vec<String> = self
+            .active_extras
+            .get(&request.name)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default();
 
         match &request.specs {
             SourceSpecs::Transitive => {
                 for dep in pkg.unique_base_deps.iter() {
                     self.queue_dependency(dep);
                 }
-                for extra in &to_walk_extras {
+                for extra in &active {
                     if let Some(deps) = pkg.unique_extra_deps.get(extra) {
                         for dep in deps.iter() {
                             self.queue_dependency(dep);
@@ -447,8 +434,6 @@ impl QueryExecutor {
                 }
             }
             SourceSpecs::Input(specs) => {
-                // Input mode still walks every extra of matching records. A
-                // follow-up commit narrows this to the active set.
                 for record in &pkg.records {
                     if !specs.iter().any(|s| s.matches(record.as_ref())) {
                         continue;
@@ -456,10 +441,13 @@ impl QueryExecutor {
                     for dependency in &record.package_record.depends {
                         self.queue_dependency(dependency);
                     }
-                    for (_, dependencies) in record.package_record.experimental_extra_depends.iter()
-                    {
-                        for dependency in dependencies {
-                            self.queue_dependency(dependency);
+                    for extra in &active {
+                        if let Some(deps) =
+                            record.package_record.experimental_extra_depends.get(extra)
+                        {
+                            for dependency in deps {
+                                self.queue_dependency(dependency);
+                            }
                         }
                     }
                 }
@@ -470,38 +458,50 @@ impl QueryExecutor {
     /// Walk the deps of newly-active extras against records that have
     /// already been fetched for `name`. Called when [`Self::queue_dependency`]
     /// activates one or more extras for a name whose records have already
-    /// arrived. Input-mode names are skipped here; they are handled by a
-    /// follow-up commit.
+    /// arrived. For Input-mode names, only deps from records matching the
+    /// stored specs are walked.
     fn late_walk(&mut self, name: &PackageName, new_extras: &[String]) {
-        // Collect deps to walk so the borrow on `self.fetched` is released
-        // before we recurse into queue_dependency.
+        // Collect deps so the borrow on `self.fetched` is released before
+        // recursing into queue_dependency.
         let deps_to_walk: Vec<String> = {
             let Some(entry) = self.fetched.get(name) else {
                 return;
             };
-            if !matches!(entry.source, SourceSpecs::Transitive) {
-                return;
-            }
-            entry
-                .pkgs
-                .iter()
-                .flat_map(|pkg| {
-                    new_extras.iter().filter_map(move |ext| {
-                        pkg.unique_extra_deps
-                            .get(ext)
-                            .map(|deps| deps.iter().cloned())
+            match &entry.source {
+                SourceSpecs::Transitive => entry
+                    .pkgs
+                    .iter()
+                    .flat_map(|pkg| {
+                        new_extras.iter().filter_map(move |ext| {
+                            pkg.unique_extra_deps
+                                .get(ext)
+                                .map(|deps| deps.iter().cloned())
+                        })
                     })
-                })
-                .flatten()
-                .collect()
-        };
-
-        {
-            let walked = self.walked_extras.entry(name.clone()).or_default();
-            for ext in new_extras {
-                walked.insert(ext.clone());
+                    .flatten()
+                    .collect(),
+                SourceSpecs::Input(specs) => entry
+                    .pkgs
+                    .iter()
+                    .flat_map(|pkg| {
+                        pkg.records.iter().filter_map(move |record| {
+                            if !specs.iter().any(|s| s.matches(record.as_ref())) {
+                                return None;
+                            }
+                            Some(new_extras.iter().filter_map(move |ext| {
+                                record
+                                    .package_record
+                                    .experimental_extra_depends
+                                    .get(ext)
+                                    .map(|deps| deps.iter().cloned())
+                            }))
+                        })
+                    })
+                    .flatten()
+                    .flatten()
+                    .collect(),
             }
-        }
+        };
 
         for dep in &deps_to_walk {
             self.queue_dependency(dep);

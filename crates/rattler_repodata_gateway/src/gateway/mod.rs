@@ -2168,6 +2168,177 @@ mod test {
         );
     }
 
+    fn extras_options() -> rattler_conda_types::ParseMatchSpecOptions {
+        rattler_conda_types::ParseMatchSpecOptions::default().with_experimental_extras(true)
+    }
+
+    /// User asks for `black` directly (Input). Black has extras `d` and
+    /// `jupyter`, neither requested. Neither aiohttp nor ipython must be
+    /// fetched.
+    #[tokio::test]
+    async fn extras_input_skipped_when_none_active() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"black".to_string()));
+        assert!(names.contains(&"click".to_string()));
+        assert!(
+            !names.contains(&"aiohttp".to_string()),
+            "aiohttp must not be fetched when black has no active extras; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "ipython must not be fetched when black has no active extras; got {names:?}",
+        );
+    }
+
+    /// User asks for `black[extras=[d]]`. aiohttp must be fetched; the other
+    /// extra's deps must not.
+    #[tokio::test]
+    async fn extras_input_walks_only_requested() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black[extras=[d]]", extras_options()).unwrap()]
+                    .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"aiohttp".to_string()));
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "ipython must not be fetched when only [d] is active; got {names:?}",
+        );
+    }
+
+    /// User asks for `pkg >=2` (Input with version constraint). A transitive
+    /// dep later activates `pkg[extras=[d]]`. The extra's deps must only be
+    /// walked from records that match the original version constraint.
+    #[tokio::test]
+    async fn extras_input_late_activation_respects_spec_filter() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        // Two versions of pkg with different deps in the [d] extra.
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_for_v1 >=1"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "2.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_for_v2 >=1"])],
+            ),
+        );
+        // Transitive activator: introduced via a separate top-level package.
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_for_v1", "1.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_for_v2", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![
+                    MatchSpec::from_str("pkg >=2", Lenient).unwrap(),
+                    MatchSpec::from_str("activator", Lenient).unwrap(),
+                ]
+                .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"dep_for_v2".to_string()),
+            "dep from matching pkg record must be fetched; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"dep_for_v1".to_string()),
+            "dep from non-matching pkg record must not be fetched; got {names:?}",
+        );
+    }
+
     /// Black has two extras `d` and `jupyter`. A transitive activation of [d]
     /// must fetch aiohttp but not ipython.
     #[tokio::test]
