@@ -45,8 +45,8 @@ pub struct MinimalPrefixRecord {
     pub name: PackageName,
     /// The package version
     pub version: VersionWithSource,
-    /// The build string
-    pub build: BuildString,
+    /// The build string of the package, if any.
+    pub build: Option<BuildString>,
 
     /// SHA256 hash of the package
     pub sha256: Option<Sha256Hash>,

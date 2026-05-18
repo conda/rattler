@@ -273,14 +273,18 @@ impl PrefixRecord {
     }
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
-    /// `<package_name>-<version>-<build>.json`.
+    /// `<package_name>-<version>-<build>.json`, or `<package_name>-<version>.json`
+    /// when the package has no build string.
     pub fn file_name(&self) -> String {
-        format!(
-            "{}-{}-{}.json",
-            self.repodata_record.package_record.name.as_normalized(),
-            self.repodata_record.package_record.version,
-            self.repodata_record.package_record.build
-        )
+        let record = &self.repodata_record.package_record;
+        match &record.build {
+            Some(build) => format!(
+                "{}-{}-{build}.json",
+                record.name.as_normalized(),
+                record.version,
+            ),
+            None => format!("{}-{}.json", record.name.as_normalized(), record.version),
+        }
     }
 
     /// Writes the contents of this instance to the file at the specified

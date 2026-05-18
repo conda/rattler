@@ -5,7 +5,7 @@ def test_whl_package_record_construction_with_url() -> None:
     record = PackageRecord(
         name="numpy",
         version="1.24.0",
-        build="cp39-cp39-linux_x86_64",
+        build="cp39_cp39_linux_x86_64",
         build_number=0,
         subdir="linux-64",
     )
@@ -22,7 +22,7 @@ def test_whl_package_record_construction_with_relative_path() -> None:
     record = PackageRecord(
         name="requests",
         version="2.28.0",
-        build="py3-none-any",
+        build="py3_none_any",
         build_number=0,
         subdir="noarch",
     )
