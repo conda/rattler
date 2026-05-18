@@ -110,24 +110,24 @@ def test_experimental_extras_multiple() -> None:
 
 def test_experimental_conditionals_enabled() -> None:
     """Test that conditionals syntax can be parsed when experimental_conditionals is enabled."""
-    m = MatchSpec('requests[when="python >=3.6"]', experimental_conditionals=True)
+    m = MatchSpec('requests[when="python>=3.6"]', experimental_conditionals=True)
     assert m.name is not None
     assert m.name.normalized == "requests"
-    assert m.condition == "python >=3.6"
+    assert m.condition == "python>=3.6"
 
 
 def test_experimental_conditionals_disabled() -> None:
     """Test that conditionals are rejected when experimental_conditionals is disabled."""
     # When disabled, the when key should be rejected as invalid
     with pytest.raises(Exception):
-        MatchSpec('requests[when="python >=3.6"]', experimental_conditionals=False)
+        MatchSpec('requests[when="python>=3.6"]', experimental_conditionals=False)
 
 
 def test_experimental_conditionals_default() -> None:
     """Test that conditionals are rejected by default (experimental_conditionals defaults to False)."""
     # When disabled, the when key should be rejected as invalid
     with pytest.raises(Exception):
-        MatchSpec('requests[when="python >=3.6"]')
+        MatchSpec('requests[when="python>=3.6"]')
 
 
 def test_deprecated_if_syntax_returns_error() -> None:
@@ -141,11 +141,11 @@ def test_deprecated_if_syntax_returns_error() -> None:
 
 def test_experimental_both_features() -> None:
     """Test using both experimental extras and conditionals together."""
-    m = MatchSpec('numpy[extras=[test], when="python >=3.7"]', experimental_extras=True, experimental_conditionals=True)
+    m = MatchSpec('numpy[extras=[test], when="python>=3.7"]', experimental_extras=True, experimental_conditionals=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]
-    assert m.condition == "python >=3.7"
+    assert m.condition == "python>=3.7"
 
 
 def test_nameless_experimental_extras() -> None:
