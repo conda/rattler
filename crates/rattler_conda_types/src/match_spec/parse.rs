@@ -566,6 +566,7 @@ fn parse_bracket_vec_into_components(
                 }
             }
             "license_family" => match_spec.license_family = Some(value.to_string()),
+            "namespace" => match_spec.namespace = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
@@ -2154,6 +2155,25 @@ mod tests {
             let reparsed = parse_conditional(&spec.to_string()).expect(input);
             assert_eq!(spec, reparsed, "round-trip failed for {input}");
         }
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_channel_subdir_namespace() {
+        // Channel, subdir, and namespace must be expressed via bracket keys
+        // inside a `when=` condition (no `channel/subdir:namespace:name`
+        // prefix), since the spec mandates pure square-bracket syntax.
+        let spec = parse_conditional(
+            r#"foo[when="python[channel=\"conda-forge\", subdir=\"linux-64\", namespace=\"py\"]"]"#,
+        )
+        .unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(
+            condition,
+            r#"python[channel="conda-forge", subdir="linux-64", namespace="py"]"#
+        );
+
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
     }
 
     #[test]

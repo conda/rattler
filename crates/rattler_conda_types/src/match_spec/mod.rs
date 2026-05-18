@@ -275,18 +275,6 @@ impl MatchSpec {
             "MatchSpec inside a `when=` condition must not itself carry a `when` clause",
         );
 
-        if let Some(channel) = &self.channel {
-            write!(f, "{}", channel.name())?;
-            if let Some(subdir) = &self.subdir {
-                write!(f, "/{subdir}")?;
-            }
-        }
-        if let Some(namespace) = &self.namespace {
-            write!(f, ":{namespace}:")?;
-        } else if self.channel.is_some() || self.subdir.is_some() {
-            write!(f, "::")?;
-        }
-
         write!(f, "{}", self.name)?;
 
         if self.is_simple_for_condition() {
@@ -314,6 +302,18 @@ impl MatchSpec {
 
         if let Some(build_number) = &self.build_number {
             keys.push(format!("build_number=\"{build_number}\""));
+        }
+
+        if let Some(channel) = &self.channel {
+            keys.push(format!("channel=\"{}\"", channel.name()));
+        }
+
+        if let Some(subdir) = &self.subdir {
+            keys.push(format!("subdir=\"{subdir}\""));
+        }
+
+        if let Some(namespace) = &self.namespace {
+            keys.push(format!("namespace=\"{namespace}\""));
         }
 
         if let Some(extras) = &self.extras {
