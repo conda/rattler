@@ -16,6 +16,7 @@ pub mod build;
 pub mod channel_config;
 pub mod concurrency;
 pub mod index;
+pub mod link_config;
 pub mod proxy;
 pub mod repodata_config;
 pub mod run_post_link_scripts;
