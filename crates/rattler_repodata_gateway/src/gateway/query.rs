@@ -307,13 +307,15 @@ impl QueryExecutor {
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic
-                let unique_deps = super::subdir::extract_unique_deps(records.iter().map(|r| &**r));
+                let (unique_base_deps, unique_extra_deps) =
+                    super::subdir::extract_unique_deps_split(records.iter().map(|r| &**r));
                 Ok((
                     0,
                     SourceSpecs::Input(vec![spec]),
                     PackageRecords {
                         records,
-                        unique_deps,
+                        unique_base_deps,
+                        unique_extra_deps,
                     },
                 ))
             }));
@@ -361,10 +363,16 @@ impl QueryExecutor {
     fn queue_dependencies(&mut self, pkg: &PackageRecords, request_specs: &SourceSpecs) {
         match request_specs {
             SourceSpecs::Transitive => {
-                // Use precomputed unique deps — typically ~50-100 strings
-                // instead of iterating all records (~20,000 dep strings).
-                for dep in pkg.unique_deps.iter() {
+                // Use precomputed unique deps. Walk base deps and every extra's
+                // deps; a later increment will restrict the extras walked to
+                // those actually active for this name.
+                for dep in pkg.unique_base_deps.iter() {
                     self.queue_dependency(dep);
+                }
+                for deps in pkg.unique_extra_deps.values() {
+                    for dep in deps.iter() {
+                        self.queue_dependency(dep);
+                    }
                 }
             }
             SourceSpecs::Input(specs) => {

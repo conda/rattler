@@ -13,7 +13,7 @@ use url::Url;
 use crate::{
     GatewayError,
     fetch::FetchRepoDataError,
-    gateway::subdir::{PackageRecords, extract_unique_deps},
+    gateway::subdir::{PackageRecords, extract_unique_deps_split},
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -154,10 +154,12 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 }));
             }
 
-            let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
+            let (unique_base_deps, unique_extra_deps) =
+                extract_unique_deps_split(records.iter().map(|r| &**r));
             Ok(PackageRecords {
                 records,
-                unique_deps,
+                unique_base_deps,
+                unique_extra_deps,
             })
         };
 

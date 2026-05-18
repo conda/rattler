@@ -1,47 +1,70 @@
 use std::sync::Arc;
 
+use ahash::HashMap;
 use rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisionInfo};
 
 use super::GatewayError;
 use crate::Reporter;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
-/// Records for a single package, with precomputed unique dependency strings.
+/// Records for a single package, with precomputed unique dependency strings
+/// split between unconditional (base) deps and per-extra deps.
 ///
-/// The `unique_deps` field contains the deduplicated set of dependency strings
-/// across all versions of the package. This avoids iterating all records
-/// during dependency resolution (e.g. 2000 numpy versions × 10 deps = 20,000
-/// strings reduced to ~50 unique ones).
+/// The split lets the gateway walk only the extras that are actually active
+/// for a name instead of cascading through every extra's dependencies. For
+/// packages without any extras (the common case), `unique_extra_deps` is
+/// empty.
 #[derive(Clone, Debug, Default)]
 pub struct PackageRecords {
     /// All repodata records for this package.
     pub records: Vec<Arc<RepoDataRecord>>,
 
-    /// Unique dependency strings across all records.
-    pub unique_deps: Arc<[String]>,
+    /// Unique base dependency strings across all records.
+    pub unique_base_deps: Arc<[String]>,
+
+    /// Unique dependency strings per extra, deduplicated across all records.
+    pub unique_extra_deps: ExtraDeps,
 }
 
-/// Extract the unique dependency strings from a set of records.
-pub(crate) fn extract_unique_deps<'a>(
+/// Per-extra deduplicated dependency strings. Empty for packages without any
+/// extras (the common case).
+pub type ExtraDeps = Arc<HashMap<String, Arc<[String]>>>;
+
+/// Extract the unique dependency strings from a set of records, split into
+/// base deps and per-extra deps. Each output list is deduplicated and a dep
+/// that appears in the base list is not repeated in any extra list.
+pub(crate) fn extract_unique_deps_split<'a>(
     records: impl IntoIterator<Item = &'a RepoDataRecord>,
-) -> Arc<[String]> {
-    let mut seen = ahash::HashSet::<String>::default();
-    let mut deps = Vec::new();
+) -> (Arc<[String]>, ExtraDeps) {
+    let mut base_seen = ahash::HashSet::<String>::default();
+    let mut base = Vec::new();
+    let mut per_extra: HashMap<String, (ahash::HashSet<String>, Vec<String>)> = HashMap::default();
+
     for record in records {
         for dep in &record.package_record.depends {
-            if seen.insert(dep.clone()) {
-                deps.push(dep.clone());
+            if base_seen.insert(dep.clone()) {
+                base.push(dep.clone());
             }
         }
-        for (_, extra_deps) in record.package_record.experimental_extra_depends.iter() {
+        for (extra, extra_deps) in record.package_record.experimental_extra_depends.iter() {
+            let entry = per_extra.entry(extra.clone()).or_default();
             for dep in extra_deps {
-                if seen.insert(dep.clone()) {
-                    deps.push(dep.clone());
+                if base_seen.contains(dep) {
+                    continue;
+                }
+                if entry.0.insert(dep.clone()) {
+                    entry.1.push(dep.clone());
                 }
             }
         }
     }
-    Arc::from(deps)
+
+    let per_extra: HashMap<String, Arc<[String]>> = per_extra
+        .into_iter()
+        .map(|(extra, (_, deps))| (extra, Arc::from(deps)))
+        .collect();
+
+    (Arc::from(base), Arc::new(per_extra))
 }
 
 pub enum Subdir {
@@ -139,5 +162,133 @@ pub trait SubdirClient: Send + Sync {
     /// Returns repodata revisions advertised by the subdirectory.
     fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
         &[]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use rattler_conda_types::{
+        package::DistArchiveIdentifier, NoArchType, PackageRecord, RepoDataRecord,
+        VersionWithSource,
+    };
+    use url::Url;
+
+    use super::extract_unique_deps_split;
+
+    fn make_record(name: &str, deps: &[&str], extra_deps: &[(&str, &[&str])]) -> RepoDataRecord {
+        let mut experimental_extra_depends: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (extra, items) in extra_deps {
+            experimental_extra_depends.insert(
+                (*extra).to_string(),
+                items.iter().map(|s| (*s).to_string()).collect(),
+            );
+        }
+
+        let package_record = PackageRecord {
+            arch: None,
+            build: "0".to_string(),
+            build_number: 0,
+            constrains: Vec::new(),
+            depends: deps.iter().map(|s| (*s).to_string()).collect(),
+            features: None,
+            flags: Vec::new(),
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: None,
+            license_family: None,
+            md5: None,
+            name: name.parse().unwrap(),
+            noarch: NoArchType::default(),
+            platform: None,
+            python_site_packages_path: None,
+            experimental_extra_depends,
+            sha256: None,
+            size: None,
+            subdir: "linux-64".to_string(),
+            timestamp: None,
+            track_features: Vec::new(),
+            version: VersionWithSource::from_str("1.0").unwrap(),
+            purls: None,
+            run_exports: None,
+        };
+
+        RepoDataRecord {
+            url: Url::parse(&format!("https://example.com/{name}-1.0-0.conda")).unwrap(),
+            channel: None,
+            package_record,
+            identifier: format!("{name}-1.0-0.conda")
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn extract_unique_deps_split_base_only() {
+        let rec = make_record("foo", &["bar >=1", "baz"], &[]);
+        let (base, per_extra) = extract_unique_deps_split([&rec]);
+        assert_eq!(&*base, &["bar >=1".to_string(), "baz".to_string()]);
+        assert!(per_extra.is_empty());
+    }
+
+    #[test]
+    fn extract_unique_deps_split_dedupes_across_records() {
+        let rec_a = make_record("foo", &["bar >=1", "baz"], &[]);
+        let rec_b = make_record("foo", &["bar >=1", "qux"], &[]);
+        let (base, per_extra) = extract_unique_deps_split([&rec_a, &rec_b]);
+        assert_eq!(
+            &*base,
+            &["bar >=1".to_string(), "baz".to_string(), "qux".to_string()]
+        );
+        assert!(per_extra.is_empty());
+    }
+
+    #[test]
+    fn extract_unique_deps_split_per_extra() {
+        let rec = make_record(
+            "black",
+            &["click >=8"],
+            &[
+                ("d", &["aiohttp >=3"]),
+                ("jupyter", &["ipython", "qtconsole"]),
+            ],
+        );
+        let (base, per_extra) = extract_unique_deps_split([&rec]);
+        assert_eq!(&*base, &["click >=8".to_string()]);
+        assert_eq!(per_extra.len(), 2);
+        assert_eq!(&*per_extra["d"], &["aiohttp >=3".to_string()]);
+        assert_eq!(
+            &*per_extra["jupyter"],
+            &["ipython".to_string(), "qtconsole".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_unique_deps_split_skips_extra_dep_already_in_base() {
+        let rec = make_record("black", &["aiohttp"], &[("d", &["aiohttp", "aiosignal"])]);
+        let (base, per_extra) = extract_unique_deps_split([&rec]);
+        assert_eq!(&*base, &["aiohttp".to_string()]);
+        assert_eq!(&*per_extra["d"], &["aiosignal".to_string()]);
+    }
+
+    /// A dep that appears in the base set of one record and in an extra of
+    /// another must not be repeated in the extra (base wins).
+    #[test]
+    fn extract_unique_deps_split_base_wins_across_records() {
+        let rec_a = make_record("black", &["aiohttp"], &[]);
+        let rec_b = make_record("black", &[], &[("d", &["aiohttp", "aiosignal"])]);
+        let (base, per_extra) = extract_unique_deps_split([&rec_a, &rec_b]);
+        assert_eq!(&*base, &["aiohttp".to_string()]);
+        assert_eq!(&*per_extra["d"], &["aiosignal".to_string()]);
+    }
+
+    #[test]
+    fn extract_unique_deps_split_empty_records() {
+        let records: Vec<&RepoDataRecord> = Vec::new();
+        let (base, per_extra) = extract_unique_deps_split(records);
+        assert!(base.is_empty());
+        assert!(per_extra.is_empty());
     }
 }
