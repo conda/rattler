@@ -60,6 +60,15 @@ enum SourceSpecs {
     Transitive,
 }
 
+/// A request to fetch records for a single package name, together with the
+/// extras that should be activated for that name. `extras` is informational
+/// for now; later increments use it to scope the dep walk.
+#[derive(Clone)]
+struct PendingRequest {
+    specs: SourceSpecs,
+    extras: ahash::HashSet<String>,
+}
+
 /// A spec that references a package by direct URL.
 struct DirectUrlSpec {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -148,7 +157,10 @@ struct QueryExecutor {
     // Mutable state during execution
     /// Normalized (lowercase) package names we've already queued.
     seen: hashbrown::HashMap<String, (), ahash::RandomState>,
-    pending_package_specs: ahash::HashMap<PackageName, SourceSpecs>,
+    pending_package_specs: ahash::HashMap<PackageName, PendingRequest>,
+    /// Per-name set of extras that are currently active. Grows monotonically
+    /// as new extras are discovered via top-level specs and dep parsing.
+    active_extras: ahash::HashMap<PackageName, ahash::HashSet<String>>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
@@ -175,7 +187,10 @@ impl QueryExecutor {
         } = query;
 
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
-        let mut pending_package_specs = ahash::HashMap::default();
+        let mut pending_package_specs: ahash::HashMap<PackageName, PendingRequest> =
+            ahash::HashMap::default();
+        let mut active_extras: ahash::HashMap<PackageName, ahash::HashSet<String>> =
+            ahash::HashMap::default();
         let mut direct_url_specs = Vec::new();
         let mut pending_pattern_specs = Vec::new();
         let pattern_names_seen = HashSet::new();
@@ -188,17 +203,36 @@ impl QueryExecutor {
                     GatewayError::MatchSpecWithoutExactName(Box::new(spec.clone())),
                 )?;
                 seen.insert(name.as_normalized().to_string(), ());
+                if let Some(extras) = spec.extras.as_ref() {
+                    active_extras
+                        .entry(name.clone())
+                        .or_default()
+                        .extend(extras.iter().cloned());
+                }
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
             } else {
                 match &spec.name {
                     PackageNameMatcher::Exact(name) => {
                         seen.insert(name.as_normalized().to_string(), ());
-                        let pending = pending_package_specs
-                            .entry(name.clone())
-                            .or_insert_with(|| SourceSpecs::Input(vec![]));
-                        let SourceSpecs::Input(input_specs) = pending else {
+                        if let Some(extras) = spec.extras.as_ref() {
+                            active_extras
+                                .entry(name.clone())
+                                .or_default()
+                                .extend(extras.iter().cloned());
+                        }
+                        let pending =
+                            pending_package_specs
+                                .entry(name.clone())
+                                .or_insert_with(|| PendingRequest {
+                                    specs: SourceSpecs::Input(vec![]),
+                                    extras: ahash::HashSet::default(),
+                                });
+                        let SourceSpecs::Input(input_specs) = &mut pending.specs else {
                             panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
                         };
+                        if let Some(extras) = spec.extras.as_ref() {
+                            pending.extras.extend(extras.iter().cloned());
+                        }
                         input_specs.push(spec);
                     }
                     matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)) => {
@@ -268,6 +302,7 @@ impl QueryExecutor {
             pattern_names_seen,
             seen,
             pending_package_specs,
+            active_extras,
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
@@ -309,9 +344,17 @@ impl QueryExecutor {
                 // Push the direct url in the first subdir result for channel priority logic
                 let (unique_base_deps, unique_extra_deps) =
                     super::subdir::extract_unique_deps_split(records.iter().map(|r| &**r));
+                let extras: ahash::HashSet<String> = spec
+                    .extras
+                    .as_ref()
+                    .map(|e| e.iter().cloned().collect())
+                    .unwrap_or_default();
                 Ok((
                     0,
-                    SourceSpecs::Input(vec![spec]),
+                    PendingRequest {
+                        specs: SourceSpecs::Input(vec![spec]),
+                        extras,
+                    },
                     PackageRecords {
                         records,
                         unique_base_deps,
@@ -337,9 +380,9 @@ impl QueryExecutor {
 
     /// Drain `pending_package_specs` and spawn fetch futures for each.
     fn spawn_package_fetches(&mut self) {
-        for (package_name, specs) in self.pending_package_specs.drain() {
+        for (package_name, request) in self.pending_package_specs.drain() {
             for handle in &self.subdir_handles {
-                let specs = specs.clone();
+                let request = request.clone();
                 let package_name = package_name.clone();
                 let reporter = self.reporter.clone();
                 let result_index = handle.result_index;
@@ -351,8 +394,8 @@ impl QueryExecutor {
                         Subdir::Found(subdir) => subdir
                             .get_or_fetch_package_records(&package_name, reporter)
                             .await
-                            .map(|pkg| (result_index, specs, pkg)),
-                        Subdir::NotFound => Ok((result_index, specs, PackageRecords::default())),
+                            .map(|pkg| (result_index, request, pkg)),
+                        Subdir::NotFound => Ok((result_index, request, PackageRecords::default())),
                     }
                 }));
             }
@@ -360,8 +403,8 @@ impl QueryExecutor {
     }
 
     /// Extract dependencies from records and queue them if not seen.
-    fn queue_dependencies(&mut self, pkg: &PackageRecords, request_specs: &SourceSpecs) {
-        match request_specs {
+    fn queue_dependencies(&mut self, pkg: &PackageRecords, request: &PendingRequest) {
+        match &request.specs {
             SourceSpecs::Transitive => {
                 // Use precomputed unique deps. Walk base deps and every extra's
                 // deps; a later increment will restrict the extras walked to
@@ -405,8 +448,13 @@ impl QueryExecutor {
         if let hashbrown::hash_map::EntryRef::Vacant(entry) = self.seen.entry_ref(normalized_str) {
             entry.insert(());
             let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-            self.pending_package_specs
-                .insert(dependency_name, SourceSpecs::Transitive);
+            self.pending_package_specs.insert(
+                dependency_name,
+                PendingRequest {
+                    specs: SourceSpecs::Transitive,
+                    extras: ahash::HashSet::default(),
+                },
+            );
         }
     }
 
@@ -415,11 +463,11 @@ impl QueryExecutor {
         &mut self,
         result_idx: usize,
         records: Vec<Arc<RepoDataRecord>>,
-        request_specs: &SourceSpecs,
+        request: &PendingRequest,
     ) {
         let result = &mut self.result[result_idx];
 
-        match request_specs {
+        match &request.specs {
             SourceSpecs::Transitive => {
                 // All records match — extend with Arc clones (cheap refcount bumps).
                 result.records.extend(records);
@@ -460,12 +508,24 @@ impl QueryExecutor {
                         .insert(name.as_normalized().to_string(), ())
                         .is_none()
                     {
+                        if let Some(extras) = spec.extras.as_ref() {
+                            self.active_extras
+                                .entry(name.clone())
+                                .or_default()
+                                .extend(extras.iter().cloned());
+                        }
                         let pending = self
                             .pending_package_specs
                             .entry(name.clone())
-                            .or_insert_with(|| SourceSpecs::Input(vec![]));
-                        if let SourceSpecs::Input(input_specs) = pending {
+                            .or_insert_with(|| PendingRequest {
+                                specs: SourceSpecs::Input(vec![]),
+                                extras: ahash::HashSet::default(),
+                            });
+                        if let SourceSpecs::Input(input_specs) = &mut pending.specs {
                             input_specs.push(spec.clone());
+                        }
+                        if let Some(extras) = spec.extras.as_ref() {
+                            pending.extras.extend(extras.iter().cloned());
                         }
                     }
                     break;
@@ -494,13 +554,13 @@ impl QueryExecutor {
 
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
-                    let (result_idx, request_specs, pkg) = records?;
+                    let (result_idx, request, pkg) = records?;
 
                     if self.recursive {
-                        self.queue_dependencies(&pkg, &request_specs);
+                        self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(result_idx, pkg.records, &request_specs);
+                    self.accumulate_records(result_idx, pkg.records, &request);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -533,7 +593,7 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 
 /// Result type for pending record fetches.
 type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
-type PendingRecordsResult = Result<(usize, SourceSpecs, PackageRecords), GatewayError>;
+type PendingRecordsResult = Result<(usize, PendingRequest, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
