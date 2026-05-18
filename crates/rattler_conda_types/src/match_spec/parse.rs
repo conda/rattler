@@ -2110,6 +2110,73 @@ mod tests {
     }
 
     #[test]
+    fn test_conditional_render_bracket_form_with_build() {
+        // A leaf with a build constraint cannot use the compact `name op version`
+        // form, so the renderer falls back to the bracket syntax.
+        let spec = parse_conditional(r#"foo[when="python >=3.8[build=\"py39*\"]"]"#).unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(condition, r#"python[version=">=3.8", build="py39*"]"#);
+
+        // Round-trip: the rendered MatchSpec parses back to the same value.
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_startswith_version() {
+        // Bare `3.9.*` parses to StrictRange(StartsWith, ...) which renders as
+        // `3.9.*` — no leading operator char. The compact form `python3.9.*`
+        // would not parse back, so we must fall back to the bracket form.
+        let spec = parse_conditional(r#"foo[when="python 3.9.*"]"#).unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(condition, r#"python[version="3.9.*"]"#);
+
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_extra_keys() {
+        // Each non-version bracket key forces the bracket form. Round-trip
+        // every supported key to keep `fmt_in_condition` aligned with the
+        // parser's accepted set.
+        let cases = [
+            r#"foo[when="python[md5=\"8b1a9953c4611296a827abf8c47804d7\"]"]"#,
+            r#"foo[when="python[sha256=\"315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3\"]"]"#,
+            r#"foo[when="python >=3.8[build_number=\">=6\"]"]"#,
+            r#"foo[when="python[fn=\"python-3.9-0.tar.bz2\"]"]"#,
+            r#"foo[when="python[license=\"MIT\"]"]"#,
+            r#"foo[when="python[license_family=\"MIT\"]"]"#,
+            r#"foo[when="python[track_features=\"feat1 feat2\"]"]"#,
+        ];
+        for input in cases {
+            let spec = parse_conditional(input).expect(input);
+            let reparsed = parse_conditional(&spec.to_string()).expect(input);
+            assert_eq!(spec, reparsed, "round-trip failed for {input}");
+        }
+    }
+
+    #[test]
+    fn test_conditional_render_compound_with_bracket_leaf() {
+        // A compound expression where one leaf must use the bracket form.
+        // Confirms that inner double quotes get escaped at the outer
+        // `when="..."` boundary and the whole thing parses back.
+        let spec = parse_conditional(
+            r#"foo[when="(python >=3.8[build=\"py39*\"] and __linux) or __win"]"#,
+        )
+        .unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(
+            condition,
+            r#"((python[version=">=3.8", build="py39*"] and __linux) or __win)"#
+        );
+
+        let rendered = spec.to_string();
+        let reparsed = parse_conditional(&rendered).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
     fn test_nameless_match_spec_with_when() {
         // NamelessMatchSpec with when should work
         let spec = NamelessMatchSpec::from_str(
