@@ -132,8 +132,11 @@ impl PyIndexJson {
     }
 
     #[setter]
-    pub fn set_build(&mut self, build: String) {
-        self.inner.build = BuildString::new_unchecked(build);
+    pub fn set_build(&mut self, build: String) -> PyResult<()> {
+        self.inner.build = BuildString::new(build)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?
+            .ok_or_else(|| PyValueError::new_err("build string must not be empty"))?;
+        Ok(())
     }
 
     /// The build number of the package. This is also included in the build string.

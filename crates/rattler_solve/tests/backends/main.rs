@@ -218,12 +218,12 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                match &pkg.package_record.build {
+                    Some(build) => format!("{name} {version} {build}"),
+                    None => format!("{name} {version}"),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -420,7 +420,10 @@ macro_rules! solver_backend_tests {
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
-            assert_eq!("py36h1af98f8_3", info.package_record.build);
+            assert_eq!(
+                Some("py36h1af98f8_3"),
+                info.package_record.build.as_ref().map(BuildString::as_str)
+            );
             assert_eq!(3, info.package_record.build_number);
             assert_eq!(
                 rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -545,12 +548,12 @@ macro_rules! solver_backend_tests {
                     .records
                     .iter()
                     .format_with("\n", |pkg, f| {
-                        f(&format_args!(
-                            "{}={}={}",
-                            pkg.package_record.name.as_normalized(),
-                            pkg.package_record.version.as_str(),
-                            &pkg.package_record.build
-                        ))
+                        let name = pkg.package_record.name.as_normalized();
+                        let version = pkg.package_record.version.as_str();
+                        match &pkg.package_record.build {
+                            Some(build) => f(&format_args!("{name}={version}={build}")),
+                            None => f(&format_args!("{name}={version}")),
+                        }
                     })
                     .to_string(),
                 Err(e) => e.to_string(),
@@ -765,7 +768,10 @@ mod libsolv_c {
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_3", info.package_record.build);
+        assert_eq!(
+            Some("py36h1af98f8_3"),
+            info.package_record.build.as_ref().map(BuildString::as_str)
+        );
         assert_eq!(3, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -1167,12 +1173,12 @@ fn compare_solve(task: CompareTask<'_>) {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                match &pkg.package_record.build {
+                    Some(build) => format!("{name} {version} {build}"),
+                    None => format!("{name} {version}"),
+                }
             })
             .collect::<Vec<_>>();
 

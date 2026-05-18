@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use rattler_conda_types::{PackageName, PackageRecord};
+use rattler_conda_types::{PackageName, PackageRecord, package::BuildString};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -240,6 +240,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
     // the branch that initializes it, so the borrow checker accepts this.
     let build_packages;
     let host_packages;
+    let build_str: &str;
     if !source_data.build_packages.is_empty() {
         build_packages = EnvironmentPackagesSelectorIds(&source_data.build_packages);
         fields.insert("build_packages", &build_packages);
@@ -282,7 +283,8 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 track_features: _,
             } = &**full;
 
-            fields.insert("build", build);
+            build_str = build.as_ref().map_or("", BuildString::as_str);
+            fields.insert("build", &build_str);
             fields.insert("build_number", build_number);
             fields.insert("noarch", noarch);
             fields.insert("subdir", subdir);

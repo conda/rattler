@@ -135,11 +135,15 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
         let derived = LocationDerivedFields::new(&value.location);
+        // An explicit `build: ""` in the lockfile collapses to `None`; the
+        // bare BuildString constructor accepts empty input for permissive
+        // deserialization, but in-memory we treat empty as "no build".
         let build: BuildString = value
             .build
             .map(Cow::into_owned)
-            .or_else(|| derived.build.clone().map(BuildString::new_unchecked))
-            .unwrap_or_default();
+            .filter(|b| !b.as_str().is_empty())
+            .or_else(|| derived.build.clone().and_then(BuildString::new_unchecked))
+            .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
         let build_str = build.to_string();
         let build_number = value
             .build_number
@@ -162,7 +166,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         let package_record = PackageRecord {
-            build,
+            build: Some(build),
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
@@ -241,7 +245,10 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
     fn from(value: &'a CondaBinaryData) -> Self {
         let package_record = &value.package_record;
         let derived = LocationDerivedFields::new(&value.location);
-        let build_str = package_record.build.to_string();
+        let build_str = package_record
+            .build
+            .as_ref()
+            .map_or_else(String::new, BuildString::to_string);
         let derived_build_number =
             derived_fields::derive_build_number_from_build(&build_str).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
@@ -263,8 +270,10 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             version: (Some(package_record.version.as_str())
                 != derived.version.as_ref().map(VersionWithSource::as_str))
             .then_some(Cow::Borrowed(&package_record.version)),
-            build: (build_str.as_str() != derived.build.as_deref().unwrap_or(""))
-                .then_some(Cow::Borrowed(&package_record.build)),
+            build: package_record.build.as_ref().and_then(|build| {
+                (build.as_str() != derived.build.as_deref().unwrap_or(""))
+                    .then_some(Cow::Borrowed(build))
+            }),
             build_number: (package_record.build_number != derived_build_number)
                 .then_some(package_record.build_number),
             subdir: (Some(package_record.subdir.as_str()) != derived.subdir.as_deref())

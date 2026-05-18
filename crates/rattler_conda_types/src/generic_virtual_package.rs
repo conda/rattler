@@ -4,7 +4,8 @@ use crate::{PackageName, Version, package::BuildString};
 use std::fmt::{Display, Formatter};
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
-/// `version` and a `build_string`.
+/// `version` and an optional `build_string`. Virtual packages without a build
+/// identifier (e.g. `__cuda`) have `build_string == None`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GenericVirtualPackage {
     /// The name of the package
@@ -13,17 +14,17 @@ pub struct GenericVirtualPackage {
     /// The version of the package
     pub version: Version,
 
-    /// The build identifier of the package.
-    pub build_string: BuildString,
+    /// The build identifier of the package, if any.
+    pub build_string: Option<BuildString>,
 }
 
 impl Display for GenericVirtualPackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}", &self.name.as_normalized(), &self.version)?;
-        if self.build_string.is_empty() {
-            return Ok(());
+        if let Some(build_string) = &self.build_string {
+            write!(f, "={build_string}")?;
         }
-        write!(f, "={}", &self.build_string)
+        Ok(())
     }
 }
 
@@ -49,7 +50,7 @@ impl<'de> Deserialize<'de> for GenericVirtualPackage {
             .unwrap_or("0")
             .parse()
             .map_err(serde::de::Error::custom)?;
-        let build_string = BuildString::new_unchecked(parts.next().unwrap_or(""));
+        let build_string = parts.next().and_then(BuildString::new_unchecked);
 
         Ok(GenericVirtualPackage {
             name,
@@ -78,7 +79,7 @@ mod tests {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: BuildString::default(),
+            build_string: None,
         };
         let s = serde_json::to_string(&p).unwrap();
         assert_eq!(s, "\"foo=1.2.3\"");

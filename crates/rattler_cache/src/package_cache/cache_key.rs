@@ -1,5 +1,5 @@
 use rattler_conda_types::PackageRecord;
-use rattler_conda_types::package::CondaArchiveIdentifier;
+use rattler_conda_types::package::{BuildString, CondaArchiveIdentifier};
 use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
 use std::{
     fmt::{Display, Formatter},
@@ -88,7 +88,10 @@ impl From<&PackageRecord> for CacheKey {
         Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record.build.to_string(),
+            build_string: record
+                .build
+                .as_ref()
+                .map_or_else(String::new, BuildString::to_string),
             sha256: record.sha256,
             md5: record.md5,
             origin_hash: None,

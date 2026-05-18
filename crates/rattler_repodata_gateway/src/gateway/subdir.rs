@@ -183,7 +183,7 @@ mod tests {
 
     use rattler_conda_types::{
         NoArchType, PackageRecord, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use url::Url;
 
@@ -200,7 +200,7 @@ mod tests {
 
         let package_record = PackageRecord {
             arch: None,
-            build: "0".to_string(),
+            build: BuildString::new_unchecked("0"),
             build_number: 0,
             constrains: Vec::new(),
             depends: deps.iter().map(|s| (*s).to_string()).collect(),
