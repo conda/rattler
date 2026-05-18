@@ -12,8 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["rustls", "system-integration"]
-native-tls = ["reqwest/native-tls"]
-rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls", "ambient-id/native-tls"]
+rustls = ["reqwest/rustls", "ambient-id/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
@@ -22,6 +22,7 @@ system-integration = ["keyring", "netrc-rs", "dirs"]
 features = ["gcs", "s3"]
 
 [dependencies]
+ambient-id = { workspace = true, features = ["reqwest-middleware"] }
 anyhow = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
@@ -53,7 +54,7 @@ keyring = { workspace = true, optional = true, features = [
 ] }
 netrc-rs = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json", "form"] }
-reqwest-middleware = { workspace = true }
+reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
