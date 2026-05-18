@@ -175,7 +175,12 @@ impl PackageName {
         let options = crate::ParseMatchSpecOptions::default().with_experimental_extras(true);
         match crate::MatchSpec::from_str(spec, options) {
             Ok(parsed) => (name, parsed.extras.unwrap_or_default()),
-            Err(_) => (name, Vec::new()),
+            Err(err) => {
+                // Failure mode is silent under-fetching of an extra's deps;
+                // log so it shows up under RUST_LOG=debug when investigating.
+                tracing::debug!("failed to parse matchspec '{spec}' for extras extraction: {err}",);
+                (name, Vec::new())
+            }
         }
     }
 }
@@ -561,6 +566,17 @@ mod test {
     // Malformed bracket section falls back to empty extras but still extracts name.
     #[case("numpy[", "numpy", &[])]
     #[case("foo[extras=[", "foo", &[])]
+    // Empty extras list is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[]]", "foo", &[])]
+    // Trailing comma is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[a,]]", "foo", &[])]
+    // Multiple bracket sections are rejected by the parser; extras silently
+    // dropped. Documented limitation, captured here so future changes notice.
+    #[case(
+        r#"aiohttp[extras=[a]] [build="py*"]"#,
+        "aiohttp",
+        &[],
+    )]
     fn test_name_and_extras_from_matchspec_str(
         #[case] spec: &str,
         #[case] expected_name: &str,

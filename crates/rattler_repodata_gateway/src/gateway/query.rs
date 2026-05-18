@@ -605,27 +605,22 @@ impl QueryExecutor {
 
             for (matcher, spec) in &self.pending_pattern_specs {
                 if matcher.matches(&name) {
-                    if self
-                        .seen
-                        .insert(name.as_normalized().to_string(), ())
-                        .is_none()
-                    {
-                        if let Some(extras) = spec.extras.as_ref() {
-                            self.active_extras
-                                .entry(name.clone())
-                                .or_default()
-                                .extend(extras.iter().cloned());
-                        }
-                        let pending = self
-                            .pending_package_specs
+                    self.seen.insert(name.as_normalized().to_string(), ());
+                    if let Some(extras) = spec.extras.as_ref() {
+                        self.active_extras
                             .entry(name.clone())
-                            .or_insert_with(|| PendingRequest {
-                                name: name.clone(),
-                                specs: SourceSpecs::Input(vec![]),
-                            });
-                        if let SourceSpecs::Input(input_specs) = &mut pending.specs {
-                            input_specs.push(spec.clone());
-                        }
+                            .or_default()
+                            .extend(extras.iter().cloned());
+                    }
+                    let pending = self
+                        .pending_package_specs
+                        .entry(name.clone())
+                        .or_insert_with(|| PendingRequest {
+                            name: name.clone(),
+                            specs: SourceSpecs::Input(vec![]),
+                        });
+                    if let SourceSpecs::Input(input_specs) = &mut pending.specs {
+                        input_specs.push(spec.clone());
                     }
                     break;
                 }

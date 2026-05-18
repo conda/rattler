@@ -2271,6 +2271,120 @@ mod test {
         );
     }
 
+    /// Pattern-expanded specs must still merge extras when another input spec
+    /// already queued the same exact package name.
+    #[tokio::test]
+    async fn extras_pattern_merges_with_existing_input() {
+        use rattler_conda_types::ParseMatchSpecOptions;
+
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        let pattern = MatchSpec::from_str(
+            "bla*[extras=[d]]",
+            ParseMatchSpecOptions::strict()
+                .with_exact_names_only(false)
+                .with_experimental_extras(true),
+        )
+        .unwrap();
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black", Lenient).unwrap(), pattern].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "pattern extras should activate [d] even when black was already queued; got {names:?}",
+        );
+    }
+
+    /// Pattern-expanded specs should activate extras even when the pattern is
+    /// the only user input.
+    #[tokio::test]
+    async fn extras_pattern_only_walks_requested_extra() {
+        use rattler_conda_types::ParseMatchSpecOptions;
+
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        let pattern = MatchSpec::from_str(
+            "bla*[extras=[d]]",
+            ParseMatchSpecOptions::strict()
+                .with_exact_names_only(false)
+                .with_experimental_extras(true),
+        )
+        .unwrap();
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![pattern].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "pattern extras should fetch deps from the requested [d] extra; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "pattern extras should not fetch inactive [jupyter] deps; got {names:?}",
+        );
+    }
+
     /// User asks for `pkg >=2` (Input with version constraint). A transitive
     /// dep later activates `pkg[extras=[d]]`. The extra's deps must only be
     /// walked from records that match the original version constraint.
@@ -2384,6 +2498,77 @@ mod test {
         assert!(
             !names.contains(&"ipython".to_string()),
             "ipython must not be fetched when only [d] is active; got {names:?}",
+        );
+    }
+
+    /// Late activation must walk cached records for a package across every
+    /// source/subdir that already returned records for that package.
+    #[tokio::test]
+    async fn extras_late_activation_walks_cached_records_across_sources() {
+        let gateway = Gateway::new();
+        let (mut source_a, fetched_a) = RecordingSource::new();
+        let (mut source_b, fetched_b) = RecordingSource::new();
+
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full("driver", "1.0.0", "linux-64", &["pkg", "activator"], &[]),
+        );
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_from_source_a >=1"])],
+            ),
+        );
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full("dep_from_source_a", "1.0.0", "linux-64", &[], &[]),
+        );
+
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
+        );
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "2.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_from_source_b >=1"])],
+            ),
+        );
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full("dep_from_source_b", "1.0.0", "linux-64", &[], &[]),
+        );
+
+        gateway
+            .query(
+                vec![
+                    super::Source::Custom(Arc::new(source_a)),
+                    super::Source::Custom(Arc::new(source_b)),
+                ],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let mut names = fetched_a.lock().unwrap().clone();
+        names.extend(fetched_b.lock().unwrap().clone());
+        assert!(
+            names.contains(&"dep_from_source_a".to_string()),
+            "late activation should walk cached pkg records from source A; got {names:?}",
+        );
+        assert!(
+            names.contains(&"dep_from_source_b".to_string()),
+            "late activation should walk cached pkg records from source B; got {names:?}",
         );
     }
 }
