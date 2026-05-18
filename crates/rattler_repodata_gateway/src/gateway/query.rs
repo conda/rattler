@@ -60,13 +60,14 @@ enum SourceSpecs {
     Transitive,
 }
 
-/// A request to fetch records for a single package name, together with the
-/// extras that should be activated for that name. `extras` is informational
-/// for now; later increments use it to scope the dep walk.
+/// A request to fetch records for a single package name. The active extras
+/// set for the name lives on `QueryExecutor::active_extras`; this struct only
+/// carries the spec source and the name (so the executor can look extras up
+/// when records arrive).
 #[derive(Clone)]
 struct PendingRequest {
+    name: PackageName,
     specs: SourceSpecs,
-    extras: ahash::HashSet<String>,
 }
 
 /// A spec that references a package by direct URL.
@@ -224,15 +225,12 @@ impl QueryExecutor {
                             pending_package_specs
                                 .entry(name.clone())
                                 .or_insert_with(|| PendingRequest {
+                                    name: name.clone(),
                                     specs: SourceSpecs::Input(vec![]),
-                                    extras: ahash::HashSet::default(),
                                 });
                         let SourceSpecs::Input(input_specs) = &mut pending.specs else {
                             panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
                         };
-                        if let Some(extras) = spec.extras.as_ref() {
-                            pending.extras.extend(extras.iter().cloned());
-                        }
                         input_specs.push(spec);
                     }
                     matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)) => {
@@ -344,16 +342,11 @@ impl QueryExecutor {
                 // Push the direct url in the first subdir result for channel priority logic
                 let (unique_base_deps, unique_extra_deps) =
                     super::subdir::extract_unique_deps_split(records.iter().map(|r| &**r));
-                let extras: ahash::HashSet<String> = spec
-                    .extras
-                    .as_ref()
-                    .map(|e| e.iter().cloned().collect())
-                    .unwrap_or_default();
                 Ok((
                     0,
                     PendingRequest {
+                        name: name.clone(),
                         specs: SourceSpecs::Input(vec![spec]),
-                        extras,
                     },
                     PackageRecords {
                         records,
@@ -404,22 +397,32 @@ impl QueryExecutor {
 
     /// Extract dependencies from records and queue them if not seen.
     fn queue_dependencies(&mut self, pkg: &PackageRecords, request: &PendingRequest) {
+        // Snapshot the set of active extras for this name so we walk only the
+        // deps the solver could actually pull in.
+        let active: Vec<String> = self
+            .active_extras
+            .get(&request.name)
+            .map(|set| set.iter().cloned().collect())
+            .unwrap_or_default();
+
         match &request.specs {
             SourceSpecs::Transitive => {
-                // Use precomputed unique deps. Walk base deps and every extra's
-                // deps; a later increment will restrict the extras walked to
-                // those actually active for this name.
+                // Use precomputed unique deps: base + only the active extras.
                 for dep in pkg.unique_base_deps.iter() {
                     self.queue_dependency(dep);
                 }
-                for deps in pkg.unique_extra_deps.values() {
-                    for dep in deps.iter() {
-                        self.queue_dependency(dep);
+                for extra in &active {
+                    if let Some(deps) = pkg.unique_extra_deps.get(extra) {
+                        for dep in deps.iter() {
+                            self.queue_dependency(dep);
+                        }
                     }
                 }
             }
             SourceSpecs::Input(specs) => {
                 // For input specs, only process deps from matching records.
+                // A later increment scopes the per-extra walk here as well; for
+                // now we still iterate every extra on matching records.
                 for record in &pkg.records {
                     if !specs.iter().any(|s| s.matches(record.as_ref())) {
                         continue;
@@ -443,18 +446,39 @@ impl QueryExecutor {
     /// Uses `entry_ref` for a single hash lookup. Only allocates when the
     /// name is genuinely new (~500 unique names vs ~1M+ dependency strings).
     fn queue_dependency(&mut self, dependency: &str) {
-        let normalized = PackageName::normalized_name_from_matchspec_str(dependency);
+        let (normalized, extras) = PackageName::name_and_extras_from_matchspec_str(dependency);
         let normalized_str: &str = &normalized;
-        if let hashbrown::hash_map::EntryRef::Vacant(entry) = self.seen.entry_ref(normalized_str) {
-            entry.insert(());
+        let is_new = matches!(
+            self.seen.entry_ref(normalized_str),
+            hashbrown::hash_map::EntryRef::Vacant(_)
+        );
+
+        if is_new {
+            self.seen.insert(normalized.to_string(), ());
             let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
+            if !extras.is_empty() {
+                self.active_extras
+                    .entry(dependency_name.clone())
+                    .or_default()
+                    .extend(extras);
+            }
             self.pending_package_specs.insert(
-                dependency_name,
+                dependency_name.clone(),
                 PendingRequest {
+                    name: dependency_name,
                     specs: SourceSpecs::Transitive,
-                    extras: ahash::HashSet::default(),
                 },
             );
+        } else if !extras.is_empty() {
+            // Name has been seen, but the dep may activate new extras. Merge
+            // into the active set so any pending fetch picks them up when its
+            // records arrive. Late activation against already-fetched records
+            // is handled by a later increment.
+            let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
+            self.active_extras
+                .entry(dependency_name)
+                .or_default()
+                .extend(extras);
         }
     }
 
@@ -518,14 +542,11 @@ impl QueryExecutor {
                             .pending_package_specs
                             .entry(name.clone())
                             .or_insert_with(|| PendingRequest {
+                                name: name.clone(),
                                 specs: SourceSpecs::Input(vec![]),
-                                extras: ahash::HashSet::default(),
                             });
                         if let SourceSpecs::Input(input_specs) = &mut pending.specs {
                             input_specs.push(spec.clone());
-                        }
-                        if let Some(extras) = spec.extras.as_ref() {
-                            pending.extras.extend(extras.iter().cloned());
                         }
                     }
                     break;
