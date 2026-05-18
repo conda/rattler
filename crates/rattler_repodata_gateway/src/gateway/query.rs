@@ -508,20 +508,24 @@ impl QueryExecutor {
         }
     }
 
-    /// Queue a single dependency if not already seen.
-    ///
-    /// Uses `entry_ref` for a single hash lookup. Only allocates when the
-    /// name is genuinely new (~500 unique names vs ~1M+ dependency strings).
+    /// Queue a single dependency if not already seen. Allocates the name
+    /// only when it is genuinely new (~500 unique names vs ~1M+ dependency
+    /// strings on a large query).
     fn queue_dependency(&mut self, dependency: &str) {
         let (normalized, extras) = PackageName::name_and_extras_from_matchspec_str(dependency);
         let normalized_str: &str = &normalized;
-        let is_new = matches!(
-            self.seen.entry_ref(normalized_str),
-            hashbrown::hash_map::EntryRef::Vacant(_)
-        );
+
+        // Single hash lookup via EntryRef: either insert for a new name, or
+        // observe and fall through to the merge-extras path for a known one.
+        let is_new = match self.seen.entry_ref(normalized_str) {
+            hashbrown::hash_map::EntryRef::Vacant(entry) => {
+                entry.insert(());
+                true
+            }
+            hashbrown::hash_map::EntryRef::Occupied(_) => false,
+        };
 
         if is_new {
-            self.seen.insert(normalized.to_string(), ());
             let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
             if !extras.is_empty() {
                 self.active_extras
@@ -537,9 +541,8 @@ impl QueryExecutor {
                 },
             );
         } else if !extras.is_empty() {
-            // Name has been seen. Merge any extras the dep activates into the
-            // active set; if records already arrived, walk the new extras
-            // against them.
+            // Merge any extras the dep activates into the active set; if
+            // records already arrived, walk the new extras against them.
             let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
             let newly_added: Vec<String> = {
                 let existing = self
