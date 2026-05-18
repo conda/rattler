@@ -10,7 +10,6 @@ on:
       - main
 
 jobs:
-
   # Release unpublished packages.
   release-plz-release:
     name: Release-plz release
@@ -43,7 +42,7 @@ jobs:
           # Verify configs are gone
           git config --global --list
       - name: Run release-plz
-        uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5.128
+        uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5.129
         with:
           command: release
         env:
@@ -87,30 +86,10 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5.128
+        uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5.129
         id: release-plz
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Set up pixi
-        if: steps.release-plz.outputs.prs_created == 'true'
-        uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
-
-      - name: Update pixi lockfile on release branch
-        if: steps.release-plz.outputs.prs_created == 'true'
-        env:
-          RELEASE_BRANCH: ${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}
-        run: |
-          git fetch origin "$RELEASE_BRANCH"
-          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-          pixi install
-          if git diff --quiet pixi.lock; then
-            echo "pixi.lock is already up-to-date"
-          else
-            git add pixi.lock
-            git commit -m "chore: update pixi.lock"
-            git push origin "$RELEASE_BRANCH"
-          fi

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.28.2"
+version = "0.29.0"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -8,24 +8,23 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-readme = "README.md"
+readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls-tls", "s3"]
+default = ["rustls", "s3"]
 native-tls = [
   "reqwest/native-tls",
-  "reqwest/native-tls-alpn",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
   "rattler_s3?/native-tls",
 ]
-rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
-  "rattler_package_streaming/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_s3?/rustls-tls",
+rustls = [
+  "reqwest/rustls",
+  "rattler_package_streaming/rustls",
+  "rattler_networking/rustls",
+  "rattler_s3?/rustls",
+  "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
 
@@ -48,6 +47,7 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = [
   "services-fs",
+  "layers-retry",
 ], default-features = false }
 rattler_config = { workspace = true }
 rattler_networking = { workspace = true, default-features = false, features = [
@@ -59,16 +59,15 @@ rattler_package_streaming = { workspace = true, default-features = false }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
-  "macos-system-configuration",
+  "system-proxy",
   "charset",
 ] }
 rmp-serde = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }

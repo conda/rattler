@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use file_url::{file_path_to_url, url_to_typed_path, FileURLParseError};
+use file_url::{FileURLParseError, file_path_to_url, url_to_typed_path};
 use itertools::Itertools;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
@@ -238,9 +238,10 @@ mod test {
     fn test_equality_from_str() {
         let tests = [
             // Same urls
-            ("https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
-             "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"),
-
+            (
+                "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+                "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            ),
             // Absolute paths as file and direct path
             ("file:///home/bob/test-file.txt", "/home/bob/test-file.txt"),
         ];

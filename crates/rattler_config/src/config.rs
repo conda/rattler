@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
 use rattler_conda_types::{ChannelConfig, NamedChannelOrUrl};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use url::Url;
 

@@ -155,7 +155,7 @@ fn segment_parser<'i>(
         Ok(result) => result,
         // Convert undefined parse errors into an expect error
         Err(nom::Err::Error(ParseVersionErrorKind::Nom(_))) => {
-            return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent))
+            return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent));
         }
         Err(e) => return Err(e),
     };
@@ -186,7 +186,7 @@ fn segment_parser<'i>(
                 None => {
                     return Err(nom::Err::Failure(
                         ParseVersionErrorKind::TooManyComponentsInASegment,
-                    ))
+                    ));
                 }
             }
         } else {
@@ -222,7 +222,7 @@ fn trailing_dash_underscore_parser(
         (Some('-'), '_') | (Some('_'), '-') => {
             return Err(nom::Err::Error(
                 ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
-            ))
+            ));
         }
         _ => dash_or_underscore,
     };
@@ -279,7 +279,7 @@ fn version_part_parser<'i>(
             (Some('-'), '_') | (Some('_'), '-') => {
                 break Err(nom::Err::Failure(
                     ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
-                ))
+                ));
             }
             _ => {}
         }
@@ -448,8 +448,8 @@ impl FromStr for StrictVersion {
 #[cfg(test)]
 mod test {
     use super::Version;
-    use crate::version::parse::version_parser;
     use crate::version::SegmentFormatter;
+    use crate::version::parse::version_parser;
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::path::Path;

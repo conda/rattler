@@ -10,7 +10,7 @@
 
 use std::{sync::Arc, time::SystemTime};
 
-use opendal::{raw::Timestamp, Operator};
+use opendal::{Operator, raw::Timestamp};
 use rattler_networking::retry_policies::default_retry_policy;
 use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
@@ -96,7 +96,7 @@ impl PackageRecordCache {
 
         if let Some(cached) = cached {
             // Validate using ETag first (preferred)
-            if let (Some(cached_etag), Some(ref current_etag)) = (&cached.etag, &current_etag) {
+            if let (Some(cached_etag), Some(current_etag)) = (&cached.etag, &current_etag) {
                 if cached_etag == current_etag {
                     tracing::debug!("Cache hit for {} (etag validated)", path);
                     return Ok(CacheResult::Hit(Box::new(cached.record)));

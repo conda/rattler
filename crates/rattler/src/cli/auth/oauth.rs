@@ -9,16 +9,17 @@ use std::{
     time::Duration,
 };
 
+use oauth2_reqwest::ReqwestClient;
 use openidconnect::{
+    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
         CoreResponseType, CoreSubjectIdentifierType,
     },
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -171,11 +172,12 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
 
     let user_agent = config.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT);
 
-    let http_client = reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(user_agent)
         .build()
         .map_err(OAuthError::Network)?;
+    let http_client = ReqwestClient::from(reqwest_client);
 
     // 1. OIDC Discovery
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
@@ -267,7 +269,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
 /// deserialized from the discovery document in a single request.
 async fn discover_endpoints(
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
     issuer_url: &str,
 ) -> Result<DiscoveredEndpoints, OAuthError> {
     let oidc_issuer =
@@ -308,7 +310,7 @@ async fn auth_code_flow(
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
     redirect_uri: Option<&str>,
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
     // If the caller pinned a redirect URI (because the IdP requires an
     // exact match against what was registered), bind there. Otherwise
@@ -530,7 +532,7 @@ async fn device_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
     let device_auth_url = endpoints
         .device_authorization_endpoint
@@ -620,10 +622,10 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     if let Some(username) = claims.preferred_username() {
         return username.to_string();
     }
-    if let Some(name) = claims.name() {
-        if let Some(n) = name.get(None) {
-            return n.to_string();
-        }
+    if let Some(name) = claims.name()
+        && let Some(n) = name.get(None)
+    {
+        return n.to_string();
     }
     claims.subject().to_string()
 }

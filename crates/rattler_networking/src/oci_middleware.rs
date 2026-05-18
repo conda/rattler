@@ -5,15 +5,15 @@ use std::{
 };
 
 use http::{
-    header::{ACCEPT, AUTHORIZATION},
     Extensions,
+    header::{ACCEPT, AUTHORIZATION},
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use url::{ParseError, Url};
 
-use crate::{mirror_middleware::create_404_response, LazyClient};
+use crate::{LazyClient, mirror_middleware::create_404_response};
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
@@ -180,7 +180,7 @@ impl OCIUrl {
                     return Err(OciMiddlewareError::InvalidUrl(
                         url.clone(),
                         "package filename must have the form name-version-build.conda",
-                    ))
+                    ));
                 }
             }
         } else if let Some(archive_name) = filename.strip_suffix(".tar.bz2") {
@@ -195,7 +195,7 @@ impl OCIUrl {
                     return Err(OciMiddlewareError::InvalidUrl(
                         url.clone(),
                         "package filename must have the form name-version-build.tar.bz2",
-                    ))
+                    ));
                 }
             }
         } else if filename.starts_with("repodata.json") {
@@ -332,7 +332,7 @@ mod tests {
     use crate::OciMiddleware;
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
         let client = reqwest::Client::new();
@@ -365,7 +365,7 @@ mod tests {
     }
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
         let client = reqwest::Client::new();

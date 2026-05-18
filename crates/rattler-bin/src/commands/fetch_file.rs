@@ -1,11 +1,8 @@
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url;
-use reqwest::Client;
 use url::Url;
 
 /// Read a file from inside a remote conda package.
@@ -23,20 +20,7 @@ pub struct Opt {
 pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
     let Opt { url, path } = opt;
 
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .into_diagnostic()
-        .context("failed to create HTTP client")?;
-
-    let authentication_storage =
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-
-    let client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            authentication_storage,
-        )))
-        .build();
+    let client = super::client::create_client_with_middleware()?;
 
     let target_path = Path::new(&path);
 

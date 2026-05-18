@@ -1,13 +1,13 @@
 use std::{borrow::Cow, sync::LazyLock};
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{PackageName, VersionOrUrl};
+use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use super::package_selector::PackageSelector;
+use super::{given_verbatim_url::GivenVerbatimUrl, package_selector::PackageSelector};
 use crate::{
-    parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
+    PackageHashes, PypiPackageData, UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw,
 };
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
@@ -127,51 +127,11 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
     }
 }
 
-/// This code is heavily inspired from the `Display::fmt` implementation of `pep508_rs`
-/// (under Apache-2.0 or BSD-2-clause license).
-///
-/// This uses the `given()` of the URL if it exists though, so that we keep relative
-/// paths intact.
+/// Serialize a requirement as a string, preserving relative paths for file
+/// dependencies. Delegates to `pep508_rs`'s own [`Display`](std::fmt::Display)
+/// impl via the [`GivenVerbatimUrl`] wrapper.
 fn requirement_to_string(req: &pep508_rs::Requirement) -> String {
-    let extras = (!req.extras.is_empty())
-        .then_some(format!(
-            "[{}]",
-            req.extras
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        ))
-        .unwrap_or_default();
-
-    let version_or_url = req
-        .version_or_url
-        .as_ref()
-        .map(|version_or_url| {
-            match version_or_url {
-                VersionOrUrl::VersionSpecifier(version_specifier) => {
-                    let version_specifier: Vec<String> =
-                        version_specifier.iter().map(ToString::to_string).collect();
-                    version_specifier.join(",")
-                }
-                VersionOrUrl::Url(url) => {
-                    if let Some(g) = url.given() {
-                        format!(" @ {g}")
-                    } else {
-                        // We add the space for markers later if necessary
-                        format!(" @ {url}")
-                    }
-                }
-            }
-        })
-        .unwrap_or_default();
-    let marker = req
-        .marker
-        .contents()
-        .map(|c| format!(" ; {c}"))
-        .unwrap_or_default();
-
-    format!("{}{extras}{version_or_url}{marker}", req.name)
+    GivenVerbatimUrl::wrap_requirement(req).to_string()
 }
 
 #[cfg(test)]
@@ -182,9 +142,9 @@ mod tests {
 
     use typed_path::Utf8TypedPathBuf;
 
-    use crate::{parse::deserialize::PypiPackageDataRaw, UrlOrPath, Verbatim};
+    use crate::{UrlOrPath, Verbatim, parse::deserialize::PypiPackageDataRaw};
 
-    use super::{PypiPackageDataModel, PYPI_URL};
+    use super::{PYPI_URL, PypiPackageDataModel};
 
     fn url_location(url: &str) -> Verbatim<UrlOrPath> {
         Verbatim::new(UrlOrPath::Url(url::Url::parse(url).unwrap()))

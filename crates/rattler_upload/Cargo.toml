@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.6.1"
+version = "0.7.0"
 edition.workspace = true
 authors = [
   "Wolf Vollprecht <w.vollprecht@gmail.com>",
@@ -14,12 +14,13 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls", "s3", "sigstore-sign"]
-rustls-tls = [
-  "reqwest/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+default = ["rustls", "s3", "sigstore-sign"]
+rustls = [
+  "reqwest/rustls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
   "sigstore-sign?/rustls",
+  "opendal?/reqwest-rustls-tls",
 ]
 native-tls = [
   "reqwest/native-tls",
@@ -54,6 +55,8 @@ reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
+  "query",
+  "stream",
 ] }
 url = { workspace = true }
 tracing = { workspace = true }

@@ -7,8 +7,8 @@ use std::{
 use fs_err::tokio as tokio_fs;
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
     ExtractError,
+    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
 };
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
@@ -160,11 +160,13 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
         index_json.version,
         index_json.build
     );
-    assert!(input
-        .path_segments()
-        .and_then(Iterator::last)
-        .unwrap()
-        .starts_with(&name));
+    assert!(
+        input
+            .path_segments()
+            .and_then(Iterator::last)
+            .unwrap()
+            .starts_with(&name)
+    );
 }
 
 #[apply(tar_bz2_archives)]

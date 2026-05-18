@@ -117,11 +117,7 @@ pub trait Shell {
 
     /// Path separator
     fn path_separator(&self, platform: &Platform) -> &str {
-        if platform.is_unix() {
-            ":"
-        } else {
-            ";"
-        }
+        if platform.is_unix() { ":" } else { ";" }
     }
 
     /// Returns the name of the PATH variable for the given platform. On
@@ -1413,31 +1409,41 @@ mod tests {
 
     #[test]
     fn test_bash_completion_location_only_for_bash_flavor() {
-        assert!(Bash {
-            flavor: BashFlavor::Bash
-        }
-        .completion_script_location()
-        .is_some());
-        assert!(Bash {
-            flavor: BashFlavor::Sh
-        }
-        .completion_script_location()
-        .is_none());
-        assert!(Bash {
-            flavor: BashFlavor::Dash
-        }
-        .completion_script_location()
-        .is_none());
-        assert!(Bash {
-            flavor: BashFlavor::Ksh
-        }
-        .completion_script_location()
-        .is_none());
-        assert!(Bash {
-            flavor: BashFlavor::BusyBox
-        }
-        .completion_script_location()
-        .is_none());
+        assert!(
+            Bash {
+                flavor: BashFlavor::Bash
+            }
+            .completion_script_location()
+            .is_some()
+        );
+        assert!(
+            Bash {
+                flavor: BashFlavor::Sh
+            }
+            .completion_script_location()
+            .is_none()
+        );
+        assert!(
+            Bash {
+                flavor: BashFlavor::Dash
+            }
+            .completion_script_location()
+            .is_none()
+        );
+        assert!(
+            Bash {
+                flavor: BashFlavor::Ksh
+            }
+            .completion_script_location()
+            .is_none()
+        );
+        assert!(
+            Bash {
+                flavor: BashFlavor::BusyBox
+            }
+            .completion_script_location()
+            .is_none()
+        );
     }
 
     #[test]

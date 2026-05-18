@@ -11,7 +11,7 @@ categories = ["development-tools"]
 homepage = "https://github.com/conda/rattler"
 repository = "https://github.com/conda/rattler"
 license = "BSD-3-Clause"
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 
 [workspace.metadata.release]
@@ -24,8 +24,9 @@ lto = true
 
 [workspace.dependencies]
 ahash = "0.8.12"
+ambient-id = { version = "0.0.11", default-features = false }
 anyhow = "1.0.98"
-archspec = "0.1.3"
+archspec = "0.2.0"
 assert_matches = "1.5.0"
 async-compression = { version = "0.4", features = [
   "gzip",
@@ -34,7 +35,7 @@ async-compression = { version = "0.4", features = [
   "zstd",
 ] }
 async-fd-lock = "0.2.0"
-async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.9.1" }
+async_http_range_reader = { package = "astral_async_http_range_reader", version = "0.11.0" }
 fs4 = "0.13.1"
 async-once-cell = "0.5.4"
 async-trait = "0.1.88"
@@ -95,8 +96,7 @@ hashbrown = "0.16"
 hex = "0.4.3"
 hex-literal = "1.0.0"
 http = "1.4"
-# Pinned to 2.x because 3.0 requires reqwest 0.13, and we're still on 0.12
-http-cache-semantics = "2.1.0"
+http-cache-semantics = "3.0.0"
 humansize = "2.1.3"
 humantime = "2.2.0"
 indexmap = "2.13.0"
@@ -117,12 +117,11 @@ netrc-rs = "0.1.2"
 nom = "8.0.0"
 nom-language = "0.1.0"
 num_cpus = "1.16.0"
-opendal = { version = "0.55.0", default-features = false }
+opendal = { version = "0.56.0", default-features = false }
 once_cell = "1.21.3"
 open = "5"
-openidconnect = { version = "4", default-features = false, features = [
-  "reqwest",
-] }
+openidconnect = { version = "4", default-features = false }
+oauth2-reqwest = { version = "0.1.0-alpha.3", default-features = false }
 parking_lot = "0.12.4"
 pathdiff = "0.2.3"
 pep440_rs = { version = "0.7.3" }
@@ -137,12 +136,11 @@ rand = "0.10.0"
 rayon = "1.10.0"
 reflink-copy = "0.1.26"
 regex = "1.11.1"
-reqwest = { version = "0.12.15", default-features = false }
-reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.4.2" }
-reqwest-retry = { package = "astral-reqwest-retry", version = "0.8.0" }
+reqwest = { version = "0.13.3", default-features = false }
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1" }
+reqwest-retry = { package = "astral-reqwest-retry", version = "0.9.1" }
 resolvo = { version = "0.10.0" }
-# hold back at 0.4.0 until `reqwest-retry` is updated
-retry-policies = { version = "0.5.0", default-features = false }
+retry-policies = { version = "0.5.1", default-features = false }
 rmp = { version = "0.8.14" }
 rmp-serde = { version = "1.3.0" }
 rstest = { version = "0.26.1" }
@@ -202,32 +200,32 @@ zip = { version = "8.5.1", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.
-coalesced_map = { path = "crates/coalesced_map", version = "=0.1.2", default-features = false }
-file_url = { path = "crates/file_url", version = "=0.3.0", default-features = false }
-path_resolver = { path = "crates/path_resolver", version = "=0.2.8", default-features = false }
-rattler = { path = "crates/rattler", version = "=0.42.0", default-features = false }
-rattler_cache = { path = "crates/rattler_cache", version = "=0.7.1", default-features = false }
-rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.46.1", default-features = false }
-rattler_config = { path = "crates/rattler_config", version = "=0.3.12", default-features = false }
-rattler_digest = { path = "crates/rattler_digest", version = "=1.2.4", default-features = false }
-rattler_git = { path = "crates/rattler_git", version = "=0.1.2", default-features = false }
-rattler_index = { path = "crates/rattler_index", version = "=0.28.2", default-features = false }
-rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.3.2", default-features = false }
-rattler_lock = { path = "crates/rattler_lock", version = "=0.30.0", default-features = false }
-rattler_macros = { path = "crates/rattler_macros", version = "=1.0.13", default-features = false }
-rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.2.59", default-features = false }
-rattler_networking = { path = "crates/rattler_networking", version = "=0.26.12", default-features = false }
-rattler_package_streaming = { path = "crates/rattler_package_streaming", version = "=0.25.1", default-features = false }
-rattler_prefix_guard = { path = "crates/rattler_prefix_guard", version = "=0.1.0", default-features = false }
-rattler_pty = { path = "crates/rattler_pty", version = "=0.2.10", default-features = false }
-rattler_redaction = { path = "crates/rattler_redaction", version = "=0.1.15", default-features = false }
-rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.28.2", default-features = false }
-rattler_s3 = { path = "crates/rattler_s3", version = "=0.1.35", default-features = false }
-rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.17", default-features = false }
-rattler_shell = { path = "crates/rattler_shell", version = "=0.26.12", default-features = false }
-rattler_solve = { path = "crates/rattler_solve", version = "=6.0.2", default-features = false }
-rattler_upload = { path = "crates/rattler_upload", version = "=0.6.1", default-features = false }
-rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.21", default-features = false }
+coalesced_map = { path = "crates/coalesced_map", version = "=0.1.3", default-features = false }
+file_url = { path = "crates/file_url", version = "=0.3.1", default-features = false }
+path_resolver = { path = "crates/path_resolver", version = "=0.2.9", default-features = false }
+rattler = { path = "crates/rattler", version = "=0.43.0", default-features = false }
+rattler_cache = { path = "crates/rattler_cache", version = "=0.8.0", default-features = false }
+rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.46.2", default-features = false }
+rattler_config = { path = "crates/rattler_config", version = "=0.3.13", default-features = false }
+rattler_digest = { path = "crates/rattler_digest", version = "=1.2.5", default-features = false }
+rattler_git = { path = "crates/rattler_git", version = "=0.1.3", default-features = false }
+rattler_index = { path = "crates/rattler_index", version = "=0.29.0", default-features = false }
+rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.3.3", default-features = false }
+rattler_lock = { path = "crates/rattler_lock", version = "=0.30.1", default-features = false }
+rattler_macros = { path = "crates/rattler_macros", version = "=1.0.14", default-features = false }
+rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.2.60", default-features = false }
+rattler_networking = { path = "crates/rattler_networking", version = "=0.27.0", default-features = false }
+rattler_package_streaming = { path = "crates/rattler_package_streaming", version = "=0.26.0", default-features = false }
+rattler_prefix_guard = { path = "crates/rattler_prefix_guard", version = "=0.1.1", default-features = false }
+rattler_pty = { path = "crates/rattler_pty", version = "=0.2.11", default-features = false }
+rattler_redaction = { path = "crates/rattler_redaction", version = "=0.2.0", default-features = false }
+rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.29.0", default-features = false }
+rattler_s3 = { path = "crates/rattler_s3", version = "=0.2.0", default-features = false }
+rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.18", default-features = false }
+rattler_shell = { path = "crates/rattler_shell", version = "=0.27.0", default-features = false }
+rattler_solve = { path = "crates/rattler_solve", version = "=7.0.0", default-features = false }
+rattler_upload = { path = "crates/rattler_upload", version = "=0.7.0", default-features = false }
+rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.22", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }

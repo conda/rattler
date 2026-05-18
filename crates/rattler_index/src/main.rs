@@ -8,10 +8,10 @@ use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
 use rattler_index::{
-    index_fs_with_channel_metadata, ChannelMetadata, IndexFsConfig, PackageRevisionAssignment,
+    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
 };
 #[cfg(feature = "s3")]
-use rattler_index::{index_s3_with_channel_metadata, IndexS3Config, PreconditionChecks};
+use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]

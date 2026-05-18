@@ -8,14 +8,14 @@ use rattler_prefix_guard::AsyncPrefixGuard;
 use tracing::debug;
 
 use crate::{
+    GitError, GitUrl, Reporter,
     git::{CheckoutOptions, GitReference},
     sha::GitSha,
-    source::{cache_digest, Fetch, GitSource},
+    source::{Fetch, GitSource, cache_digest},
     url::RepositoryUrl,
-    GitError, GitUrl, Reporter,
 };
-use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
 

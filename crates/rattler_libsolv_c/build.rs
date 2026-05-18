@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::{self, PathBuf};
 
 fn build_libsolv() -> Result<PathBuf> {

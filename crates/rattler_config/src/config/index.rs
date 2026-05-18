@@ -29,8 +29,8 @@ use std::{collections::HashMap, fmt, str::FromStr};
 
 use rattler_conda_types::{ChannelRelations, RepodataRevision, RepodataRevisionInfo};
 use serde::{
-    de::{Error as DeError, Visitor},
     Deserialize, Deserializer, Serialize,
+    de::{Error as DeError, Visitor},
 };
 
 use crate::config::{Config, MergeError, ValidationError};

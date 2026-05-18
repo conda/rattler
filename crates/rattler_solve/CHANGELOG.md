@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0](https://github.com/conda/rattler/compare/rattler_solve-v6.0.2...rattler_solve-v7.0.0) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- preserve Arc when crossing the Python custom-source boundary ([#2400](https://github.com/conda/rattler/pull/2400))
+
 ## [6.0.2](https://github.com/conda/rattler/compare/rattler_solve-v6.0.1...rattler_solve-v6.0.2) - 2026-05-07
 
 ### Other

@@ -1,14 +1,14 @@
 use std::convert::TryFrom;
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_while},
     character::complete::{alpha1, digit1, multispace0, u32},
     combinator::{all_consuming, cut, map, not, opt, recognize, value},
-    error::{context, ContextError, ParseError},
+    error::{ContextError, ParseError, context},
     multi::separated_list1,
     sequence::{delimited, preceded, terminated},
-    IResult, Parser,
 };
 use nom_language::error::convert_error;
 use thiserror::Error;
@@ -259,10 +259,10 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 mod tests {
     use std::convert::TryFrom;
 
-    use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
+    use super::{LogicalOperator, VersionTree, parse_operator, recognize_version};
     use crate::version_spec::{
-        version_tree::{parse_version_epoch, recognize_constraint},
         EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+        version_tree::{parse_version_epoch, recognize_constraint},
     };
 
     #[test]

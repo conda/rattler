@@ -5,11 +5,11 @@ use std::{
 };
 
 use rattler_conda_types::{
-    compression_level::CompressionLevel, ChannelRelations, Platform, ShardedRepodata,
+    ChannelRelations, Platform, ShardedRepodata, compression_level::CompressionLevel,
 };
 use rattler_index::{
-    index_fs, index_fs_with_channel_metadata, ChannelMetadata, IndexFsConfig,
-    PackageRevisionAssignment, RepodataRevision, RepodataRevisionInfo,
+    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
+    RepodataRevisionInfo, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::write_tar_bz2_package;
 use serde_json::Value;
@@ -104,11 +104,13 @@ async fn test_index() {
             .as_str(),
         Some("win-64")
     );
-    assert!(repodata_json
-        .get("packages")
-        .unwrap()
-        .get("conda-22.9.0-py38haa244fe_2.tar.bz2")
-        .is_some());
+    assert!(
+        repodata_json
+            .get("packages")
+            .unwrap()
+            .get("conda-22.9.0-py38haa244fe_2.tar.bz2")
+            .is_some()
+    );
     assert_eq!(
         repodata_json
             .get("packages.conda")
@@ -189,11 +191,13 @@ async fn test_reindex_removes_deleted_conda_package() {
     let repodata_path = subdir_path.join("repodata.json");
     let repodata_json: Value =
         serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .get("packages.conda")
-        .unwrap()
-        .get(package_name)
-        .is_some());
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .get(package_name)
+            .is_some()
+    );
 
     fs::remove_file(target_package).unwrap();
 
@@ -213,11 +217,13 @@ async fn test_reindex_removes_deleted_conda_package() {
     .unwrap();
 
     let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .get("packages.conda")
-        .unwrap()
-        .get(package_name)
-        .is_none());
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .get(package_name)
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -254,15 +260,19 @@ async fn test_index_latest_repodata_revision() {
     let repodata_path = subdir_path.join("repodata.json");
     let repodata_json: Value =
         serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .get("packages.conda")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .is_empty());
-    assert!(repodata_json
-        .pointer("/v3/conda/empty-0.1.0-h4616a5c_0")
-        .is_some());
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repodata_json
+            .pointer("/v3/conda/empty-0.1.0-h4616a5c_0")
+            .is_some()
+    );
     let revision = &repodata_json["info"]["repodata_revisions"][0];
     assert_eq!(revision["revision"], 3);
     assert_eq!(revision["n_packages"], 1);
@@ -349,15 +359,21 @@ async fn test_index_repodata_revision_from_index_json() {
     let repodata_path = subdir_path.join("repodata.json");
     let repodata_json: Value =
         serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .pointer("/packages.conda/empty-0.1.0-h4616a5c_0.conda")
-        .is_some());
-    assert!(repodata_json
-        .pointer("/packages/revision-demo-1.0.0-h123_0.tar.bz2")
-        .is_none());
-    assert!(repodata_json
-        .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
-        .is_some());
+    assert!(
+        repodata_json
+            .pointer("/packages.conda/empty-0.1.0-h4616a5c_0.conda")
+            .is_some()
+    );
+    assert!(
+        repodata_json
+            .pointer("/packages/revision-demo-1.0.0-h123_0.tar.bz2")
+            .is_none()
+    );
+    assert!(
+        repodata_json
+            .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
+            .is_some()
+    );
     let revision = &repodata_json["info"]["repodata_revisions"][0];
     assert_eq!(revision["revision"], 3);
     assert_eq!(revision["n_packages"], 1);

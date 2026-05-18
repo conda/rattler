@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, multispace0},
     sequence::{delimited, preceded},
-    IResult, Parser,
 };
 use serde::{Deserialize, Serialize};
 

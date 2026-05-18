@@ -1,6 +1,6 @@
 //! Storage and access of authentication information
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::IntoUrl;
 use std::{
     collections::HashMap,
@@ -8,9 +8,9 @@ use std::{
 };
 use url::Url;
 
-use crate::authentication_storage::{backends::file::FileStorage, AuthenticationStorageError};
+use crate::authentication_storage::{AuthenticationStorageError, backends::file::FileStorage};
 
-use super::{authentication::Authentication, StorageBackend};
+use super::{StorageBackend, authentication::Authentication};
 
 #[cfg(feature = "netrc-rs")]
 use super::backends::netrc::NetRcStorage;

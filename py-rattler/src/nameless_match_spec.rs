@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions};
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};

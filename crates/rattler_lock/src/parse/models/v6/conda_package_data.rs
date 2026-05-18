@@ -3,17 +3,17 @@ use super::{
     source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
 };
 use crate::{
+    ConversionError, UrlOrPath,
     conda::{PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
-    ConversionError, UrlOrPath,
 };
 use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
-    package::CondaArchiveIdentifier, BuildNumber, ChannelUrl, Flag, NoArchType, PackageName,
-    PackageRecord, PackageUrl, VersionWithSource,
+    BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
+    VersionWithSource, package::CondaArchiveIdentifier,
 };
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::Deserialize;
 use serde_with::serde_as;
 use std::{

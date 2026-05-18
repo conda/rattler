@@ -3,14 +3,14 @@
 use std::{collections::HashMap, sync::Arc};
 
 use rattler_networking::{
-    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config,
     AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
+    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config,
 };
 
 use reqwest::Client;
 use rstest::*;
 use temp_env::async_with_vars;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 use url::Url;
 
 /* ------------------------------------ FIXTURES ------------------------------------ */

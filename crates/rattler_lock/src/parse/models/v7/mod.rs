@@ -1,4 +1,5 @@
 mod conda_package_data;
+mod given_verbatim_url;
 mod package_selector;
 mod pypi_package_data;
 mod source_data;

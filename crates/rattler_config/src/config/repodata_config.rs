@@ -153,7 +153,7 @@ impl Config for RepodataConfig {
             _ => {
                 return Err(ConfigEditError::UnknownKeyInner {
                     key: key.to_string(),
-                })
+                });
             }
         }
         Ok(())

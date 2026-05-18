@@ -17,8 +17,8 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tokio_util::io::StreamReader;
 use url::Url;
 
-use crate::tokio::async_read::get_file_from_tar_archive;
 use crate::ExtractError;
+use crate::tokio::async_read::get_file_from_tar_archive;
 
 /// Stream the full package response and extract a single file by path.
 ///

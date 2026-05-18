@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides};
 
 use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage};

@@ -29,10 +29,10 @@ When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 ## Per-channel index configuration
 
 Index options live in `[index-config]` and follow the same shape as
-`[repodata-config]`: a flat default block with optional per-channel overrides
-keyed by URL or absolute path. The most specific entry wins; less-specific
-entries supply fallback values, and `[index-config]` itself is the final
-fallback.
+[`[repodata-config]`](https://pixi.prefix.dev/latest/reference/pixi_configuration/#repodata-config):
+a flat default block with optional per-channel overrides keyed by URL or
+absolute path. The most specific entry wins; less-specific entries supply
+fallback values, and `[index-config]` itself is the final fallback.
 
 ```toml
 # Defaults applied when no per-channel entry matches
@@ -76,8 +76,8 @@ Matching rules:
 | --- | --- | --- |
 | `write-zst` | boolean | Writes `repodata.json.zst`. Defaults to `true`. |
 | `write-shards` | boolean | Writes `repodata_shards.msgpack.zst` and shard files. Defaults to `true`. |
-| `repodata-revisions` | array | Repodata revisions to enable, e.g. `["v3"]` or `[3]`. The indexer fills revision package counts and timestamps while writing repodata. |
-| `package-revision-assignment` | string | `from-index-json` (default) reads the revision from each package's `info/index.json`; `latest` assigns every package to the newest configured revision. |
+| `repodata-revisions` | array | Repodata revisions to enable, e.g. `["v3"]`. Each entry may be the string form (`"v3"`, `"legacy"`) or an integer (`3`). The indexer fills revision package counts and timestamps while writing repodata. |
+| `package-revision-assignment` | string | Controls which `repodata-revisions` bucket a freshly indexed package lands in. `from-index-json` (default) reads the revision from each package's `info/index.json`, so legacy packages stay in the legacy maps and v3-tagged packages go to the v3 bucket. `latest` is an opt-in override that forces every package into the newest configured revision — useful for migrating a whole channel onto v3 in one shot. A future revision-assignment mode will pick based on a package's timestamp so repodata can be deterministically recreated. |
 | `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. May be relative or absolute. |
 | `channel-relations.base` | string | A single channel reference with higher priority than this channel, written to `info.channel_relations.base`. |
 | `channel-relations.overrides` | string | A single channel reference with lower priority than this channel, written to `info.channel_relations.overrides`. |

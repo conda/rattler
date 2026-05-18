@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pythonize::{depythonize, pythonize};
 use rattler_conda_types::package::{AboutJson, PackageFile};

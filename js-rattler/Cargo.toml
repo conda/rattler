@@ -2,7 +2,7 @@
 name = "js-rattler"
 version = "0.1.1"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "WASM bindings to the rattler library"
 
 [lib]
@@ -42,8 +42,8 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 url = "2.5.4"
 
 chrono = { version = "0.4.40", features = ["wasmbind"] }
-reqwest = { version = "0.12.24", default-features = false }
-reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.4.2", default-features = false }
+reqwest = { version = "0.13.3", default-features = false, features = ["default-tls"] }
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1", default-features = false }
 
 # We have transient dependencies on getrandom 0.2 and 0.3 which need WASM features enabled.
 [dependencies.getrandom_v02]

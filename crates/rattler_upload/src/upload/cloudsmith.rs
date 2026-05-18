@@ -1,7 +1,7 @@
 use miette::IntoDiagnostic;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use tracing::{debug, info};
 
@@ -329,7 +329,7 @@ impl Cloudsmith {
 mod test {
     use std::net::SocketAddr;
 
-    use axum::{http::StatusCode, routing::post, Router};
+    use axum::{Router, http::StatusCode, routing::post};
     use url::Url;
 
     use super::Cloudsmith;
@@ -385,8 +385,8 @@ mod test {
 
     #[tokio::test]
     async fn test_cloudsmith_multipart_upload_flow() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
