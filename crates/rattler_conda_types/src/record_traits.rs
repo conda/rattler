@@ -12,7 +12,7 @@ pub trait HasArtifactIdentificationRefs {
     fn version(&self) -> &VersionWithSource;
 
     /// Returns the build string of the package.
-    fn build(&self) -> &BuildString;
+    fn build(&self) -> Option<&BuildString>;
 }
 
 impl HasArtifactIdentificationRefs for PackageRecord {
@@ -24,8 +24,8 @@ impl HasArtifactIdentificationRefs for PackageRecord {
         &self.version
     }
 
-    fn build(&self) -> &BuildString {
-        &self.build
+    fn build(&self) -> Option<&BuildString> {
+        self.build.as_ref()
     }
 }
 
@@ -38,8 +38,8 @@ impl HasArtifactIdentificationRefs for RepoDataRecord {
         &self.package_record.version
     }
 
-    fn build(&self) -> &BuildString {
-        &self.package_record.build
+    fn build(&self) -> Option<&BuildString> {
+        self.package_record.build.as_ref()
     }
 }
 
@@ -52,8 +52,8 @@ impl HasArtifactIdentificationRefs for PrefixRecord {
         &self.repodata_record.package_record.version
     }
 
-    fn build(&self) -> &BuildString {
-        &self.repodata_record.package_record.build
+    fn build(&self) -> Option<&BuildString> {
+        self.repodata_record.package_record.build.as_ref()
     }
 }
 
@@ -66,7 +66,7 @@ impl HasArtifactIdentificationRefs for MinimalPrefixRecord {
         &self.version
     }
 
-    fn build(&self) -> &BuildString {
-        &self.build
+    fn build(&self) -> Option<&BuildString> {
+        self.build.as_ref()
     }
 }

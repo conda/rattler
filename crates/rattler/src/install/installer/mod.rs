@@ -456,13 +456,14 @@ impl Installer {
                 .installed_packages()
                 .filter(|record| record.package_record.subdir != "noarch")
                 .map(|record| {
-                    format!(
-                        "{}/{}-{}-{}",
-                        record.package_record.subdir,
-                        record.package_record.name.as_normalized(),
-                        record.package_record.version,
-                        record.package_record.build
-                    )
+                    let package_record = &record.package_record;
+                    let subdir = &package_record.subdir;
+                    let name = package_record.name.as_normalized();
+                    let version = &package_record.version;
+                    match &package_record.build {
+                        Some(build) => format!("{subdir}/{name}-{version}-{build}"),
+                        None => format!("{subdir}/{name}-{version}"),
+                    }
                 })
                 .collect();
 
@@ -978,12 +979,12 @@ fn update_existing_records<'p>(
             // Write the updated record back to disk if needed
             if let Some(new_record) = updated_record {
                 let conda_meta_path = prefix.path().join("conda-meta");
-                let pkg_meta_path = format!(
-                    "{}-{}-{}.json",
-                    new_record.name().as_normalized(),
-                    new_record.version(),
-                    new_record.build()
-                );
+                let name = new_record.name().as_normalized();
+                let version = new_record.version();
+                let pkg_meta_path = match new_record.build() {
+                    Some(build) => format!("{name}-{version}-{build}.json"),
+                    None => format!("{name}-{version}.json"),
+                };
                 let full_path = conda_meta_path.join(&pkg_meta_path);
 
                 // We need to do a targeted update of just the requested_specs fields
@@ -1055,12 +1056,12 @@ mod tests {
         repo_record: &rattler_conda_types::RepoDataRecord,
     ) -> std::path::PathBuf {
         let conda_meta_path = prefix.path().join("conda-meta");
-        let expected_filename = format!(
-            "{}-{}-{}.json",
-            repo_record.package_record.name.as_normalized(),
-            repo_record.package_record.version,
-            repo_record.package_record.build
-        );
+        let record = &repo_record.package_record;
+        let name = record.name.as_normalized();
+        let expected_filename = match &record.build {
+            Some(build) => format!("{name}-{}-{build}.json", record.version),
+            None => format!("{name}-{}.json", record.version),
+        };
         conda_meta_path.join(&expected_filename)
     }
 

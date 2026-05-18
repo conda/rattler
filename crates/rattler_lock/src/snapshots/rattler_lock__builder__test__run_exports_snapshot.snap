@@ -11,7 +11,7 @@ environments:
     packages:
       linux-64:
       - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
-      - conda_source: my-pkg[abf1cfe6] @ ./my-pkg
+      - conda_source: my-pkg[2e0d8418] @ ./my-pkg
 packages:
 - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
   channel: null
@@ -20,7 +20,7 @@ packages:
     - libbar >=2
     strong:
     - libfoo >=1.0,<2
-- conda_source: my-pkg[abf1cfe6] @ ./my-pkg
+- conda_source: my-pkg[2e0d8418] @ ./my-pkg
   version: 0.1.0
   build: py_0
   subdir: noarch

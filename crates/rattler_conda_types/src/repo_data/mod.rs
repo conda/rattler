@@ -370,8 +370,9 @@ pub struct PackageRecord {
     /// the package is `noarch`.
     pub arch: Option<String>,
 
-    /// The build string of the package
-    pub build: BuildString,
+    /// The build string of the package, if known. Source packages without a
+    /// built artifact have `None` here.
+    pub build: Option<BuildString>,
 
     /// The build number of the package
     pub build_number: BuildNumber,
@@ -580,16 +581,15 @@ impl FromStr for UrlOrPath {
 
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.build.is_empty() {
-            write!(f, "{} {}", self.name.as_normalized(), self.version,)
-        } else {
-            write!(
+        match &self.build {
+            Some(build) => write!(
                 f,
                 "{}={}={}",
                 self.name.as_normalized(),
                 self.version,
-                self.build
-            )
+                build
+            ),
+            None => write!(f, "{} {}", self.name.as_normalized(), self.version),
         }
     }
 }
@@ -743,7 +743,7 @@ impl PackageRecord {
     pub fn new(
         name: PackageName,
         version: impl Into<VersionWithSource>,
-        build: BuildString,
+        build: Option<BuildString>,
     ) -> Self {
         Self {
             arch: None,
@@ -1012,7 +1012,7 @@ impl PackageRecord {
 
         Ok(PackageRecord {
             arch: index.arch,
-            build: index.build,
+            build: Some(index.build),
             build_number: index.build_number,
             constrains: index.constrains,
             depends: index.depends,
@@ -1528,13 +1528,11 @@ mod test {
         let formatted: Vec<String> = records
             .iter()
             .map(|r| {
-                format!(
-                    "{}/{}-{}-{}",
-                    r.subdir,
-                    r.name.as_normalized(),
-                    r.version,
-                    r.build
-                )
+                let name = r.name.as_normalized();
+                match &r.build {
+                    Some(build) => format!("{}/{name}-{}-{build}", r.subdir, r.version),
+                    None => format!("{}/{name}-{}", r.subdir, r.version),
+                }
             })
             .collect();
         insta::assert_snapshot!(formatted.join("\n"));

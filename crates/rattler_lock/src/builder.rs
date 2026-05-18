@@ -119,7 +119,7 @@ struct UniqueBinaryIdentifier {
     location: UrlOrPath,
     normalized_name: String,
     version: Version,
-    build: BuildString,
+    build: Option<BuildString>,
     subdir: String,
 }
 

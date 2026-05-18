@@ -12,7 +12,7 @@ environments:
     packages:
       win-64:
         - conda: "https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda"
-        - conda_source: "child-package[9b6d0ace] @ child-package"
+        - conda_source: "child-package[f8e1f9b2] @ child-package"
 packages:
   - conda: "https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda"
     sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
@@ -20,7 +20,7 @@ packages:
     license: Python-2.0
     size: 16140836
     timestamp: 1696321871976
-  - conda_source: "child-package[9b6d0ace] @ child-package"
+  - conda_source: "child-package[f8e1f9b2] @ child-package"
     version: 0.1.0
     build: pyhbf21a9e_0
     subdir: noarch

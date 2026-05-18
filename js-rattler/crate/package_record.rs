@@ -98,13 +98,18 @@ macro_rules! impl_package_record {
             /// The build string of the package.
             #[wasm_bindgen::prelude::wasm_bindgen(getter)]
             pub fn build(&self) -> String {
-                AsRef::<PackageRecord>::as_ref(self).build.to_string()
+                AsRef::<PackageRecord>::as_ref(self)
+                    .build
+                    .as_ref()
+                    .map_or_else(String::new, ToString::to_string)
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
-            pub fn set_build(&mut self, build: String) {
+            pub fn set_build(&mut self, build: String) -> Result<(), crate::error::JsError> {
                 AsMut::<PackageRecord>::as_mut(self).build =
-                    rattler_conda_types::package::BuildString::new_unchecked(build);
+                    rattler_conda_types::package::BuildString::new(build)
+                        .map_err(crate::error::JsError::from)?;
+                Ok(())
             }
 
             /// The build number of the package.

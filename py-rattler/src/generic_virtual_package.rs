@@ -33,7 +33,8 @@ impl From<PyVirtualPackage> for PyGenericVirtualPackage {
 
 #[pymethods]
 impl PyGenericVirtualPackage {
-    /// Constructs a new `GenericVirtualPackage`.
+    /// Constructs a new `GenericVirtualPackage`. An empty `build_string`
+    /// records the virtual package as having no build identifier.
     #[new]
     pub fn new(name: PyPackageName, version: PyVersion, build_string: String) -> Self {
         Self {
@@ -62,9 +63,13 @@ impl PyGenericVirtualPackage {
         self.inner.version.clone().into()
     }
 
-    /// The build identifier of the package.
+    /// The build identifier of the package. Returns an empty string when the
+    /// virtual package has no build identifier (e.g. `__cuda`).
     #[getter]
     pub fn build_string(&self) -> String {
-        self.inner.build_string.to_string()
+        self.inner
+            .build_string
+            .as_ref()
+            .map_or_else(String::new, BuildString::to_string)
     }
 }
