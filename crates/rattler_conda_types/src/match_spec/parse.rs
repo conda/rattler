@@ -1829,7 +1829,7 @@ mod tests {
         assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.6".to_string()
+            "python>=3.6".to_string()
         );
     }
 
@@ -1848,7 +1848,7 @@ mod tests {
         );
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.10".to_string()
+            "python>=3.10".to_string()
         );
     }
 
@@ -1863,7 +1863,7 @@ mod tests {
         assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.6".to_string()
+            "python>=3.6".to_string()
         );
     }
 
@@ -1881,7 +1881,7 @@ mod tests {
         let spec = parse_conditional(r#"foo[when="python >=3.6 and linux"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python >=3.6 and linux)"
+            "(python>=3.6 and linux)"
         );
     }
 
@@ -1899,13 +1899,13 @@ mod tests {
     fn test_conditional_parsing_complex_version() {
         // Complex version constraints in condition
         let spec = parse_conditional(r#"foo[when="python >=3.6,<4.0"]"#).unwrap();
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6,<4.0");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6,<4.0");
 
         // Multiple conditions with or
         let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python >=3.6 or python <3.0)"
+            "(python>=3.6 or python<3.0)"
         );
     }
 
@@ -1961,7 +1961,7 @@ mod tests {
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
         );
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6");
         assert_eq!(spec.build.unwrap().to_string(), "py*");
     }
 
@@ -2084,7 +2084,7 @@ mod tests {
     fn test_conditional_package_name_with_and_or_substring() {
         // Package names containing "and"/"or" substrings should not be split
         let spec = parse_conditional(r#"foo[when="pandoc >=2.0"]"#).unwrap();
-        assert_eq!(spec.condition.unwrap().to_string(), "pandoc >=2.0");
+        assert_eq!(spec.condition.unwrap().to_string(), "pandoc>=2.0");
     }
 
     #[test]
@@ -2121,7 +2121,7 @@ mod tests {
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
         );
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6");
     }
 
     #[test]
