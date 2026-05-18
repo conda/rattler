@@ -20,7 +20,9 @@ pub const DEFAULT_USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
 struct LoginArgs {
-    /// The host to authenticate with (e.g. prefix.dev)
+    /// The host to authenticate with (e.g. prefix.dev). Defaults to
+    /// `prefix.dev`.
+    #[clap(default_value = "prefix.dev")]
     host: String,
 
     // -- Token / Basic auth --
