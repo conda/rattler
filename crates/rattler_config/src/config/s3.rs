@@ -9,6 +9,13 @@ use crate::edit::ConfigEditError;
 #[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct S3OptionsMap(pub IndexMap<String, S3Options>);
 
+impl S3OptionsMap {
+    /// Returns `true` if no S3 buckets are configured.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct S3Options {
