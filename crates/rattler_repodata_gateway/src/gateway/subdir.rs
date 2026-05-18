@@ -31,8 +31,10 @@ pub struct PackageRecords {
 pub type ExtraDeps = Arc<HashMap<String, Arc<[String]>>>;
 
 /// Extract the unique dependency strings from a set of records, split into
-/// base deps and per-extra deps. Each output list is deduplicated and a dep
-/// that appears in the base list is not repeated in any extra list.
+/// base deps and per-extra deps. Each output list is deduplicated, and a dep
+/// that appears in any record's base list is removed from every extra list
+/// (a base requirement is unconditional, so the solver does not need it gated
+/// on an extra).
 pub(crate) fn extract_unique_deps_split<'a>(
     records: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> (Arc<[String]>, ExtraDeps) {
@@ -49,9 +51,6 @@ pub(crate) fn extract_unique_deps_split<'a>(
         for (extra, extra_deps) in record.package_record.experimental_extra_depends.iter() {
             let entry = per_extra.entry(extra.clone()).or_default();
             for dep in extra_deps {
-                if base_seen.contains(dep) {
-                    continue;
-                }
                 if entry.0.insert(dep.clone()) {
                     entry.1.push(dep.clone());
                 }
@@ -59,9 +58,21 @@ pub(crate) fn extract_unique_deps_split<'a>(
         }
     }
 
+    // Final pass: a dep that ended up in base must not appear in any extra
+    // list, regardless of the order records were visited.
     let per_extra: HashMap<String, Arc<[String]>> = per_extra
         .into_iter()
-        .map(|(extra, (_, deps))| (extra, Arc::from(deps)))
+        .filter_map(|(extra, (_, deps))| {
+            let filtered: Vec<String> = deps
+                .into_iter()
+                .filter(|d| !base_seen.contains(d))
+                .collect();
+            if filtered.is_empty() {
+                None
+            } else {
+                Some((extra, Arc::from(filtered)))
+            }
+        })
         .collect();
 
     (Arc::from(base), Arc::new(per_extra))
@@ -171,8 +182,8 @@ mod tests {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, NoArchType, PackageRecord, RepoDataRecord,
-        VersionWithSource,
+        NoArchType, PackageRecord, RepoDataRecord, VersionWithSource,
+        package::DistArchiveIdentifier,
     };
     use url::Url;
 
@@ -282,6 +293,29 @@ mod tests {
         let (base, per_extra) = extract_unique_deps_split([&rec_a, &rec_b]);
         assert_eq!(&*base, &["aiohttp".to_string()]);
         assert_eq!(&*per_extra["d"], &["aiosignal".to_string()]);
+    }
+
+    /// Same as `extract_unique_deps_split_base_wins_across_records` but with
+    /// the records visited in the opposite order. The base-wins invariant
+    /// must hold regardless of iteration order.
+    #[test]
+    fn extract_unique_deps_split_base_wins_reversed_order() {
+        let rec_extra_first = make_record("black", &[], &[("d", &["aiohttp", "aiosignal"])]);
+        let rec_base_after = make_record("black", &["aiohttp"], &[]);
+        let (base, per_extra) = extract_unique_deps_split([&rec_extra_first, &rec_base_after]);
+        assert_eq!(&*base, &["aiohttp".to_string()]);
+        assert_eq!(&*per_extra["d"], &["aiosignal".to_string()]);
+    }
+
+    /// An extra whose only dep also appears in some record's base list must
+    /// not produce an empty entry in the per-extra map.
+    #[test]
+    fn extract_unique_deps_split_extra_fully_subsumed_is_dropped() {
+        let rec_extra_first = make_record("black", &[], &[("d", &["aiohttp"])]);
+        let rec_base_after = make_record("black", &["aiohttp"], &[]);
+        let (base, per_extra) = extract_unique_deps_split([&rec_extra_first, &rec_base_after]);
+        assert_eq!(&*base, &["aiohttp".to_string()]);
+        assert!(per_extra.is_empty());
     }
 
     #[test]
