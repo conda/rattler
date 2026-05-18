@@ -1,3 +1,13 @@
+//! Trusted publishing (via OIDC).
+//!
+//! The flow:
+//! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
+//!    claim. It owns CI-provider detection and returns `None` when no
+//!    supported provider is present.
+//! 2. Exchange that ID token at the server's mint endpoint for a short-lived
+//!    bearer token usable against the server (read or write, depending on
+//!    server policy).
+
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -264,20 +274,6 @@ struct CachedTrustedPublishingToken {
 impl CachedTrustedPublishingToken {
     fn new(token: TrustedPublishingToken) -> Self {
         let expires_at = jwt_expiration(token.secret());
-        match expires_at {
-            Some(expires_at) => {
-                tracing::debug!(
-                    "TrustedPublishingMiddleware: minted JWT expires at {:?}, refreshing with a {:?} margin",
-                    expires_at,
-                    TOKEN_REFRESH_MARGIN
-                );
-            }
-            None => {
-                tracing::debug!(
-                    "TrustedPublishingMiddleware: minted token has no readable JWT exp claim; reusing it for the client lifetime"
-                );
-            }
-        }
         Self { token, expires_at }
     }
 
