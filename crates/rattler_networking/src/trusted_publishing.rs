@@ -30,13 +30,6 @@ use url::Url;
 /// becomes invalid while a request is in flight.
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// Default audience for the OIDC ID token. Matches prefix.dev's expectation.
-pub const DEFAULT_AUDIENCE: &str = "prefix.dev";
-
-/// Default path on the server where the OIDC ID token is exchanged for a
-/// bearer token.
-pub const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
-
 /// Knobs for the trusted-publishing flow. Use
 /// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults, or
 /// construct directly to point at a different server.
@@ -63,8 +56,8 @@ impl TrustedPublishingOptions {
     /// `/api/oidc/mint_token`.
     pub fn for_prefix_dev() -> Self {
         Self {
-            audience: DEFAULT_AUDIENCE.to_string(),
-            mint_path: DEFAULT_MINT_PATH.to_string(),
+            audience: "prefix.dev".to_string(),
+            mint_path: "/api/oidc/mint_token".to_string(),
         }
     }
 }
