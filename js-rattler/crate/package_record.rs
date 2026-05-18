@@ -54,10 +54,16 @@ extern "C" {
 #[wasm_bindgen(js_class = "PackageRecord")]
 impl JsPackageRecord {
     /// Constructs a new instance from the json representation of a
-    /// PackageRecord.
+    /// PackageRecord. Returns an error if the build string is not a valid
+    /// CEP26 value (the underlying serde representation is permissive, so the
+    /// validation is applied here instead).
     #[wasm_bindgen(constructor)]
     pub fn new(json: JsPackageRecordJson) -> Result<JsPackageRecord, crate::error::JsError> {
         let package_record: PackageRecord = serde_wasm_bindgen::from_value(json.into())?;
+        if let Some(build) = package_record.build.as_ref() {
+            rattler_conda_types::package::BuildString::new(build.as_str())
+                .map_err(crate::error::JsError::from)?;
+        }
         Ok(JsPackageRecord::from(package_record))
     }
 

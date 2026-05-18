@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::{package::BuildString, GenericVirtualPackage};
+use rattler_conda_types::{GenericVirtualPackage, package::BuildString};
 
 use crate::package_name::PyPackageName;
 use crate::version::PyVersion;

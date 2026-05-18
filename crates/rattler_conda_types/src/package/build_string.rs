@@ -22,6 +22,10 @@ pub enum BuildStringError {
         /// The maximum byte length CEP26 allows.
         max: usize,
     },
+
+    /// The value is empty. CEP26 requires at least one character.
+    #[error("build string must not be empty: CEP26 requires at least one character")]
+    Empty,
 }
 
 /// A conda build string.
@@ -35,8 +39,8 @@ pub enum BuildStringError {
 ///
 /// The internal structure of the build string (prefix, hash, build number) is
 /// intentionally not exposed -- callers should treat the value as a single
-/// opaque token. Use [`BuildString::append`] / [`BuildString::prepend`]
-/// (validating) or their `_unchecked` siblings to build composite values.
+/// opaque token. Use [`BuildString::append`] / [`BuildString::prepend`] to
+/// build composite values; both validate the combined result.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct BuildString(String);
@@ -92,42 +96,29 @@ impl BuildString {
     }
 
     /// Append `other` to this build string and validate the combined value
-    /// against CEP26. The receiver is left unchanged if validation fails.
+    /// against CEP26 (non-empty, at most [`Self::MAX_LEN`] bytes, allowed
+    /// characters only). The receiver is left unchanged if validation fails.
     pub fn append(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
-        let other = other.as_ref();
-        if other.is_empty() {
-            return Ok(());
-        }
-        let combined = format!("{}{}", self.0, other);
+        let combined = format!("{}{}", self.0, other.as_ref());
         Self::validate(&combined)?;
         self.0 = combined;
         Ok(())
-    }
-
-    /// Append `other` to this build string without validation.
-    pub fn append_unchecked(&mut self, other: impl AsRef<str>) {
-        self.0.push_str(other.as_ref());
     }
 
     /// Prepend `other` to this build string and validate the combined value
-    /// against CEP26. The receiver is left unchanged if validation fails.
+    /// against CEP26 (non-empty, at most [`Self::MAX_LEN`] bytes, allowed
+    /// characters only). The receiver is left unchanged if validation fails.
     pub fn prepend(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
-        let other = other.as_ref();
-        if other.is_empty() {
-            return Ok(());
-        }
-        let combined = format!("{}{}", other, self.0);
+        let combined = format!("{}{}", other.as_ref(), self.0);
         Self::validate(&combined)?;
         self.0 = combined;
         Ok(())
     }
 
-    /// Prepend `other` to this build string without validation.
-    pub fn prepend_unchecked(&mut self, other: impl AsRef<str>) {
-        self.0.insert_str(0, other.as_ref());
-    }
-
     fn validate(value: &str) -> Result<(), BuildStringError> {
+        if value.is_empty() {
+            return Err(BuildStringError::Empty);
+        }
         if value.len() > Self::MAX_LEN {
             return Err(BuildStringError::TooLong {
                 actual: value.len(),
@@ -275,6 +266,23 @@ mod tests {
     }
 
     #[test]
+    fn append_rejects_when_result_would_be_empty() {
+        // An empty BuildString can only arise from permissive deserialization.
+        // Appending nothing to such a value must surface the invariant
+        // violation rather than silently leaving it empty.
+        let mut bs: BuildString = serde_json::from_str("\"\"").unwrap();
+        let err = bs.append("").unwrap_err();
+        assert!(matches!(err, BuildStringError::Empty));
+    }
+
+    #[test]
+    fn prepend_rejects_when_result_would_be_empty() {
+        let mut bs: BuildString = serde_json::from_str("\"\"").unwrap();
+        let err = bs.prepend("").unwrap_err();
+        assert!(matches!(err, BuildStringError::Empty));
+    }
+
+    #[test]
     fn append_rejects_overflow() {
         let mut bs = BuildString::new("a".repeat(60)).unwrap().unwrap();
         let err = bs.append("h12345").unwrap_err();
@@ -294,13 +302,6 @@ mod tests {
     }
 
     #[test]
-    fn append_unchecked_concatenates_anything() {
-        let mut bs = BuildString::new_unchecked("py").unwrap();
-        bs.append_unchecked("-weird");
-        assert_eq!(bs.as_str(), "py-weird");
-    }
-
-    #[test]
     fn prepend_concatenates_in_order() {
         let mut bs = BuildString::new("h12345ab_0").unwrap().unwrap();
         bs.prepend("py").unwrap();
@@ -312,13 +313,6 @@ mod tests {
         let mut bs = BuildString::new("py").unwrap().unwrap();
         bs.prepend("").unwrap();
         assert_eq!(bs.as_str(), "py");
-    }
-
-    #[test]
-    fn prepend_unchecked_concatenates_anything() {
-        let mut bs = BuildString::new_unchecked("py").unwrap();
-        bs.prepend_unchecked("-weird");
-        assert_eq!(bs.as_str(), "-weirdpy");
     }
 
     #[test]

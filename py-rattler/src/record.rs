@@ -190,13 +190,15 @@ impl PyRecord {
         platform: Option<String>,
         noarch: Option<PyNoArchType>,
         python_site_packages_path: Option<String>,
-    ) -> Self {
+    ) -> PyResult<Self> {
+        let build =
+            BuildString::new(build).map_err(|err| PyValueError::new_err(err.to_string()))?;
         let noarch = noarch.map(Into::into);
-        Self {
+        Ok(Self {
             inner: RecordInner::Package(Arc::new(PackageRecord {
                 name: name.into(),
                 version: VersionWithSource::new(version.0.inner.clone(), version.1),
-                build: BuildString::new_unchecked(build),
+                build,
                 build_number,
                 arch,
                 platform,
@@ -220,7 +222,7 @@ impl PyRecord {
                 timestamp: None,
                 track_features: Vec::new(),
             })),
-        }
+        })
     }
 
     #[staticmethod]

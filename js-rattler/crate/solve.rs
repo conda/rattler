@@ -91,7 +91,7 @@ pub async fn simple_solve(
             let rec = PackageRecord {
                 name: PackageName::try_from(pkg.package_name.clone())?,
                 version: Version::from_str(&pkg.version)?.into(),
-                build: BuildString::new_unchecked(pkg.build.clone()),
+                build: BuildString::new(pkg.build.clone()).map_err(JsError::from)?,
                 build_number: pkg.build_number.unwrap_or_default(),
                 md5: pkg
                     .md5
