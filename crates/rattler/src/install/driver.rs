@@ -132,6 +132,22 @@ impl InstallDriverBuilder {
         }
     }
 
+    /// Apply the settings from a [`rattler_config::config::ConfigBase`] to the
+    /// builder. Currently this only wires `run-post-link-scripts` to
+    /// [`Self::execute_link_scripts`]; treat it as the entry point for any
+    /// future config-driven install options.
+    #[cfg(feature = "rattler_config")]
+    pub fn with_config<T>(self, config: &rattler_config::config::ConfigBase<T>) -> Self
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        let execute_link_scripts = matches!(
+            config.run_post_link_scripts,
+            Some(rattler_config::config::run_post_link_scripts::RunPostLinkScripts::Insecure)
+        );
+        self.execute_link_scripts(execute_link_scripts)
+    }
+
     pub fn finish(self) -> InstallDriver {
         InstallDriver {
             io_concurrency_semaphore: self.io_concurrency_semaphore,
@@ -339,5 +355,30 @@ impl InstallDriver {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "rattler_config"))]
+mod tests {
+    use super::*;
+    use rattler_config::config::{ConfigBase, run_post_link_scripts::RunPostLinkScripts};
+
+    #[test]
+    fn with_config_enables_link_scripts_when_insecure() {
+        let mut config = ConfigBase::<()>::default();
+        config.run_post_link_scripts = Some(RunPostLinkScripts::Insecure);
+        let builder = InstallDriver::builder().with_config(&config);
+        assert!(builder.execute_link_scripts);
+    }
+
+    #[test]
+    fn with_config_disables_link_scripts_otherwise() {
+        let cases = [None, Some(RunPostLinkScripts::False)];
+        for run in cases {
+            let mut config = ConfigBase::<()>::default();
+            config.run_post_link_scripts = run;
+            let builder = InstallDriver::builder().with_config(&config);
+            assert!(!builder.execute_link_scripts);
+        }
     }
 }

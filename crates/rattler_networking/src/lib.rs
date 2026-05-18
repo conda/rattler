@@ -21,6 +21,11 @@ pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod oauth_refresh;
 
+#[cfg(feature = "rattler_config")]
+pub mod client;
+#[cfg(feature = "rattler_config")]
+pub use client::{apply_config_to_reqwest_builder, client_with_middleware_from_config};
+
 mod lazy_client;
 pub mod mirror_middleware;
 pub mod oci_middleware;

@@ -168,6 +168,23 @@ impl Installer {
         self
     }
 
+    /// Apply the settings from a [`rattler_config::config::ConfigBase`] to the
+    /// installer. Currently this wires `run-post-link-scripts` to
+    /// [`Self::with_execute_link_scripts`]; treat it as the entry point for
+    /// any future config-driven install options.
+    #[cfg(feature = "rattler_config")]
+    #[must_use]
+    pub fn with_config<T>(self, config: &rattler_config::config::ConfigBase<T>) -> Self
+    where
+        T: rattler_config::config::Config + Default,
+    {
+        let execute_link_scripts = matches!(
+            config.run_post_link_scripts,
+            Some(rattler_config::config::run_post_link_scripts::RunPostLinkScripts::Insecure)
+        );
+        self.with_execute_link_scripts(execute_link_scripts)
+    }
+
     /// Sets the package cache to use.
     #[must_use]
     pub fn with_package_cache(self, package_cache: PackageCache) -> Self {

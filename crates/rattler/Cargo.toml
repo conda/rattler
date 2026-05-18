@@ -17,6 +17,7 @@ rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/r
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth']
 indicatif = ['dep:indicatif', 'dep:console']
+rattler_config = ['dep:rattler_config']
 
 [package.metadata.docs.rs]
 features = ["cli-tools", "indicatif"]
@@ -39,6 +40,7 @@ once_cell = { workspace = true }
 parking_lot = { workspace = true }
 rattler_cache = { workspace = true }
 rattler_conda_types = { workspace = true }
+rattler_config = { workspace = true, optional = true, default-features = false }
 rattler_digest = { workspace = true }
 rattler_networking = { workspace = true }
 rattler_shell = { workspace = true }
