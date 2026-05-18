@@ -11,34 +11,46 @@ use digest::{Digest, Output, OutputSizeUser};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
-use std::borrow::Cow;
 use std::fmt::LowerHex;
 use std::ops::Deref;
 
 /// Deserialize the [`Output`] of a [`Digest`].
 ///
-/// If the deserializer is human-readable, it will parse the digest from a hex
-/// string. Otherwise, it will deserialize raw bytes.
+/// Accepts either a hex-encoded string (for human-readable formats like JSON)
+/// or raw bytes (for binary formats like MessagePack). The format is detected
+/// per-value rather than by branching on `deserializer.is_human_readable()`,
+/// because serde's internal `Content` deserializer (used for
+/// `#[serde(flatten)]` and friends) hardcodes `is_human_readable() == true`
+/// regardless of the underlying format, so a flattened digest field reached
+/// via a binary deserializer would otherwise be asked for a hex string.
 pub fn deserialize<'de, D, Dig: Digest>(deserializer: D) -> Result<Output<Dig>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    if deserializer.is_human_readable() {
-        let str = Cow::<'de, str>::deserialize(deserializer)?;
-        super::parse_digest_from_hex::<Dig>(str.as_ref())
-            .ok_or_else(|| Error::custom("failed to parse digest"))
-    } else {
-        let bytes = Cow::<'de, [u8]>::deserialize(deserializer)?;
-        let len = <Dig as OutputSizeUser>::output_size();
-        if bytes.len() != len {
-            return Err(Error::custom(format!(
-                "invalid length, expected {}, got {}",
-                len,
+    let expected_len = <Dig as OutputSizeUser>::output_size();
+    let check_len = |bytes: &[u8]| -> Result<Output<Dig>, String> {
+        if bytes.len() == expected_len {
+            Ok(Output::<Dig>::clone_from_slice(bytes))
+        } else {
+            Err(format!(
+                "invalid length, expected {expected_len}, got {}",
                 bytes.len()
-            )));
+            ))
         }
-        Ok(Output::<Dig>::clone_from_slice(&bytes))
-    }
+    };
+
+    serde_untagged::UntaggedEnumVisitor::new()
+        .expecting("a hex-encoded digest string or raw digest bytes")
+        .string(|s| {
+            super::parse_digest_from_hex::<Dig>(s)
+                .ok_or_else(|| Error::custom("failed to parse digest"))
+        })
+        .bytes(|b| check_len(b).map_err(Error::custom))
+        .seq(|seq| {
+            let bytes: Vec<u8> = seq.deserialize()?;
+            check_len(&bytes).map_err(Error::custom)
+        })
+        .deserialize(deserializer)
 }
 
 /// Serializes the [`Output`] of a [`Digest`].
@@ -246,6 +258,43 @@ mod test {
         let deserialized_array: SerializableHash<sha2::Sha256> =
             rmp_serde::from_slice(&msgpack_array).unwrap();
         assert_eq!(&expected_hash.0, &deserialized_array.0);
+    }
+
+    #[test]
+    pub fn test_deserialize_messagepack_under_flatten() {
+        // Regression test: when SerializableHash is inside a struct that uses
+        // `#[serde(flatten)]`, serde buffers fields through its internal Content
+        // representation. That Content deserializer hardcodes
+        // `is_human_readable() == true`, which previously broke the bin/hex
+        // dispatch and surfaced as "byte array, expected a string" for shards
+        // produced for conda-pypi-style channels.
+        use serde::{Deserialize, Serialize};
+
+        #[serde_with::serde_as]
+        #[derive(Deserialize, Serialize)]
+        struct Inner {
+            #[serde_as(as = "SerializableHash::<sha2::Sha256>")]
+            sha256: sha2::digest::Output<sha2::Sha256>,
+        }
+
+        #[derive(Deserialize, Serialize)]
+        struct Outer {
+            #[serde(flatten)]
+            inner: Inner,
+            extra: String,
+        }
+
+        let expected = crate::parse_digest_from_hex::<sha2::Sha256>(
+            "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+        )
+        .unwrap();
+        let outer = Outer {
+            inner: Inner { sha256: expected },
+            extra: "hi".into(),
+        };
+        let bytes = rmp_serde::to_vec(&outer).unwrap();
+        let parsed: Outer = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(parsed.inner.sha256, expected);
     }
 
     #[test]

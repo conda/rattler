@@ -4,10 +4,13 @@ use miette::{Context, IntoDiagnostic};
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use reqwest::Client;
 
+pub const USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
+
 /// Creates an HTTP client with the middleware stack used by the CLI for remote fetches.
 pub fn create_client_with_middleware() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
     let download_client = Client::builder()
         .no_gzip()
+        .user_agent(USER_AGENT)
         .build()
         .into_diagnostic()
         .context("failed to create HTTP client")?;

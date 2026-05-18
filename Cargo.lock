@@ -5299,6 +5299,7 @@ dependencies = [
  "rmp-serde",
  "rstest",
  "serde",
+ "serde-untagged",
  "serde_bytes",
  "serde_json",
  "serde_with",
