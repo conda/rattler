@@ -25,13 +25,10 @@
 //! [index-config."/srv/conda/internal"]
 //! base-url = "../packages/"
 //! ```
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
 use rattler_conda_types::{ChannelRelations, RepodataRevision, RepodataRevisionInfo};
-use serde::{
-    Deserialize, Deserializer, Serialize,
-    de::{Error as DeError, Visitor},
-};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
 #[cfg(feature = "edit")]
@@ -265,70 +262,29 @@ fn validate_channel_relations(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy)]
-struct RepodataRevisionValue(RepodataRevision);
-
-impl<'de> Deserialize<'de> for RepodataRevisionValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_any(RepodataRevisionVisitor)
-    }
-}
-
-struct RepodataRevisionVisitor;
-
-impl<'de> Visitor<'de> for RepodataRevisionVisitor {
-    type Value = RepodataRevisionValue;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a repodata revision such as \"v3\", \"legacy\", or 3")
-    }
-
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
-    where
-        E: DeError,
-    {
-        let value = u64::try_from(value)
-            .map_err(|_err| E::custom("repodata revisions must not be negative"))?;
-        Ok(RepodataRevisionValue(RepodataRevision::from(value)))
-    }
-
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-    where
-        E: DeError,
-    {
-        Ok(RepodataRevisionValue(RepodataRevision::from(value)))
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: DeError,
-    {
-        RepodataRevision::from_str(value)
-            .map(RepodataRevisionValue)
-            .map_err(E::custom)
-    }
-}
-
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
 ) -> Result<Option<Vec<RepodataRevisionInfo>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let revisions: Option<Vec<RepodataRevisionValue>> = Option::deserialize(deserializer)?;
-    Ok(revisions.map(|revs| {
-        revs.into_iter()
-            .map(|r| RepodataRevisionInfo {
-                revision: r.0,
-                n_packages: None,
-                oldest: None,
-                newest: None,
-            })
-            .collect()
-    }))
+    let revisions: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    revisions
+        .map(|revs| {
+            revs.into_iter()
+                .map(|s| {
+                    RepodataRevision::from_str(&s)
+                        .map(|revision| RepodataRevisionInfo {
+                            revision,
+                            n_packages: None,
+                            oldest: None,
+                            newest: None,
+                        })
+                        .map_err(D::Error::custom)
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
 }
 
 #[cfg(test)]
@@ -464,11 +420,11 @@ base-url = "../packages/"
     }
 
     #[test]
-    fn parses_numeric_repodata_revisions() {
-        let cfg = parse("repodata-revisions = [3]\n");
-        assert_eq!(
-            cfg.default.repodata_revisions.as_ref().unwrap()[0].revision,
-            RepodataRevision::V3
+    fn rejects_numeric_repodata_revisions() {
+        let err = toml::from_str::<IndexConfig>("repodata-revisions = [3]\n").unwrap_err();
+        assert!(
+            err.to_string().contains("invalid type"),
+            "unexpected error: {err}"
         );
     }
 
