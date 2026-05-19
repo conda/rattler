@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.2](https://github.com/conda/rattler/compare/rattler_lock-v0.30.1...rattler_lock-v0.30.2) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
 ## [0.30.1](https://github.com/conda/rattler/compare/rattler_lock-v0.30.0...rattler_lock-v0.30.1) - 2026-05-13
 
 ### Other
