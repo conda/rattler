@@ -23,6 +23,8 @@ features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 hex = { workspace = true }

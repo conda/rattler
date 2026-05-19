@@ -148,6 +148,15 @@ impl StorageBackend for FileStorage {
         Ok(cache.content.get(host).cloned())
     }
 
+    fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
+        let cache = self.cache.read().unwrap();
+        Ok(cache
+            .content
+            .iter()
+            .map(|(host, auth)| (host.clone(), auth.clone()))
+            .collect())
+    }
+
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let mut dict = self.read_json()?;
         if dict.remove(host).is_some() {

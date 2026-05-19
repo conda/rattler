@@ -130,6 +130,18 @@ impl StorageBackend for NetRcStorage {
             Err(err) => Err(err.into()),
         }
     }
+
+    fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        self.machines
+            .keys()
+            .map(|host| {
+                self.get_password(host)
+                    .map(|auth| auth.map(|auth| (host.clone(), auth)))
+                    .map_err(AuthenticationStorageError::from)
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
 }
 
 #[cfg(test)]

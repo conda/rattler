@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow};
 use reqwest::IntoUrl;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
 };
 use url::Url;
@@ -146,6 +146,29 @@ impl AuthenticationStorage {
         cache.insert(host.to_string(), None);
 
         Ok(None)
+    }
+
+    /// List authentication entries known to the configured backends.
+    ///
+    /// Entries are deduplicated by host using backend priority, matching the
+    /// lookup behavior of [`get`](Self::get).
+    pub fn list(&self) -> Result<Vec<(String, Authentication)>> {
+        let mut entries = BTreeMap::new();
+
+        for backend in &self.backends {
+            match backend.list() {
+                Ok(backend_entries) => {
+                    for (host, auth) in backend_entries {
+                        entries.entry(host).or_insert(auth);
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!("Error listing credentials from backend: {}", error);
+                }
+            }
+        }
+
+        Ok(entries.into_iter().collect())
     }
 
     /// Retrieve the authentication information for the given URL, along with the
@@ -340,5 +363,25 @@ mod tests {
                 .unwrap();
             assert_eq!(retrieved, Some(auth));
         }
+    }
+
+    #[test]
+    fn list_returns_entries_from_backends() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage
+            .store(
+                "example.com",
+                &Authentication::BearerToken("token".to_string()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            storage.list().unwrap(),
+            vec![(
+                "example.com".to_string(),
+                Authentication::BearerToken("token".to_string())
+            )]
+        );
     }
 }

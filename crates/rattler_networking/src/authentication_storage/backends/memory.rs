@@ -58,6 +58,17 @@ impl StorageBackend for MemoryStorage {
         Ok(store.get(host).cloned())
     }
 
+    fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        Ok(store
+            .iter()
+            .map(|(host, auth)| (host.clone(), auth.clone()))
+            .collect())
+    }
+
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let mut store = self
             .store

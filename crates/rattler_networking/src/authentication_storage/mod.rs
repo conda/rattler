@@ -38,6 +38,15 @@ pub trait StorageBackend: std::fmt::Debug {
     /// Retrieve the authentication information for the given host
     fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError>;
 
+    /// List all authentication entries known to this backend.
+    ///
+    /// Some backends, such as platform keyrings, cannot enumerate arbitrary
+    /// legacy entries. They may return only entries that were stored with an
+    /// index maintained by this crate.
+    fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        Ok(Vec::new())
+    }
+
     /// Delete the authentication information for the given host
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError>;
 }

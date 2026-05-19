@@ -8,6 +8,15 @@ use crate::{
     authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
+const INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
+const WELL_KNOWN_HOSTS: &[&str] = &[
+    "prefix.dev",
+    "*.prefix.dev",
+    "repo.prefix.dev",
+    "anaconda.org",
+    "*.anaconda.org",
+];
+
 #[derive(Clone, Debug)]
 /// A storage backend that stores credentials in the operating system's keyring
 pub struct KeyringAuthenticationStorage {
@@ -22,6 +31,49 @@ impl KeyringAuthenticationStorage {
         Self {
             store_key: store_key.to_string(),
         }
+    }
+
+    fn index_entry(&self) -> Result<Entry, KeyringAuthenticationStorageError> {
+        Entry::new(&self.store_key, INDEX_ACCOUNT).map_err(KeyringAuthenticationStorageError::from)
+    }
+
+    fn read_index(&self) -> Result<Vec<String>, KeyringAuthenticationStorageError> {
+        let entry = self.index_entry()?;
+        let password = match entry.get_password() {
+            Ok(password) => password,
+            Err(keyring::Error::NoEntry) => return Ok(Vec::new()),
+            Err(err) => return Err(KeyringAuthenticationStorageError::from(err)),
+        };
+
+        serde_json::from_str(&password).map_err(KeyringAuthenticationStorageError::from)
+    }
+
+    fn write_index(&self, hosts: &[String]) -> Result<(), KeyringAuthenticationStorageError> {
+        let password =
+            serde_json::to_string(hosts).map_err(KeyringAuthenticationStorageError::from)?;
+        self.index_entry()?
+            .set_password(&password)
+            .map_err(KeyringAuthenticationStorageError::from)
+    }
+
+    fn add_to_index(&self, host: &str) -> Result<(), KeyringAuthenticationStorageError> {
+        let mut hosts = self.read_index()?;
+        if !hosts.iter().any(|existing| existing == host) {
+            hosts.push(host.to_string());
+            hosts.sort();
+            self.write_index(&hosts)?;
+        }
+        Ok(())
+    }
+
+    fn remove_from_index(&self, host: &str) -> Result<(), KeyringAuthenticationStorageError> {
+        let mut hosts = self.read_index()?;
+        let previous_len = hosts.len();
+        hosts.retain(|existing| existing != host);
+        if hosts.len() != previous_len {
+            self.write_index(&hosts)?;
+        }
+        Ok(())
     }
 }
 
@@ -66,6 +118,10 @@ impl StorageBackend for KeyringAuthenticationStorage {
             .set_password(&password)
             .map_err(KeyringAuthenticationStorageError::from)?;
 
+        if let Err(err) = self.add_to_index(host) {
+            tracing::debug!("Error updating keyring credential index: {err}");
+        }
+
         Ok(())
     }
 
@@ -92,12 +148,33 @@ impl StorageBackend for KeyringAuthenticationStorage {
         }
     }
 
+    fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        let mut entries = Vec::new();
+        let mut hosts = self.read_index()?;
+        hosts.extend(WELL_KNOWN_HOSTS.iter().map(|host| host.to_string()));
+        hosts.sort();
+        hosts.dedup();
+
+        for host in hosts {
+            if let Some(auth) = self.get(&host)? {
+                entries.push((host, auth));
+            }
+        }
+        Ok(entries)
+    }
+
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let entry =
             Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
-        entry
-            .delete_credential()
-            .map_err(KeyringAuthenticationStorageError::from)?;
+
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(err) => return Err(KeyringAuthenticationStorageError::from(err).into()),
+        }
+
+        if let Err(err) = self.remove_from_index(host) {
+            tracing::debug!("Error updating keyring credential index: {err}");
+        }
 
         Ok(())
     }
