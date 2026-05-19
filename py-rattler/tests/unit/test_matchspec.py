@@ -81,16 +81,10 @@ def test_parse_no_channel_nameless() -> None:
 
 
 def test_extras_parsing() -> None:
-    """Test that extras syntax can be parsed (now always enabled)."""
+    """Test that extras syntax can be parsed."""
     m = MatchSpec("numpy[extras=[test]]")
     assert m.name is not None
     assert m.name.normalized == "numpy"
-    assert m.extras == ["test"]
-
-
-def test_extras_kwargs_are_noop() -> None:
-    """The `experimental_extras` kwarg is kept for backwards compatibility but is a no-op."""
-    m = MatchSpec("numpy[extras=[test]]", experimental_extras=False)
     assert m.extras == ["test"]
 
 
@@ -103,16 +97,10 @@ def test_extras_multiple() -> None:
 
 
 def test_conditionals_parsing() -> None:
-    """Test that conditionals syntax can be parsed (now always enabled)."""
+    """Test that conditionals syntax can be parsed."""
     m = MatchSpec('requests[when="python>=3.6"]')
     assert m.name is not None
     assert m.name.normalized == "requests"
-    assert m.condition == "python>=3.6"
-
-
-def test_conditionals_kwargs_are_noop() -> None:
-    """The `experimental_conditionals` kwarg is kept for backwards compatibility but is a no-op."""
-    m = MatchSpec('requests[when="python>=3.6"]', experimental_conditionals=False)
     assert m.condition == "python>=3.6"
 
 
@@ -131,24 +119,24 @@ def test_extras_and_conditionals_together() -> None:
     assert m.condition == "python>=3.7"
 
 
-def test_nameless_experimental_extras() -> None:
-    """Test that NamelessMatchSpec also supports experimental extras."""
-    nms = NamelessMatchSpec(">=1.20[extras=[test]]", experimental_extras=True)
+def test_nameless_extras() -> None:
+    """Test that NamelessMatchSpec also supports extras."""
+    nms = NamelessMatchSpec(">=1.20[extras=[test]]")
     assert nms.version == ">=1.20"
     assert nms.extras == ["test"]
 
 
-def test_strict_mode_with_experimental_features() -> None:
-    """Test that experimental features work with strict parsing mode."""
-    m = MatchSpec("numpy[extras=[test]]", strict=True, experimental_extras=True)
+def test_strict_mode_with_extras() -> None:
+    """Test that extras work with strict parsing mode."""
+    m = MatchSpec("numpy[extras=[test]]", strict=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]
 
 
-def test_lenient_mode_with_experimental_features() -> None:
-    """Test that experimental features work with lenient parsing mode."""
-    m = MatchSpec("numpy[extras=[test]]", strict=False, experimental_extras=True)
+def test_lenient_mode_with_extras() -> None:
+    """Test that extras work with lenient parsing mode."""
+    m = MatchSpec("numpy[extras=[test]]", strict=False)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]

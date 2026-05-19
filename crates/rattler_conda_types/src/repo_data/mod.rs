@@ -64,12 +64,8 @@ pub struct RepoData {
     /// Packages stored under the `v3` top-level key.
     /// Uses extension-less `ArchiveIdentifier` keys with sub-maps for each
     /// archive type.
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3Packages::is_empty"
-    )]
-    pub experimental_v3: ExperimentalV3Packages,
+    #[serde(default, rename = "v3", skip_serializing_if = "V3Packages::is_empty")]
+    pub v3: V3Packages,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -261,7 +257,7 @@ impl ChannelRelations {
 /// Records in this set of packages can have conditional dependencies, extras
 /// and can be whls.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
-pub struct ExperimentalV3Packages {
+pub struct V3Packages {
     /// The tar.bz2 package records
     #[serde(
         default,
@@ -288,7 +284,7 @@ pub struct ExperimentalV3Packages {
     pub whl: ahash::HashMap<ArchiveIdentifier, WhlPackageRecord>,
 }
 
-impl ExperimentalV3Packages {
+impl V3Packages {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
@@ -392,8 +388,7 @@ pub struct PackageRecord {
     /// are only required if certain features are enabled or if certain
     /// conditions are met.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -636,14 +631,14 @@ impl RepoData {
         };
 
         // Conda packages: packages, packages.conda, v3.tar.bz2, v3.conda
-        let v3_tar_bz2 = self.experimental_v3.tar_bz2.into_iter().map(|(id, rec)| {
+        let v3_tar_bz2 = self.v3.tar_bz2.into_iter().map(|(id, rec)| {
             (
                 DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
                 rec,
             )
         });
         let v3_conda = self
-            .experimental_v3
+            .v3
             .conda
             .into_iter()
             .map(|(id, rec)| (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec));
@@ -674,7 +669,7 @@ impl RepoData {
                 url,
                 package_record,
             },
-        ) in self.experimental_v3.whl
+        ) in self.v3.whl
         {
             let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
             let url = match url {
@@ -758,7 +753,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            experimental_extra_depends: BTreeMap::new(),
+            extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -860,7 +855,7 @@ pub struct SubdirRunExportsJson {
         rename = "v3",
         skip_serializing_if = "ExperimentalV3RunExports::is_empty"
     )]
-    experimental_v3: ExperimentalV3RunExports,
+    v3: ExperimentalV3RunExports,
 }
 
 /// Run exports for packages stored under the `v3` top-level key.
@@ -899,10 +894,10 @@ impl SubdirRunExportsJson {
             .get(file_name)
             .or_else(|| self.conda_packages.get(file_name))
             .or_else(|| {
-                self.experimental_v3
+                self.v3
                     .tar_bz2
                     .get(&file_name.identifier)
-                    .or_else(|| self.experimental_v3.conda.get(&file_name.identifier))
+                    .or_else(|| self.v3.conda.get(&file_name.identifier))
             })
             .map(|pre| &pre.run_exports)
     }
@@ -1023,7 +1018,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            experimental_extra_depends: index.experimental_extra_depends,
+            extra_depends: index.extra_depends,
             sha256,
             size,
             subdir,
@@ -1048,8 +1043,8 @@ mod test {
     use indexmap::IndexMap;
 
     use crate::{
-        Channel, ChannelConfig, ChannelInfo, ChannelRelations, ExperimentalV3Packages,
-        PackageRecord, RepoData, RepodataRevision,
+        Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
+        RepodataRevision, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
     };
@@ -1073,7 +1068,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: [
                 "xyz-1-py.conda",
                 "foo-1-py.conda",
@@ -1138,7 +1133,7 @@ mod test {
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: ahash::HashSet::default(),
         };
         let json = serde_json::to_string(&partial).unwrap();
@@ -1160,7 +1155,7 @@ mod test {
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
-                experimental_v3: ExperimentalV3Packages::default(),
+                v3: V3Packages::default(),
                 removed: ahash::HashSet::default(),
             };
             let json = serde_json::to_string(&repodata).unwrap();
@@ -1435,7 +1430,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: ahash::HashSet::default(),
         };
 

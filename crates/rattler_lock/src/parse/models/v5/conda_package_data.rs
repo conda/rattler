@@ -142,7 +142,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
                 build_number,
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
-                experimental_extra_depends: std::collections::BTreeMap::new(),
+                extra_depends: std::collections::BTreeMap::new(),
                 features: value.features.into_owned(),
                 flags: value.flags.into_owned(),
                 legacy_bz2_md5: value.legacy_bz2_md5,

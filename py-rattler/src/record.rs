@@ -203,7 +203,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
                 flags: Vec::new(),
                 legacy_bz2_md5: None,
@@ -422,7 +422,7 @@ impl PyRecord {
     #[getter]
     pub fn extra_depends(&self) -> std::collections::HashMap<String, Vec<String>> {
         self.as_package_record()
-            .experimental_extra_depends
+            .extra_depends
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
@@ -433,8 +433,7 @@ impl PyRecord {
         &mut self,
         extra_depends: std::collections::HashMap<String, Vec<String>>,
     ) {
-        self.as_package_record_mut().experimental_extra_depends =
-            extra_depends.into_iter().collect();
+        self.as_package_record_mut().extra_depends = extra_depends.into_iter().collect();
     }
 
     /// Features are a deprecated way to specify different

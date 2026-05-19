@@ -37,19 +37,8 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = true, experimental_conditionals = true, experimental_flags = true))]
-    #[allow(clippy::fn_params_excessive_bools)]
-    pub fn __init__(
-        spec: &str,
-        strict: bool,
-        exact_names_only: bool,
-        experimental_extras: bool,
-        experimental_conditionals: bool,
-        experimental_flags: bool,
-    ) -> PyResult<Self> {
-        // These kwargs are kept for backwards compatibility but are no-ops:
-        // extras, conditionals, and flags are now part of default rattler.
-        let _ = (experimental_extras, experimental_conditionals, experimental_flags);
+    #[pyo3(signature = (spec, strict = false, exact_names_only = true))]
+    pub fn __init__(spec: &str, strict: bool, exact_names_only: bool) -> PyResult<Self> {
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {

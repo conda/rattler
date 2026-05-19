@@ -20,18 +20,14 @@ class NamelessMatchSpec:
         self,
         spec: str,
         strict: bool = False,
-        experimental_extras: bool = True,
-        experimental_conditionals: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        `experimental_extras` and `experimental_conditionals` are accepted for
-        backwards compatibility but are no-ops: extras (`[extras=[foo,bar]]`)
-        and conditionals (`>=1.0[when="python >=3.6"]`) syntax are now always
-        enabled.
+        Extras (`[extras=[foo,bar]]`) and conditionals
+        (`>=1.0[when="python >=3.6"]`) syntax are always enabled.
 
         ```python
         >>> NamelessMatchSpec(">=24.0")
@@ -42,9 +38,7 @@ class NamelessMatchSpec:
         ```
         """
         if isinstance(spec, str):
-            self._nameless_match_spec = PyNamelessMatchSpec(
-                spec, strict, experimental_extras, experimental_conditionals
-            )
+            self._nameless_match_spec = PyNamelessMatchSpec(spec, strict)
         else:
             raise TypeError(
                 "NamelessMatchSpec constructor received unsupported type"

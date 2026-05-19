@@ -2012,7 +2012,7 @@ mod tests {
     #[test]
     fn test_nested_when_conditions_not_allowed() {
         // According to the CEP, inner MatchSpec queries MUST NOT feature their own `when` field.
-        // The inner condition parser uses strict mode without experimental conditionals,
+        // The inner condition parser uses strict mode without conditionals enabled,
         // so nested when conditions should fail with an InvalidCondition error.
 
         // Test case 1: Simple nested when

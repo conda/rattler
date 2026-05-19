@@ -48,7 +48,7 @@ pub(crate) fn extract_unique_deps_split<'a>(
                 base.push(dep.clone());
             }
         }
-        for (extra, extra_deps) in record.package_record.experimental_extra_depends.iter() {
+        for (extra, extra_deps) in record.package_record.extra_depends.iter() {
             let entry = per_extra.entry(extra.clone()).or_default();
             for dep in extra_deps {
                 if entry.0.insert(dep.clone()) {
@@ -190,9 +190,9 @@ mod tests {
     use super::extract_unique_deps_split;
 
     fn make_record(name: &str, deps: &[&str], extra_deps: &[(&str, &[&str])]) -> RepoDataRecord {
-        let mut experimental_extra_depends: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut extra_depends: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (extra, items) in extra_deps {
-            experimental_extra_depends.insert(
+            extra_depends.insert(
                 (*extra).to_string(),
                 items.iter().map(|s| (*s).to_string()).collect(),
             );
@@ -215,7 +215,7 @@ mod tests {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            experimental_extra_depends,
+            extra_depends,
             sha256: None,
             size: None,
             subdir: "linux-64".to_string(),
