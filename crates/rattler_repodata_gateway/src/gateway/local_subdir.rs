@@ -7,7 +7,7 @@ use crate::{
     gateway::{
         GatewayError,
         error::SubdirNotFoundError,
-        subdir::{PackageRecords, SubdirClient, extract_unique_deps},
+        subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
     },
     sparse::{PackageFormatSelection, SparseRepoData},
 };
@@ -81,10 +81,11 @@ impl SubdirClient for LocalSubdirClient {
             .load_records(&name, PackageFormatSelection::PreferConda)
         {
             Ok(records) => {
-                let unique_deps = extract_unique_deps(&records);
+                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
                 Ok(PackageRecords {
                     records: records.into_iter().map(Arc::new).collect(),
-                    unique_deps,
+                    unique_base_deps,
+                    unique_extra_deps,
                 })
             }
             Err(err) => Err(GatewayError::IoError(
