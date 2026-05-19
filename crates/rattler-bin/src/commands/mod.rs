@@ -13,3 +13,6 @@ pub mod run;
 pub mod search;
 pub mod shell_hook;
 pub mod virtual_packages;
+
+#[cfg(feature = "sigstore-verify")]
+pub mod verify;
