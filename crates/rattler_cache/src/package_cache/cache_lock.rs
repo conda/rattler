@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_digest::Sha256Hash;
@@ -290,7 +289,7 @@ impl CacheMetadataFile {
                 ));
             }
         }
-        Ok(Some(GenericArray::clone_from_slice(&buf)))
+        Ok(Some(Sha256Hash::from(buf)))
     }
 }
 

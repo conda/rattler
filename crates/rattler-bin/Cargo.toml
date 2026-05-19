@@ -43,6 +43,7 @@ clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 futures-util = { workspace = true }
+hex = { workspace = true }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }

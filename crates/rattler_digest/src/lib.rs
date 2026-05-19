@@ -20,11 +20,11 @@
 //!
 //! // Compute the MD5 hash of a string
 //! let md5_result = compute_bytes_digest::<Md5>("Hello, world!");
-//! println!("MD5 hash: {:x}", md5_result);
+//! println!("MD5 hash: {}", hex::encode(md5_result));
 //!
 //! // Compute the SHA256 hash of a file
 //! let sha256_result = compute_file_digest::<Sha256>("somefile.txt").unwrap();
-//! println!("SHA256 hash: {:x}", sha256_result);
+//! println!("SHA256 hash: {}", hex::encode(sha256_result));
 //! ```
 //!
 //! # Available functions
@@ -77,21 +77,17 @@ pub type Blake2bMac256 = Blake2bMac<U32>;
 pub type Blake2bMac256Hash = blake2::digest::Output<Blake2bMac256>;
 
 /// Compute a hash of the file at the specified location.
-pub fn compute_file_digest<D: Digest + Default + Write>(
+pub fn compute_file_digest<D: Digest + Default>(
     path: impl AsRef<Path>,
 ) -> Result<Output<D>, std::io::Error> {
-    // Open the file for reading
-    let mut file = File::open(path)?;
-
-    // Determine the hash of the file on disk
-    let mut hasher = D::default();
-    std::io::copy(&mut file, &mut hasher)?;
-
-    Ok(hasher.finalize())
+    let file = File::open(path)?;
+    let mut writer = HashingWriter::<_, D>::new(std::io::sink());
+    std::io::copy(&mut std::io::BufReader::new(file), &mut writer)?;
+    Ok(writer.finalize().1)
 }
 
 /// Compute a hash of the specified Url without basic auth.
-pub fn compute_url_digest<D: Digest + Default + Write>(mut url: url::Url) -> Output<D> {
+pub fn compute_url_digest<D: Digest + Default>(mut url: url::Url) -> Output<D> {
     let _ = url.set_username("");
     let _ = url.set_password(None);
 
@@ -101,7 +97,7 @@ pub fn compute_url_digest<D: Digest + Default + Write>(mut url: url::Url) -> Out
 }
 
 /// Compute a hash of the specified bytes.
-pub fn compute_bytes_digest<D: Digest + Default + Write>(bytes: impl AsRef<[u8]>) -> Output<D> {
+pub fn compute_bytes_digest<D: Digest + Default>(bytes: impl AsRef<[u8]>) -> Output<D> {
     let mut hasher = D::default();
     hasher.update(bytes);
     hasher.finalize()
@@ -227,7 +223,7 @@ mod test {
         std::fs::write(&file_path, input).unwrap();
         let hash = super::compute_file_digest::<sha2::Sha256>(&file_path).unwrap();
 
-        assert_eq!(format!("{hash:x}"), expected_hash);
+        assert_eq!(hex::encode(hash), expected_hash);
     }
 
     #[rstest]
@@ -245,6 +241,6 @@ mod test {
         cursor.read_to_string(&mut cursor_string).unwrap();
         assert_eq!(&cursor_string, input);
         let (_, hash) = cursor.finalize();
-        assert_eq!(format!("{hash:x}"), expected_hash);
+        assert_eq!(hex::encode(hash), expected_hash);
     }
 }

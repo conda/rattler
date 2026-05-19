@@ -1281,7 +1281,7 @@ pub async fn write_repodata(
         for (_, (digest, encoded_shard)) in shards {
             let op = op.clone();
             let future = async move || {
-                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+                let shard_path = format!("{subdir}/shards/{}.msgpack.zst", hex::encode(digest));
                 tracing::trace!("Writing repodata shard to {shard_path}");
                 match op
                     .write_with(&shard_path, encoded_shard)

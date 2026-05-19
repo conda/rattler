@@ -281,7 +281,7 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_pkg_id,
                 repo_type_md5,
-                &c_string(format!("{md5:x}")),
+                &c_string(hex::encode(md5)),
             );
         }
 
@@ -291,7 +291,7 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_checksum,
                 repo_type_sha256,
-                &c_string(format!("{sha256:x}")),
+                &c_string(hex::encode(sha256)),
             );
         }
 

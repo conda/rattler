@@ -585,10 +585,10 @@ async fn stream_and_decode_to_file(
     let (_, hash) = hashing_file_writer.finalize();
 
     tracing::debug!(
-        "downloaded {}, decoded that into {}, BLAKE2 hash: {:x}",
+        "downloaded {}, decoded that into {}, BLAKE2 hash: {}",
         SizeFormatter::new(total_bytes, DECIMAL),
         SizeFormatter::new(bytes, DECIMAL),
-        hash
+        hex::encode(hash)
     );
 
     Ok((temp_file, hash))

@@ -125,8 +125,8 @@ fn test_extract_conda(#[case] input: Url, #[case] sha256: &str, #[case] md5: &st
     )
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(conda_archives)]
@@ -183,8 +183,8 @@ fn test_extract_tar_bz2(#[case] input: Url, #[case] sha256: &str, #[case] md5: &
     )
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(tar_bz2_archives)]
@@ -206,8 +206,8 @@ async fn test_extract_tar_bz2_async(#[case] input: Url, #[case] sha256: &str, #[
     .await
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(conda_archives)]
@@ -231,8 +231,8 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
         .await
         .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[cfg(feature = "reqwest")]
@@ -261,8 +261,8 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
     .await
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[rstest]
@@ -312,8 +312,8 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
         extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir).unwrap();
 
     let combined_result = json!({
-        "sha256": format!("{:x}", new_result.sha256),
-        "md5": format!("{:x}", new_result.md5),
+        "sha256": hex::encode(new_result.sha256),
+        "md5": hex::encode(new_result.md5),
     });
 
     insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);

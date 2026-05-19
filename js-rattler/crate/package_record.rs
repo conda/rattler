@@ -243,7 +243,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -273,7 +273,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .legacy_bz2_md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -324,7 +324,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .sha256
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 

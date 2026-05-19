@@ -11,7 +11,6 @@ use digest::{Digest, Output, OutputSizeUser};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
-use std::fmt::LowerHex;
 use std::ops::Deref;
 
 /// Deserialize the [`Output`] of a [`Digest`].
@@ -29,14 +28,12 @@ where
 {
     let expected_len = <Dig as OutputSizeUser>::output_size();
     let check_len = |bytes: &[u8]| -> Result<Output<Dig>, String> {
-        if bytes.len() == expected_len {
-            Ok(Output::<Dig>::clone_from_slice(bytes))
-        } else {
-            Err(format!(
+        Output::<Dig>::try_from(bytes).map_err(|_e| {
+            format!(
                 "invalid length, expected {expected_len}, got {}",
                 bytes.len()
-            ))
-        }
+            )
+        })
     };
 
     serde_untagged::UntaggedEnumVisitor::new()
@@ -57,15 +54,12 @@ where
 ///
 /// If the serializer is human-readable, it will write the digest as a hex
 /// string. Otherwise, it will deserialize raw bytes.
-pub fn serialize<'a, S: Serializer, Dig: Digest>(
-    digest: &'a Output<Dig>,
+pub fn serialize<S: Serializer, Dig: Digest>(
+    digest: &Output<Dig>,
     s: S,
-) -> Result<S::Ok, S::Error>
-where
-    &'a Output<Dig>: LowerHex,
-{
+) -> Result<S::Ok, S::Error> {
     if s.is_human_readable() {
-        format!("{digest:x}").serialize(s)
+        hex::encode::<&[u8]>(digest.as_ref()).serialize(s)
     } else {
         // Without specialization, Rust forces Serde to treat &[u8] just like any other slice and
         // Vec<u8> just like any other vector. In reality this particular slice and vector can
@@ -130,10 +124,7 @@ where
 #[derive(Debug, Clone)]
 pub struct SerializableHash<T: Digest>(pub Output<T>);
 
-impl<T: Digest> Serialize for SerializableHash<T>
-where
-    Output<T>: LowerHex,
-{
+impl<T: Digest> Serialize for SerializableHash<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -172,10 +163,7 @@ impl<T: Digest> Deref for SerializableHash<T> {
     }
 }
 
-impl<T: Digest> SerializeAs<Output<T>> for SerializableHash<T>
-where
-    for<'a> &'a Output<T>: LowerHex,
-{
+impl<T: Digest> SerializeAs<Output<T>> for SerializableHash<T> {
     fn serialize_as<S>(source: &Output<T>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

@@ -37,6 +37,7 @@ all-features = true
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+hex = { workspace = true }
 rattler_networking = { workspace = true, features = ["rattler_config"] }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
@@ -74,11 +75,6 @@ tokio = { workspace = true, features = [
   "process",
 ] }
 sigstore-sign = { workspace = true, optional = true, default-features = false }
-
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-sha2 = { workspace = true, features = ["asm"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
 sha2 = { workspace = true }
 
 [dev-dependencies]

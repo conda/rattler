@@ -523,8 +523,8 @@ impl PackageCache {
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),
-                                        expected: format!("{sha256:x}"),
-                                        actual: format!("{:x}", result.sha256),
+                                        expected: hex::encode(sha256),
+                                        actual: hex::encode(result.sha256),
                                         total_size: result.total_size,
                                     });
                                 }
@@ -543,8 +543,8 @@ impl PackageCache {
                                     return Err(ExtractError::HashMismatch {
                                         url: url.clone().redact().to_string(),
                                         destination: destination.display().to_string(),
-                                        expected: format!("{md5:x}"),
-                                        actual: format!("{:x}", result.md5),
+                                        expected: hex::encode(md5),
+                                        actual: hex::encode(result.md5),
                                         total_size: result.total_size,
                                     });
                                 }
@@ -694,8 +694,8 @@ where
         tracing::warn!(
             "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
             path.display(),
-            given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
-            locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
+            given_sha.map_or(String::from("<unknown>"), hex::encode),
+            locked_sha256.map_or(String::from("<unknown>"), hex::encode)
         );
     }
 
@@ -1216,7 +1216,7 @@ mod test {
 
         let file_name = get_file_name_from_path(cache_metadata_without_origin_hash.path());
         let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
-        let expected_file_name = format!("clobber-python-0.1.0-cpython-{path_hash:x}");
+        let expected_file_name = format!("clobber-python-0.1.0-cpython-{}", hex::encode(path_hash));
         assert_eq!(file_name, expected_file_name);
     }
 

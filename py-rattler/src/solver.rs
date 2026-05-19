@@ -92,7 +92,7 @@ pub fn py_solve<'a>(
             .query(
                 rust_sources,
                 platforms.into_iter().map(Into::into),
-                specs.clone().into_iter(),
+                specs.clone(),
             )
             .recursive(true)
             .execute()

@@ -113,7 +113,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{shard:x}.msgpack.zst"))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
             .expect("invalid shard url");
 
         let shard_request = self

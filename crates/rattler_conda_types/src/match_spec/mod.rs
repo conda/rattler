@@ -214,11 +214,11 @@ impl Display for MatchSpec {
         }
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{md5:x}\""));
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{sha256:x}\""));
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
         }
 
         if let Some(build_number) = &self.build_number {
@@ -325,11 +325,11 @@ impl MatchSpec {
         }
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{md5:x}\""));
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{sha256:x}\""));
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
         }
 
         if let Some(file_name) = &self.file_name {
@@ -517,11 +517,11 @@ impl Display for NamelessMatchSpec {
         }
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{md5:x}\""));
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{sha256:x}\""));
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
         }
 
         if let Some(license_family) = &self.license_family {

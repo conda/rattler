@@ -25,6 +25,7 @@ features = ["cli-tools", "indicatif"]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
+hex = { workspace = true }
 dirs = { workspace = true }
 filetime = { workspace = true }
 fs-err = { workspace = true }
