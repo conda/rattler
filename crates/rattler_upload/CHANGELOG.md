@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/conda/rattler/compare/rattler_upload-v0.7.0...rattler_upload-v0.7.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+- add trusted publisher middleware in rattler_networking ([#2426](https://github.com/conda/rattler/pull/2426))
+
 ## [0.7.0](https://github.com/conda/rattler/compare/rattler_upload-v0.6.1...rattler_upload-v0.7.0) - 2026-05-13
 
 ### Other
