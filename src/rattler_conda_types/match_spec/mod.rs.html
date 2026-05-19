@@ -1,9 +1,9 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_conda_types/src/match_spec/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_conda_types" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_conda_types/src/match_spec/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_conda_types" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_conda_types/match_spec/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Query language for conda packages.
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_conda_types/match_spec/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Query language for conda packages.
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="kw">use </span><span class="kw">crate</span>::match_spec::condition::MatchSpecCondition;
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span><span class="kw">crate</span>::package::CondaArchiveIdentifier;
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use crate</span>::{
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>crate::{
 <a href=#5 id=5 data-nosnippet>5</a>    GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord, RepodataRevision,
 <a href=#6 id=6 data-nosnippet>6</a>    VersionSpec, build_spec::BuildNumberSpec,
 <a href=#7 id=7 data-nosnippet>7</a>};
@@ -216,11 +216,11 @@
 <a href=#214 id=214 data-nosnippet>214</a>        }
 <a href=#215 id=215 data-nosnippet>215</a>
 <a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(md5) = <span class="kw-2">&amp;</span><span class="self">self</span>.md5 {
-<a href=#217 id=217 data-nosnippet>217</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{md5:x}\""</span>));
+<a href=#217 id=217 data-nosnippet>217</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{}\""</span>, hex::encode(md5)));
 <a href=#218 id=218 data-nosnippet>218</a>        }
 <a href=#219 id=219 data-nosnippet>219</a>
 <a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sha256) = <span class="kw-2">&amp;</span><span class="self">self</span>.sha256 {
-<a href=#221 id=221 data-nosnippet>221</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{sha256:x}\""</span>));
+<a href=#221 id=221 data-nosnippet>221</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{}\""</span>, hex::encode(sha256)));
 <a href=#222 id=222 data-nosnippet>222</a>        }
 <a href=#223 id=223 data-nosnippet>223</a>
 <a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(build_number) = <span class="kw-2">&amp;</span><span class="self">self</span>.build_number {
@@ -327,11 +327,11 @@
 <a href=#325 id=325 data-nosnippet>325</a>        }
 <a href=#326 id=326 data-nosnippet>326</a>
 <a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(md5) = <span class="kw-2">&amp;</span><span class="self">self</span>.md5 {
-<a href=#328 id=328 data-nosnippet>328</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{md5:x}\""</span>));
+<a href=#328 id=328 data-nosnippet>328</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{}\""</span>, hex::encode(md5)));
 <a href=#329 id=329 data-nosnippet>329</a>        }
 <a href=#330 id=330 data-nosnippet>330</a>
 <a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sha256) = <span class="kw-2">&amp;</span><span class="self">self</span>.sha256 {
-<a href=#332 id=332 data-nosnippet>332</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{sha256:x}\""</span>));
+<a href=#332 id=332 data-nosnippet>332</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{}\""</span>, hex::encode(sha256)));
 <a href=#333 id=333 data-nosnippet>333</a>        }
 <a href=#334 id=334 data-nosnippet>334</a>
 <a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(file_name) = <span class="kw-2">&amp;</span><span class="self">self</span>.file_name {
@@ -519,11 +519,11 @@
 <a href=#517 id=517 data-nosnippet>517</a>        }
 <a href=#518 id=518 data-nosnippet>518</a>
 <a href=#519 id=519 data-nosnippet>519</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(md5) = <span class="kw-2">&amp;</span><span class="self">self</span>.md5 {
-<a href=#520 id=520 data-nosnippet>520</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{md5:x}\""</span>));
+<a href=#520 id=520 data-nosnippet>520</a>            keys.push(<span class="macro">format!</span>(<span class="string">"md5=\"{}\""</span>, hex::encode(md5)));
 <a href=#521 id=521 data-nosnippet>521</a>        }
 <a href=#522 id=522 data-nosnippet>522</a>
 <a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sha256) = <span class="kw-2">&amp;</span><span class="self">self</span>.sha256 {
-<a href=#524 id=524 data-nosnippet>524</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{sha256:x}\""</span>));
+<a href=#524 id=524 data-nosnippet>524</a>            keys.push(<span class="macro">format!</span>(<span class="string">"sha256=\"{}\""</span>, hex::encode(sha256)));
 <a href=#525 id=525 data-nosnippet>525</a>        }
 <a href=#526 id=526 data-nosnippet>526</a>
 <a href=#527 id=527 data-nosnippet>527</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(license_family) = <span class="kw-2">&amp;</span><span class="self">self</span>.license_family {
@@ -767,7 +767,7 @@
 <a href=#765 id=765 data-nosnippet>765</a>    <span class="doccomment">/// Match a [`MatchSpec`] against a [`RepoDataRecord`]
 <a href=#766 id=766 data-nosnippet>766</a>    </span><span class="kw">fn </span>matches(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>RepoDataRecord) -&gt; bool {
 <a href=#767 id=767 data-nosnippet>767</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(url_spec) = <span class="self">self</span>.url.as_ref()
-<a href=#768 id=768 data-nosnippet>768</a>            &amp;&amp; <span class="macro">url_spec !</span>= <span class="kw-2">&amp;</span>other.url
+<a href=#768 id=768 data-nosnippet>768</a>            &amp;&amp; url_spec != <span class="kw-2">&amp;</span>other.url
 <a href=#769 id=769 data-nosnippet>769</a>        {
 <a href=#770 id=770 data-nosnippet>770</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#771 id=771 data-nosnippet>771</a>        }
@@ -784,7 +784,7 @@
 <a href=#782 id=782 data-nosnippet>782</a>    <span class="doccomment">/// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`]
 <a href=#783 id=783 data-nosnippet>783</a>    </span><span class="kw">fn </span>matches(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>RepoDataRecord) -&gt; bool {
 <a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(url_spec) = <span class="self">self</span>.url.as_ref()
-<a href=#785 id=785 data-nosnippet>785</a>            &amp;&amp; <span class="macro">url_spec !</span>= <span class="kw-2">&amp;</span>other.url
+<a href=#785 id=785 data-nosnippet>785</a>            &amp;&amp; url_spec != <span class="kw-2">&amp;</span>other.url
 <a href=#786 id=786 data-nosnippet>786</a>        {
 <a href=#787 id=787 data-nosnippet>787</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#788 id=788 data-nosnippet>788</a>        }
@@ -895,7 +895,7 @@
 <a href=#893 id=893 data-nosnippet>893</a>
 <a href=#894 id=894 data-nosnippet>894</a>    <span class="kw">use </span>rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 <a href=#895 id=895 data-nosnippet>895</a>
-<a href=#896 id=896 data-nosnippet>896</a>    <span class="kw">use crate</span>::{
+<a href=#896 id=896 data-nosnippet>896</a>    <span class="kw">use </span>crate::{
 <a href=#897 id=897 data-nosnippet>897</a>        Flag, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError,
 <a href=#898 id=898 data-nosnippet>898</a>        ParseMatchSpecOptions, ParseStrictness::<span class="kw-2">*</span>, RepoDataRecord, RepodataRevision, StringMatcher,
 <a href=#899 id=899 data-nosnippet>899</a>        Version, match_spec::Matches, package::DistArchiveIdentifier,
@@ -916,7 +916,7 @@
 <a href=#914 id=914 data-nosnippet>914</a>    <span class="attr">#[test]
 <a href=#915 id=915 data-nosnippet>915</a>    </span><span class="kw">fn </span>test_name_asterisk() {
 <a href=#916 id=916 data-nosnippet>916</a>        <span class="kw">use </span><span class="kw">crate</span>::match_spec::package_name_matcher::PackageNameMatcher;
-<a href=#917 id=917 data-nosnippet>917</a>        <span class="kw">use crate</span>::{MatchSpec, ParseMatchSpecOptions, ParseStrictness::Lenient, VersionSpec};
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="kw">use </span>crate::{MatchSpec, ParseMatchSpecOptions, ParseStrictness::Lenient, VersionSpec};
 <a href=#918 id=918 data-nosnippet>918</a>
 <a href=#919 id=919 data-nosnippet>919</a>        <span class="kw">let </span>options = ParseMatchSpecOptions::from(Lenient).with_exact_names_only(<span class="bool-val">false</span>);
 <a href=#920 id=920 data-nosnippet>920</a>
@@ -935,7 +935,7 @@
 <a href=#933 id=933 data-nosnippet>933</a>    <span class="attr">#[test]
 <a href=#934 id=934 data-nosnippet>934</a>    </span><span class="kw">fn </span>test_name_asterisk_edge_cases() {
 <a href=#935 id=935 data-nosnippet>935</a>        <span class="kw">use </span><span class="kw">crate</span>::match_spec::package_name_matcher::PackageNameMatcher;
-<a href=#936 id=936 data-nosnippet>936</a>        <span class="kw">use crate</span>::{
+<a href=#936 id=936 data-nosnippet>936</a>        <span class="kw">use </span>crate::{
 <a href=#937 id=937 data-nosnippet>937</a>            MatchSpec, ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::Strict,
 <a href=#938 id=938 data-nosnippet>938</a>            VersionSpec,
 <a href=#939 id=939 data-nosnippet>939</a>        };

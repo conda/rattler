@@ -1,6 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_cache/src/package_cache/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_cache" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_cache/src/package_cache/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_cache" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_cache/package_cache/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! This module provides functionality to cache extracted Conda packages. See
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_cache/package_cache/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! This module provides functionality to cache extracted Conda packages. See
 <a href=#2 id=2 data-nosnippet>2</a>//! [`PackageCache`].
 <a href=#3 id=3 data-nosnippet>3</a>
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span>std::{
@@ -511,7 +511,7 @@
 <a href=#509 id=509 data-nosnippet>509</a>                            //
 <a href=#510 id=510 data-nosnippet>510</a>                            // For context, conda itself only checks one hash.
 <a href=#511 id=511 data-nosnippet>511</a>                            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sha256) = sha256 {
-<a href=#512 id=512 data-nosnippet>512</a>                                <span class="kw">if </span><span class="macro">sha256 !</span>= result.sha256 {
+<a href=#512 id=512 data-nosnippet>512</a>                                <span class="kw">if </span>sha256 != result.sha256 {
 <a href=#513 id=513 data-nosnippet>513</a>                                    <span class="comment">// Delete the package if the hash does not match.
 <a href=#514 id=514 data-nosnippet>514</a>                                    // Failure here is non-fatal: the TempDir guard will
 <a href=#515 id=515 data-nosnippet>515</a>                                    // clean up on drop; log and continue so the retry
@@ -525,13 +525,13 @@
 <a href=#523 id=523 data-nosnippet>523</a>                                    <span class="kw">return </span><span class="prelude-val">Err</span>(ExtractError::HashMismatch {
 <a href=#524 id=524 data-nosnippet>524</a>                                        url: url.clone().redact().to_string(),
 <a href=#525 id=525 data-nosnippet>525</a>                                        destination: destination.display().to_string(),
-<a href=#526 id=526 data-nosnippet>526</a>                                        expected: <span class="macro">format!</span>(<span class="string">"{sha256:x}"</span>),
-<a href=#527 id=527 data-nosnippet>527</a>                                        actual: <span class="macro">format!</span>(<span class="string">"{:x}"</span>, result.sha256),
+<a href=#526 id=526 data-nosnippet>526</a>                                        expected: hex::encode(sha256),
+<a href=#527 id=527 data-nosnippet>527</a>                                        actual: hex::encode(result.sha256),
 <a href=#528 id=528 data-nosnippet>528</a>                                        total_size: result.total_size,
 <a href=#529 id=529 data-nosnippet>529</a>                                    });
 <a href=#530 id=530 data-nosnippet>530</a>                                }
 <a href=#531 id=531 data-nosnippet>531</a>                            }  <span class="kw">else if let </span><span class="prelude-val">Some</span>(md5) = md5
-<a href=#532 id=532 data-nosnippet>532</a>                                &amp;&amp; <span class="macro">md5 !</span>= result.md5 {
+<a href=#532 id=532 data-nosnippet>532</a>                                &amp;&amp; md5 != result.md5 {
 <a href=#533 id=533 data-nosnippet>533</a>                                    <span class="comment">// Delete the package if the hash does not match.
 <a href=#534 id=534 data-nosnippet>534</a>                                    // Failure here is non-fatal: the TempDir guard will
 <a href=#535 id=535 data-nosnippet>535</a>                                    // clean up on drop; log and continue so the retry
@@ -545,8 +545,8 @@
 <a href=#543 id=543 data-nosnippet>543</a>                                    <span class="kw">return </span><span class="prelude-val">Err</span>(ExtractError::HashMismatch {
 <a href=#544 id=544 data-nosnippet>544</a>                                        url: url.clone().redact().to_string(),
 <a href=#545 id=545 data-nosnippet>545</a>                                        destination: destination.display().to_string(),
-<a href=#546 id=546 data-nosnippet>546</a>                                        expected: <span class="macro">format!</span>(<span class="string">"{md5:x}"</span>),
-<a href=#547 id=547 data-nosnippet>547</a>                                        actual: <span class="macro">format!</span>(<span class="string">"{:x}"</span>, result.md5),
+<a href=#546 id=546 data-nosnippet>546</a>                                        expected: hex::encode(md5),
+<a href=#547 id=547 data-nosnippet>547</a>                                        actual: hex::encode(result.md5),
 <a href=#548 id=548 data-nosnippet>548</a>                                        total_size: result.total_size,
 <a href=#549 id=549 data-nosnippet>549</a>                                    });
 <a href=#550 id=550 data-nosnippet>550</a>                                }
@@ -629,7 +629,7 @@
 <a href=#627 id=627 data-nosnippet>627</a>    <span class="kw">let </span>locked_sha256 = metadata.read_sha256()<span class="question-mark">?</span>;
 <a href=#628 id=628 data-nosnippet>628</a>
 <a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">let </span>hash_mismatch = <span class="kw">match </span>(given_sha, <span class="kw-2">&amp;</span>locked_sha256) {
-<a href=#630 id=630 data-nosnippet>630</a>        (<span class="prelude-val">Some</span>(given_hash), <span class="prelude-val">Some</span>(locked_sha256)) =&gt; <span class="macro">given_hash !</span>= locked_sha256,
+<a href=#630 id=630 data-nosnippet>630</a>        (<span class="prelude-val">Some</span>(given_hash), <span class="prelude-val">Some</span>(locked_sha256)) =&gt; given_hash != locked_sha256,
 <a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
 <a href=#632 id=632 data-nosnippet>632</a>    };
 <a href=#633 id=633 data-nosnippet>633</a>
@@ -696,8 +696,8 @@
 <a href=#694 id=694 data-nosnippet>694</a>        <span class="macro">tracing::warn!</span>(
 <a href=#695 id=695 data-nosnippet>695</a>            <span class="string">"hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package"</span>,
 <a href=#696 id=696 data-nosnippet>696</a>            path.display(),
-<a href=#697 id=697 data-nosnippet>697</a>            given_sha.map_or(String::from(<span class="string">"&lt;unknown&gt;"</span>), |s| <span class="macro">format!</span>(<span class="string">"{s:x}"</span>)),
-<a href=#698 id=698 data-nosnippet>698</a>            locked_sha256.map_or(String::from(<span class="string">"&lt;unknown&gt;"</span>), |s| <span class="macro">format!</span>(<span class="string">"{s:x}"</span>))
+<a href=#697 id=697 data-nosnippet>697</a>            given_sha.map_or(String::from(<span class="string">"&lt;unknown&gt;"</span>), hex::encode),
+<a href=#698 id=698 data-nosnippet>698</a>            locked_sha256.map_or(String::from(<span class="string">"&lt;unknown&gt;"</span>), hex::encode)
 <a href=#699 id=699 data-nosnippet>699</a>        );
 <a href=#700 id=700 data-nosnippet>700</a>    }
 <a href=#701 id=701 data-nosnippet>701</a>
@@ -855,7 +855,7 @@
 <a href=#853 id=853 data-nosnippet>853</a>    <span class="kw">use </span>url::Url;
 <a href=#854 id=854 data-nosnippet>854</a>
 <a href=#855 id=855 data-nosnippet>855</a>    <span class="kw">use </span><span class="kw">super</span>::PackageCache;
-<a href=#856 id=856 data-nosnippet>856</a>    <span class="kw">use crate</span>::{
+<a href=#856 id=856 data-nosnippet>856</a>    <span class="kw">use </span>crate::{
 <a href=#857 id=857 data-nosnippet>857</a>        package_cache::{CacheKey, PackageCacheError},
 <a href=#858 id=858 data-nosnippet>858</a>        validation::{ValidationMode, validate_package_directory},
 <a href=#859 id=859 data-nosnippet>859</a>    };
@@ -964,7 +964,7 @@
 <a href=#962 id=962 data-nosnippet>962</a>            <span class="kw">let </span>bytes = buffer.into_iter().take(byte_count).collect::&lt;Vec&lt;u8&gt;&gt;();
 <a href=#963 id=963 data-nosnippet>963</a>            <span class="comment">// Create a stream that ends prematurely
 <a href=#964 id=964 data-nosnippet>964</a>            </span><span class="kw">let </span>stream = stream::iter(<span class="macro">vec!</span>[
-<a href=#965 id=965 data-nosnippet>965</a>                <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, Infallible&gt;(bytes.into_iter().collect::&lt;Bytes&gt;()),
+<a href=#965 id=965 data-nosnippet>965</a>                Ok::&lt;<span class="kw">_</span>, Infallible&gt;(bytes.into_iter().collect::&lt;Bytes&gt;()),
 <a href=#966 id=966 data-nosnippet>966</a>                <span class="comment">// The stream ends after sending partial data, simulating a premature close
 <a href=#967 id=967 data-nosnippet>967</a>            </span>]);
 <a href=#968 id=968 data-nosnippet>968</a>            <span class="kw">let </span>body = Body::from_stream(stream);
@@ -1023,7 +1023,7 @@
 <a href=#1021 id=1021 data-nosnippet>1021</a>                    ));
 <a href=#1022 id=1022 data-nosnippet>1022</a>                }
 <a href=#1023 id=1023 data-nosnippet>1023</a>                <span class="comment">// Return the partial data first
-<a href=#1024 id=1024 data-nosnippet>1024</a>                </span><span class="prelude-val">Some</span>((<span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, std::io::Error&gt;(data.clone()), (<span class="bool-val">true</span>, data)))
+<a href=#1024 id=1024 data-nosnippet>1024</a>                </span><span class="prelude-val">Some</span>((Ok::&lt;<span class="kw">_</span>, std::io::Error&gt;(data.clone()), (<span class="bool-val">true</span>, data)))
 <a href=#1025 id=1025 data-nosnippet>1025</a>            });
 <a href=#1026 id=1026 data-nosnippet>1026</a>
 <a href=#1027 id=1027 data-nosnippet>1027</a>            <span class="kw">let </span>body = Body::from_stream(stream);
@@ -1218,7 +1218,7 @@
 <a href=#1216 id=1216 data-nosnippet>1216</a>
 <a href=#1217 id=1217 data-nosnippet>1217</a>        <span class="kw">let </span>file_name = get_file_name_from_path(cache_metadata_without_origin_hash.path());
 <a href=#1218 id=1218 data-nosnippet>1218</a>        <span class="kw">let </span>path_hash = compute_bytes_digest::&lt;Sha256&gt;(package_path.to_string_lossy().as_bytes());
-<a href=#1219 id=1219 data-nosnippet>1219</a>        <span class="kw">let </span>expected_file_name = <span class="macro">format!</span>(<span class="string">"clobber-python-0.1.0-cpython-{path_hash:x}"</span>);
+<a href=#1219 id=1219 data-nosnippet>1219</a>        <span class="kw">let </span>expected_file_name = <span class="macro">format!</span>(<span class="string">"clobber-python-0.1.0-cpython-{}"</span>, hex::encode(path_hash));
 <a href=#1220 id=1220 data-nosnippet>1220</a>        <span class="macro">assert_eq!</span>(file_name, expected_file_name);
 <a href=#1221 id=1221 data-nosnippet>1221</a>    }
 <a href=#1222 id=1222 data-nosnippet>1222</a>
@@ -1427,7 +1427,7 @@
 <a href=#1425 id=1425 data-nosnippet>1425</a>                cache_key.clone(),
 <a href=#1426 id=1426 data-nosnippet>1426</a>                <span class="kw">move </span>|_destination| {
 <a href=#1427 id=1427 data-nosnippet>1427</a>                    cloned.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#1428 id=1428 data-nosnippet>1428</a>                    <span class="kw">async </span>{ <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, PackageCacheError&gt;(()) }
+<a href=#1428 id=1428 data-nosnippet>1428</a>                    <span class="kw">async </span>{ Ok::&lt;<span class="kw">_</span>, PackageCacheError&gt;(()) }
 <a href=#1429 id=1429 data-nosnippet>1429</a>                },
 <a href=#1430 id=1430 data-nosnippet>1430</a>                <span class="prelude-val">None</span>,
 <a href=#1431 id=1431 data-nosnippet>1431</a>            )
@@ -1469,7 +1469,7 @@
 <a href=#1467 id=1467 data-nosnippet>1467</a>                cache_key.clone(),
 <a href=#1468 id=1468 data-nosnippet>1468</a>                <span class="kw">move </span>|_destination| {
 <a href=#1469 id=1469 data-nosnippet>1469</a>                    cloned.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#1470 id=1470 data-nosnippet>1470</a>                    <span class="kw">async </span>{ <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, PackageCacheError&gt;(()) }
+<a href=#1470 id=1470 data-nosnippet>1470</a>                    <span class="kw">async </span>{ Ok::&lt;<span class="kw">_</span>, PackageCacheError&gt;(()) }
 <a href=#1471 id=1471 data-nosnippet>1471</a>                },
 <a href=#1472 id=1472 data-nosnippet>1472</a>                <span class="prelude-val">None</span>,
 <a href=#1473 id=1473 data-nosnippet>1473</a>            )

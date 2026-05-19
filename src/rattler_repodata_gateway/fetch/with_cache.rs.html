@@ -1,6 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_repodata_gateway/src/fetch/with_cache.rs`."><title>with_cache.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_repodata_gateway" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_repodata_gateway/src/fetch/with_cache.rs`."><title>with_cache.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rattler_repodata_gateway" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/fetch/</div>with_cache.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::{
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/fetch/</div>with_cache.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::{
 <a href=#2 id=2 data-nosnippet>2</a>    io::ErrorKind,
 <a href=#3 id=3 data-nosnippet>3</a>    path::{Path, PathBuf},
 <a href=#4 id=4 data-nosnippet>4</a>    sync::Arc,
@@ -23,7 +23,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>tracing::{Level, instrument};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>url::Url;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use crate</span>::{
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>crate::{
 <a href=#25 id=25 data-nosnippet>25</a>    Reporter,
 <a href=#26 id=26 data-nosnippet>26</a>    fetch::{
 <a href=#27 id=27 data-nosnippet>27</a>        CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
@@ -587,10 +587,10 @@
 <a href=#585 id=585 data-nosnippet>585</a>    </span><span class="kw">let </span>(<span class="kw">_</span>, hash) = hashing_file_writer.finalize();
 <a href=#586 id=586 data-nosnippet>586</a>
 <a href=#587 id=587 data-nosnippet>587</a>    <span class="macro">tracing::debug!</span>(
-<a href=#588 id=588 data-nosnippet>588</a>        <span class="string">"downloaded {}, decoded that into {}, BLAKE2 hash: {:x}"</span>,
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="string">"downloaded {}, decoded that into {}, BLAKE2 hash: {}"</span>,
 <a href=#589 id=589 data-nosnippet>589</a>        SizeFormatter::new(total_bytes, DECIMAL),
 <a href=#590 id=590 data-nosnippet>590</a>        SizeFormatter::new(bytes, DECIMAL),
-<a href=#591 id=591 data-nosnippet>591</a>        hash
+<a href=#591 id=591 data-nosnippet>591</a>        hex::encode(hash)
 <a href=#592 id=592 data-nosnippet>592</a>    );
 <a href=#593 id=593 data-nosnippet>593</a>
 <a href=#594 id=594 data-nosnippet>594</a>    <span class="prelude-val">Ok</span>((temp_file, hash))
@@ -818,7 +818,7 @@
 <a href=#816 id=816 data-nosnippet>816</a>        url.set_path(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{subdir_path}/"</span>));
 <a href=#817 id=817 data-nosnippet>817</a>        url
 <a href=#818 id=818 data-nosnippet>818</a>    };
-<a href=#819 id=819 data-nosnippet>819</a>    <span class="kw">if </span><span class="kw-2">&amp;</span><span class="macro">cached_subdir_url !</span>= subdir_url {
+<a href=#819 id=819 data-nosnippet>819</a>    <span class="kw">if </span><span class="kw-2">&amp;</span>cached_subdir_url != subdir_url {
 <a href=#820 id=820 data-nosnippet>820</a>        <span class="macro">tracing::warn!</span>(
 <a href=#821 id=821 data-nosnippet>821</a>            <span class="string">"cache state refers to a different repodata.json url. Ignoring cached files..."
 <a href=#822 id=822 data-nosnippet>822</a>        </span>);
@@ -850,7 +850,7 @@
 <a href=#848 id=848 data-nosnippet>848</a>                <span class="kw">return </span>ValidatedCacheState::Mismatched(cache_state);
 <a href=#849 id=849 data-nosnippet>849</a>            }
 <a href=#850 id=850 data-nosnippet>850</a>            <span class="prelude-val">Ok</span>(hash) =&gt; {
-<a href=#851 id=851 data-nosnippet>851</a>                <span class="kw">if </span><span class="kw-2">&amp;</span><span class="macro">hash !</span>= cached_hash {
+<a href=#851 id=851 data-nosnippet>851</a>                <span class="kw">if </span><span class="kw-2">&amp;</span>hash != cached_hash {
 <a href=#852 id=852 data-nosnippet>852</a>                    <span class="macro">tracing::warn!</span>(
 <a href=#853 id=853 data-nosnippet>853</a>                        <span class="string">"BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
 <a href=#854 id=854 data-nosnippet>854</a>                    </span>);
@@ -957,7 +957,7 @@
 <a href=#955 id=955 data-nosnippet>955</a>    <span class="kw">use </span>tokio_util::io::ReaderStream;
 <a href=#956 id=956 data-nosnippet>956</a>    <span class="kw">use </span>url::Url;
 <a href=#957 id=957 data-nosnippet>957</a>
-<a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">use crate</span>::{
+<a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">use </span>crate::{
 <a href=#959 id=959 data-nosnippet>959</a>        DownloadReporter, Reporter,
 <a href=#960 id=960 data-nosnippet>960</a>        fetch::{
 <a href=#961 id=961 data-nosnippet>961</a>            FetchRepoDataError, RepoDataNotFoundError,

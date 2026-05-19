@@ -1,6 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_repodata_gateway/src/gateway/sharded_subdir/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="rattler_repodata_gateway" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_repodata_gateway/src/gateway/sharded_subdir/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="rattler_repodata_gateway" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/sharded_subdir/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/sharded_subdir/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>std::sync::Arc;
 <a href=#3 id=3 data-nosnippet>3</a>
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>cfg_if::cfg_if;
@@ -12,10 +12,10 @@
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>rattler_redaction::Redact;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>url::Url;
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use crate</span>::{
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>crate::{
 <a href=#14 id=14 data-nosnippet>14</a>    GatewayError,
 <a href=#15 id=15 data-nosnippet>15</a>    fetch::FetchRepoDataError,
-<a href=#16 id=16 data-nosnippet>16</a>    gateway::subdir::{PackageRecords, extract_unique_deps},
+<a href=#16 id=16 data-nosnippet>16</a>    gateway::subdir::{PackageRecords, extract_unique_deps_split},
 <a href=#17 id=17 data-nosnippet>17</a>};
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Returns `true` if the HTTP status indicates that the server does not expose
@@ -156,275 +156,277 @@
 <a href=#154 id=154 data-nosnippet>154</a>                }));
 <a href=#155 id=155 data-nosnippet>155</a>            }
 <a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a>            <span class="kw">let </span>unique_deps = extract_unique_deps(records.iter().map(|r| <span class="kw-2">&amp;**</span>r));
-<a href=#158 id=158 data-nosnippet>158</a>            <span class="prelude-val">Ok</span>(PackageRecords {
-<a href=#159 id=159 data-nosnippet>159</a>                records,
-<a href=#160 id=160 data-nosnippet>160</a>                unique_deps,
-<a href=#161 id=161 data-nosnippet>161</a>            })
-<a href=#162 id=162 data-nosnippet>162</a>        };
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="attr">#[cfg(target_arch = <span class="string">"wasm32"</span>)]
-<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">return </span>parse();
-<a href=#166 id=166 data-nosnippet>166</a>
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
-<a href=#168 id=168 data-nosnippet>168</a>    </span>simple_spawn_blocking::tokio::run_blocking_task(parse).<span class="kw">await
-<a href=#169 id=169 data-nosnippet>169</a></span>}
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a><span class="comment">// Tests are only run on non-wasm targets since they use tokio and axum
-<a href=#172 id=172 data-nosnippet>172</a></span><span class="attr">#[cfg(test)]
-<a href=#173 id=173 data-nosnippet>173</a></span><span class="kw">mod </span>tests {
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">use </span><span class="kw">crate</span>::fetch::CacheAction;
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">use </span><span class="kw">crate</span>::gateway::error::GatewayError;
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">use </span><span class="kw">crate</span>::gateway::subdir::SubdirClient;
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">use </span>axum::{
-<a href=#178 id=178 data-nosnippet>178</a>        Router,
-<a href=#179 id=179 data-nosnippet>179</a>        body::Body,
-<a href=#180 id=180 data-nosnippet>180</a>        http::{Response, StatusCode},
-<a href=#181 id=181 data-nosnippet>181</a>        routing::get,
-<a href=#182 id=182 data-nosnippet>182</a>    };
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">use </span>rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">use </span>rattler_digest::{Sha256, parse_digest_from_hex};
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">use </span>std::future::IntoFuture;
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">use </span>std::net::SocketAddr;
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">use </span>tokio::sync::oneshot;
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">use </span>url::Url;
-<a href=#189 id=189 data-nosnippet>189</a>
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">use </span><span class="kw">super</span>::ShardedSubdir;
+<a href=#157 id=157 data-nosnippet>157</a>            <span class="kw">let </span>(unique_base_deps, unique_extra_deps) =
+<a href=#158 id=158 data-nosnippet>158</a>                extract_unique_deps_split(records.iter().map(|r| <span class="kw-2">&amp;**</span>r));
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="prelude-val">Ok</span>(PackageRecords {
+<a href=#160 id=160 data-nosnippet>160</a>                records,
+<a href=#161 id=161 data-nosnippet>161</a>                unique_base_deps,
+<a href=#162 id=162 data-nosnippet>162</a>                unique_extra_deps,
+<a href=#163 id=163 data-nosnippet>163</a>            })
+<a href=#164 id=164 data-nosnippet>164</a>        };
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="attr">#[cfg(target_arch = <span class="string">"wasm32"</span>)]
+<a href=#167 id=167 data-nosnippet>167</a>    </span><span class="kw">return </span>parse();
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
+<a href=#170 id=170 data-nosnippet>170</a>    </span>simple_spawn_blocking::tokio::run_blocking_task(parse).<span class="kw">await
+<a href=#171 id=171 data-nosnippet>171</a></span>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="comment">// Tests are only run on non-wasm targets since they use tokio and axum
+<a href=#174 id=174 data-nosnippet>174</a></span><span class="attr">#[cfg(test)]
+<a href=#175 id=175 data-nosnippet>175</a></span><span class="kw">mod </span>tests {
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">use </span><span class="kw">crate</span>::fetch::CacheAction;
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">use </span><span class="kw">crate</span>::gateway::error::GatewayError;
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">use </span><span class="kw">crate</span>::gateway::subdir::SubdirClient;
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">use </span>axum::{
+<a href=#180 id=180 data-nosnippet>180</a>        Router,
+<a href=#181 id=181 data-nosnippet>181</a>        body::Body,
+<a href=#182 id=182 data-nosnippet>182</a>        http::{Response, StatusCode},
+<a href=#183 id=183 data-nosnippet>183</a>        routing::get,
+<a href=#184 id=184 data-nosnippet>184</a>    };
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">use </span>rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">use </span>rattler_digest::{Sha256, parse_digest_from_hex};
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">use </span>std::future::IntoFuture;
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">use </span>std::net::SocketAddr;
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">use </span>tokio::sync::oneshot;
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">use </span>url::Url;
 <a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="doccomment">/// A mock server that serves a sharded repodata index but returns
-<a href=#193 id=193 data-nosnippet>193</a>    /// configurable responses for shard requests.
-<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">struct </span>MockShardedServer {
-<a href=#195 id=195 data-nosnippet>195</a>        local_addr: SocketAddr,
-<a href=#196 id=196 data-nosnippet>196</a>        _shutdown_sender: oneshot::Sender&lt;()&gt;,
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">impl </span>MockShardedServer {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">async fn </span>new(shard_response: MockShardResponse) -&gt; <span class="self">Self </span>{
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="comment">// Create a minimal sharded index with one package
-<a href=#202 id=202 data-nosnippet>202</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>shards = ahash::HashMap::default();
-<a href=#203 id=203 data-nosnippet>203</a>            <span class="comment">// Use a known hash for the "test-package" shard (SHA256 of empty string)
-<a href=#204 id=204 data-nosnippet>204</a>            </span><span class="kw">let </span>shard_hash = parse_digest_from_hex::&lt;Sha256&gt;(
-<a href=#205 id=205 data-nosnippet>205</a>                <span class="string">"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"</span>,
-<a href=#206 id=206 data-nosnippet>206</a>            )
-<a href=#207 id=207 data-nosnippet>207</a>            .unwrap();
-<a href=#208 id=208 data-nosnippet>208</a>            shards.insert(<span class="string">"test-package"</span>.to_string(), shard_hash);
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">let </span>sharded_index = ShardedRepodata {
-<a href=#211 id=211 data-nosnippet>211</a>                info: ShardedSubdirInfo {
-<a href=#212 id=212 data-nosnippet>212</a>                    subdir: <span class="string">"linux-64"</span>.to_string(),
-<a href=#213 id=213 data-nosnippet>213</a>                    base_url: <span class="string">"./"</span>.to_string(),
-<a href=#214 id=214 data-nosnippet>214</a>                    shards_base_url: <span class="string">"./shards/"</span>.to_string(),
-<a href=#215 id=215 data-nosnippet>215</a>                    created_at: <span class="prelude-val">Some</span>(chrono::Utc::now()),
-<a href=#216 id=216 data-nosnippet>216</a>                    repodata_revisions: Vec::new(),
-<a href=#217 id=217 data-nosnippet>217</a>                    channel_relations: <span class="prelude-val">None</span>,
-<a href=#218 id=218 data-nosnippet>218</a>                },
-<a href=#219 id=219 data-nosnippet>219</a>                shards,
-<a href=#220 id=220 data-nosnippet>220</a>            };
-<a href=#221 id=221 data-nosnippet>221</a>
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="comment">// Encode the index as msgpack and compress with zstd
-<a href=#223 id=223 data-nosnippet>223</a>            </span><span class="kw">let </span>index_bytes = rmp_serde::to_vec(<span class="kw-2">&amp;</span>sharded_index).unwrap();
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">let </span>compressed_index = zstd::encode_all(index_bytes.as_slice(), <span class="number">3</span>).unwrap();
-<a href=#225 id=225 data-nosnippet>225</a>
-<a href=#226 id=226 data-nosnippet>226</a>            <span class="kw">let </span>app = Router::new()
-<a href=#227 id=227 data-nosnippet>227</a>                .route(
-<a href=#228 id=228 data-nosnippet>228</a>                    <span class="string">"/linux-64/repodata_shards.msgpack.zst"</span>,
-<a href=#229 id=229 data-nosnippet>229</a>                    get(<span class="kw">move </span>|| <span class="kw">async move </span>{
-<a href=#230 id=230 data-nosnippet>230</a>                        Response::builder()
-<a href=#231 id=231 data-nosnippet>231</a>                            .status(StatusCode::OK)
-<a href=#232 id=232 data-nosnippet>232</a>                            .header(<span class="string">"Content-Type"</span>, <span class="string">"application/octet-stream"</span>)
-<a href=#233 id=233 data-nosnippet>233</a>                            .body(Body::from(compressed_index.clone()))
-<a href=#234 id=234 data-nosnippet>234</a>                            .unwrap()
-<a href=#235 id=235 data-nosnippet>235</a>                    }),
-<a href=#236 id=236 data-nosnippet>236</a>                )
-<a href=#237 id=237 data-nosnippet>237</a>                .route(
-<a href=#238 id=238 data-nosnippet>238</a>                    <span class="string">"/linux-64/shards/{shard_file}"</span>,
-<a href=#239 id=239 data-nosnippet>239</a>                    get(<span class="kw">move </span>|| <span class="kw">async move </span>{
-<a href=#240 id=240 data-nosnippet>240</a>                        <span class="kw">match </span>shard_response {
-<a href=#241 id=241 data-nosnippet>241</a>                            MockShardResponse::Empty =&gt; Response::builder()
-<a href=#242 id=242 data-nosnippet>242</a>                                .status(StatusCode::OK)
-<a href=#243 id=243 data-nosnippet>243</a>                                .body(Body::empty())
-<a href=#244 id=244 data-nosnippet>244</a>                                .unwrap(),
-<a href=#245 id=245 data-nosnippet>245</a>                            MockShardResponse::Truncated =&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>                                <span class="comment">// Return some bytes that look like zstd but are truncated
-<a href=#247 id=247 data-nosnippet>247</a>                                </span>Response::builder()
-<a href=#248 id=248 data-nosnippet>248</a>                                    .status(StatusCode::OK)
-<a href=#249 id=249 data-nosnippet>249</a>                                    .body(Body::from(<span class="macro">vec!</span>[<span class="number">0x28</span>, <span class="number">0xb5</span>, <span class="number">0x2f</span>, <span class="number">0xfd</span>]))
-<a href=#250 id=250 data-nosnippet>250</a>                                    .unwrap()
-<a href=#251 id=251 data-nosnippet>251</a>                            }
-<a href=#252 id=252 data-nosnippet>252</a>                        }
-<a href=#253 id=253 data-nosnippet>253</a>                    }),
-<a href=#254 id=254 data-nosnippet>254</a>                );
-<a href=#255 id=255 data-nosnippet>255</a>
-<a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">let </span>addr = SocketAddr::new([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>].into(), <span class="number">0</span>);
-<a href=#257 id=257 data-nosnippet>257</a>            <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr).<span class="kw">await</span>.unwrap();
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="kw">let </span>local_addr = listener.local_addr().unwrap();
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">let </span>(tx, rx) = oneshot::channel();
-<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">let </span>server = axum::serve(listener, app)
-<a href=#262 id=262 data-nosnippet>262</a>                .with_graceful_shutdown(<span class="kw">async </span>{
-<a href=#263 id=263 data-nosnippet>263</a>                    rx.<span class="kw">await</span>.ok();
-<a href=#264 id=264 data-nosnippet>264</a>                })
-<a href=#265 id=265 data-nosnippet>265</a>                .into_future();
-<a href=#266 id=266 data-nosnippet>266</a>
-<a href=#267 id=267 data-nosnippet>267</a>            tokio::spawn(server);
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">use </span><span class="kw">super</span>::ShardedSubdir;
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// A mock server that serves a sharded repodata index but returns
+<a href=#195 id=195 data-nosnippet>195</a>    /// configurable responses for shard requests.
+<a href=#196 id=196 data-nosnippet>196</a>    </span><span class="kw">struct </span>MockShardedServer {
+<a href=#197 id=197 data-nosnippet>197</a>        local_addr: SocketAddr,
+<a href=#198 id=198 data-nosnippet>198</a>        _shutdown_sender: oneshot::Sender&lt;()&gt;,
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">impl </span>MockShardedServer {
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">async fn </span>new(shard_response: MockShardResponse) -&gt; <span class="self">Self </span>{
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="comment">// Create a minimal sharded index with one package
+<a href=#204 id=204 data-nosnippet>204</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>shards = ahash::HashMap::default();
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="comment">// Use a known hash for the "test-package" shard (SHA256 of empty string)
+<a href=#206 id=206 data-nosnippet>206</a>            </span><span class="kw">let </span>shard_hash = parse_digest_from_hex::&lt;Sha256&gt;(
+<a href=#207 id=207 data-nosnippet>207</a>                <span class="string">"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"</span>,
+<a href=#208 id=208 data-nosnippet>208</a>            )
+<a href=#209 id=209 data-nosnippet>209</a>            .unwrap();
+<a href=#210 id=210 data-nosnippet>210</a>            shards.insert(<span class="string">"test-package"</span>.to_string(), shard_hash);
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">let </span>sharded_index = ShardedRepodata {
+<a href=#213 id=213 data-nosnippet>213</a>                info: ShardedSubdirInfo {
+<a href=#214 id=214 data-nosnippet>214</a>                    subdir: <span class="string">"linux-64"</span>.to_string(),
+<a href=#215 id=215 data-nosnippet>215</a>                    base_url: <span class="string">"./"</span>.to_string(),
+<a href=#216 id=216 data-nosnippet>216</a>                    shards_base_url: <span class="string">"./shards/"</span>.to_string(),
+<a href=#217 id=217 data-nosnippet>217</a>                    created_at: <span class="prelude-val">Some</span>(chrono::Utc::now()),
+<a href=#218 id=218 data-nosnippet>218</a>                    repodata_revisions: Vec::new(),
+<a href=#219 id=219 data-nosnippet>219</a>                    channel_relations: <span class="prelude-val">None</span>,
+<a href=#220 id=220 data-nosnippet>220</a>                },
+<a href=#221 id=221 data-nosnippet>221</a>                shards,
+<a href=#222 id=222 data-nosnippet>222</a>            };
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="comment">// Encode the index as msgpack and compress with zstd
+<a href=#225 id=225 data-nosnippet>225</a>            </span><span class="kw">let </span>index_bytes = rmp_serde::to_vec(<span class="kw-2">&amp;</span>sharded_index).unwrap();
+<a href=#226 id=226 data-nosnippet>226</a>            <span class="kw">let </span>compressed_index = zstd::encode_all(index_bytes.as_slice(), <span class="number">3</span>).unwrap();
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">let </span>app = Router::new()
+<a href=#229 id=229 data-nosnippet>229</a>                .route(
+<a href=#230 id=230 data-nosnippet>230</a>                    <span class="string">"/linux-64/repodata_shards.msgpack.zst"</span>,
+<a href=#231 id=231 data-nosnippet>231</a>                    get(<span class="kw">move </span>|| <span class="kw">async move </span>{
+<a href=#232 id=232 data-nosnippet>232</a>                        Response::builder()
+<a href=#233 id=233 data-nosnippet>233</a>                            .status(StatusCode::OK)
+<a href=#234 id=234 data-nosnippet>234</a>                            .header(<span class="string">"Content-Type"</span>, <span class="string">"application/octet-stream"</span>)
+<a href=#235 id=235 data-nosnippet>235</a>                            .body(Body::from(compressed_index.clone()))
+<a href=#236 id=236 data-nosnippet>236</a>                            .unwrap()
+<a href=#237 id=237 data-nosnippet>237</a>                    }),
+<a href=#238 id=238 data-nosnippet>238</a>                )
+<a href=#239 id=239 data-nosnippet>239</a>                .route(
+<a href=#240 id=240 data-nosnippet>240</a>                    <span class="string">"/linux-64/shards/{shard_file}"</span>,
+<a href=#241 id=241 data-nosnippet>241</a>                    get(<span class="kw">move </span>|| <span class="kw">async move </span>{
+<a href=#242 id=242 data-nosnippet>242</a>                        <span class="kw">match </span>shard_response {
+<a href=#243 id=243 data-nosnippet>243</a>                            MockShardResponse::Empty =&gt; Response::builder()
+<a href=#244 id=244 data-nosnippet>244</a>                                .status(StatusCode::OK)
+<a href=#245 id=245 data-nosnippet>245</a>                                .body(Body::empty())
+<a href=#246 id=246 data-nosnippet>246</a>                                .unwrap(),
+<a href=#247 id=247 data-nosnippet>247</a>                            MockShardResponse::Truncated =&gt; {
+<a href=#248 id=248 data-nosnippet>248</a>                                <span class="comment">// Return some bytes that look like zstd but are truncated
+<a href=#249 id=249 data-nosnippet>249</a>                                </span>Response::builder()
+<a href=#250 id=250 data-nosnippet>250</a>                                    .status(StatusCode::OK)
+<a href=#251 id=251 data-nosnippet>251</a>                                    .body(Body::from(<span class="macro">vec!</span>[<span class="number">0x28</span>, <span class="number">0xb5</span>, <span class="number">0x2f</span>, <span class="number">0xfd</span>]))
+<a href=#252 id=252 data-nosnippet>252</a>                                    .unwrap()
+<a href=#253 id=253 data-nosnippet>253</a>                            }
+<a href=#254 id=254 data-nosnippet>254</a>                        }
+<a href=#255 id=255 data-nosnippet>255</a>                    }),
+<a href=#256 id=256 data-nosnippet>256</a>                );
+<a href=#257 id=257 data-nosnippet>257</a>
+<a href=#258 id=258 data-nosnippet>258</a>            <span class="kw">let </span>addr = SocketAddr::new([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>].into(), <span class="number">0</span>);
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr).<span class="kw">await</span>.unwrap();
+<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">let </span>local_addr = listener.local_addr().unwrap();
+<a href=#261 id=261 data-nosnippet>261</a>
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="kw">let </span>(tx, rx) = oneshot::channel();
+<a href=#263 id=263 data-nosnippet>263</a>            <span class="kw">let </span>server = axum::serve(listener, app)
+<a href=#264 id=264 data-nosnippet>264</a>                .with_graceful_shutdown(<span class="kw">async </span>{
+<a href=#265 id=265 data-nosnippet>265</a>                    rx.<span class="kw">await</span>.ok();
+<a href=#266 id=266 data-nosnippet>266</a>                })
+<a href=#267 id=267 data-nosnippet>267</a>                .into_future();
 <a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a>            <span class="self">Self </span>{
-<a href=#270 id=270 data-nosnippet>270</a>                local_addr,
-<a href=#271 id=271 data-nosnippet>271</a>                _shutdown_sender: tx,
-<a href=#272 id=272 data-nosnippet>272</a>            }
-<a href=#273 id=273 data-nosnippet>273</a>        }
-<a href=#274 id=274 data-nosnippet>274</a>
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">fn </span>url(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Url {
-<a href=#276 id=276 data-nosnippet>276</a>            Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, <span class="self">self</span>.local_addr.port())).unwrap()
-<a href=#277 id=277 data-nosnippet>277</a>        }
-<a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">fn </span>channel(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Channel {
-<a href=#280 id=280 data-nosnippet>280</a>            Channel::from_url(<span class="self">self</span>.url())
-<a href=#281 id=281 data-nosnippet>281</a>        }
-<a href=#282 id=282 data-nosnippet>282</a>    }
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="attr">#[derive(Clone, Copy)]
-<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">enum </span>MockShardResponse {
-<a href=#286 id=286 data-nosnippet>286</a>        Empty,
-<a href=#287 id=287 data-nosnippet>287</a>        Truncated,
-<a href=#288 id=288 data-nosnippet>288</a>    }
-<a href=#289 id=289 data-nosnippet>289</a>
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="attr">#[tokio::test]
-<a href=#291 id=291 data-nosnippet>291</a>    </span><span class="kw">async fn </span>test_empty_shard_response_error() {
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span>server = MockShardedServer::new(MockShardResponse::Empty).<span class="kw">await</span>;
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="kw">let </span>channel = server.channel();
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
-<a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
+<a href=#269 id=269 data-nosnippet>269</a>            tokio::spawn(server);
+<a href=#270 id=270 data-nosnippet>270</a>
+<a href=#271 id=271 data-nosnippet>271</a>            <span class="self">Self </span>{
+<a href=#272 id=272 data-nosnippet>272</a>                local_addr,
+<a href=#273 id=273 data-nosnippet>273</a>                _shutdown_sender: tx,
+<a href=#274 id=274 data-nosnippet>274</a>            }
+<a href=#275 id=275 data-nosnippet>275</a>        }
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">fn </span>url(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Url {
+<a href=#278 id=278 data-nosnippet>278</a>            Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, <span class="self">self</span>.local_addr.port())).unwrap()
+<a href=#279 id=279 data-nosnippet>279</a>        }
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">fn </span>channel(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Channel {
+<a href=#282 id=282 data-nosnippet>282</a>            Channel::from_url(<span class="self">self</span>.url())
+<a href=#283 id=283 data-nosnippet>283</a>        }
+<a href=#284 id=284 data-nosnippet>284</a>    }
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="attr">#[derive(Clone, Copy)]
+<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">enum </span>MockShardResponse {
+<a href=#288 id=288 data-nosnippet>288</a>        Empty,
+<a href=#289 id=289 data-nosnippet>289</a>        Truncated,
+<a href=#290 id=290 data-nosnippet>290</a>    }
+<a href=#291 id=291 data-nosnippet>291</a>
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="attr">#[tokio::test]
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">async fn </span>test_empty_shard_response_error() {
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="kw">let </span>server = MockShardedServer::new(MockShardResponse::Empty).<span class="kw">await</span>;
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>channel = server.channel();
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
 <a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span>subdir = ShardedSubdir::new(
-<a href=#299 id=299 data-nosnippet>299</a>            channel,
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="string">"linux-64"</span>.to_string(),
-<a href=#301 id=301 data-nosnippet>301</a>            client,
-<a href=#302 id=302 data-nosnippet>302</a>            cache_dir.path().to_path_buf(),
-<a href=#303 id=303 data-nosnippet>303</a>            CacheAction::NoCache,
-<a href=#304 id=304 data-nosnippet>304</a>            <span class="prelude-val">None</span>,
-<a href=#305 id=305 data-nosnippet>305</a>            <span class="prelude-val">None</span>,
-<a href=#306 id=306 data-nosnippet>306</a>        )
-<a href=#307 id=307 data-nosnippet>307</a>        .<span class="kw">await
-<a href=#308 id=308 data-nosnippet>308</a>        </span>.unwrap();
-<a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span>package_name = <span class="string">"test-package"</span>.parse().unwrap();
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">let </span>result = subdir.fetch_package_records(<span class="kw-2">&amp;</span>package_name, <span class="prelude-val">None</span>).<span class="kw">await</span>;
-<a href=#312 id=312 data-nosnippet>312</a>
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span>err = result.expect_err(<span class="string">"should fail with empty response"</span>);
-<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">let </span>err_string = err.to_string();
-<a href=#315 id=315 data-nosnippet>315</a>
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="comment">// Redact the dynamic port number from the error message
-<a href=#317 id=317 data-nosnippet>317</a>        </span><span class="kw">let </span>err_string = regex::Regex::new(<span class="string">r"localhost:\d+"</span>)
-<a href=#318 id=318 data-nosnippet>318</a>            .unwrap()
-<a href=#319 id=319 data-nosnippet>319</a>            .replace_all(<span class="kw-2">&amp;</span>err_string, <span class="string">"localhost:[PORT]"</span>)
-<a href=#320 id=320 data-nosnippet>320</a>            .to_string();
-<a href=#321 id=321 data-nosnippet>321</a>
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"empty_shard_response_error"</span>, err_string);
-<a href=#323 id=323 data-nosnippet>323</a>    }
-<a href=#324 id=324 data-nosnippet>324</a>
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="doccomment">/// A mock server that returns a configurable HTTP status for the sharded
-<a href=#326 id=326 data-nosnippet>326</a>    /// repodata index URL. Used to exercise the fallback paths for servers
-<a href=#327 id=327 data-nosnippet>327</a>    /// that report the index as unavailable.
-<a href=#328 id=328 data-nosnippet>328</a>    </span><span class="kw">async fn </span>start_index_status_server(status: StatusCode) -&gt; (SocketAddr, oneshot::Sender&lt;()&gt;) {
-<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span>app = Router::new().route(
-<a href=#330 id=330 data-nosnippet>330</a>            <span class="string">"/linux-64/repodata_shards.msgpack.zst"</span>,
-<a href=#331 id=331 data-nosnippet>331</a>            get(<span class="kw">move </span>|| <span class="kw">async move </span>{
-<a href=#332 id=332 data-nosnippet>332</a>                Response::builder()
-<a href=#333 id=333 data-nosnippet>333</a>                    .status(status)
-<a href=#334 id=334 data-nosnippet>334</a>                    .body(Body::empty())
-<a href=#335 id=335 data-nosnippet>335</a>                    .unwrap()
-<a href=#336 id=336 data-nosnippet>336</a>            }),
-<a href=#337 id=337 data-nosnippet>337</a>        );
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">let </span>addr = SocketAddr::new([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>].into(), <span class="number">0</span>);
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr).<span class="kw">await</span>.unwrap();
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>local_addr = listener.local_addr().unwrap();
-<a href=#342 id=342 data-nosnippet>342</a>
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>(tx, rx) = oneshot::channel();
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>server = axum::serve(listener, app)
-<a href=#345 id=345 data-nosnippet>345</a>            .with_graceful_shutdown(<span class="kw">async </span>{
-<a href=#346 id=346 data-nosnippet>346</a>                rx.<span class="kw">await</span>.ok();
-<a href=#347 id=347 data-nosnippet>347</a>            })
-<a href=#348 id=348 data-nosnippet>348</a>            .into_future();
-<a href=#349 id=349 data-nosnippet>349</a>
-<a href=#350 id=350 data-nosnippet>350</a>        tokio::spawn(server);
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="kw">let </span>subdir = ShardedSubdir::new(
+<a href=#301 id=301 data-nosnippet>301</a>            channel,
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="string">"linux-64"</span>.to_string(),
+<a href=#303 id=303 data-nosnippet>303</a>            client,
+<a href=#304 id=304 data-nosnippet>304</a>            cache_dir.path().to_path_buf(),
+<a href=#305 id=305 data-nosnippet>305</a>            CacheAction::NoCache,
+<a href=#306 id=306 data-nosnippet>306</a>            <span class="prelude-val">None</span>,
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="prelude-val">None</span>,
+<a href=#308 id=308 data-nosnippet>308</a>        )
+<a href=#309 id=309 data-nosnippet>309</a>        .<span class="kw">await
+<a href=#310 id=310 data-nosnippet>310</a>        </span>.unwrap();
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">let </span>package_name = <span class="string">"test-package"</span>.parse().unwrap();
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span>result = subdir.fetch_package_records(<span class="kw-2">&amp;</span>package_name, <span class="prelude-val">None</span>).<span class="kw">await</span>;
+<a href=#314 id=314 data-nosnippet>314</a>
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span>err = result.expect_err(<span class="string">"should fail with empty response"</span>);
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span>err_string = err.to_string();
+<a href=#317 id=317 data-nosnippet>317</a>
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="comment">// Redact the dynamic port number from the error message
+<a href=#319 id=319 data-nosnippet>319</a>        </span><span class="kw">let </span>err_string = regex::Regex::new(<span class="string">r"localhost:\d+"</span>)
+<a href=#320 id=320 data-nosnippet>320</a>            .unwrap()
+<a href=#321 id=321 data-nosnippet>321</a>            .replace_all(<span class="kw-2">&amp;</span>err_string, <span class="string">"localhost:[PORT]"</span>)
+<a href=#322 id=322 data-nosnippet>322</a>            .to_string();
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"empty_shard_response_error"</span>, err_string);
+<a href=#325 id=325 data-nosnippet>325</a>    }
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// A mock server that returns a configurable HTTP status for the sharded
+<a href=#328 id=328 data-nosnippet>328</a>    /// repodata index URL. Used to exercise the fallback paths for servers
+<a href=#329 id=329 data-nosnippet>329</a>    /// that report the index as unavailable.
+<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">async fn </span>start_index_status_server(status: StatusCode) -&gt; (SocketAddr, oneshot::Sender&lt;()&gt;) {
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>app = Router::new().route(
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="string">"/linux-64/repodata_shards.msgpack.zst"</span>,
+<a href=#333 id=333 data-nosnippet>333</a>            get(<span class="kw">move </span>|| <span class="kw">async move </span>{
+<a href=#334 id=334 data-nosnippet>334</a>                Response::builder()
+<a href=#335 id=335 data-nosnippet>335</a>                    .status(status)
+<a href=#336 id=336 data-nosnippet>336</a>                    .body(Body::empty())
+<a href=#337 id=337 data-nosnippet>337</a>                    .unwrap()
+<a href=#338 id=338 data-nosnippet>338</a>            }),
+<a href=#339 id=339 data-nosnippet>339</a>        );
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>addr = SocketAddr::new([<span class="number">127</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>].into(), <span class="number">0</span>);
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr).<span class="kw">await</span>.unwrap();
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>local_addr = listener.local_addr().unwrap();
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>(tx, rx) = oneshot::channel();
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>server = axum::serve(listener, app)
+<a href=#347 id=347 data-nosnippet>347</a>            .with_graceful_shutdown(<span class="kw">async </span>{
+<a href=#348 id=348 data-nosnippet>348</a>                rx.<span class="kw">await</span>.ok();
+<a href=#349 id=349 data-nosnippet>349</a>            })
+<a href=#350 id=350 data-nosnippet>350</a>            .into_future();
 <a href=#351 id=351 data-nosnippet>351</a>
-<a href=#352 id=352 data-nosnippet>352</a>        (local_addr, tx)
-<a href=#353 id=353 data-nosnippet>353</a>    }
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">async fn </span>assert_index_status_triggers_subdir_not_found(status: StatusCode) {
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span>(local_addr, _shutdown) = start_index_status_server(status).<span class="kw">await</span>;
-<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>channel = Channel::from_url(
-<a href=#358 id=358 data-nosnippet>358</a>            Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, local_addr.port())).unwrap(),
-<a href=#359 id=359 data-nosnippet>359</a>        );
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
-<a href=#362 id=362 data-nosnippet>362</a>
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>err = ShardedSubdir::new(
-<a href=#364 id=364 data-nosnippet>364</a>            channel,
-<a href=#365 id=365 data-nosnippet>365</a>            <span class="string">"linux-64"</span>.to_string(),
-<a href=#366 id=366 data-nosnippet>366</a>            client,
-<a href=#367 id=367 data-nosnippet>367</a>            cache_dir.path().to_path_buf(),
-<a href=#368 id=368 data-nosnippet>368</a>            CacheAction::NoCache,
-<a href=#369 id=369 data-nosnippet>369</a>            <span class="prelude-val">None</span>,
-<a href=#370 id=370 data-nosnippet>370</a>            <span class="prelude-val">None</span>,
-<a href=#371 id=371 data-nosnippet>371</a>        )
-<a href=#372 id=372 data-nosnippet>372</a>        .<span class="kw">await
-<a href=#373 id=373 data-nosnippet>373</a>        </span>.err()
-<a href=#374 id=374 data-nosnippet>374</a>        .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"expected an error for status {status}"</span>));
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="macro">assert!</span>(
-<a href=#377 id=377 data-nosnippet>377</a>            <span class="macro">matches!</span>(err, GatewayError::SubdirNotFoundError(<span class="kw">_</span>)),
-<a href=#378 id=378 data-nosnippet>378</a>            <span class="string">"expected SubdirNotFoundError for status {status}, got {err}"
-<a href=#379 id=379 data-nosnippet>379</a>        </span>);
-<a href=#380 id=380 data-nosnippet>380</a>    }
-<a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="attr">#[tokio::test]
-<a href=#383 id=383 data-nosnippet>383</a>    </span><span class="kw">async fn </span>test_index_404_triggers_subdir_not_found() {
-<a href=#384 id=384 data-nosnippet>384</a>        assert_index_status_triggers_subdir_not_found(StatusCode::NOT_FOUND).<span class="kw">await</span>;
-<a href=#385 id=385 data-nosnippet>385</a>    }
-<a href=#386 id=386 data-nosnippet>386</a>
-<a href=#387 id=387 data-nosnippet>387</a>    <span class="attr">#[tokio::test]
-<a href=#388 id=388 data-nosnippet>388</a>    </span><span class="kw">async fn </span>test_index_501_triggers_subdir_not_found() {
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="comment">// JFrog Artifactory can produce 501s here
-<a href=#390 id=390 data-nosnippet>390</a>        </span>assert_index_status_triggers_subdir_not_found(StatusCode::NOT_IMPLEMENTED).<span class="kw">await</span>;
-<a href=#391 id=391 data-nosnippet>391</a>    }
-<a href=#392 id=392 data-nosnippet>392</a>
-<a href=#393 id=393 data-nosnippet>393</a>    <span class="attr">#[tokio::test]
-<a href=#394 id=394 data-nosnippet>394</a>    </span><span class="kw">async fn </span>test_truncated_shard_response_error() {
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">let </span>server = MockShardedServer::new(MockShardResponse::Truncated).<span class="kw">await</span>;
-<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">let </span>channel = server.channel();
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
-<a href=#398 id=398 data-nosnippet>398</a>
-<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
+<a href=#352 id=352 data-nosnippet>352</a>        tokio::spawn(server);
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a>        (local_addr, tx)
+<a href=#355 id=355 data-nosnippet>355</a>    }
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a>    <span class="kw">async fn </span>assert_index_status_triggers_subdir_not_found(status: StatusCode) {
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>(local_addr, _shutdown) = start_index_status_server(status).<span class="kw">await</span>;
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span>channel = Channel::from_url(
+<a href=#360 id=360 data-nosnippet>360</a>            Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, local_addr.port())).unwrap(),
+<a href=#361 id=361 data-nosnippet>361</a>        );
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>err = ShardedSubdir::new(
+<a href=#366 id=366 data-nosnippet>366</a>            channel,
+<a href=#367 id=367 data-nosnippet>367</a>            <span class="string">"linux-64"</span>.to_string(),
+<a href=#368 id=368 data-nosnippet>368</a>            client,
+<a href=#369 id=369 data-nosnippet>369</a>            cache_dir.path().to_path_buf(),
+<a href=#370 id=370 data-nosnippet>370</a>            CacheAction::NoCache,
+<a href=#371 id=371 data-nosnippet>371</a>            <span class="prelude-val">None</span>,
+<a href=#372 id=372 data-nosnippet>372</a>            <span class="prelude-val">None</span>,
+<a href=#373 id=373 data-nosnippet>373</a>        )
+<a href=#374 id=374 data-nosnippet>374</a>        .<span class="kw">await
+<a href=#375 id=375 data-nosnippet>375</a>        </span>.err()
+<a href=#376 id=376 data-nosnippet>376</a>        .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"expected an error for status {status}"</span>));
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="macro">assert!</span>(
+<a href=#379 id=379 data-nosnippet>379</a>            <span class="macro">matches!</span>(err, GatewayError::SubdirNotFoundError(<span class="kw">_</span>)),
+<a href=#380 id=380 data-nosnippet>380</a>            <span class="string">"expected SubdirNotFoundError for status {status}, got {err}"
+<a href=#381 id=381 data-nosnippet>381</a>        </span>);
+<a href=#382 id=382 data-nosnippet>382</a>    }
+<a href=#383 id=383 data-nosnippet>383</a>
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="attr">#[tokio::test]
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="kw">async fn </span>test_index_404_triggers_subdir_not_found() {
+<a href=#386 id=386 data-nosnippet>386</a>        assert_index_status_triggers_subdir_not_found(StatusCode::NOT_FOUND).<span class="kw">await</span>;
+<a href=#387 id=387 data-nosnippet>387</a>    }
+<a href=#388 id=388 data-nosnippet>388</a>
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="attr">#[tokio::test]
+<a href=#390 id=390 data-nosnippet>390</a>    </span><span class="kw">async fn </span>test_index_501_triggers_subdir_not_found() {
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="comment">// JFrog Artifactory can produce 501s here
+<a href=#392 id=392 data-nosnippet>392</a>        </span>assert_index_status_triggers_subdir_not_found(StatusCode::NOT_IMPLEMENTED).<span class="kw">await</span>;
+<a href=#393 id=393 data-nosnippet>393</a>    }
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="attr">#[tokio::test]
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">async fn </span>test_truncated_shard_response_error() {
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">let </span>server = MockShardedServer::new(MockShardResponse::Truncated).<span class="kw">await</span>;
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>channel = server.channel();
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>cache_dir = tempfile::tempdir().unwrap();
 <a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>subdir = ShardedSubdir::new(
-<a href=#402 id=402 data-nosnippet>402</a>            channel,
-<a href=#403 id=403 data-nosnippet>403</a>            <span class="string">"linux-64"</span>.to_string(),
-<a href=#404 id=404 data-nosnippet>404</a>            client,
-<a href=#405 id=405 data-nosnippet>405</a>            cache_dir.path().to_path_buf(),
-<a href=#406 id=406 data-nosnippet>406</a>            CacheAction::NoCache,
-<a href=#407 id=407 data-nosnippet>407</a>            <span class="prelude-val">None</span>,
-<a href=#408 id=408 data-nosnippet>408</a>            <span class="prelude-val">None</span>,
-<a href=#409 id=409 data-nosnippet>409</a>        )
-<a href=#410 id=410 data-nosnippet>410</a>        .<span class="kw">await
-<a href=#411 id=411 data-nosnippet>411</a>        </span>.unwrap();
-<a href=#412 id=412 data-nosnippet>412</a>
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">let </span>package_name = <span class="string">"test-package"</span>.parse().unwrap();
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>result = subdir.fetch_package_records(<span class="kw-2">&amp;</span>package_name, <span class="prelude-val">None</span>).<span class="kw">await</span>;
-<a href=#415 id=415 data-nosnippet>415</a>
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>err = result.expect_err(<span class="string">"should fail with truncated response"</span>);
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>err_string = err.to_string();
-<a href=#418 id=418 data-nosnippet>418</a>
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="comment">// Redact the dynamic port number from the error message
-<a href=#420 id=420 data-nosnippet>420</a>        </span><span class="kw">let </span>err_string = regex::Regex::new(<span class="string">r"localhost:\d+"</span>)
-<a href=#421 id=421 data-nosnippet>421</a>            .unwrap()
-<a href=#422 id=422 data-nosnippet>422</a>            .replace_all(<span class="kw-2">&amp;</span>err_string, <span class="string">"localhost:[PORT]"</span>)
-<a href=#423 id=423 data-nosnippet>423</a>            .to_string();
-<a href=#424 id=424 data-nosnippet>424</a>
-<a href=#425 id=425 data-nosnippet>425</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"truncated_shard_response_error"</span>, err_string);
-<a href=#426 id=426 data-nosnippet>426</a>    }
-<a href=#427 id=427 data-nosnippet>427</a>}
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>client = rattler_networking::LazyClient::default();
+<a href=#402 id=402 data-nosnippet>402</a>
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span>subdir = ShardedSubdir::new(
+<a href=#404 id=404 data-nosnippet>404</a>            channel,
+<a href=#405 id=405 data-nosnippet>405</a>            <span class="string">"linux-64"</span>.to_string(),
+<a href=#406 id=406 data-nosnippet>406</a>            client,
+<a href=#407 id=407 data-nosnippet>407</a>            cache_dir.path().to_path_buf(),
+<a href=#408 id=408 data-nosnippet>408</a>            CacheAction::NoCache,
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="prelude-val">None</span>,
+<a href=#410 id=410 data-nosnippet>410</a>            <span class="prelude-val">None</span>,
+<a href=#411 id=411 data-nosnippet>411</a>        )
+<a href=#412 id=412 data-nosnippet>412</a>        .<span class="kw">await
+<a href=#413 id=413 data-nosnippet>413</a>        </span>.unwrap();
+<a href=#414 id=414 data-nosnippet>414</a>
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>package_name = <span class="string">"test-package"</span>.parse().unwrap();
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>result = subdir.fetch_package_records(<span class="kw-2">&amp;</span>package_name, <span class="prelude-val">None</span>).<span class="kw">await</span>;
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span>err = result.expect_err(<span class="string">"should fail with truncated response"</span>);
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span>err_string = err.to_string();
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="comment">// Redact the dynamic port number from the error message
+<a href=#422 id=422 data-nosnippet>422</a>        </span><span class="kw">let </span>err_string = regex::Regex::new(<span class="string">r"localhost:\d+"</span>)
+<a href=#423 id=423 data-nosnippet>423</a>            .unwrap()
+<a href=#424 id=424 data-nosnippet>424</a>            .replace_all(<span class="kw-2">&amp;</span>err_string, <span class="string">"localhost:[PORT]"</span>)
+<a href=#425 id=425 data-nosnippet>425</a>            .to_string();
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="macro">insta::assert_snapshot!</span>(<span class="string">"truncated_shard_response_error"</span>, err_string);
+<a href=#428 id=428 data-nosnippet>428</a>    }
+<a href=#429 id=429 data-nosnippet>429</a>}
 </code></pre></div></section></main></body></html>

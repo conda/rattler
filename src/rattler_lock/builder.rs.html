@@ -1,13 +1,13 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_lock/src/builder.rs`."><title>builder.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_lock" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_lock/src/builder.rs`."><title>builder.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_lock" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_lock/</div>builder.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Builder for the creation of lock files.
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_lock/</div>builder.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Builder for the creation of lock files.
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::{borrow::Cow, collections::HashMap, sync::Arc};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>indexmap::IndexMap;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>rattler_conda_types::Version;
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use crate</span>::{
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>crate::{
 <a href=#9 id=9 data-nosnippet>9</a>    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData, EnvironmentIndex,
 <a href=#10 id=10 data-nosnippet>10</a>    EnvironmentPackages, InconsistentInsertError, InvalidPackageHandleError, LockFile,
 <a href=#11 id=11 data-nosnippet>11</a>    LockFileInner, PackageHandle, PackageIndex, ParseCondaLockError, PlatformData, PlatformIndex,
@@ -581,7 +581,7 @@
 <a href=#579 id=579 data-nosnippet>579</a>    };
 <a href=#580 id=580 data-nosnippet>580</a>    <span class="kw">use </span>url::Url;
 <a href=#581 id=581 data-nosnippet>581</a>
-<a href=#582 id=582 data-nosnippet>582</a>    <span class="kw">use crate</span>::{
+<a href=#582 id=582 data-nosnippet>582</a>    <span class="kw">use </span>crate::{
 <a href=#583 id=583 data-nosnippet>583</a>        CondaBinaryData, CondaPackageData, LockFile, PlatformData, PypiPrereleaseMode,
 <a href=#584 id=584 data-nosnippet>584</a>        platform::PlatformName,
 <a href=#585 id=585 data-nosnippet>585</a>    };
@@ -834,7 +834,7 @@
 <a href=#832 id=832 data-nosnippet>832</a>
 <a href=#833 id=833 data-nosnippet>833</a>        <span class="kw">use </span>typed_path::Utf8TypedPathBuf;
 <a href=#834 id=834 data-nosnippet>834</a>
-<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">use crate</span>::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">use </span>crate::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
 <a href=#836 id=836 data-nosnippet>836</a>
 <a href=#837 id=837 data-nosnippet>837</a>        <span class="kw">let </span><span class="kw-2">mut </span>record = PackageRecord::new(
 <a href=#838 id=838 data-nosnippet>838</a>            PackageName::new_unchecked(<span class="string">"my-pkg"</span>),
@@ -889,7 +889,7 @@
 <a href=#887 id=887 data-nosnippet>887</a>
 <a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">use </span>typed_path::Utf8TypedPathBuf;
 <a href=#889 id=889 data-nosnippet>889</a>
-<a href=#890 id=890 data-nosnippet>890</a>        <span class="kw">use crate</span>::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="kw">use </span>crate::{CondaPackageData, CondaSourceData, SourceMetadata, UrlOrPath};
 <a href=#891 id=891 data-nosnippet>891</a>
 <a href=#892 id=892 data-nosnippet>892</a>        <span class="kw">let </span>binary_record = PackageRecord {
 <a href=#893 id=893 data-nosnippet>893</a>            run_exports: <span class="prelude-val">Some</span>(make_run_exports()),
@@ -1091,7 +1091,7 @@
 <a href=#1089 id=1089 data-nosnippet>1089</a>    </span><span class="kw">fn </span>register_conda_source_package_attaches_build_and_host() {
 <a href=#1090 id=1090 data-nosnippet>1090</a>        <span class="kw">use </span>std::collections::BTreeMap;
 <a href=#1091 id=1091 data-nosnippet>1091</a>
-<a href=#1092 id=1092 data-nosnippet>1092</a>        <span class="kw">use crate</span>::{CondaSourceData, SourceMetadata};
+<a href=#1092 id=1092 data-nosnippet>1092</a>        <span class="kw">use </span>crate::{CondaSourceData, SourceMetadata};
 <a href=#1093 id=1093 data-nosnippet>1093</a>
 <a href=#1094 id=1094 data-nosnippet>1094</a>        <span class="kw">let </span>make_binary = |name: <span class="kw-2">&amp;</span>str| {
 <a href=#1095 id=1095 data-nosnippet>1095</a>            <span class="kw">let </span><span class="kw-2">mut </span>record = PackageRecord::new(
@@ -1157,7 +1157,7 @@
 <a href=#1155 id=1155 data-nosnippet>1155</a>    </span><span class="kw">fn </span>register_conda_source_package_rejects_foreign_handle() {
 <a href=#1156 id=1156 data-nosnippet>1156</a>        <span class="kw">use </span>std::collections::BTreeMap;
 <a href=#1157 id=1157 data-nosnippet>1157</a>
-<a href=#1158 id=1158 data-nosnippet>1158</a>        <span class="kw">use crate</span>::{CondaSourceData, SourceMetadata};
+<a href=#1158 id=1158 data-nosnippet>1158</a>        <span class="kw">use </span>crate::{CondaSourceData, SourceMetadata};
 <a href=#1159 id=1159 data-nosnippet>1159</a>
 <a href=#1160 id=1160 data-nosnippet>1160</a>        <span class="kw">let </span>binary = CondaBinaryData {
 <a href=#1161 id=1161 data-nosnippet>1161</a>            package_record: {
@@ -1210,7 +1210,7 @@
 <a href=#1208 id=1208 data-nosnippet>1208</a>        <span class="kw">use </span>pep508_rs::PackageName <span class="kw">as </span>PypiPackageName;
 <a href=#1209 id=1209 data-nosnippet>1209</a>        <span class="kw">use </span>typed_path::Utf8TypedPathBuf;
 <a href=#1210 id=1210 data-nosnippet>1210</a>
-<a href=#1211 id=1211 data-nosnippet>1211</a>        <span class="kw">use crate</span>::{
+<a href=#1211 id=1211 data-nosnippet>1211</a>        <span class="kw">use </span>crate::{
 <a href=#1212 id=1212 data-nosnippet>1212</a>            CondaPackageData, CondaSourceData, LockedPackage, PypiPackageData, PypiSourceData,
 <a href=#1213 id=1213 data-nosnippet>1213</a>            SourceMetadata, UrlOrPath, Verbatim,
 <a href=#1214 id=1214 data-nosnippet>1214</a>        };

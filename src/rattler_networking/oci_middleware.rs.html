@@ -1,6 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_networking/src/oci_middleware.rs`."><title>oci_middleware.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_networking" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.1 (01f6ddf75 2026-02-11)" data-channel="1.93.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/rattler_networking/src/oci_middleware.rs`."><title>oci_middleware.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rattler_networking" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><meta name="robots" content="noindex">
 
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rattler_networking/</div>oci_middleware.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Middleware to handle `oci://` URLs to pull artifacts from an OCI registry
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_networking/</div>oci_middleware.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Middleware to handle `oci://` URLs to pull artifacts from an OCI registry
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="kw">use </span>std::{
 <a href=#3 id=3 data-nosnippet>3</a>    collections::HashMap,
 <a href=#4 id=4 data-nosnippet>4</a>    fmt::{Display, Formatter},
@@ -15,7 +15,7 @@
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>serde::Deserialize;
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>url::{ParseError, Url};
 <a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use crate</span>::{LazyClient, mirror_middleware::create_404_response};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>crate::{LazyClient, mirror_middleware::create_404_response};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[derive(thiserror::Error, Debug)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">enum </span>OciMiddlewareError {
@@ -357,33 +357,31 @@
 <a href=#355 id=355 data-nosnippet>355</a>        <span class="comment">// write out to tempfile
 <a href=#356 id=356 data-nosnippet>356</a>        </span><span class="macro">assert_eq!</span>(response.status(), <span class="number">200</span>);
 <a href=#357 id=357 data-nosnippet>357</a>        <span class="comment">// check that the bytes are the same
-<a href=#358 id=358 data-nosnippet>358</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>hasher = Sha256::new();
-<a href=#359 id=359 data-nosnippet>359</a>        std::io::copy(<span class="kw-2">&amp;mut </span>response.bytes().<span class="kw">await</span>.unwrap().as_ref(), <span class="kw-2">&amp;mut </span>hasher).unwrap();
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>hash = hasher.finalize();
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="macro">assert_eq!</span>(
-<a href=#362 id=362 data-nosnippet>362</a>            <span class="macro">format!</span>(<span class="string">"{hash:x}"</span>),
-<a href=#363 id=363 data-nosnippet>363</a>            <span class="string">"8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
-<a href=#364 id=364 data-nosnippet>364</a>        </span>);
-<a href=#365 id=365 data-nosnippet>365</a>    }
-<a href=#366 id=366 data-nosnippet>366</a>
-<a href=#367 id=367 data-nosnippet>367</a>    <span class="comment">// test pulling an image from OCI registry
-<a href=#368 id=368 data-nosnippet>368</a>    </span><span class="attr">#[cfg(any(feature = <span class="string">"rustls"</span>, feature = <span class="string">"native-tls"</span>))]
-<a href=#369 id=369 data-nosnippet>369</a>    #[tokio::test]
-<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="kw">async fn </span>test_oci_middleware_repodata() {
-<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">let </span>client = reqwest::Client::new();
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span>middleware = OciMiddleware::new(client.clone());
-<a href=#373 id=373 data-nosnippet>373</a>
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
-<a href=#375 id=375 data-nosnippet>375</a>            .with(middleware)
-<a href=#376 id=376 data-nosnippet>376</a>            .build();
-<a href=#377 id=377 data-nosnippet>377</a>
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">let </span>response = client_with_middleware
-<a href=#379 id=379 data-nosnippet>379</a>            .head(<span class="string">"oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json"</span>)
-<a href=#380 id=380 data-nosnippet>380</a>            .send()
-<a href=#381 id=381 data-nosnippet>381</a>            .<span class="kw">await
-<a href=#382 id=382 data-nosnippet>382</a>            </span>.unwrap();
-<a href=#383 id=383 data-nosnippet>383</a>
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert_eq!</span>(response.status(), <span class="number">200</span>);
-<a href=#385 id=385 data-nosnippet>385</a>    }
-<a href=#386 id=386 data-nosnippet>386</a>}
+<a href=#358 id=358 data-nosnippet>358</a>        </span><span class="kw">let </span>hash = Sha256::digest(response.bytes().<span class="kw">await</span>.unwrap());
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="macro">assert_eq!</span>(
+<a href=#360 id=360 data-nosnippet>360</a>            hex::encode(hash),
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="string">"8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
+<a href=#362 id=362 data-nosnippet>362</a>        </span>);
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>    <span class="comment">// test pulling an image from OCI registry
+<a href=#366 id=366 data-nosnippet>366</a>    </span><span class="attr">#[cfg(any(feature = <span class="string">"rustls"</span>, feature = <span class="string">"native-tls"</span>))]
+<a href=#367 id=367 data-nosnippet>367</a>    #[tokio::test]
+<a href=#368 id=368 data-nosnippet>368</a>    </span><span class="kw">async fn </span>test_oci_middleware_repodata() {
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>client = reqwest::Client::new();
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>middleware = OciMiddleware::new(client.clone());
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span>client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
+<a href=#373 id=373 data-nosnippet>373</a>            .with(middleware)
+<a href=#374 id=374 data-nosnippet>374</a>            .build();
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span>response = client_with_middleware
+<a href=#377 id=377 data-nosnippet>377</a>            .head(<span class="string">"oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/repodata.json"</span>)
+<a href=#378 id=378 data-nosnippet>378</a>            .send()
+<a href=#379 id=379 data-nosnippet>379</a>            .<span class="kw">await
+<a href=#380 id=380 data-nosnippet>380</a>            </span>.unwrap();
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="macro">assert_eq!</span>(response.status(), <span class="number">200</span>);
+<a href=#383 id=383 data-nosnippet>383</a>    }
+<a href=#384 id=384 data-nosnippet>384</a>}
 </code></pre></div></section></main></body></html>
