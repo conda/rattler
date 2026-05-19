@@ -34,7 +34,7 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false, experimental_extras = false, experimental_conditionals = false, experimental_flags = false))]
+    #[pyo3(signature = (spec, strict = false, experimental_extras = true, experimental_conditionals = true, experimental_flags = true))]
     pub fn __init__(
         spec: &str,
         strict: bool,
@@ -42,14 +42,17 @@ impl PyNamelessMatchSpec {
         experimental_conditionals: bool,
         experimental_flags: bool,
     ) -> PyResult<Self> {
+        // These kwargs are kept for backwards compatibility but are no-ops:
+        // extras, conditionals, and flags are now part of default rattler.
+        let _ = (experimental_extras, experimental_conditionals, experimental_flags);
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {
             ParseMatchSpecOptions::lenient()
         }
-        .with_experimental_extras(experimental_extras)
-        .with_experimental_conditionals(experimental_conditionals)
-        .with_experimental_flags(experimental_flags);
+        .with_extras(true)
+        .with_conditionals(true)
+        .with_flags(true);
 
         Ok(NamelessMatchSpec::from_str(spec, options)
             .map(Into::into)

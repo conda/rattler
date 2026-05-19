@@ -1105,11 +1105,7 @@ fn solve<T: SolverImpl + Default>(
         .specs
         .iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
@@ -1117,11 +1113,7 @@ fn solve<T: SolverImpl + Default>(
         .constraints
         .into_iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
