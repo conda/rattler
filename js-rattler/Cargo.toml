@@ -34,6 +34,7 @@ wee_alloc = { version = "0.4.5", optional = true }
 
 thiserror = "2.0.12"
 
+hex = "0.4"
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
