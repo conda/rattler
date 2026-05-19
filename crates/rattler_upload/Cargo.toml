@@ -74,11 +74,6 @@ tokio = { workspace = true, features = [
   "process",
 ] }
 sigstore-sign = { workspace = true, optional = true, default-features = false }
-
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-sha2 = { workspace = true, features = ["asm"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
 sha2 = { workspace = true }
 
 [dev-dependencies]
