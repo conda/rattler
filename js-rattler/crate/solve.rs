@@ -211,16 +211,8 @@ pub async fn simple_solve(
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),
             version: r.package_record.version.to_string(),
-            md5: r
-                .package_record
-                .md5
-                .as_ref()
-                .map(hex::encode),
-            sha256: r
-                .package_record
-                .sha256
-                .as_ref()
-                .map(hex::encode),
+            md5: r.package_record.md5.as_ref().map(hex::encode),
+            sha256: r.package_record.sha256.as_ref().map(hex::encode),
             size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
