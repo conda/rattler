@@ -90,10 +90,13 @@ impl AuthenticationStorage {
             #[allow(unused_variables)]
             if let Err(error) = backend.store(host, authentication) {
                 #[cfg(feature = "keyring")]
-                if let AuthenticationStorageError::KeyringStorageError(
-                    KeyringAuthenticationStorageError::StorageError(_),
-                ) = error
-                {
+                if matches!(
+                    error,
+                    AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_)
+                            | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                    )
+                ) {
                     tracing::debug!("Error storing credentials in keyring: {}", error);
                 } else {
                     tracing::warn!("Error storing credentials from backend: {}", error);
@@ -128,10 +131,13 @@ impl AuthenticationStorage {
                 Ok(None) => {}
                 Err(_e) => {
                     #[cfg(feature = "keyring")]
-                    if let AuthenticationStorageError::KeyringStorageError(
-                        KeyringAuthenticationStorageError::StorageError(_),
-                    ) = _e
-                    {
+                    if matches!(
+                        _e,
+                        AuthenticationStorageError::KeyringStorageError(
+                            KeyringAuthenticationStorageError::StorageError(_)
+                                | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                        )
+                    ) {
                         tracing::trace!("Error storing credentials in keyring: {}", _e);
                     } else {
                         tracing::warn!("Error retrieving credentials from backend: {}", _e);
@@ -302,10 +308,13 @@ impl AuthenticationStorage {
             #[allow(unused_variables)]
             if let Err(error) = backend.delete(host) {
                 #[cfg(feature = "keyring")]
-                if let AuthenticationStorageError::KeyringStorageError(
-                    KeyringAuthenticationStorageError::StorageError(_),
-                ) = error
-                {
+                if matches!(
+                    error,
+                    AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_)
+                            | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                    )
+                ) {
                     tracing::debug!("Error deleting credentials in keyring: {}", error);
                 } else {
                     tracing::warn!("Error deleting credentials from backend: {}", error);
