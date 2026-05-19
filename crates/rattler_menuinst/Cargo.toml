@@ -30,6 +30,7 @@ indexmap = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = { workspace = true }
 sha2 = { workspace = true }
+hex = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 quick-xml = "0.37.5"

@@ -1132,11 +1132,11 @@ dependencies = [
 
 [[package]]
 name = "blake2"
-version = "0.10.6"
+version = "0.11.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+checksum = "061f1a09225e328e1ffbb378d2d49923c0ca5fee19fb5ac1cc9c1e9d52b93690"
 dependencies = [
- "digest 0.10.7",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -5140,6 +5140,7 @@ dependencies = [
  "filetime",
  "fs-err",
  "futures",
+ "hex",
  "humantime",
  "indexmap 2.14.0",
  "indicatif",
@@ -5198,6 +5199,7 @@ dependencies = [
  "clap_complete_nushell",
  "console",
  "futures-util",
+ "hex",
  "indicatif",
  "itertools 0.14.0",
  "miette",
@@ -5236,6 +5238,7 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
+ "hex",
  "itertools 0.14.0",
  "parking_lot",
  "rattler_conda_types",
@@ -5383,6 +5386,7 @@ dependencies = [
  "console",
  "fs-err",
  "futures",
+ "hex",
  "indexmap 2.14.0",
  "indicatif",
  "opendal",
@@ -5469,6 +5473,7 @@ dependencies = [
  "configparser",
  "dirs",
  "fs-err",
+ "hex",
  "indexmap 2.14.0",
  "insta",
  "known-folders",
@@ -5510,6 +5515,7 @@ dependencies = [
  "fs-err",
  "getrandom 0.4.2",
  "google-cloud-auth",
+ "hex",
  "http 1.4.0",
  "insta",
  "itertools 0.14.0",
@@ -5550,6 +5556,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.4.2",
+ "hex",
  "http 1.4.0",
  "insta",
  "num_cpus",
@@ -5735,6 +5742,7 @@ dependencies = [
  "chrono",
  "criterion",
  "futures",
+ "hex",
  "humantime",
  "insta",
  "itertools 0.14.0",
@@ -5767,6 +5775,7 @@ dependencies = [
  "clap",
  "fs-err",
  "futures",
+ "hex",
  "indicatif",
  "miette",
  "opendal",
@@ -7610,6 +7619,7 @@ dependencies = [
  "dirs",
  "fs-err",
  "fslock",
+ "hex",
  "rattler_digest",
  "reqwest",
  "tempfile",

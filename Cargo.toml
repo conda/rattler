@@ -46,7 +46,7 @@ axum = { version = "0.8.4", default-features = false, features = [
 ] }
 base64 = "0.22.1"
 bindgen = "0.72.0"
-blake2 = "0.10.6"
+blake2 = "0.11.0-rc.6"
 bytes = "1.10.1"
 bzip2 = "0.6.0"
 cache_control = "0.2.0"

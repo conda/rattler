@@ -22,6 +22,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
   "tokio",
 ] }
 rattler_networking = { workspace = true, default-features = false }
+hex = { workspace = true }
 rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",

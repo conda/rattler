@@ -40,9 +40,7 @@ impl CacheKey {
 
     /// Return the sha256 hash string of the package if it is known.
     pub fn sha256_str(&self) -> String {
-        self.sha256()
-            .map(|hash| format!("{hash:x}"))
-            .unwrap_or_default()
+        self.sha256().map(hex::encode).unwrap_or_default()
     }
 
     /// Try to create a new cache key from a package record and a filename.
@@ -72,8 +70,8 @@ impl Display for CacheKey {
         // we need to use either sha256 or md5 hash to display the key
         // if both are none, we ignore them
         let display_key = match (self.sha256(), self.md5()) {
-            (Some(sha256), _) => format!("-{sha256:x}"),
-            (_, Some(md5)) => format!("-{md5:x}"),
+            (Some(sha256), _) => format!("-{}", hex::encode(sha256)),
+            (_, Some(md5)) => format!("-{}", hex::encode(md5)),
             _ => "".to_string(),
         };
 

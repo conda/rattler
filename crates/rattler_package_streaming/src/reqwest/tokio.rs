@@ -54,7 +54,7 @@ async fn get_reader(
         if let Some(sha256) = expected_sha256 {
             // This is used by the OCI registry middleware to verify the sha256 of the
             // response
-            request = request.header("X-Expected-Sha256", format!("{sha256:x}"));
+            request = request.header("X-Expected-Sha256", hex::encode(sha256));
         }
 
         let response = request

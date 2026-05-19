@@ -136,7 +136,7 @@ fn serialize_blake2_hash<S: Serializer>(
 ) -> Result<S::Ok, S::Error> {
     match time.as_ref() {
         None => s.serialize_none(),
-        Some(hash) => format!("{hash:x}").serialize(s),
+        Some(hash) => hex::encode(hash).serialize(s),
     }
 }
 

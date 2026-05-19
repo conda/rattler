@@ -39,6 +39,7 @@ url = { workspace = true }
 thiserror = { workspace = true }
 reqwest-middleware = { workspace = true }
 digest = { workspace = true }
+hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }

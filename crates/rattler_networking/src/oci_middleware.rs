@@ -355,11 +355,9 @@ mod tests {
         // write out to tempfile
         assert_eq!(response.status(), 200);
         // check that the bytes are the same
-        let mut hasher = Sha256::new();
-        std::io::copy(&mut response.bytes().await.unwrap().as_ref(), &mut hasher).unwrap();
-        let hash = hasher.finalize();
+        let hash = Sha256::digest(response.bytes().await.unwrap());
         assert_eq!(
-            format!("{hash:x}"),
+            hex::encode(hash),
             "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
         );
     }
