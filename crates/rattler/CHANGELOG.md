@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.2](https://github.com/conda/rattler/compare/rattler-v0.43.1...rattler-v0.43.2) - 2026-05-19
+
+### Fixed
+
+- reject path traversal in python entrypoints ([#2445](https://github.com/conda/rattler/pull/2445))
+
 ## [0.43.1](https://github.com/conda/rattler/compare/rattler-v0.43.0...rattler-v0.43.1) - 2026-05-19
 
 ### Added
