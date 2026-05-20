@@ -5684,6 +5684,7 @@ dependencies = [
  "url",
  "wasmtimer",
  "windows-sys 0.61.2",
+ "zip",
  "zstd",
 ]
 
