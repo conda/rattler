@@ -69,7 +69,6 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
     pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Metadata

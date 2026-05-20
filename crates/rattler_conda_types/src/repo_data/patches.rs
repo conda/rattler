@@ -155,7 +155,7 @@ mod tracked_features {
 /// Patches for packages stored under the `v3` top-level key.
 /// Mirrors [`V3Packages`] but with [`PackageRecordPatch`] values.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
-pub struct ExperimentalV3PackagePatches {
+pub struct V3PackagePatches {
     /// Patches for v3 tar.bz2 package records
     #[serde(
         default,
@@ -173,7 +173,7 @@ pub struct ExperimentalV3PackagePatches {
     pub whl: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
 }
 
-impl ExperimentalV3PackagePatches {
+impl V3PackagePatches {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
@@ -201,12 +201,8 @@ pub struct PatchInstructions {
     pub conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 
     /// Patches for v3 packages
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3PackagePatches::is_empty"
-    )]
-    pub v3: ExperimentalV3PackagePatches,
+    #[serde(default, skip_serializing_if = "V3PackagePatches::is_empty")]
+    pub v3: V3PackagePatches,
 }
 
 impl PackageRecord {

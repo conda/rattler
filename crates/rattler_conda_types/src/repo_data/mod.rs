@@ -64,7 +64,7 @@ pub struct RepoData {
     /// Packages stored under the `v3` top-level key.
     /// Uses extension-less `ArchiveIdentifier` keys with sub-maps for each
     /// archive type.
-    #[serde(default, rename = "v3", skip_serializing_if = "V3Packages::is_empty")]
+    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
     pub v3: V3Packages,
 
     /// removed packages (files are still accessible, but they are not
@@ -850,17 +850,13 @@ pub struct SubdirRunExportsJson {
     conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRunExports>,
 
     /// Run exports for v3 packages.
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3RunExports::is_empty"
-    )]
-    v3: ExperimentalV3RunExports,
+    #[serde(default, skip_serializing_if = "V3RunExports::is_empty")]
+    v3: V3RunExports,
 }
 
 /// Run exports for packages stored under the `v3` top-level key.
 #[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
-struct ExperimentalV3RunExports {
+struct V3RunExports {
     /// Run exports for v3 tar.bz2 packages
     #[serde(
         default,
@@ -879,7 +875,7 @@ struct ExperimentalV3RunExports {
     conda: ahash::HashMap<ArchiveIdentifier, PackageRunExports>,
 }
 
-impl ExperimentalV3RunExports {
+impl V3RunExports {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty()

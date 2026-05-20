@@ -34,8 +34,17 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false))]
-    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
+    #[pyo3(signature = (spec, strict = false, experimental_extras = true, experimental_conditionals = true, experimental_flags = true))]
+    pub fn __init__(
+        spec: &str,
+        strict: bool,
+        experimental_extras: bool,
+        experimental_conditionals: bool,
+        experimental_flags: bool,
+    ) -> PyResult<Self> {
+        // These kwargs are deprecated no-ops kept for backwards compatibility.
+        // Extras, conditionals, and flags syntax are now always enabled.
+        let _ = (experimental_extras, experimental_conditionals, experimental_flags);
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {

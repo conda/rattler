@@ -86,14 +86,20 @@ class MatchSpec:
         spec: str,
         strict: bool = False,
         exact_names_only: bool = True,
+        experimental_extras: bool = True,
+        experimental_conditionals: bool = True,
+        experimental_flags: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        Extras (`pkg[extras=[foo,bar]]`) and conditionals
-        (`pkg[when="python >=3.6"]`) syntax are always enabled.
+        `experimental_extras`, `experimental_conditionals`, and
+        `experimental_flags` are deprecated no-ops kept for backwards
+        compatibility. Extras (`pkg[extras=[foo,bar]]`), conditionals
+        (`pkg[when="python >=3.6"]`), and flags (`pkg[flags=[cuda]]`) syntax
+        are now always enabled.
 
         ```python
         >>> MatchSpec("pip >=24.0")
@@ -111,7 +117,14 @@ class MatchSpec:
         ```
         """
         if isinstance(spec, str):
-            self._match_spec = PyMatchSpec(spec, strict, exact_names_only)
+            self._match_spec = PyMatchSpec(
+                spec,
+                strict,
+                exact_names_only,
+                experimental_extras,
+                experimental_conditionals,
+                experimental_flags,
+            )
         else:
             raise TypeError(
                 f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"

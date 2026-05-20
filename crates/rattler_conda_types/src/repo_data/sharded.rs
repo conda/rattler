@@ -106,7 +106,7 @@ pub struct Shard {
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(default, rename = "v3", skip_serializing_if = "V3Packages::is_empty")]
+    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
     pub v3: V3Packages,
 
     /// The file names of all removed for this shard

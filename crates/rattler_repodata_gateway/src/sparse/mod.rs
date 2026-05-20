@@ -508,7 +508,7 @@ struct LazyRepoData<'i> {
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(borrow, default, rename = "v3")]
+    #[serde(borrow, default)]
     v3: LazyV3Packages<'i>,
 }
 
