@@ -364,30 +364,34 @@ mod tests {
     }
 
     #[test]
-    fn test_timestamp_ms_from_datetime() {
-        let datetime = chrono::DateTime::from_timestamp(1640000000, 0).unwrap();
+    fn test_timestamp_ms_from_timestamp() {
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
 
-        // Test creating from datetime with milliseconds
-        let ts_millis = TimestampMs::from_datetime_millis(datetime);
-        assert!(ts_millis.is_millis);
-        assert_eq!(ts_millis.datetime(), &datetime);
+        // Test creating from timestamp with milliseconds precision marker
+        let ts_millis = TimestampMs::from_timestamp_millis(timestamp);
+        assert_eq!(ts_millis.jiff_timestamp(), timestamp);
+        // Serializes as milliseconds
+        let json = serde_json::to_string(&ts_millis).unwrap();
+        assert_eq!(json, "1640000000000");
 
-        // Test creating from datetime with seconds
-        let ts_seconds = TimestampMs::from_datetime_seconds(datetime);
-        assert!(!ts_seconds.is_millis);
-        assert_eq!(ts_seconds.datetime(), &datetime);
+        // Test creating from timestamp with seconds precision marker
+        let ts_seconds = TimestampMs::from_timestamp_seconds(timestamp);
+        assert_eq!(ts_seconds.jiff_timestamp(), timestamp);
+        // Serializes as seconds
+        let json = serde_json::to_string(&ts_seconds).unwrap();
+        assert_eq!(json, "1640000000");
     }
 
     #[test]
     fn test_timestamp_ms_conversion() {
-        let datetime = chrono::DateTime::from_timestamp(1640000000, 0).unwrap();
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
 
         // Test From trait
-        let ts: TimestampMs = datetime.into();
-        assert!(ts.is_millis); // Default is milliseconds
+        let ts: TimestampMs = timestamp.into();
+        assert_eq!(ts.jiff_timestamp(), timestamp);
 
         // Test Into trait
-        let converted: chrono::DateTime<chrono::Utc> = ts.into();
-        assert_eq!(converted, datetime);
+        let converted: jiff::Timestamp = ts.into();
+        assert_eq!(converted, timestamp);
     }
 }

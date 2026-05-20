@@ -1487,8 +1487,8 @@ mod test {
             r.build_number = build_number;
             r.subdir = subdir.to_string();
             r.timestamp = timestamp.map(|secs| {
-                crate::utils::TimestampMs::from_datetime_seconds(
-                    chrono::DateTime::from_timestamp(secs, 0).unwrap(),
+                crate::utils::TimestampMs::from_timestamp_seconds(
+                    jiff::Timestamp::from_second(secs).unwrap(),
                 )
             });
             r
