@@ -4,7 +4,9 @@ use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    package::{
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+    },
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -115,7 +117,7 @@ impl PackageBuilder {
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
-                    build: "h123456_0".to_string(),
+                    build: BuildString::new("h123456_0").unwrap(),
                     build_number: 0,
                     subdir: "linux-64".to_string(),
                     md5: Some(dummy_md5_hash()),
@@ -165,7 +167,7 @@ impl PackageBuilder {
     }
 
     fn build_string(mut self, build: &str) -> Self {
-        self.record.package_record.build = build.to_string();
+        self.record.package_record.build = BuildString::new_unchecked(build);
         self
     }
 
@@ -216,12 +218,12 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                match &pkg.package_record.build {
+                    Some(build) => format!("{name} {version} {build}"),
+                    None => format!("{name} {version}"),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -375,7 +377,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: rattler_conda_types::PackageName::new_unchecked("__unix"),
                         version: Version::from_str("0").unwrap(),
-                        build_string: "0".to_string(),
+                        build_string: BuildString::new("0").unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -418,7 +420,10 @@ macro_rules! solver_backend_tests {
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
-            assert_eq!("py36h1af98f8_3", info.package_record.build);
+            assert_eq!(
+                Some("py36h1af98f8_3"),
+                info.package_record.build.as_ref().map(BuildString::as_str)
+            );
             assert_eq!(3, info.package_record.build_number);
             assert_eq!(
                 rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -532,7 +537,7 @@ macro_rules! solver_backend_tests {
                     virtual_packages: vec![GenericVirtualPackage {
                         name: "__cuda".parse().unwrap(),
                         version: Version::from_str("1").unwrap(),
-                        build_string: "0".to_string(),
+                        build_string: BuildString::new("0").unwrap(),
                     }],
                     ..SimpleSolveTask::default()
                 },
@@ -543,12 +548,12 @@ macro_rules! solver_backend_tests {
                     .records
                     .iter()
                     .format_with("\n", |pkg, f| {
-                        f(&format_args!(
-                            "{}={}={}",
-                            pkg.package_record.name.as_normalized(),
-                            pkg.package_record.version.as_str(),
-                            &pkg.package_record.build
-                        ))
+                        let name = pkg.package_record.name.as_normalized();
+                        let version = pkg.package_record.version.as_str();
+                        match &pkg.package_record.build {
+                            Some(build) => f(&format_args!("{name}={version}={build}")),
+                            None => f(&format_args!("{name}={version}")),
+                        }
                     })
                     .to_string(),
                 Err(e) => e.to_string(),
@@ -666,8 +671,8 @@ mod libsolv_c {
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
-        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
-        dummy_channel_json_path, installed_package, solve, solve_real_world,
+        BuildString, FromStr, GenericVirtualPackage, ParseStrictness, SimpleSolveTask, SolveError,
+        Version, dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
@@ -763,7 +768,10 @@ mod libsolv_c {
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_3", info.package_record.build);
+        assert_eq!(
+            Some("py36h1af98f8_3"),
+            info.package_record.build.as_ref().map(BuildString::as_str)
+        );
         assert_eq!(3, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
@@ -788,7 +796,7 @@ mod libsolv_c {
 mod resolvo {
     use rattler_conda_types::{
         MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
-        package::DistArchiveIdentifier,
+        package::{BuildString, DistArchiveIdentifier},
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
@@ -885,7 +893,7 @@ mod resolvo {
             // package direct_url: Some(url.clone()),
             "_libgcc_mutex".parse().unwrap(),
             VersionWithSource::from_str("0.1").unwrap(),
-            "0".to_string(),
+            BuildString::new("0").unwrap(),
         );
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record: package_record.clone(),
@@ -1173,12 +1181,12 @@ fn compare_solve(task: CompareTask<'_>) {
         let mut pkgs = records
             .into_iter()
             .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name.as_normalized(),
-                    pkg.package_record.version,
-                    pkg.package_record.build
-                )
+                let name = pkg.package_record.name.as_normalized();
+                let version = &pkg.package_record.version;
+                match &pkg.package_record.build {
+                    Some(build) => format!("{name} {version} {build}"),
+                    None => format!("{name} {version}"),
+                }
             })
             .collect::<Vec<_>>();
 

@@ -5,7 +5,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use rattler_conda_types::{
     GenericVirtualPackage, RepoDataRecord, RepodataRevision,
-    package::{ArchiveIdentifier, DistArchiveType},
+    package::{ArchiveIdentifier, BuildString, DistArchiveType},
 };
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
@@ -260,7 +260,7 @@ pub fn add_repodata_records<'a>(
         data.add_poolstr_array(
             solvable_id,
             solvable_buildflavor_id,
-            &c_string(&record.build),
+            &c_string(record.build.as_ref().map_or("", BuildString::as_str)),
         );
 
         // Build number
@@ -400,7 +400,12 @@ pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVir
         data.add_poolstr_array(
             solvable_id,
             solvable_buildflavor_id,
-            &c_string(&package.build_string),
+            &c_string(
+                package
+                    .build_string
+                    .as_ref()
+                    .map_or("", BuildString::as_str),
+            ),
         );
     }
 }

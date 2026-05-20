@@ -3,6 +3,7 @@
 mod about;
 mod archive_identifier;
 mod archive_type;
+mod build_string;
 mod entry_point;
 mod files;
 mod has_prefix;
@@ -16,11 +17,13 @@ mod run_exports;
 
 use std::io::Read;
 use std::path::Path;
+
 pub use {
     about::AboutJson,
     archive_identifier::{ArchiveIdentifier, CondaArchiveIdentifier, DistArchiveIdentifier},
     archive_type::{CondaArchiveType, DistArchiveType, WheelArchiveType},
     entry_point::{EntryPoint, EntryPointDottedField, ParseEntryPointError},
+    build_string::{BuildString, BuildStringError},
     files::Files,
     has_prefix::HasPrefix,
     has_prefix::HasPrefixEntry,

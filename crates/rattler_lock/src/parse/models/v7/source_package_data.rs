@@ -5,7 +5,7 @@ use std::{
 
 use rattler_conda_types::{
     BuildNumber, Flag, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
-    package::RunExportsJson,
+    package::{BuildString, RunExportsJson},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -48,8 +48,8 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
 
-    #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub build: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<Cow<'a, BuildString>>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub build_number: BuildNumber,
 
@@ -136,7 +136,11 @@ impl<'a> SourcePackageDataModel<'a> {
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
             let subdir = subdir.into_owned();
-            let build = self.build.into_owned();
+            // An explicit `build: ""` in the lockfile collapses to `None`.
+            let build = self
+                .build
+                .map(Cow::into_owned)
+                .filter(|b| !b.as_str().is_empty());
             let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
             SourceMetadata::Full(Box::new(PackageRecord {
                 name: name.clone(),
@@ -211,7 +215,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: Some(Cow::Borrowed(&full.version)),
                 subdir: Some(Cow::Borrowed(&full.subdir)),
-                build: Cow::Borrowed(&full.build),
+                build: full.build.as_ref().map(Cow::Borrowed),
                 build_number: full.build_number,
                 noarch: full.noarch,
                 variants,
@@ -240,7 +244,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: None,
                 subdir: None,
-                build: Cow::Borrowed(""),
+                build: None,
                 build_number: 0,
                 noarch: NoArchType::default(),
                 variants,

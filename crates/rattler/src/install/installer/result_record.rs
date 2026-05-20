@@ -1,5 +1,6 @@
 use std::{io, path::Path};
 
+use rattler_conda_types::package::BuildString;
 use rattler_conda_types::{
     HasArtifactIdentificationRefs, MinimalPrefixRecord, PrefixRecord, RepoDataRecord,
 };
@@ -31,12 +32,12 @@ impl InstallationResultRecord {
         match self {
             InstallationResultRecord::Max(prefix_record) => Ok(prefix_record),
             InstallationResultRecord::Min(minimal_prefix_record) => {
-                let record_name = format!(
-                    "{build}-{version}-{name}.json",
-                    build = minimal_prefix_record.build,
-                    version = minimal_prefix_record.version,
-                    name = minimal_prefix_record.name.as_normalized()
-                );
+                let name = minimal_prefix_record.name.as_normalized();
+                let version = &minimal_prefix_record.version;
+                let record_name = match &minimal_prefix_record.build {
+                    Some(build) => format!("{build}-{version}-{name}.json"),
+                    None => format!("{version}-{name}.json"),
+                };
                 let record_path = prefix.as_ref().join(record_name);
                 PrefixRecord::from_path(record_path)
             }
@@ -63,13 +64,15 @@ impl InstallationResultRecord {
         }
     }
 
-    /// Return reference to the underlying build string.
-    pub fn build(&self) -> &str {
+    /// Return reference to the underlying build string, if any.
+    pub fn build(&self) -> Option<&BuildString> {
         match self {
             InstallationResultRecord::Max(prefix_record) => {
-                &prefix_record.repodata_record.package_record.build
+                prefix_record.repodata_record.package_record.build.as_ref()
             }
-            InstallationResultRecord::Min(minimal_prefix_record) => &minimal_prefix_record.build,
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                minimal_prefix_record.build.as_ref()
+            }
         }
     }
 
@@ -176,7 +179,7 @@ impl InstallationResultRecord {
 pub trait ContentComparable {
     fn name(&self) -> &PackageName;
     fn version(&self) -> &VersionWithSource;
-    fn build(&self) -> &str;
+    fn build(&self) -> Option<&BuildString>;
     fn sha256(&self) -> Option<&Sha256Hash>;
     fn md5(&self) -> Option<&Md5Hash>;
     fn size(&self) -> Option<u64>;
@@ -193,7 +196,7 @@ impl ContentComparable for InstallationResultRecord {
         self.version()
     }
 
-    fn build(&self) -> &str {
+    fn build(&self) -> Option<&BuildString> {
         self.build()
     }
 
@@ -225,8 +228,8 @@ impl ContentComparable for PackageRecord {
     fn version(&self) -> &VersionWithSource {
         &self.version
     }
-    fn build(&self) -> &str {
-        &self.build
+    fn build(&self) -> Option<&BuildString> {
+        self.build.as_ref()
     }
     fn sha256(&self) -> Option<&Sha256Hash> {
         self.sha256.as_ref()
@@ -252,8 +255,8 @@ impl ContentComparable for MinimalPrefixRecord {
     fn version(&self) -> &VersionWithSource {
         &self.version
     }
-    fn build(&self) -> &str {
-        &self.build
+    fn build(&self) -> Option<&BuildString> {
+        self.build.as_ref()
     }
     fn sha256(&self) -> Option<&Sha256Hash> {
         self.sha256.as_ref()
@@ -279,8 +282,8 @@ impl ContentComparable for PrefixRecord {
     fn version(&self) -> &VersionWithSource {
         &self.repodata_record.package_record.version
     }
-    fn build(&self) -> &str {
-        &self.repodata_record.package_record.build
+    fn build(&self) -> Option<&BuildString> {
+        self.repodata_record.package_record.build.as_ref()
     }
     fn sha256(&self) -> Option<&Sha256Hash> {
         self.repodata_record.package_record.sha256.as_ref()
@@ -309,8 +312,8 @@ impl ContentComparable for RepoDataRecord {
     fn version(&self) -> &VersionWithSource {
         &self.package_record.version
     }
-    fn build(&self) -> &str {
-        &self.package_record.build
+    fn build(&self) -> Option<&BuildString> {
+        self.package_record.build.as_ref()
     }
     fn sha256(&self) -> Option<&Sha256Hash> {
         self.package_record.sha256.as_ref()
@@ -336,7 +339,7 @@ impl<T: ContentComparable> ContentComparable for &T {
     fn version(&self) -> &VersionWithSource {
         (*self).version()
     }
-    fn build(&self) -> &str {
+    fn build(&self) -> Option<&BuildString> {
         (*self).build()
     }
     fn sha256(&self) -> Option<&Sha256Hash> {
@@ -365,7 +368,7 @@ impl HasArtifactIdentificationRefs for InstallationResultRecord {
         InstallationResultRecord::version(self)
     }
 
-    fn build(&self) -> &str {
+    fn build(&self) -> Option<&BuildString> {
         InstallationResultRecord::build(self)
     }
 }

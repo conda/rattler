@@ -4,7 +4,9 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, RepoDataRecord, Version,
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    package::{
+        ArchiveIdentifier, BuildString, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+    },
 };
 use url::Url;
 
@@ -34,7 +36,7 @@ impl PackageBuilder {
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
-                    build: "h123456_0".to_string(),
+                    build: BuildString::new("h123456_0").unwrap(),
                     build_number: 0,
                     subdir: "linux-64".to_string(),
                     md5: Some(dummy_md5_hash()),
@@ -69,7 +71,12 @@ impl PackageBuilder {
             identifier: ArchiveIdentifier {
                 name: self.record.package_record.name.as_normalized().to_string(),
                 version: self.record.package_record.version.as_str().to_string(),
-                build_string: self.record.package_record.build.clone(),
+                build_string: self
+                    .record
+                    .package_record
+                    .build
+                    .as_ref()
+                    .map_or_else(String::new, BuildString::to_string),
             },
             archive_type: DistArchiveType::Conda(self.archive_type),
         };
@@ -97,7 +104,7 @@ impl PackageBuilder {
     }
 
     pub fn build_string(mut self, build: &str) -> Self {
-        self.record.package_record.build = build.to_string();
+        self.record.package_record.build = BuildString::new_unchecked(build);
         self.update_filename();
         self
     }
