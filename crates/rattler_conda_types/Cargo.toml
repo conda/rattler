@@ -18,7 +18,7 @@ all-features = true
 
 [dependencies]
 ahash = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 file_url = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
