@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import warnings
 from typing import List, Optional, Protocol, runtime_checkable
 
 from rattler.match_spec import MatchSpec
@@ -312,7 +313,7 @@ async def install(
     ...     records = await solve(sources=["conda-forge"], specs=["python 3.9.*"])
     ...
     ...     # Link the environment in a temporary directory (you can pass any kind of path here).
-    ...     await install(records, target_prefix=temp_dir.name)
+    ...     await install(records, target_prefix=temp_dir.name, show_progress=False)
     ...
     ...     # That's it! The environment is now created.
     ...     # You will find Python under `f"{temp_dir.name}/bin/python"` or `f"{temp_dir.name}/python.exe"` on Windows.
@@ -339,7 +340,9 @@ async def install(
         execute_link_scripts: whether to execute the post-link and pre-unlink scripts
                 that may be part of a package. Defaults to False.
         show_progress: If set to `True` a progress bar will be shown on the CLI.
-                Ignored when `reporter` is provided.
+                **Deprecated** — pass `reporter=RichInstallerReporter()` instead
+                (`pip install py-rattler[rich]`). This parameter will be removed in a
+                future release.
         client: An authenticated client to use for downloading packages. If not specified a default
                 client will be used.
         requested_specs: A list of `MatchSpec`s that were originally requested. These will be used
@@ -347,8 +350,17 @@ async def install(
                 If `None`, the `requested_specs` field will remain empty.
         reporter: An optional :class:`InstallerReporter` instance that receives progress
                 callbacks during installation. When provided, `show_progress` is ignored.
-                Subclass :class:`InstallerReporter` and override the methods you need.
+                Use :class:`rattler.install.RichInstallerReporter` for a rich-powered
+                progress display (requires ``rich``).
     """
+
+    if show_progress and reporter is None:
+        warnings.warn(
+            "The 'show_progress' parameter is deprecated and will be removed in a future release. "
+            "Use 'reporter=RichInstallerReporter()' instead for rich progress output.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     await py_install(
         records=records,
