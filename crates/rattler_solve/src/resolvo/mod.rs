@@ -41,9 +41,15 @@ fn exclude_newer_reason(
 ) -> Option<String> {
     let cutoff = config.cutoff_for_package(package, channel);
     match timestamp {
-        Some(timestamp) if *timestamp > cutoff => Some(format!(
-            "the package is uploaded after the cutoff date of {cutoff}"
-        )),
+        Some(timestamp) if *timestamp > cutoff => {
+            // Display in user's local timezone for better readability
+            let display_time = cutoff
+                .to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%Y-%m-%d %H:%M:%S");
+            Some(format!(
+                "the package is uploaded after the cutoff date of {display_time}"
+            ))
+        }
         None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
         _ => None,
     }
