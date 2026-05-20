@@ -153,6 +153,29 @@ impl Default for KeyringAuthenticationStorage {
 }
 
 impl StorageBackend for KeyringAuthenticationStorage {
+    fn name(&self) -> String {
+        #[cfg(target_os = "macos")]
+        {
+            "macOS keychain".to_string()
+        }
+        #[cfg(target_os = "windows")]
+        {
+            "Windows credential manager".to_string()
+        }
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+        {
+            "secret service (keyring)".to_string()
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            all(unix, not(any(target_os = "macos", target_os = "ios")))
+        )))]
+        {
+            "keyring".to_string()
+        }
+    }
+
     fn store(
         &self,
         host: &str,

@@ -133,6 +133,10 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
+    fn name(&self) -> String {
+        format!("file ({})", self.path.display())
+    }
+
     fn store(
         &self,
         host: &str,

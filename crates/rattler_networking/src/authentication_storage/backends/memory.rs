@@ -37,6 +37,10 @@ pub enum MemoryStorageError {
 }
 
 impl StorageBackend for MemoryStorage {
+    fn name(&self) -> String {
+        "memory".to_string()
+    }
+
     fn store(
         &self,
         host: &str,

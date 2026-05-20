@@ -630,9 +630,10 @@ fn now_unix_timestamp() -> i64 {
 }
 
 fn format_timestamp(timestamp: i64) -> String {
-    DateTime::<Utc>::from_timestamp(timestamp, 0)
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-        .unwrap_or_else(|| format!("unix timestamp {timestamp}"))
+    DateTime::<Utc>::from_timestamp(timestamp, 0).map_or_else(
+        || format!("unix timestamp {timestamp}"),
+        |dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+    )
 }
 
 fn format_validity(expires_at: Option<i64>, now: i64) -> String {
@@ -675,9 +676,19 @@ fn print_token_metadata(metadata: Option<&TokenMetadata>) {
     }
 }
 
-fn print_authentication_status(host: &str, auth: &Authentication, now: i64) {
+fn print_authentication_status(
+    host: &str,
+    auth: &Authentication,
+    source: &str,
+    account: Option<&str>,
+    now: i64,
+) {
     println!("{host}");
+    println!("  source: {source}");
     println!("  method: {}", auth.method());
+    if let Some(account) = account {
+        println!("  account: {account}");
+    }
 
     match auth {
         Authentication::BearerToken(token) => {
@@ -744,21 +755,65 @@ fn print_authentication_status(host: &str, auth: &Authentication, now: i64) {
     }
 }
 
-fn status(_args: StatusArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let entries = storage.list()?;
+/// Returns true if `host` belongs to the prefix.dev family (e.g. `prefix.dev`,
+/// `repo.prefix.dev`, `*.prefix.dev`). Used to decide whether the status
+/// command should look up the account name via prefix.dev's GraphQL API.
+fn is_prefix_dev_host(host: &str) -> bool {
+    let normalized = normalize_login_host(host);
+    normalized == "prefix.dev" || normalized.ends_with(".prefix.dev")
+}
+
+/// Extract a bearer-style token from an authentication entry if one is
+/// available — i.e. something that can be sent as `Authorization: Bearer …`
+/// to prefix.dev's GraphQL API.
+fn bearer_for_prefix_dev(auth: &Authentication) -> Option<&str> {
+    match auth {
+        Authentication::BearerToken(token) => Some(token.as_str()),
+        Authentication::OAuth { access_token, .. } => Some(access_token.as_str()),
+        _ => None,
+    }
+}
+
+/// Best-effort lookup of the prefix.dev account name for an entry. Returns
+/// `None` on any failure (network error, invalid token, non-prefix.dev host)
+/// since this is a display-only enrichment for `auth status`.
+async fn lookup_prefix_dev_account(host: &str, auth: &Authentication) -> Option<String> {
+    if !is_prefix_dev_host(host) {
+        return None;
+    }
+    let token = bearer_for_prefix_dev(auth)?;
+    match validate_prefix_dev_token(token, host, None).await {
+        Ok(ValidationResult::Valid(username, _)) => Some(username),
+        _ => None,
+    }
+}
+
+async fn status(
+    _args: StatusArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    let entries = storage.list_with_sources()?;
 
     if entries.is_empty() {
         println!("No stored authentication entries found.");
         return Ok(());
     }
 
+    let accounts = futures::future::join_all(
+        entries
+            .iter()
+            .map(|(host, auth, _)| lookup_prefix_dev_account(host, auth)),
+    )
+    .await;
+
     println!("Stored authentication entries:");
     let now = now_unix_timestamp();
-    for (index, (host, auth)) in entries.iter().enumerate() {
+    for (index, ((host, auth, source), account)) in entries.iter().zip(accounts.iter()).enumerate()
+    {
         if index > 0 {
             println!();
         }
-        print_authentication_status(host, auth, now);
+        print_authentication_status(host, auth, source, account.as_deref(), now);
     }
 
     Ok(())
@@ -771,7 +826,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage).await,
         Subcommand::Logout(args) => logout(args, storage).await,
-        Subcommand::Status(args) => status(args, storage),
+        Subcommand::Status(args) => status(args, storage).await,
     }
 }
 

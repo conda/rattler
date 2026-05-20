@@ -28,6 +28,11 @@ pub enum AuthenticationStorageError {
 
 /// A trait that defines the interface for authentication storage backends
 pub trait StorageBackend: std::fmt::Debug {
+    /// A short human-readable description identifying this backend (and any
+    /// relevant location, like a file path). Surfaced to users by the
+    /// `auth status` CLI so they can tell where each credential lives.
+    fn name(&self) -> String;
+
     /// Store the given authentication information for the given host
     fn store(
         &self,

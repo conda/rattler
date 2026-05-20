@@ -159,13 +159,28 @@ impl AuthenticationStorage {
     /// Entries are deduplicated by host using backend priority, matching the
     /// lookup behavior of [`get`](Self::get).
     pub fn list(&self) -> Result<Vec<(String, Authentication)>> {
-        let mut entries = BTreeMap::new();
+        Ok(self
+            .list_with_sources()?
+            .into_iter()
+            .map(|(host, auth, _source)| (host, auth))
+            .collect())
+    }
+
+    /// Like [`list`](Self::list), but also reports the human-readable name of
+    /// the backend each entry was loaded from (see [`StorageBackend::name`]).
+    /// Entries are deduplicated by host using backend priority — the first
+    /// backend to surface a given host wins, matching [`get`](Self::get).
+    pub fn list_with_sources(&self) -> Result<Vec<(String, Authentication, String)>> {
+        let mut entries: BTreeMap<String, (Authentication, String)> = BTreeMap::new();
 
         for backend in &self.backends {
             match backend.list() {
                 Ok(backend_entries) => {
+                    let source = backend.name();
                     for (host, auth) in backend_entries {
-                        entries.entry(host).or_insert(auth);
+                        entries
+                            .entry(host)
+                            .or_insert_with(|| (auth, source.clone()));
                     }
                 }
                 Err(error) => {
@@ -174,7 +189,10 @@ impl AuthenticationStorage {
             }
         }
 
-        Ok(entries.into_iter().collect())
+        Ok(entries
+            .into_iter()
+            .map(|(host, (auth, source))| (host, auth, source))
+            .collect())
     }
 
     /// Retrieve the authentication information for the given URL, along with the
