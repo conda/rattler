@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-05-20
+
+### Added
+
+- Add additional parameters to `Client` (auth storage, proxy config, cache dir, etc.) in [#2273](https://github.com/conda/rattler/pull/2273)
+- Expose `extra_depends` on `PackageRecord` in [#2268](https://github.com/conda/rattler/pull/2268)
+- Add cancellation token support for in-flight solves in [#2369](https://github.com/conda/rattler/pull/2369)
+- Add support for CEP-42 channel relations in repodata in [#2370](https://github.com/conda/rattler/pull/2370)
+- Add repodata revisions as proposed in the CEP in [#2379](https://github.com/conda/rattler/pull/2379)
+- Implement simplified variant selection with `flags` in [#2381](https://github.com/conda/rattler/pull/2381)
+- Implement shell flavors and workspace-wide initialization in [#2259](https://github.com/conda/rattler/pull/2259)
+- Handle HTTP 501 responses in sharded repodata fetching in [#2401](https://github.com/conda/rattler/pull/2401)
+
+### Changed
+
+- **BREAKING:** Lockfile v7 — restructured format with platform-keyed environments, partial source records, source timestamps, and `run_exports` on source packages ([#2026](https://github.com/conda/rattler/pull/2026), [#2348](https://github.com/conda/rattler/pull/2348))
+- **BREAKING:** Move `min_age` into `exclude_newer` and allow per-channel configuration in [#2279](https://github.com/conda/rattler/pull/2279)
+- Preserve `Arc` when crossing the Python custom-source boundary, improving solver performance with many custom sources in [#2400](https://github.com/conda/rattler/pull/2400)
+
+### Fixed
+
+- Render conditional `when` dependencies as defined in CEP 43 in [#2436](https://github.com/conda/rattler/pull/2436)
+- Avoid runtime import of `typing_extensions` in the index module in [#2428](https://github.com/conda/rattler/pull/2428)
+- Make build string matching case-insensitive per CEP-29 in [#2386](https://github.com/conda/rattler/pull/2386)
+- Fix ordering of `dev` and `post` components in version comparison in [#2299](https://github.com/conda/rattler/pull/2299)
+- Fix `StrictVersion` `Ord` contract violation in [#2225](https://github.com/conda/rattler/pull/2225)
+- Sort paths returned by `link_package_sync` for deterministic install output in [#2418](https://github.com/conda/rattler/pull/2418)
+- Copy symlinked files when symbolic linking is disabled in [#2409](https://github.com/conda/rattler/pull/2409)
+- Handle missing symlinks on Windows install path in [#2399](https://github.com/conda/rattler/pull/2399)
+- Don't assume path is a `file://` URL in run-exports extraction in [#2411](https://github.com/conda/rattler/pull/2411)
+
 ## [0.23.2] - 2026-03-19
 
 ### Added

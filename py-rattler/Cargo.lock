@@ -3946,7 +3946,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.23.2"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
