@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/conda/rattler/compare/rattler-bin-v0.1.12...rattler-bin-v0.1.13) - 2026-05-20
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.1.12](https://github.com/conda/rattler/compare/rattler-bin-v0.1.11...rattler-bin-v0.1.12) - 2026-05-19
 
 ### Other

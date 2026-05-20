@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.2...rattler_package_streaming-v0.26.3) - 2026-05-20
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.26.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.1...rattler_package_streaming-v0.26.2) - 2026-05-19
 
 ### Other
