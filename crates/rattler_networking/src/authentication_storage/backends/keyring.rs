@@ -10,6 +10,20 @@ use crate::{
 
 const INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
 
+/// Hosts that rattler historically stored credentials for under the keyring
+/// `rattler` service name, before the `__rattler_authentication_hosts` index
+/// was introduced. Probed during [`list`](StorageBackend::list) so that
+/// `auth status` can still surface legacy keychain entries written by older
+/// rattler / pixi versions. New stores are tracked via the index and don't
+/// need to appear here.
+const LEGACY_FALLBACK_HOSTS: &[&str] = &[
+    "prefix.dev",
+    "*.prefix.dev",
+    "repo.prefix.dev",
+    "anaconda.org",
+    "*.anaconda.org",
+];
+
 fn configure_default_store() -> Result<(), KeyringAuthenticationStorageError> {
     if keyring_core::get_default_store().is_some() {
         Ok(())
@@ -212,8 +226,13 @@ impl StorageBackend for KeyringAuthenticationStorage {
     }
 
     fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        let mut hosts = self.read_index()?;
+        hosts.extend(LEGACY_FALLBACK_HOSTS.iter().map(ToString::to_string));
+        hosts.sort();
+        hosts.dedup();
+
         let mut entries = Vec::new();
-        for host in self.read_index()? {
+        for host in hosts {
             if let Some(auth) = self.get(&host)? {
                 entries.push((host, auth));
             }

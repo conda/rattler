@@ -20,6 +20,26 @@ use crate::authentication_storage::backends::keyring::KeyringAuthenticationStora
 
 #[cfg(feature = "keyring")]
 use super::backends::keyring::KeyringAuthenticationStorage;
+
+/// A single entry returned by [`AuthenticationStorage::list_with_sources`].
+/// Carries the host and credential along with the backend's display name and
+/// a flag indicating whether this is the entry [`get`](AuthenticationStorage::get)
+/// would actually return (the first backend that knows the host wins).
+#[derive(Debug, Clone)]
+pub struct ListedEntry {
+    /// The host this credential is stored under.
+    pub host: String,
+    /// The credential itself.
+    pub auth: Authentication,
+    /// Human-readable name of the backend the entry came from (see
+    /// [`StorageBackend::name`]).
+    pub source: String,
+    /// `true` if this is the entry `get(host)` would return — i.e. the first
+    /// backend (in priority order) that holds credentials for `host`. Later
+    /// backends with the same host are "shadowed" and have `active = false`.
+    pub active: bool,
+}
+
 #[derive(Debug, Clone)]
 /// This struct implements storage and access of authentication
 /// information backed by multiple storage backends
@@ -159,28 +179,13 @@ impl AuthenticationStorage {
     /// Entries are deduplicated by host using backend priority, matching the
     /// lookup behavior of [`get`](Self::get).
     pub fn list(&self) -> Result<Vec<(String, Authentication)>> {
-        Ok(self
-            .list_with_sources()?
-            .into_iter()
-            .map(|(host, auth, _source)| (host, auth))
-            .collect())
-    }
-
-    /// Like [`list`](Self::list), but also reports the human-readable name of
-    /// the backend each entry was loaded from (see [`StorageBackend::name`]).
-    /// Entries are deduplicated by host using backend priority — the first
-    /// backend to surface a given host wins, matching [`get`](Self::get).
-    pub fn list_with_sources(&self) -> Result<Vec<(String, Authentication, String)>> {
-        let mut entries: BTreeMap<String, (Authentication, String)> = BTreeMap::new();
+        let mut entries: BTreeMap<String, Authentication> = BTreeMap::new();
 
         for backend in &self.backends {
             match backend.list() {
                 Ok(backend_entries) => {
-                    let source = backend.name();
                     for (host, auth) in backend_entries {
-                        entries
-                            .entry(host)
-                            .or_insert_with(|| (auth, source.clone()));
+                        entries.entry(host).or_insert(auth);
                     }
                 }
                 Err(error) => {
@@ -189,10 +194,40 @@ impl AuthenticationStorage {
             }
         }
 
-        Ok(entries
-            .into_iter()
-            .map(|(host, (auth, source))| (host, auth, source))
-            .collect())
+        Ok(entries.into_iter().collect())
+    }
+
+    /// Like [`list`](Self::list), but reports every entry from every backend
+    /// (not deduplicated) along with the backend's human-readable name (see
+    /// [`StorageBackend::name`]) and whether it's the entry that `get()` would
+    /// return for that host. Used by `auth status` so users can see what's
+    /// stored where, including shadowed entries.
+    pub fn list_with_sources(&self) -> Result<Vec<ListedEntry>> {
+        let mut entries: Vec<ListedEntry> = Vec::new();
+        let mut seen_hosts: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for backend in &self.backends {
+            match backend.list() {
+                Ok(backend_entries) => {
+                    let source = backend.name();
+                    for (host, auth) in backend_entries {
+                        let active = seen_hosts.insert(host.clone());
+                        entries.push(ListedEntry {
+                            host,
+                            auth,
+                            source: source.clone(),
+                            active,
+                        });
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!("Error listing credentials from backend: {}", error);
+                }
+            }
+        }
+
+        entries.sort_by(|a, b| a.host.cmp(&b.host));
+        Ok(entries)
     }
 
     /// Retrieve the authentication information for the given URL, along with the

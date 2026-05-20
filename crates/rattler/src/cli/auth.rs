@@ -687,10 +687,18 @@ fn print_authentication_status(
     host: &str,
     auth: &Authentication,
     source: &str,
+    active: bool,
     account: Option<&str>,
     now: i64,
 ) {
-    println!("{host}");
+    if active {
+        println!("{host}");
+    } else {
+        // Shadowed entry — `get()` would return a different backend's copy
+        // for this host. Dim the heading so it's visually subordinate but
+        // still useful for cleanup.
+        println!("{} {}", host, style("(shadowed)").dim());
+    }
 
     // Header line. For verified prefix.dev entries (account known) we mirror
     // `gh auth status` and lead with a "✓ Logged in to ..." line. For
@@ -804,21 +812,31 @@ async fn status(
         return Ok(());
     }
 
-    let accounts = futures::future::join_all(
-        entries
-            .iter()
-            .map(|(host, auth, _)| lookup_prefix_dev_account(host, auth)),
-    )
+    // Only call prefix.dev's API for entries that `get()` would actually
+    // return — there's no point validating shadowed copies.
+    let accounts = futures::future::join_all(entries.iter().map(|entry| async {
+        if entry.active {
+            lookup_prefix_dev_account(&entry.host, &entry.auth).await
+        } else {
+            None
+        }
+    }))
     .await;
 
     println!("Stored authentication entries:");
     let now = now_unix_timestamp();
-    for (index, ((host, auth, source), account)) in entries.iter().zip(accounts.iter()).enumerate()
-    {
+    for (index, (entry, account)) in entries.iter().zip(accounts.iter()).enumerate() {
         if index > 0 {
             println!();
         }
-        print_authentication_status(host, auth, source, account.as_deref(), now);
+        print_authentication_status(
+            &entry.host,
+            &entry.auth,
+            &entry.source,
+            entry.active,
+            account.as_deref(),
+            now,
+        );
     }
 
     Ok(())
