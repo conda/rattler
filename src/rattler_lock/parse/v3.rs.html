@@ -105,7 +105,7 @@
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">pub </span>python_site_packages_path: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">pub </span>size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="attr">#[serde_as(<span class="kw">as </span>= <span class="string">"Option&lt;crate::utils::serde::Timestamp&gt;"</span>)]
-<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>timestamp: <span class="prelude-ty">Option</span>&lt;chrono::DateTime&lt;chrono::Utc&gt;&gt;,
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>timestamp: <span class="prelude-ty">Option</span>&lt;jiff::Timestamp&gt;,
 <a href=#107 id=107 data-nosnippet>107</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"BTreeSet::is_empty"</span>)]
 <a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">pub </span>purls: BTreeSet&lt;PackageUrl&gt;,
 <a href=#109 id=109 data-nosnippet>109</a>}

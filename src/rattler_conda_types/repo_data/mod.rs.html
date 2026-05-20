@@ -1489,8 +1489,8 @@
 <a href=#1487 id=1487 data-nosnippet>1487</a>            r.build_number = build_number;
 <a href=#1488 id=1488 data-nosnippet>1488</a>            r.subdir = subdir.to_string();
 <a href=#1489 id=1489 data-nosnippet>1489</a>            r.timestamp = timestamp.map(|secs| {
-<a href=#1490 id=1490 data-nosnippet>1490</a>                <span class="kw">crate</span>::utils::TimestampMs::from_datetime_seconds(
-<a href=#1491 id=1491 data-nosnippet>1491</a>                    chrono::DateTime::from_timestamp(secs, <span class="number">0</span>).unwrap(),
+<a href=#1490 id=1490 data-nosnippet>1490</a>                <span class="kw">crate</span>::utils::TimestampMs::from_timestamp_seconds(
+<a href=#1491 id=1491 data-nosnippet>1491</a>                    jiff::Timestamp::from_second(secs).unwrap(),
 <a href=#1492 id=1492 data-nosnippet>1492</a>                )
 <a href=#1493 id=1493 data-nosnippet>1493</a>            });
 <a href=#1494 id=1494 data-nosnippet>1494</a>            r

@@ -363,7 +363,7 @@
 <a href=#361 id=361 data-nosnippet>361</a>                <span class="prelude-val">Ok</span>(response) <span class="kw">if </span>response.status() == StatusCode::NOT_FOUND =&gt; {
 <a href=#362 id=362 data-nosnippet>362</a>                    <span class="kw">let </span>unavailable = <span class="prelude-val">Some</span>(Expiring {
 <a href=#363 id=363 data-nosnippet>363</a>                        value: <span class="bool-val">false</span>,
-<a href=#364 id=364 data-nosnippet>364</a>                        last_checked: chrono::Utc::now(),
+<a href=#364 id=364 data-nosnippet>364</a>                        last_checked: jiff::Timestamp::now(),
 <a href=#365 id=365 data-nosnippet>365</a>                    });
 <a href=#366 id=366 data-nosnippet>366</a>                    <span class="kw">match </span>content_encoding {
 <a href=#367 id=367 data-nosnippet>367</a>                        Encoding::Zst =&gt; variant_availability.has_zst = unavailable,
@@ -628,7 +628,7 @@
 <a href=#626 id=626 data-nosnippet>626</a>) -&gt; VariantAvailability {
 <a href=#627 id=627 data-nosnippet>627</a>    <span class="comment">// Determine from the cache which variant are available. This is currently
 <a href=#628 id=628 data-nosnippet>628</a>    // cached for a maximum of 14 days.
-<a href=#629 id=629 data-nosnippet>629</a>    </span><span class="kw">let </span>expiration_duration = chrono::TimeDelta::try_days(<span class="number">14</span>).expect(<span class="string">"14 days is a valid duration"</span>);
+<a href=#629 id=629 data-nosnippet>629</a>    </span><span class="kw">let </span>expiration_duration = jiff::Span::new().days(<span class="number">14</span>);
 <a href=#630 id=630 data-nosnippet>630</a>    <span class="kw">let </span>has_zst = <span class="kw">if </span>options.zstd_enabled {
 <a href=#631 id=631 data-nosnippet>631</a>        cache_state
 <a href=#632 id=632 data-nosnippet>632</a>            .and_then(|state| state.has_zst.as_ref())
@@ -658,7 +658,7 @@
 <a href=#656 id=656 data-nosnippet>656</a>        <span class="prelude-val">None </span>=&gt; <span class="kw">async </span>{
 <a href=#657 id=657 data-nosnippet>657</a>            <span class="prelude-val">Some</span>(Expiring {
 <a href=#658 id=658 data-nosnippet>658</a>                value: check_valid_download_target(<span class="kw-2">&amp;</span>zst_repodata_url, client).<span class="kw">await</span>,
-<a href=#659 id=659 data-nosnippet>659</a>                last_checked: chrono::Utc::now(),
+<a href=#659 id=659 data-nosnippet>659</a>                last_checked: jiff::Timestamp::now(),
 <a href=#660 id=660 data-nosnippet>660</a>            })
 <a href=#661 id=661 data-nosnippet>661</a>        }
 <a href=#662 id=662 data-nosnippet>662</a>        .right_future(),
@@ -682,7 +682,7 @@
 <a href=#680 id=680 data-nosnippet>680</a>                }
 <a href=#681 id=681 data-nosnippet>681</a>                <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Some</span>(Expiring {
 <a href=#682 id=682 data-nosnippet>682</a>                    value: check_valid_download_target(<span class="kw-2">&amp;</span>bz2_repodata_url, client).<span class="kw">await</span>,
-<a href=#683 id=683 data-nosnippet>683</a>                    last_checked: chrono::Utc::now(),
+<a href=#683 id=683 data-nosnippet>683</a>                    last_checked: jiff::Timestamp::now(),
 <a href=#684 id=684 data-nosnippet>684</a>                }),
 <a href=#685 id=685 data-nosnippet>685</a>            }
 <a href=#686 id=686 data-nosnippet>686</a>        }
