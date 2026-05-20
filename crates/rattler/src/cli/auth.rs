@@ -663,17 +663,36 @@ fn print_token_metadata(metadata: Option<&TokenMetadata>) {
     };
 
     if !metadata.scopes.is_empty() {
-        println!("  scopes: {}", metadata.scopes.join(", "));
+        let scopes = metadata
+            .scopes
+            .iter()
+            .map(|s| format!("'{s}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!("  - Token scopes: {scopes}");
     }
     if let Some(issuer) = &metadata.issuer {
-        println!("  issuer: {issuer}");
+        println!("  - Issuer: {issuer}");
     }
     if !metadata.audience.is_empty() {
-        println!("  audience: {}", metadata.audience.join(", "));
+        println!("  - Audience: {}", metadata.audience.join(", "));
     }
     if let Some(subject) = &metadata.subject {
-        println!("  subject: {subject}");
+        println!("  - Subject: {subject}");
     }
+}
+
+/// Render a secret token in a redacted, gh-style form: keep a short visible
+/// prefix and pad with asterisks so the user can recognize the token without
+/// the secret material appearing on screen.
+fn redact_token(token: &str) -> String {
+    const VISIBLE_PREFIX: usize = 4;
+    const TOTAL_LEN: usize = 40;
+
+    let visible_len = token.chars().count().min(VISIBLE_PREFIX);
+    let visible: String = token.chars().take(visible_len).collect();
+    let mask_len = TOTAL_LEN.saturating_sub(visible_len);
+    format!("{visible}{}", "*".repeat(mask_len))
 }
 
 fn print_authentication_status(
@@ -684,17 +703,22 @@ fn print_authentication_status(
     now: i64,
 ) {
     println!("{host}");
-    println!("  source: {source}");
-    println!("  method: {}", auth.method());
-    if let Some(account) = account {
-        println!("  account: {account}");
+
+    // Header line. For verified prefix.dev entries (account known) we mirror
+    // `gh auth status` and lead with a "✓ Logged in to ..." line. For
+    // anything else we just report where the entry came from.
+    match account {
+        Some(account) => println!("  ✓ Logged in to {host} account {account} ({source})"),
+        None => println!("  - Source: {source}"),
     }
+    println!("  - Method: {}", auth.method());
 
     match auth {
         Authentication::BearerToken(token) => {
             let metadata = token_metadata(token);
+            println!("  - Token: {}", redact_token(token));
             println!(
-                "  validity: {}",
+                "  - Token validity: {}",
                 format_validity(
                     metadata.as_ref().and_then(|metadata| metadata.expires_at),
                     now
@@ -704,8 +728,9 @@ fn print_authentication_status(
         }
         Authentication::CondaToken(token) => {
             let metadata = token_metadata(token);
+            println!("  - Token: {}", redact_token(token));
             println!(
-                "  validity: {}",
+                "  - Token validity: {}",
                 format_validity(
                     metadata.as_ref().and_then(|metadata| metadata.expires_at),
                     now
@@ -722,34 +747,44 @@ fn print_authentication_status(
             client_id,
         } => {
             let metadata = token_metadata(access_token);
+            println!("  - Token: {}", redact_token(access_token));
             println!(
-                "  validity: {}",
+                "  - Token validity: {}",
                 format_validity(
                     expires_at
                         .or_else(|| metadata.as_ref().and_then(|metadata| metadata.expires_at)),
                     now,
                 )
             );
-            println!("  client id: {client_id}");
+            println!("  - Client ID: {client_id}");
             println!(
-                "  refresh token: {}",
+                "  - Refresh token: {}",
                 if refresh_token.is_some() { "yes" } else { "no" }
             );
-            println!("  token endpoint: {token_endpoint}");
+            println!("  - Token endpoint: {token_endpoint}");
             if let Some(revocation_endpoint) = revocation_endpoint {
-                println!("  revocation endpoint: {revocation_endpoint}");
+                println!("  - Revocation endpoint: {revocation_endpoint}");
             }
             print_token_metadata(metadata.as_ref());
         }
         Authentication::BasicHTTP { username, .. } => {
-            println!("  validity: unknown (basic authentication)");
-            println!("  username: {username}");
+            println!("  - Username: {username}");
+            println!("  - Password: {}", "*".repeat(12));
         }
-        Authentication::S3Credentials { session_token, .. } => {
-            println!("  validity: unknown (S3 credentials)");
+        Authentication::S3Credentials {
+            access_key_id,
+            session_token,
+            ..
+        } => {
+            println!("  - Access key ID: {}", redact_token(access_key_id));
+            println!("  - Secret access key: {}", "*".repeat(40));
             println!(
-                "  session token: {}",
-                if session_token.is_some() { "yes" } else { "no" }
+                "  - Session token: {}",
+                if session_token.is_some() {
+                    "present"
+                } else {
+                    "none"
+                }
             );
         }
     }
