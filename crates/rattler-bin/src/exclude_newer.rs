@@ -1,7 +1,7 @@
 //! Defines the `ExcludeNewer` type which is used to exclude packages based on
 //! their timestamp.
 
-use jiff::{civil::Date, tz::TimeZone, Timestamp};
+use jiff::{Timestamp, civil::Date, tz::TimeZone};
 use std::fmt;
 use std::str::FromStr;
 

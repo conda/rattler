@@ -236,8 +236,10 @@ impl ExcludeNewer {
         package: PackageName,
         duration: std::time::Duration,
     ) -> Self {
-        self.package_cutoffs
-            .insert(package, Self::cutoff_from_duration(duration, Timestamp::now()));
+        self.package_cutoffs.insert(
+            package,
+            Self::cutoff_from_duration(duration, Timestamp::now()),
+        );
         self
     }
 
@@ -281,11 +283,7 @@ impl ExcludeNewer {
     }
 
     /// Sets the absolute cutoff override for a specific channel.
-    pub fn with_channel_cutoff(
-        mut self,
-        channel: impl Into<String>,
-        cutoff: Timestamp,
-    ) -> Self {
+    pub fn with_channel_cutoff(mut self, channel: impl Into<String>, cutoff: Timestamp) -> Self {
         self.channel_cutoffs.insert(channel.into(), cutoff);
         self
     }
@@ -304,11 +302,7 @@ impl ExcludeNewer {
     }
 
     /// Computes the cutoff time for the given package and channel.
-    pub fn cutoff_for_package(
-        &self,
-        package: &PackageName,
-        channel: Option<&str>,
-    ) -> Timestamp {
+    pub fn cutoff_for_package(&self, package: &PackageName, channel: Option<&str>) -> Timestamp {
         self.package_cutoffs
             .get(package)
             .copied()

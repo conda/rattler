@@ -190,13 +190,15 @@ impl<'de> Deserialize<'de> for TimestampMs {
         // Determine if this is milliseconds or seconds based on magnitude
         let (ts, is_millis) = if timestamp > 253_402_300_799 {
             // This is milliseconds (year 9999 in seconds is 253402300799)
-            let ts = jiff::Timestamp::from_millisecond(timestamp)
-                .map_err(|_| D::Error::custom("got invalid timestamp, timestamp out of range"))?;
+            let ts = jiff::Timestamp::from_millisecond(timestamp).map_err(|_err| {
+                D::Error::custom("got invalid timestamp, timestamp out of range")
+            })?;
             (ts, true)
         } else {
             // This is seconds
-            let ts = jiff::Timestamp::from_second(timestamp)
-                .map_err(|_| D::Error::custom("got invalid timestamp, timestamp out of range"))?;
+            let ts = jiff::Timestamp::from_second(timestamp).map_err(|_err| {
+                D::Error::custom("got invalid timestamp, timestamp out of range")
+            })?;
             (ts, false)
         };
 
