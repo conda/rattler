@@ -165,7 +165,7 @@ fn detect_cuda_info_via_libcuda() -> CudaInfo {
             return CudaInfo {
                 version: None,
                 arch_info: None,
-            }
+            };
         }
     };
 
@@ -177,7 +177,7 @@ fn detect_cuda_info_via_libcuda() -> CudaInfo {
                 return CudaInfo {
                     version: None,
                     arch_info: None,
-                }
+                };
             }
         };
 
