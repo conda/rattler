@@ -34,29 +34,23 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false, experimental_extras = true, experimental_conditionals = true, experimental_flags = true))]
+    #[pyo3(signature = (spec, strict = false, extras = true, conditionals = true, flags = true))]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn __init__(
         spec: &str,
         strict: bool,
-        experimental_extras: bool,
-        experimental_conditionals: bool,
-        experimental_flags: bool,
+        extras: bool,
+        conditionals: bool,
+        flags: bool,
     ) -> PyResult<Self> {
-        // These kwargs are deprecated no-ops kept for backwards compatibility.
-        // Extras, conditionals, and flags syntax are now always enabled.
-        let _ = (
-            experimental_extras,
-            experimental_conditionals,
-            experimental_flags,
-        );
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {
             ParseMatchSpecOptions::lenient()
         }
-        .with_extras(true)
-        .with_conditionals(true)
-        .with_flags(true);
+        .with_extras(extras)
+        .with_conditionals(conditionals)
+        .with_flags(flags);
 
         Ok(NamelessMatchSpec::from_str(spec, options)
             .map(Into::into)

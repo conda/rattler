@@ -86,20 +86,19 @@ class MatchSpec:
         spec: str,
         strict: bool = False,
         exact_names_only: bool = True,
-        experimental_extras: bool = True,
-        experimental_conditionals: bool = True,
-        experimental_flags: bool = True,
+        extras: bool = True,
+        conditionals: bool = True,
+        flags: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        `experimental_extras`, `experimental_conditionals`, and
-        `experimental_flags` are deprecated no-ops kept for backwards
-        compatibility. Extras (`pkg[extras=[foo,bar]]`), conditionals
-        (`pkg[when="python >=3.6"]`), and flags (`pkg[flags=[cuda]]`) syntax
-        are now always enabled.
+        When `extras` is `True`, extras syntax (`pkg[extras=[foo,bar]]`) is
+        allowed. When `conditionals` is `True`, conditionals syntax
+        (`pkg[when="python >=3.6"]`) is allowed. When `flags` is `True`, flags
+        syntax (`pkg[flags=[cuda]]`) is allowed.
 
         ```python
         >>> MatchSpec("pip >=24.0")
@@ -121,9 +120,9 @@ class MatchSpec:
                 spec,
                 strict,
                 exact_names_only,
-                experimental_extras,
-                experimental_conditionals,
-                experimental_flags,
+                extras,
+                conditionals,
+                flags,
             )
         else:
             raise TypeError(

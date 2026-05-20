@@ -20,20 +20,19 @@ class NamelessMatchSpec:
         self,
         spec: str,
         strict: bool = False,
-        experimental_extras: bool = True,
-        experimental_conditionals: bool = True,
-        experimental_flags: bool = True,
+        extras: bool = True,
+        conditionals: bool = True,
+        flags: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        `experimental_extras`, `experimental_conditionals`, and
-        `experimental_flags` are deprecated no-ops kept for backwards
-        compatibility. Extras (`[extras=[foo,bar]]`), conditionals
-        (`>=1.0[when="python >=3.6"]`), and flags (`[flags=[cuda]]`) syntax
-        are now always enabled.
+        When `extras` is `True`, extras syntax (`[extras=[foo,bar]]`) is
+        allowed. When `conditionals` is `True`, conditionals syntax
+        (`>=1.0[when="python >=3.6"]`) is allowed. When `flags` is `True`,
+        flags syntax (`[flags=[cuda]]`) is allowed.
 
         ```python
         >>> NamelessMatchSpec(">=24.0")
@@ -47,9 +46,9 @@ class NamelessMatchSpec:
             self._nameless_match_spec = PyNamelessMatchSpec(
                 spec,
                 strict,
-                experimental_extras,
-                experimental_conditionals,
-                experimental_flags,
+                extras,
+                conditionals,
+                flags,
             )
         else:
             raise TypeError(

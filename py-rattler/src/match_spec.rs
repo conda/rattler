@@ -37,32 +37,25 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = true, experimental_conditionals = true, experimental_flags = true))]
+    #[pyo3(signature = (spec, strict = false, exact_names_only = true, extras = true, conditionals = true, flags = true))]
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn __init__(
         spec: &str,
         strict: bool,
         exact_names_only: bool,
-        experimental_extras: bool,
-        experimental_conditionals: bool,
-        experimental_flags: bool,
+        extras: bool,
+        conditionals: bool,
+        flags: bool,
     ) -> PyResult<Self> {
-        // These kwargs are deprecated no-ops kept for backwards compatibility.
-        // Extras, conditionals, and flags syntax are now always enabled.
-        let _ = (
-            experimental_extras,
-            experimental_conditionals,
-            experimental_flags,
-        );
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {
             ParseMatchSpecOptions::lenient()
         }
         .with_exact_names_only(exact_names_only)
-        .with_extras(true)
-        .with_conditionals(true)
-        .with_flags(true);
+        .with_extras(extras)
+        .with_conditionals(conditionals)
+        .with_flags(flags);
 
         Ok(MatchSpec::from_str(spec, options)
             .map(Into::into)
