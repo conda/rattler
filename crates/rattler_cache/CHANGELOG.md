@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3](https://github.com/conda/rattler/compare/rattler_cache-v0.8.2...rattler_cache-v0.8.3) - 2026-05-20
+
+### Other
+
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.8.2](https://github.com/conda/rattler/compare/rattler_cache-v0.8.1...rattler_cache-v0.8.2) - 2026-05-19
 
 ### Other

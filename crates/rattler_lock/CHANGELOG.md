@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_lock-v0.30.3...rattler_lock-v0.30.4) - 2026-05-20
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_lock-v0.30.2...rattler_lock-v0.30.3) - 2026-05-19
 
 ### Other

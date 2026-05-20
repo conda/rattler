@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1](https://github.com/conda/rattler/compare/rattler_digest-v1.3.0...rattler_digest-v1.3.1) - 2026-05-20
+
+### Other
+
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [1.3.0](https://github.com/conda/rattler/compare/rattler_digest-v1.2.5...rattler_digest-v1.3.0) - 2026-05-19
 
 ### Added

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.4...rattler_conda_types-v0.47.0) - 2026-05-20
+
+### Added
+
+- only walk active extras when fetching repodata ([#2447](https://github.com/conda/rattler/pull/2447))
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.46.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.3...rattler_conda_types-v0.46.4) - 2026-05-19
 
 ### Fixed
