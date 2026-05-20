@@ -5814,6 +5814,7 @@ dependencies = [
  "rattler_conda_types",
  "regex",
  "serde",
+ "temp-env",
  "thiserror 2.0.18",
  "tracing",
  "winver",
