@@ -16,7 +16,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
 };
@@ -175,31 +175,31 @@ impl CancellationToken {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewer {
     /// The default cutoff date. Packages uploaded after this date are excluded.
-    cutoff: DateTime<Utc>,
+    cutoff: Timestamp,
 
     /// Channel-specific cutoff dates that override [`Self::cutoff`] for
     /// records from matching channels.
     ///
     /// The key is matched against [`RepoDataRecord::channel`] exactly.
-    channel_cutoffs: HashMap<String, DateTime<Utc>>,
+    channel_cutoffs: HashMap<String, Timestamp>,
 
     /// Package-specific cutoff dates that override both [`Self::cutoff`] and
     /// [`Self::channel_cutoffs`] for matching package names.
-    package_cutoffs: HashMap<PackageName, DateTime<Utc>>,
+    package_cutoffs: HashMap<PackageName, Timestamp>,
 
     /// Whether to include packages that don't have a timestamp.
     include_unknown_timestamp: bool,
 }
 
 impl ExcludeNewer {
-    fn cutoff_from_duration(duration: std::time::Duration, now: DateTime<Utc>) -> DateTime<Utc> {
-        let duration =
-            chrono::Duration::from_std(duration).expect("exclude_newer duration is too large");
-        now - duration
+    fn cutoff_from_duration(duration: std::time::Duration, now: Timestamp) -> Timestamp {
+        let span = jiff::Span::try_from(duration).expect("exclude_newer duration is too large");
+        now.checked_sub(span)
+            .expect("exclude_newer duration subtraction overflowed")
     }
 
     /// Creates a new configuration from an absolute cutoff date.
-    pub fn from_datetime(cutoff: DateTime<Utc>) -> Self {
+    pub fn from_datetime(cutoff: Timestamp) -> Self {
         Self {
             cutoff,
             channel_cutoffs: HashMap::new(),
@@ -210,12 +210,12 @@ impl ExcludeNewer {
 
     /// Creates a new configuration from a relative duration.
     pub fn from_duration(duration: std::time::Duration) -> Self {
-        Self::from_duration_with_now(duration, Utc::now())
+        Self::from_duration_with_now(duration, Timestamp::now())
     }
 
     /// Creates a new configuration from a relative duration and explicit
     /// reference time.
-    pub fn from_duration_with_now(duration: std::time::Duration, now: DateTime<Utc>) -> Self {
+    pub fn from_duration_with_now(duration: std::time::Duration, now: Timestamp) -> Self {
         Self {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
@@ -225,7 +225,7 @@ impl ExcludeNewer {
     }
 
     /// Sets the absolute cutoff override for a specific package.
-    pub fn with_package_cutoff(mut self, package: PackageName, cutoff: DateTime<Utc>) -> Self {
+    pub fn with_package_cutoff(mut self, package: PackageName, cutoff: Timestamp) -> Self {
         self.package_cutoffs.insert(package, cutoff);
         self
     }
@@ -237,7 +237,7 @@ impl ExcludeNewer {
         duration: std::time::Duration,
     ) -> Self {
         self.package_cutoffs
-            .insert(package, Self::cutoff_from_duration(duration, Utc::now()));
+            .insert(package, Self::cutoff_from_duration(duration, Timestamp::now()));
         self
     }
 
@@ -247,7 +247,7 @@ impl ExcludeNewer {
         mut self,
         package: PackageName,
         duration: std::time::Duration,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Self {
         self.package_cutoffs
             .insert(package, Self::cutoff_from_duration(duration, now));
@@ -262,7 +262,7 @@ impl ExcludeNewer {
     ) -> Self {
         self.channel_cutoffs.insert(
             channel.into(),
-            Self::cutoff_from_duration(duration, Utc::now()),
+            Self::cutoff_from_duration(duration, Timestamp::now()),
         );
         self
     }
@@ -273,7 +273,7 @@ impl ExcludeNewer {
         mut self,
         channel: impl Into<String>,
         duration: std::time::Duration,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Self {
         self.channel_cutoffs
             .insert(channel.into(), Self::cutoff_from_duration(duration, now));
@@ -284,7 +284,7 @@ impl ExcludeNewer {
     pub fn with_channel_cutoff(
         mut self,
         channel: impl Into<String>,
-        cutoff: DateTime<Utc>,
+        cutoff: Timestamp,
     ) -> Self {
         self.channel_cutoffs.insert(channel.into(), cutoff);
         self
@@ -308,7 +308,7 @@ impl ExcludeNewer {
         &self,
         package: &PackageName,
         channel: Option<&str>,
-    ) -> DateTime<Utc> {
+    ) -> Timestamp {
         self.package_cutoffs
             .get(package)
             .copied()
@@ -330,8 +330,8 @@ impl ExcludeNewer {
     }
 }
 
-impl From<DateTime<Utc>> for ExcludeNewer {
-    fn from(value: DateTime<Utc>) -> Self {
+impl From<Timestamp> for ExcludeNewer {
+    fn from(value: Timestamp) -> Self {
         Self::from_datetime(value)
     }
 }

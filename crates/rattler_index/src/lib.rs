@@ -1266,7 +1266,7 @@ pub async fn write_repodata(
                 subdir: subdir.to_string(),
                 base_url: sharded_base_url,
                 shards_base_url: "./shards/".into(),
-                created_at: Some(chrono::Utc::now()),
+                created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
             },

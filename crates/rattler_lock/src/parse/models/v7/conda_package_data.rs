@@ -7,7 +7,6 @@ use rattler_conda_types::{
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
     package::{DistArchiveIdentifier, RunExportsJson},
-    utils::TimestampMs,
 };
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
@@ -126,7 +125,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
@@ -286,7 +285,7 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
+            timestamp: package_record.timestamp.map(|ts| ts.jiff_timestamp()),
             features: Cow::Borrowed(&package_record.features),
             flags: Cow::Borrowed(&package_record.flags),
             track_features: Cow::Borrowed(&package_record.track_features),

@@ -11,11 +11,11 @@ use std::{
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
+use jiff::Timestamp;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
     ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, SolverResult,
     package::{ArchiveIdentifier, DistArchiveType},
-    utils::TimestampMs,
 };
 use resolvo::{
     Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
@@ -191,13 +191,12 @@ impl SolverPackageRecord<'_> {
         }
     }
 
-    fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
+    fn timestamp(&self) -> Option<jiff::Timestamp> {
         match self {
             SolverPackageRecord::Record(rec) => rec
                 .package_record
                 .timestamp
-                .as_ref()
-                .map(TimestampMs::datetime),
+                .map(|ts| ts.jiff_timestamp()),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }

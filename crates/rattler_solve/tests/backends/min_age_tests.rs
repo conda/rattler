@@ -4,12 +4,12 @@
 //! packages that have been published too recently, helping reduce the risk
 //! of installing compromised packages.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_solve::{ExcludeNewer, SolverImpl};
 
 use crate::helpers::{PackageBuilder, SolverCase};
 
-fn fixed_now() -> DateTime<Utc> {
+fn fixed_now() -> Timestamp {
     "2026-03-24T00:00:00Z"
         .parse()
         .expect("invalid fixed test timestamp")
