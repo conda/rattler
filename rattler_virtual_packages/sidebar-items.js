@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Archspec","DetectVirtualPackageError","Override","VirtualPackage"],"mod":["cuda","libc","linux","osx","win"],"struct":["Cuda","LibC","Linux","Osx","VirtualPackageOverrides","VirtualPackages","Windows"],"trait":["EnvOverride"]};
+window.SIDEBAR_ITEMS = {"enum":["Archspec","DetectVirtualPackageError","Override","ParseVirtualPackageOverrideError","VirtualPackage"],"mod":["cuda","libc","linux","osx","win"],"struct":["Cuda","CudaArch","LibC","Linux","Osx","VirtualPackageOverrides","VirtualPackages","Windows"],"trait":["EnvOverride"]};

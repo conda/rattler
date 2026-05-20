@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cuda_version","detect_cuda_version","detect_cuda_version_via_libcuda","detect_cuda_version_via_nvml"]};
+window.SIDEBAR_ITEMS = {"fn":["cuda_arch","cuda_info","cuda_version","detect_cuda_version","detect_cuda_version_via_libcuda","detect_cuda_version_via_nvml"],"struct":["CudaArchInfo","CudaInfo"]};
