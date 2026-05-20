@@ -53,7 +53,10 @@ pub async fn fetch_file_from_remote_full_download(
 
     let content = match archive_type {
         CondaArchiveType::TarBz2 => {
-            let buf_reader = tokio::io::BufReader::new(stream_reader);
+            let buf_reader = tokio::io::BufReader::with_capacity(
+                crate::tokio::shared::DEFAULT_BUF_SIZE,
+                stream_reader,
+            );
             let decoder = BzDecoder::new(buf_reader);
             let mut archive = tokio_tar::Archive::new(decoder);
             get_file_from_tar_archive(&mut archive, target_path).await?
@@ -61,7 +64,10 @@ pub async fn fetch_file_from_remote_full_download(
         CondaArchiveType::Conda => {
             // async_zip uses futures IO traits, so bridge tokio → futures
             let compat_reader = stream_reader.compat();
-            let mut buf_reader = futures::io::BufReader::new(compat_reader);
+            let mut buf_reader = futures::io::BufReader::with_capacity(
+                crate::tokio::shared::DEFAULT_BUF_SIZE,
+                compat_reader,
+            );
             let mut zip_reader = ZipFileReader::new(&mut buf_reader);
 
             let mut found: Option<Vec<u8>> = None;
@@ -79,7 +85,10 @@ pub async fn fetch_file_from_remote_full_download(
                 if filename.starts_with(prefix) && filename.ends_with(".tar.zst") {
                     // Bridge the entry reader back from futures → tokio
                     let compat_entry = entry.reader_mut().compat();
-                    let buf_entry = tokio::io::BufReader::new(compat_entry);
+                    let buf_entry = tokio::io::BufReader::with_capacity(
+                        crate::tokio::shared::DEFAULT_BUF_SIZE,
+                        compat_entry,
+                    );
                     let decoder = ZstdDecoder::new(buf_entry);
                     let mut archive = tokio_tar::Archive::new(decoder);
                     found = get_file_from_tar_archive(&mut archive, target_path).await?;
