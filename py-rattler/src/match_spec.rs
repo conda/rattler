@@ -49,7 +49,11 @@ impl PyMatchSpec {
     ) -> PyResult<Self> {
         // These kwargs are deprecated no-ops kept for backwards compatibility.
         // Extras, conditionals, and flags syntax are now always enabled.
-        let _ = (experimental_extras, experimental_conditionals, experimental_flags);
+        let _ = (
+            experimental_extras,
+            experimental_conditionals,
+            experimental_flags,
+        );
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {
