@@ -137,6 +137,52 @@ impl PackageName {
             Cow::Borrowed(name)
         }
     }
+
+    /// Extracts the normalized package name and the optional features (extras)
+    /// from a matchspec string.
+    ///
+    /// When the spec contains no `[` bracket section, this is the fast path:
+    /// equivalent to [`Self::normalized_name_from_matchspec_str`] with no
+    /// allocation for the extras `Vec`.
+    ///
+    /// When brackets are present, the full matchspec is parsed (with
+    /// experimental extras enabled) to correctly distinguish extras from other
+    /// bracket keys like `build`, `version` or `when`. If parsing fails, the
+    /// name is still extracted with the cheap scan and the extras list is
+    /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    ///
+    /// let (name, extras) = PackageName::name_and_extras_from_matchspec_str("numpy >=1.0");
+    /// assert_eq!(name, "numpy");
+    /// assert!(extras.is_empty());
+    ///
+    /// let (name, extras) =
+    ///     PackageName::name_and_extras_from_matchspec_str("numpy[extras=[gpu, mkl]]");
+    /// assert_eq!(name, "numpy");
+    /// assert_eq!(extras, vec!["gpu".to_string(), "mkl".to_string()]);
+    /// ```
+    pub fn name_and_extras_from_matchspec_str(spec: &str) -> (Cow<'_, str>, Vec<String>) {
+        if !spec.contains('[') {
+            return (Self::normalized_name_from_matchspec_str(spec), Vec::new());
+        }
+
+        let name = Self::normalized_name_from_matchspec_str(spec);
+
+        let options = crate::ParseMatchSpecOptions::default().with_experimental_extras(true);
+        match crate::MatchSpec::from_str(spec, options) {
+            Ok(parsed) => (name, parsed.extras.unwrap_or_default()),
+            Err(err) => {
+                // Failure mode is silent under-fetching of an extra's deps;
+                // log so it shows up under RUST_LOG=debug when investigating.
+                tracing::debug!("failed to parse matchspec '{spec}' for extras extraction: {err}",);
+                (name, Vec::new())
+            }
+        }
+    }
 }
 
 /// Returns `true` if the byte is a matchspec delimiter (whitespace or version
@@ -489,5 +535,56 @@ mod test {
         let name = PackageName::normalized_name_from_matchspec_str(spec);
         assert_eq!(&*name, expected);
         assert_eq!(matches!(name, Cow::Borrowed(_)), is_borrowed);
+    }
+
+    #[rstest]
+    // No brackets: fast path, no extras.
+    #[case("numpy", "numpy", &[])]
+    #[case("numpy>=1.0", "numpy", &[])]
+    #[case("numpy >=1.0,<2.0", "numpy", &[])]
+    #[case("NumPy>=1.0", "numpy", &[])]
+    // Brackets but no extras key.
+    #[case(r#"numpy[build="py37*"]"#, "numpy", &[])]
+    #[case(r#"numpy[when="python >=3.6"]"#, "numpy", &[])]
+    #[case(r#"foo[version=">=1.0", build="py*"]"#, "foo", &[])]
+    // Extras present.
+    #[case("numpy[extras=[gpu]]", "numpy", &["gpu"])]
+    #[case("numpy[extras=[gpu, mkl]]", "numpy", &["gpu", "mkl"])]
+    #[case("Numpy[extras=[GPU]]", "numpy", &["GPU"])]
+    // Extras combined with other bracket keys.
+    #[case(
+        r#"aiohttp[extras=[speedups], build="py*"]"#,
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Extras combined with a version constraint outside the bracket.
+    #[case(
+        "aiohttp >=3.7.4 [extras=[speedups]]",
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Malformed bracket section falls back to empty extras but still extracts name.
+    #[case("numpy[", "numpy", &[])]
+    #[case("foo[extras=[", "foo", &[])]
+    // Empty extras list is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[]]", "foo", &[])]
+    // Trailing comma is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[a,]]", "foo", &[])]
+    // Multiple bracket sections are rejected by the parser; extras silently
+    // dropped. Documented limitation, captured here so future changes notice.
+    #[case(
+        r#"aiohttp[extras=[a]] [build="py*"]"#,
+        "aiohttp",
+        &[],
+    )]
+    fn test_name_and_extras_from_matchspec_str(
+        #[case] spec: &str,
+        #[case] expected_name: &str,
+        #[case] expected_extras: &[&str],
+    ) {
+        let (name, extras) = PackageName::name_and_extras_from_matchspec_str(spec);
+        assert_eq!(&*name, expected_name);
+        let expected: Vec<String> = expected_extras.iter().map(|s| (*s).to_string()).collect();
+        assert_eq!(extras, expected);
     }
 }

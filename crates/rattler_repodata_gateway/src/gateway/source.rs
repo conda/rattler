@@ -6,7 +6,7 @@ use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 
 use super::{
     GatewayError,
-    subdir::{PackageRecords, SubdirClient, extract_unique_deps},
+    subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
 use crate::Reporter;
 
@@ -90,10 +90,12 @@ impl SubdirClient for CustomSourceClient {
             .source
             .fetch_package_records(self.platform, name)
             .await?;
-        let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
+        let (unique_base_deps, unique_extra_deps) =
+            extract_unique_deps_split(records.iter().map(|r| &**r));
         Ok(PackageRecords {
             records,
-            unique_deps,
+            unique_base_deps,
+            unique_extra_deps,
         })
     }
 
