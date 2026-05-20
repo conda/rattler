@@ -15,7 +15,7 @@ default = ['rustls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
-cli-tools = ['dep:clap', 'oauth']
+cli-tools = ['dep:clap', 'oauth', 'dep:console']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]
@@ -23,6 +23,8 @@ features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 hex = { workspace = true }
