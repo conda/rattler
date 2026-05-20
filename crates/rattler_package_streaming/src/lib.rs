@@ -91,17 +91,29 @@ impl From<Cancelled> for ExtractError {
 impl ExtractError {
     /// Returns true if this error is transient and the operation should be retried.
     ///
-    /// This checks for common transient I/O errors like broken pipes,
-    /// connection resets, and unexpected EOF that can occur during
-    /// network streaming operations.
+    /// Only specific I/O error kinds are considered transient (e.g. broken pipe,
+    /// connection reset, timeout). Permanent failures like `PermissionDenied`,
+    /// `NotFound`, or `InvalidInput` return `false`.
     pub fn should_retry(&self) -> bool {
+        use std::io::ErrorKind;
+
+        let is_transient_io = |err: &std::io::Error| {
+            matches!(
+                err.kind(),
+                ErrorKind::BrokenPipe
+                    | ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::ConnectionRefused
+                    | ErrorKind::NotConnected
+                    | ErrorKind::TimedOut
+                    | ErrorKind::UnexpectedEof
+                    | ErrorKind::Interrupted
+            )
+        };
+
         match self {
-            // Retry on all I/O errors during streaming - these are typically
-            // transient network issues (broken pipe, connection reset, etc.)
-            // The cache layer will clean up partial files on retry.
-            // TODO: Add more specific checks for transient I/O errors
-            ExtractError::IoError(_) => true,
-            ExtractError::CouldNotCreateDestination(_) => true,
+            ExtractError::IoError(err) => is_transient_io(err),
+            ExtractError::CouldNotCreateDestination(err) => is_transient_io(err),
             #[cfg(feature = "reqwest")]
             ExtractError::ReqwestError(err) => {
                 // Check if this is a connection error (includes broken pipe during connection)
@@ -215,27 +227,38 @@ mod tests {
     }
 
     #[test]
-    fn test_should_retry_io_error_not_found() {
+    fn test_should_not_retry_io_error_not_found() {
         let err = ExtractError::IoError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "not found",
         ));
-        assert!(err.should_retry());
+        assert!(!err.should_retry());
     }
 
     #[test]
-    fn test_should_retry_io_error_permission_denied() {
+    fn test_should_not_retry_io_error_permission_denied() {
         let err = ExtractError::IoError(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "permission denied",
         ));
-        assert!(err.should_retry());
+        assert!(!err.should_retry());
     }
 
     #[test]
-    fn test_should_retry_could_not_create_destination() {
+    fn test_should_not_retry_could_not_create_destination() {
+        // ErrorKind::Other (non-transient) must not trigger a retry.
         let err =
             ExtractError::CouldNotCreateDestination(std::io::Error::other("could not create"));
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_could_not_create_destination_transient() {
+        // A broken-pipe variant of CouldNotCreateDestination is transient.
+        let err = ExtractError::CouldNotCreateDestination(std::io::Error::new(
+            std::io::ErrorKind::BrokenPipe,
+            "broken pipe",
+        ));
         assert!(err.should_retry());
     }
 
