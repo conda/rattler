@@ -3,3 +3,4 @@
 - Single test: `pixi run -- cargo nextest run -p <crate_name> <test_name>`
 - Before committing, run `pixi run cargo-fmt` and `pixi run cargo-clippy` to ensure formatting and lint compliance
 - crates in `crates/`, Python bindings in `py-rattler/`, WASM bindings in `js-rattler/`
+- If you modify something in `py-rattler/` or `rattler-bin/`, update the skill in `skills/` accordingly

@@ -1,0 +1,47 @@
+context:
+  skill: rattler-bin
+  version: ${{ load_from_file('../../crates/rattler-bin/Cargo.toml').package.version }}
+
+package:
+  name: agent-skill-${{ skill }}
+  version: ${{ version }}
+
+source:
+  path: ../../LICENSE
+
+build:
+  number: 0
+  noarch: generic
+  script:
+    - mkdir -p $PREFIX/share/agent-skills/${{ skill }}
+    - cp $RECIPE_DIR/SKILL.md $PREFIX/share/agent-skills/${{ skill }}/SKILL.md
+    - cp -R $RECIPE_DIR/references $PREFIX/share/agent-skills/${{ skill }}/
+
+requirements:
+  run_constraints:
+    - rattler ==${{ version }}
+
+tests:
+  - package_contents:
+      files:
+        - share/agent-skills/${{ skill }}/SKILL.md
+        - share/agent-skills/${{ skill }}/references/*.md
+      strict: true
+  - script:
+      - agentskills validate $CONDA_PREFIX/share/agent-skills/${{ skill }}
+    requirements:
+      run:
+        - skills-ref
+
+about:
+  summary: Agent skill for programmatic conda operations with py-rattler
+  description: >
+    Use the rattler CLI (the rattler-bin Rust binary) to interact with the conda
+    ecosystem: create environments, search packages, inspect and extract conda
+    archives, upload to channels, and authenticate with private servers. Use when
+    the user mentions the `rattler` command-line tool.
+  homepage: https://github.com/conda/rattler/tree/main/py-rattler
+  repository: https://github.com/pavelzw/skill-forge
+  documentation: https://github.com/conda/rattler/tree/main/py-rattler
+  license: BSD-3-Clause
+  license_file: LICENSE

@@ -1,0 +1,46 @@
+context:
+  skill: py-rattler
+  version: ${{ load_from_file('../../py-rattler/Cargo.toml').package.version }}
+
+package:
+  name: agent-skill-${{ skill }}
+  version: ${{ version }}
+
+source:
+  path: ../../LICENSE
+
+build:
+  number: 0
+  noarch: generic
+  script:
+    - mkdir -p $PREFIX/share/agent-skills/${{ skill }}
+    - cp $RECIPE_DIR/SKILL.md $PREFIX/share/agent-skills/${{ skill }}/SKILL.md
+    - cp -R $RECIPE_DIR/references $PREFIX/share/agent-skills/${{ skill }}/
+
+requirements:
+  run_constraints:
+    - py-rattler ==${{ version }}
+
+tests:
+  - package_contents:
+      files:
+        - share/agent-skills/${{ skill }}/SKILL.md
+        - share/agent-skills/${{ skill }}/references/*.md
+      strict: true
+  - script:
+      - agentskills validate $CONDA_PREFIX/share/agent-skills/${{ skill }}
+    requirements:
+      run:
+        - skills-ref
+
+about:
+  summary: Agent skill for programmatic conda operations with py-rattler
+  description: >
+    Python bindings for the rattler conda library. Use when solving dependencies,
+    installing packages, managing conda environments, working with repodata, lock
+    files, conda pakckages or shell activation programmatically from Python.
+  homepage: https://github.com/conda/rattler/tree/main/py-rattler
+  repository: https://github.com/conda/rattler
+  documentation: https://rattler.prefix.dev/py-rattler/latest
+  license: BSD-3-Clause
+  license_file: LICENSE
