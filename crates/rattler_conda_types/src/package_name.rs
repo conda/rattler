@@ -172,7 +172,7 @@ impl PackageName {
 
         let name = Self::normalized_name_from_matchspec_str(spec);
 
-        let options = crate::ParseMatchSpecOptions::default().with_experimental_extras(true);
+        let options = crate::ParseMatchSpecOptions::default().with_extras(true);
         match crate::MatchSpec::from_str(spec, options) {
             Ok(parsed) => (name, parsed.extras.unwrap_or_default()),
             Err(err) => {

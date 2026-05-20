@@ -817,7 +817,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         // Add extras
         for (extra, matchspec) in record
             .package_record
-            .experimental_extra_depends
+            .extra_depends
             .iter()
             .flat_map(|(extra, deps)| deps.iter().map(move |dep| (extra, dep)))
         {

@@ -2,7 +2,7 @@
 
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
-use crate::repo_data::{ChannelRelations, ExperimentalV3Packages, RepodataRevisionInfo};
+use crate::repo_data::{ChannelRelations, RepodataRevisionInfo, V3Packages};
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
 use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
@@ -106,12 +106,8 @@ pub struct Shard {
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3Packages::is_empty"
-    )]
-    pub experimental_v3: ExperimentalV3Packages,
+    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
+    pub v3: V3Packages,
 
     /// The file names of all removed for this shard
     #[serde(default)]

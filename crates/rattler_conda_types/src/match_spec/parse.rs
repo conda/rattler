@@ -483,15 +483,14 @@ fn parse_bracket_vec_into_components(
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "extras" => {
-                // Optional features are still experimental
-                if options.allow_experimental_extras() {
+                if options.allow_extras() {
                     match_spec.extras = Some(parse_extras(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
                 }
             }
             "flags" => {
-                if options.allow_experimental_flags() {
+                if options.allow_flags() {
                     match_spec.flags = Some(parse_flags(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
@@ -545,7 +544,7 @@ fn parse_bracket_vec_into_components(
             }
             "when" => {
                 // Conditional dependencies using bracket syntax
-                if options.allow_experimental_conditionals() {
+                if options.allow_conditionals() {
                     // Unescape the value in case it contains escaped quotes
                     let unescaped_value = unescape_string(value);
                     let (remainder, condition) =
@@ -1824,7 +1823,7 @@ mod tests {
         // Basic usage with new bracket syntax
         let spec = MatchSpec::from_str(
             r#"foo[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "foo".parse().unwrap());
@@ -1839,7 +1838,7 @@ mod tests {
         // Bracket syntax with version spec
         let spec = MatchSpec::from_str(
             r#"numpy >=2.0[when="python >=3.10"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "numpy".parse().unwrap());
@@ -1858,7 +1857,7 @@ mod tests {
         // Single quotes for the when value
         let spec = MatchSpec::from_str(
             r#"foo[when='python >=3.6']"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "foo".parse().unwrap());
@@ -1872,7 +1871,7 @@ mod tests {
     fn parse_conditional(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         MatchSpec::from_str(
             input,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
     }
 
@@ -1922,7 +1921,7 @@ mod tests {
         // Old "; if" syntax should return an error
         let spec = MatchSpec::from_str(
             "foo; if python >=3.6",
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert_matches!(spec, Err(ParseMatchSpecError::DeprecatedIfSyntax));
 
@@ -1936,7 +1935,7 @@ mod tests {
         // Test that parsing and displaying a conditional spec produces a valid spec
         let spec = MatchSpec::from_str(
             r#"foo >=1.0[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
 
@@ -1946,7 +1945,7 @@ mod tests {
         // Parse the displayed string back
         let reparsed = MatchSpec::from_str(
             &spec_str,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec, reparsed);
@@ -2013,13 +2012,13 @@ mod tests {
     #[test]
     fn test_nested_when_conditions_not_allowed() {
         // According to the CEP, inner MatchSpec queries MUST NOT feature their own `when` field.
-        // The inner condition parser uses strict mode without experimental conditionals,
+        // The inner condition parser uses strict mode without conditionals enabled,
         // so nested when conditions should fail with an InvalidCondition error.
 
         // Test case 1: Simple nested when
         let spec = MatchSpec::from_str(
             r#"foo[when="bar[when=\"baz\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         let err = spec.unwrap_err();
@@ -2029,7 +2028,7 @@ mod tests {
         // Test case 2: Nested when in OR condition
         let spec = MatchSpec::from_str(
             r#"foo[when="bar or baz[when=\"qux\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2040,7 +2039,7 @@ mod tests {
         // Test case 3: Nested when in AND condition
         let spec = MatchSpec::from_str(
             r#"foo[when="bar and baz[when=\"qux\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2051,7 +2050,7 @@ mod tests {
         // Test case 4: Deeply nested when (when inside when inside when)
         let spec = MatchSpec::from_str(
             r#"foo[when="bar[when=\"baz[when=\\\"qux\\\"]\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2076,7 +2075,7 @@ mod tests {
         // Multiple when keys in strict mode should error
         let spec = MatchSpec::from_str(
             r#"foo[when="a", when="b"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert_matches!(spec, Err(ParseMatchSpecError::MultipleValueForKey(_)));
     }
@@ -2201,7 +2200,7 @@ mod tests {
         // NamelessMatchSpec with when should work
         let spec = NamelessMatchSpec::from_str(
             r#">=1.0[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(
@@ -2239,7 +2238,7 @@ mod tests {
     fn test_simple_extras() {
         let spec = MatchSpec::from_str(
             "foo[extras=[bar]]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true),
+            ParseMatchSpecOptions::strict().with_extras(true),
         )
         .unwrap();
 
@@ -2247,7 +2246,7 @@ mod tests {
         assert!(
             MatchSpec::from_str(
                 "foo[extras=[bar,baz]",
-                ParseMatchSpecOptions::strict().with_experimental_extras(true)
+                ParseMatchSpecOptions::strict().with_extras(true)
             )
             .is_err()
         );
@@ -2257,7 +2256,7 @@ mod tests {
     fn test_multiple_extras() {
         let spec = MatchSpec::from_str(
             "foo[extras=[bar,baz]]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true),
+            ParseMatchSpecOptions::strict().with_extras(true),
         )
         .unwrap();
         assert_eq!(
@@ -2282,7 +2281,7 @@ mod tests {
 
     #[test]
     fn test_invalid_extras() {
-        let opts = ParseMatchSpecOptions::strict().with_experimental_extras(true);
+        let opts = ParseMatchSpecOptions::strict().with_extras(true);
 
         // Empty extras value
         assert!(MatchSpec::from_str("foo[extras=]", opts).is_err());

@@ -1464,10 +1464,10 @@ mod test {
             PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
         };
 
-        let mut experimental_extra_depends: std::collections::BTreeMap<String, Vec<String>> =
+        let mut extra_depends_map: std::collections::BTreeMap<String, Vec<String>> =
             std::collections::BTreeMap::default();
         for (extra, items) in extra_depends {
-            experimental_extra_depends.insert(
+            extra_depends_map.insert(
                 (*extra).to_string(),
                 items.iter().map(|s| (*s).to_string()).collect(),
             );
@@ -1498,7 +1498,7 @@ mod test {
             purls: None,
             run_exports: None,
             python_site_packages_path: None,
-            experimental_extra_depends,
+            extra_depends: extra_depends_map,
         };
 
         RepoDataRecord {
@@ -2169,7 +2169,7 @@ mod test {
     }
 
     fn extras_options() -> rattler_conda_types::ParseMatchSpecOptions {
-        rattler_conda_types::ParseMatchSpecOptions::default().with_experimental_extras(true)
+        rattler_conda_types::ParseMatchSpecOptions::default().with_extras(true)
     }
 
     /// User asks for `black` directly (Input). Black has extras `d` and
@@ -2303,7 +2303,7 @@ mod test {
             "bla*[extras=[d]]",
             ParseMatchSpecOptions::strict()
                 .with_exact_names_only(false)
-                .with_experimental_extras(true),
+                .with_extras(true),
         )
         .unwrap();
 
@@ -2360,7 +2360,7 @@ mod test {
             "bla*[extras=[d]]",
             ParseMatchSpecOptions::strict()
                 .with_exact_names_only(false)
-                .with_experimental_extras(true),
+                .with_extras(true),
         )
         .unwrap();
 
