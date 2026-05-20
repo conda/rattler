@@ -588,6 +588,85 @@ impl PackageCache {
     }
 }
 
+/// Renames `from` to `to`. Plain `rename` on non-Windows; retries transient
+/// file-locking errors on Windows. See the Windows-only definition.
+#[cfg(not(windows))]
+async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
+    tokio_fs::rename(from, to).await
+}
+
+/// Renames `from` to `to`, retrying transient Windows file-locking errors
+/// (`ERROR_ACCESS_DENIED`, `ERROR_SHARING_VIOLATION`) with exponential backoff.
+/// Antivirus scanners and the search indexer hold short-lived handles to
+/// freshly-extracted files, breaking `MoveFileEx`.
+/// See <https://github.com/prefix-dev/pixi/issues/5660>.
+#[cfg(windows)]
+async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
+    use rattler_networking::retry_policies::ExponentialBackoff;
+
+    let retry_policy = ExponentialBackoff::builder()
+        .retry_bounds(Duration::from_millis(100), Duration::from_secs(2))
+        .build_with_max_retries(5);
+    retry_io_on_transient(
+        || tokio_fs::rename(from, to),
+        is_transient_rename_error,
+        retry_policy,
+    )
+    .await
+}
+
+/// Calls `op` and retries on transient I/O errors using the given retry
+/// policy. The op is invoked again each iteration to obtain a fresh future.
+/// Non-transient errors and `RetryDecision::DoNotRetry` cause the loop to
+/// return the last error.
+#[cfg(any(windows, test))]
+async fn retry_io_on_transient<F, Fut, P, R>(
+    mut op: F,
+    is_transient: P,
+    retry_policy: R,
+) -> std::io::Result<()>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = std::io::Result<()>>,
+    P: Fn(&std::io::Error) -> bool,
+    R: RetryPolicy,
+{
+    let request_start = SystemTime::now();
+    let mut current_try: u32 = 0;
+    loop {
+        match op().await {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                if !is_transient(&err) {
+                    return Err(err);
+                }
+                let execute_after = match retry_policy.should_retry(request_start, current_try) {
+                    RetryDecision::Retry { execute_after } => execute_after,
+                    RetryDecision::DoNotRetry => return Err(err),
+                };
+                let duration = execute_after
+                    .duration_since(SystemTime::now())
+                    .unwrap_or(Duration::ZERO);
+                tracing::warn!(
+                    "transient I/O error '{}'; retry #{} in {:?}",
+                    err,
+                    current_try + 1,
+                    duration,
+                );
+                tokio::time::sleep(duration).await;
+                current_try += 1;
+            }
+        }
+    }
+}
+
+/// True for transient Windows file-locking errors worth retrying on rename.
+#[cfg(windows)]
+fn is_transient_rename_error(err: &std::io::Error) -> bool {
+    // 5 = ERROR_ACCESS_DENIED, 32 = ERROR_SHARING_VIOLATION.
+    matches!(err.raw_os_error(), Some(5) | Some(32))
+}
+
 /// Shared logic for validating a package.
 async fn validate_package_common<F, Fut, E>(
     path: PathBuf,
@@ -755,8 +834,9 @@ where
                     })?;
                 }
 
-                // Atomically rename the temp directory to the final destination
-                tokio_fs::rename(&temp_path, &path).await.map_err(|e| {
+                // Atomically rename the temp directory into the cache;
+                // see `rename_with_retry` for the Windows retry rationale.
+                rename_with_retry(&temp_path, &path).await.map_err(|e| {
                     PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
                         "failed to rename temp directory '{}' to '{}': {}",
                         temp_path.display(),
@@ -853,7 +933,7 @@ mod test {
     use tokio_stream::StreamExt;
     use url::Url;
 
-    use super::PackageCache;
+    use super::{PackageCache, rename_with_retry};
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
         validation::{validate_package_directory, ValidationMode},
@@ -861,6 +941,235 @@ mod test {
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+    }
+
+    #[tokio::test]
+    async fn test_rename_with_retry_succeeds() {
+        // Multi-file + nested layout to exercise the atomic same-volume move:
+        // either everything ends up at the destination or nothing does.
+        let dir = tempdir().unwrap();
+        let from = dir.path().join("src");
+        let to = dir.path().join("dst");
+        std::fs::create_dir(&from).unwrap();
+        std::fs::create_dir(from.join("nested")).unwrap();
+        std::fs::write(from.join("a.txt"), b"a").unwrap();
+        std::fs::write(from.join("b.txt"), b"b").unwrap();
+        std::fs::write(from.join("nested").join("c.txt"), b"c").unwrap();
+
+        rename_with_retry(&from, &to).await.unwrap();
+
+        assert!(!from.exists());
+        assert!(to.is_dir());
+        assert_eq!(std::fs::read(to.join("a.txt")).unwrap(), b"a");
+        assert_eq!(std::fs::read(to.join("b.txt")).unwrap(), b"b");
+        assert_eq!(
+            std::fs::read(to.join("nested").join("c.txt")).unwrap(),
+            b"c"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rename_with_retry_propagates_non_transient_errors() {
+        // NotFound is not 5/32, so Windows must propagate it without retrying.
+        let dir = tempdir().unwrap();
+        let from = dir.path().join("does-not-exist");
+        let to = dir.path().join("dst");
+
+        let err = rename_with_retry(&from, &to).await.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_is_transient_rename_error() {
+        use super::is_transient_rename_error;
+
+        assert!(is_transient_rename_error(
+            &std::io::Error::from_raw_os_error(5)
+        ));
+        assert!(is_transient_rename_error(
+            &std::io::Error::from_raw_os_error(32)
+        ));
+        assert!(!is_transient_rename_error(
+            &std::io::Error::from_raw_os_error(2)
+        )); // not found
+        assert!(!is_transient_rename_error(&std::io::Error::other("nope")));
+    }
+
+    // The next group tests `retry_io_on_transient` directly with mock closures
+    // and a zero-duration retry policy, so the retry logic is exercised
+    // without any real waiting.
+
+    fn zero_backoff_policy(max_retries: u32) -> impl super::RetryPolicy {
+        ExponentialBackoffBuilder::default()
+            .retry_bounds(std::time::Duration::ZERO, std::time::Duration::ZERO)
+            .build_with_max_retries(max_retries)
+    }
+
+    #[tokio::test]
+    async fn test_retry_io_on_transient_succeeds_first_try() {
+        let mut calls = 0u32;
+        super::retry_io_on_transient(
+            || {
+                calls += 1;
+                async { Ok(()) }
+            },
+            |_| true,
+            zero_backoff_policy(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn test_retry_io_on_transient_retries_until_success() {
+        // Fails transiently twice, then succeeds on the third try.
+        let mut calls = 0u32;
+        super::retry_io_on_transient(
+            || {
+                calls += 1;
+                let attempt = calls;
+                async move {
+                    if attempt < 3 {
+                        Err(std::io::Error::from_raw_os_error(5))
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+            |e| e.raw_os_error() == Some(5),
+            zero_backoff_policy(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls, 3);
+    }
+
+    #[tokio::test]
+    async fn test_retry_io_on_transient_propagates_non_transient_immediately() {
+        let mut calls = 0u32;
+        let err = super::retry_io_on_transient(
+            || {
+                calls += 1;
+                async { Err(std::io::Error::from_raw_os_error(2)) }
+            },
+            |e| e.raw_os_error() == Some(5),
+            zero_backoff_policy(5),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(2));
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn test_retry_io_on_transient_exhausts_policy() {
+        // 3 retries means up to 4 total attempts; the policy then gives up
+        // and returns the last error.
+        let mut calls = 0u32;
+        let err = super::retry_io_on_transient(
+            || {
+                calls += 1;
+                async { Err(std::io::Error::from_raw_os_error(5)) }
+            },
+            |_| true,
+            zero_backoff_policy(3),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(5));
+        assert_eq!(calls, 4);
+    }
+
+    /// Drives `retry_io_on_transient` against a real `tokio_fs::rename` that
+    /// fails because of an exclusive Win32 file-share lock, then succeeds once
+    /// the op signals a background task to drop the handle. Synchronisation is
+    /// done with `tokio::sync::Semaphore`, so the test does not depend on any
+    /// wall-clock timing.
+    ///
+    /// POSIX `rename` ignores file-sharing flags, so the body is gated to
+    /// Windows. The function itself always compiles; on non-Windows the
+    /// `#[ignore]` attribute makes it surface as "skipped" in test reports.
+    #[tokio::test]
+    #[cfg_attr(
+        not(windows),
+        ignore = "Windows-specific: POSIX rename ignores file-sharing flags"
+    )]
+    async fn test_retry_io_on_transient_recovers_from_share_lock() {
+        #[cfg(windows)]
+        {
+            use std::{
+                os::windows::fs::OpenOptionsExt,
+                sync::{
+                    Arc,
+                    atomic::{AtomicBool, Ordering},
+                },
+                time::Duration,
+            };
+
+            use tokio::sync::Semaphore;
+
+            let dir = tempdir().unwrap();
+            let from = dir.path().join("src");
+            let to = dir.path().join("dst");
+            std::fs::create_dir(&from).unwrap();
+            let locked_path = from.join("locked.txt");
+            std::fs::write(&locked_path, b"data").unwrap();
+
+            let handle = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0) // exclusive: blocks MoveFileEx on the parent dir.
+                .open(&locked_path)
+                .expect("open with exclusive share mode");
+
+            // Two semaphores choreograph the lock release without timing:
+            // - `release_request` is granted by the op after the first failed
+            //   rename, asking the background task to drop the handle.
+            // - `release_done` is granted by the task once the handle is gone,
+            //   so the op returns only after the file is actually unlocked.
+            let release_request = Arc::new(Semaphore::new(0));
+            let release_done = Arc::new(Semaphore::new(0));
+
+            let release_request_for_task = release_request.clone();
+            let release_done_for_task = release_done.clone();
+            tokio::spawn(async move {
+                let _ = release_request_for_task.acquire().await;
+                drop(handle);
+                release_done_for_task.add_permits(1);
+            });
+
+            let signaled = Arc::new(AtomicBool::new(false));
+            let policy = ExponentialBackoffBuilder::default()
+                .retry_bounds(Duration::ZERO, Duration::ZERO)
+                .build_with_max_retries(5);
+
+            super::retry_io_on_transient(
+                || {
+                    let from = &from;
+                    let to = &to;
+                    let signaled = signaled.clone();
+                    let release_request = release_request.clone();
+                    let release_done = release_done.clone();
+                    async move {
+                        let result = super::tokio_fs::rename(from, to).await;
+                        if result.is_err() && !signaled.swap(true, Ordering::SeqCst) {
+                            release_request.add_permits(1);
+                            let _ = release_done.acquire().await;
+                        }
+                        result
+                    }
+                },
+                |_| true,
+                policy,
+            )
+            .await
+            .expect("rename should succeed once the share lock is released");
+
+            assert!(!from.exists());
+            assert!(to.is_dir());
+            assert_eq!(std::fs::read(to.join("locked.txt")).unwrap(), b"data");
+        }
     }
 
     #[tokio::test]
