@@ -9,6 +9,7 @@ use base64::{
 };
 use chrono::{DateTime, Utc};
 use clap::Parser;
+use console::style;
 use rattler_networking::{
     Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
 };
@@ -682,19 +683,6 @@ fn print_token_metadata(metadata: Option<&TokenMetadata>) {
     }
 }
 
-/// Render a secret token in a redacted, gh-style form: keep a short visible
-/// prefix and pad with asterisks so the user can recognize the token without
-/// the secret material appearing on screen.
-fn redact_token(token: &str) -> String {
-    const VISIBLE_PREFIX: usize = 4;
-    const TOTAL_LEN: usize = 40;
-
-    let visible_len = token.chars().count().min(VISIBLE_PREFIX);
-    let visible: String = token.chars().take(visible_len).collect();
-    let mask_len = TOTAL_LEN.saturating_sub(visible_len);
-    format!("{visible}{}", "*".repeat(mask_len))
-}
-
 fn print_authentication_status(
     host: &str,
     auth: &Authentication,
@@ -708,27 +696,17 @@ fn print_authentication_status(
     // `gh auth status` and lead with a "✓ Logged in to ..." line. For
     // anything else we just report where the entry came from.
     match account {
-        Some(account) => println!("  ✓ Logged in to {host} account {account} ({source})"),
+        Some(account) => println!(
+            "  {} Logged in to {host} account {account} ({source})",
+            style("✓").green()
+        ),
         None => println!("  - Source: {source}"),
     }
     println!("  - Method: {}", auth.method());
 
     match auth {
-        Authentication::BearerToken(token) => {
+        Authentication::BearerToken(token) | Authentication::CondaToken(token) => {
             let metadata = token_metadata(token);
-            println!("  - Token: {}", redact_token(token));
-            println!(
-                "  - Token validity: {}",
-                format_validity(
-                    metadata.as_ref().and_then(|metadata| metadata.expires_at),
-                    now
-                )
-            );
-            print_token_metadata(metadata.as_ref());
-        }
-        Authentication::CondaToken(token) => {
-            let metadata = token_metadata(token);
-            println!("  - Token: {}", redact_token(token));
             println!(
                 "  - Token validity: {}",
                 format_validity(
@@ -747,7 +725,6 @@ fn print_authentication_status(
             client_id,
         } => {
             let metadata = token_metadata(access_token);
-            println!("  - Token: {}", redact_token(access_token));
             println!(
                 "  - Token validity: {}",
                 format_validity(
@@ -769,15 +746,8 @@ fn print_authentication_status(
         }
         Authentication::BasicHTTP { username, .. } => {
             println!("  - Username: {username}");
-            println!("  - Password: {}", "*".repeat(12));
         }
-        Authentication::S3Credentials {
-            access_key_id,
-            session_token,
-            ..
-        } => {
-            println!("  - Access key ID: {}", redact_token(access_key_id));
-            println!("  - Secret access key: {}", "*".repeat(40));
+        Authentication::S3Credentials { session_token, .. } => {
             println!(
                 "  - Session token: {}",
                 if session_token.is_some() {

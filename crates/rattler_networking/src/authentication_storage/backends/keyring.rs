@@ -9,13 +9,6 @@ use crate::{
 };
 
 const INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
-const WELL_KNOWN_HOSTS: &[&str] = &[
-    "prefix.dev",
-    "*.prefix.dev",
-    "repo.prefix.dev",
-    "anaconda.org",
-    "*.anaconda.org",
-];
 
 fn configure_default_store() -> Result<(), KeyringAuthenticationStorageError> {
     if keyring_core::get_default_store().is_some() {
@@ -220,12 +213,7 @@ impl StorageBackend for KeyringAuthenticationStorage {
 
     fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
         let mut entries = Vec::new();
-        let mut hosts = self.read_index()?;
-        hosts.extend(WELL_KNOWN_HOSTS.iter().map(ToString::to_string));
-        hosts.sort();
-        hosts.dedup();
-
-        for host in hosts {
+        for host in self.read_index()? {
             if let Some(auth) = self.get(&host)? {
                 entries.push((host, auth));
             }
