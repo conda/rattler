@@ -1184,12 +1184,12 @@ mod test {
 
         // Test override via environment variable
         let env_var_name = format!("{}_{}", CudaArch::DEFAULT_ENV_NAME, "test123");
-        env::set_var(&env_var_name, "7.5");
-        let result = CudaArch::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap();
-        assert!(result.is_some());
-        let cuda_arch = result.unwrap();
-        assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
-        env::remove_var(&env_var_name);
+        temp_env::with_var(&env_var_name, Some("7.5"), || {
+            let result = CudaArch::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap();
+            assert!(result.is_some());
+            let cuda_arch = result.unwrap();
+            assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
+        });
     }
 
     #[test]
