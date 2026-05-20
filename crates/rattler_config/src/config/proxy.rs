@@ -90,11 +90,9 @@ impl Config for ProxyConfig {
     }
 
     fn validate(&self) -> Result<(), ValidationError> {
-        if self.https.is_none() && self.http.is_none() {
-            return Err(ValidationError::Invalid(
-                "At least one of https or http proxy must be set".to_string(),
-            ));
-        }
+        // Empty is valid — no proxy configured is the common case.
+        // Downstreams (e.g. pixi) emit their own informational warning
+        // when `non_proxy_hosts` is set without an actual proxy URL.
         Ok(())
     }
 
@@ -170,5 +168,23 @@ impl Config for ProxyConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An unconfigured `ProxyConfig` must validate. Previously
+    /// `validate` rejected the default-empty state, which broke any
+    /// caller that ran validation on a config without proxies.
+    #[test]
+    fn validate_accepts_empty() {
+        let config = ProxyConfig {
+            https: None,
+            http: None,
+            non_proxy_hosts: vec![],
+        };
+        config.validate().expect("empty proxy config is valid");
     }
 }
