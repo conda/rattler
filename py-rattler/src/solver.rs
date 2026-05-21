@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::DateTime;
+use jiff::Timestamp;
 use pyo3::{
     Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
     pybacked::PyBackedStr, pyfunction, types::PyAnyMethods,
@@ -46,7 +46,7 @@ fn parse_exclude_newer(
     exclude_newer_duration_seconds: Option<u64>,
 ) -> PyResult<Option<ExcludeNewer>> {
     match (
-        exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis),
+        exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok()),
         exclude_newer_duration_seconds,
     ) {
         (Some(_), Some(_)) => Err(PyValueError::new_err(
@@ -92,7 +92,7 @@ pub fn py_solve<'a>(
             .query(
                 rust_sources,
                 platforms.into_iter().map(Into::into),
-                specs.clone().into_iter(),
+                specs.clone(),
             )
             .recursive(true)
             .execute()

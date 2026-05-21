@@ -56,7 +56,7 @@ pub async fn create_attestation(
     // Step 2: Compute package digest
     let digest = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(package_path)
         .into_diagnostic()?;
-    let digest_hex = format!("{digest:x}");
+    let digest_hex = hex::encode(digest);
 
     // Step 3: Get package filename
     let filename = package_path

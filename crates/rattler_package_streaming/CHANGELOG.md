@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.1...rattler_package_streaming-v0.26.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.0...rattler_package_streaming-v0.26.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
 ## [0.26.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.25.1...rattler_package_streaming-v0.26.0) - 2026-05-13
 
 ### Fixed

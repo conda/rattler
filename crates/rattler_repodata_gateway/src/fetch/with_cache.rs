@@ -361,7 +361,7 @@ pub async fn fetch_repo_data(
                 Ok(response) if response.status() == StatusCode::NOT_FOUND => {
                     let unavailable = Some(Expiring {
                         value: false,
-                        last_checked: chrono::Utc::now(),
+                        last_checked: jiff::Timestamp::now(),
                     });
                     match content_encoding {
                         Encoding::Zst => variant_availability.has_zst = unavailable,
@@ -585,10 +585,10 @@ async fn stream_and_decode_to_file(
     let (_, hash) = hashing_file_writer.finalize();
 
     tracing::debug!(
-        "downloaded {}, decoded that into {}, BLAKE2 hash: {:x}",
+        "downloaded {}, decoded that into {}, BLAKE2 hash: {}",
         SizeFormatter::new(total_bytes, DECIMAL),
         SizeFormatter::new(bytes, DECIMAL),
-        hash
+        hex::encode(hash)
     );
 
     Ok((temp_file, hash))
@@ -626,7 +626,7 @@ pub async fn check_variant_availability(
 ) -> VariantAvailability {
     // Determine from the cache which variant are available. This is currently
     // cached for a maximum of 14 days.
-    let expiration_duration = chrono::TimeDelta::try_days(14).expect("14 days is a valid duration");
+    let expiration_duration = jiff::Span::new().days(14);
     let has_zst = if options.zstd_enabled {
         cache_state
             .and_then(|state| state.has_zst.as_ref())
@@ -656,7 +656,7 @@ pub async fn check_variant_availability(
         None => async {
             Some(Expiring {
                 value: check_valid_download_target(&zst_repodata_url, client).await,
-                last_checked: chrono::Utc::now(),
+                last_checked: jiff::Timestamp::now(),
             })
         }
         .right_future(),
@@ -680,7 +680,7 @@ pub async fn check_variant_availability(
                 }
                 None => Some(Expiring {
                     value: check_valid_download_target(&bz2_repodata_url, client).await,
-                    last_checked: chrono::Utc::now(),
+                    last_checked: jiff::Timestamp::now(),
                 }),
             }
         }

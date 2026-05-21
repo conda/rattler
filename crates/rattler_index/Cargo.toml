@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.29.0"
+version = "0.30.1"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -12,7 +12,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls", "s3", "rattler_config"]
+default = ["rustls", "s3"]
 native-tls = [
   "reqwest/native-tls",
   "rattler_package_streaming/native-tls",
@@ -27,7 +27,6 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
-rattler_config = ["dep:rattler_config"]
 
 [[bin]]
 name = "rattler-index"
@@ -39,7 +38,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
-chrono = { workspace = true, features = ["clock"] }
+jiff = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
@@ -50,13 +49,14 @@ opendal = { workspace = true, features = [
   "services-fs",
   "layers-retry",
 ], default-features = false }
-rattler_config = { workspace = true, optional = true }
+rattler_config = { workspace = true }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
 ] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
+hex = { workspace = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",

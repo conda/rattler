@@ -36,7 +36,6 @@ mod package;
 mod prefix;
 #[cfg(feature = "s3")]
 mod s3;
-mod trusted_publishing;
 #[cfg(feature = "s3")]
 pub use s3::upload_package_to_s3;
 

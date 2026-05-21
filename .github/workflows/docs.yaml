@@ -73,9 +73,9 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
         with:
-          profile: minimal
+          toolchain: "1.95"
 
       - name: Pre-docs-build
         run: |

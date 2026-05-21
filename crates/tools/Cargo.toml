@@ -19,6 +19,7 @@ fslock = { workspace = true }
 dirs = { workspace = true }
 thiserror = { workspace = true }
 rattler_digest = { path = "../rattler_digest" }
+hex = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = [
   "blocking",
 ] }

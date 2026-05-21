@@ -1,6 +1,6 @@
 [package]
 name = "rattler_pty"
-version = "0.2.11"
+version = "0.2.12"
 description = "A crate to create pty"
 categories.workspace = true
 homepage.workspace = true

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12](https://github.com/conda/rattler/compare/rattler-bin-v0.1.11...rattler-bin-v0.1.12) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst, rattler_solve, rattler_repodata_gateway, rattler_upload, rattler_virtual_packages
+
+## [0.1.11](https://github.com/conda/rattler/compare/rattler-bin-v0.1.10...rattler-bin-v0.1.11) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+- support conda-pypi channel ([#2435](https://github.com/conda/rattler/pull/2435))
+
 ## [0.1.10](https://github.com/conda/rattler/compare/rattler-bin-v0.1.9...rattler-bin-v0.1.10) - 2026-05-13
 
 ### Other
