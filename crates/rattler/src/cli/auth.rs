@@ -380,6 +380,7 @@ async fn login(
                 scopes,
                 redirect_uri,
                 user_agent: args.user_agent,
+                callback_page: None,
             };
 
             let auth = oauth::perform_oauth_login(config).await?;
