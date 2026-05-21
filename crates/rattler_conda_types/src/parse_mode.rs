@@ -37,14 +37,14 @@ pub struct ParseMatchSpecOptions {
     /// Whether to allow only `Exact` matchers for the package name or whether to also allow `Glob` or `Regex` matchers.
     exact_names_only: bool,
 
-    /// Whether to allow experimental extras syntax (e.g., `foo[extras=[bar,baz]]`).
-    allow_experimental_extras: bool,
+    /// Whether to allow extras syntax (e.g., `foo[extras=[bar,baz]]`).
+    allow_extras: bool,
 
-    /// Whether to allow experimental conditionals syntax (e.g., `foo; if python >=3.6`).
-    allow_experimental_conditionals: bool,
+    /// Whether to allow conditionals syntax (e.g., `foo[when="python >=3.6"]`).
+    allow_conditionals: bool,
 
-    /// Whether to allow experimental flags syntax (e.g., `foo[flags=[cuda]]`).
-    allow_experimental_flags: bool,
+    /// Whether to allow flags syntax (e.g., `foo[flags=[cuda]]`).
+    allow_flags: bool,
 }
 
 impl ParseMatchSpecOptions {
@@ -53,9 +53,9 @@ impl ParseMatchSpecOptions {
         Self {
             strictness,
             exact_names_only: true,
-            allow_experimental_extras: false,
-            allow_experimental_conditionals: false,
-            allow_experimental_flags: false,
+            allow_extras: false,
+            allow_conditionals: false,
+            allow_flags: false,
         }
     }
 
@@ -81,19 +81,19 @@ impl ParseMatchSpecOptions {
         self.exact_names_only
     }
 
-    /// Returns whether experimental extras parsing is allowed.
-    pub fn allow_experimental_extras(&self) -> bool {
-        self.allow_experimental_extras
+    /// Returns whether extras parsing is allowed.
+    pub fn allow_extras(&self) -> bool {
+        self.allow_extras
     }
 
-    /// Returns whether experimental conditionals parsing is allowed.
-    pub fn allow_experimental_conditionals(&self) -> bool {
-        self.allow_experimental_conditionals
+    /// Returns whether conditionals parsing is allowed.
+    pub fn allow_conditionals(&self) -> bool {
+        self.allow_conditionals
     }
 
-    /// Returns whether experimental flags parsing is allowed.
-    pub fn allow_experimental_flags(&self) -> bool {
-        self.allow_experimental_flags
+    /// Returns whether flags parsing is allowed.
+    pub fn allow_flags(&self) -> bool {
+        self.allow_flags
     }
 
     /// Sets whether to allow only exact package names.
@@ -102,21 +102,21 @@ impl ParseMatchSpecOptions {
         self
     }
 
-    /// Sets whether to allow experimental extras syntax.
-    pub fn with_experimental_extras(mut self, enable: bool) -> Self {
-        self.allow_experimental_extras = enable;
+    /// Sets whether to allow extras syntax.
+    pub fn with_extras(mut self, enable: bool) -> Self {
+        self.allow_extras = enable;
         self
     }
 
-    /// Sets whether to allow experimental conditionals syntax.
-    pub fn with_experimental_conditionals(mut self, enable: bool) -> Self {
-        self.allow_experimental_conditionals = enable;
+    /// Sets whether to allow conditionals syntax.
+    pub fn with_conditionals(mut self, enable: bool) -> Self {
+        self.allow_conditionals = enable;
         self
     }
 
-    /// Sets whether to allow experimental flags syntax.
-    pub fn with_experimental_flags(mut self, enable: bool) -> Self {
-        self.allow_experimental_flags = enable;
+    /// Sets whether to allow flags syntax.
+    pub fn with_flags(mut self, enable: bool) -> Self {
+        self.allow_flags = enable;
         self
     }
 
@@ -127,25 +127,25 @@ impl ParseMatchSpecOptions {
     /// repodata revision syntax surface.
     pub fn with_repodata_revision(mut self, revision: RepodataRevision) -> Self {
         let allow_v3_syntax = !matches!(revision, RepodataRevision::Legacy);
-        self.allow_experimental_extras = allow_v3_syntax;
-        self.allow_experimental_conditionals = allow_v3_syntax;
-        self.allow_experimental_flags = allow_v3_syntax;
+        self.allow_extras = allow_v3_syntax;
+        self.allow_conditionals = allow_v3_syntax;
+        self.allow_flags = allow_v3_syntax;
         self
     }
 
-    /// Sets whether to allow experimental extras syntax (mutable).
-    pub fn set_experimental_extras(&mut self, enable: bool) {
-        self.allow_experimental_extras = enable;
+    /// Sets whether to allow extras syntax (mutable).
+    pub fn set_extras(&mut self, enable: bool) {
+        self.allow_extras = enable;
     }
 
-    /// Sets whether to allow experimental conditionals syntax (mutable).
-    pub fn set_experimental_conditionals(&mut self, enable: bool) {
-        self.allow_experimental_conditionals = enable;
+    /// Sets whether to allow conditionals syntax (mutable).
+    pub fn set_conditionals(&mut self, enable: bool) {
+        self.allow_conditionals = enable;
     }
 
-    /// Sets whether to allow experimental flags syntax (mutable).
-    pub fn set_experimental_flags(&mut self, enable: bool) {
-        self.allow_experimental_flags = enable;
+    /// Sets whether to allow flags syntax (mutable).
+    pub fn set_flags(&mut self, enable: bool) {
+        self.allow_flags = enable;
     }
 }
 
@@ -166,9 +166,9 @@ impl From<ParseStrictnessWithNameMatcher> for ParseMatchSpecOptions {
         Self {
             strictness: value.parse_strictness,
             exact_names_only: value.exact_names_only,
-            allow_experimental_extras: false,
-            allow_experimental_conditionals: false,
-            allow_experimental_flags: false,
+            allow_extras: false,
+            allow_conditionals: false,
+            allow_flags: false,
         }
     }
 }
@@ -182,15 +182,15 @@ mod tests {
     fn with_repodata_revision_preserves_strictness() {
         let options = ParseMatchSpecOptions::strict().with_repodata_revision(RepodataRevision::V3);
         assert_eq!(options.strictness(), ParseStrictness::Strict);
-        assert!(options.allow_experimental_extras());
-        assert!(options.allow_experimental_conditionals());
-        assert!(options.allow_experimental_flags());
+        assert!(options.allow_extras());
+        assert!(options.allow_conditionals());
+        assert!(options.allow_flags());
 
         let options =
             ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::Legacy);
         assert_eq!(options.strictness(), ParseStrictness::Lenient);
-        assert!(!options.allow_experimental_extras());
-        assert!(!options.allow_experimental_conditionals());
-        assert!(!options.allow_experimental_flags());
+        assert!(!options.allow_extras());
+        assert!(!options.allow_conditionals());
+        assert!(!options.allow_flags());
     }
 }

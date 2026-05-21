@@ -442,9 +442,7 @@ impl QueryExecutor {
                         self.queue_dependency(dependency);
                     }
                     for extra in &active {
-                        if let Some(deps) =
-                            record.package_record.experimental_extra_depends.get(extra)
-                        {
+                        if let Some(deps) = record.package_record.extra_depends.get(extra) {
                             for dependency in deps {
                                 self.queue_dependency(dependency);
                             }
@@ -491,7 +489,7 @@ impl QueryExecutor {
                             Some(new_extras.iter().filter_map(move |ext| {
                                 record
                                     .package_record
-                                    .experimental_extra_depends
+                                    .extra_depends
                                     .get(ext)
                                     .map(|deps| deps.iter().cloned())
                             }))

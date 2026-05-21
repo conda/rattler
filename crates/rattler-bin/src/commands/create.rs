@@ -143,9 +143,9 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // clap to deal with this because we need to parse the `channel_config` when
     // parsing matchspecs.
     let match_spec_options = ParseMatchSpecOptions::strict()
-        .with_experimental_extras(true)
-        .with_experimental_conditionals(true)
-        .with_experimental_flags(true);
+        .with_extras(true)
+        .with_conditionals(true)
+        .with_flags(true);
 
     let specs = opt
         .specs

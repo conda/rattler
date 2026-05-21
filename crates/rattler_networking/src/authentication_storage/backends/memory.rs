@@ -37,6 +37,10 @@ pub enum MemoryStorageError {
 }
 
 impl StorageBackend for MemoryStorage {
+    fn name(&self) -> String {
+        "memory".to_string()
+    }
+
     fn store(
         &self,
         host: &str,
@@ -56,6 +60,17 @@ impl StorageBackend for MemoryStorage {
             .lock()
             .map_err(|_err| MemoryStorageError::LockError)?;
         Ok(store.get(host).cloned())
+    }
+
+    fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        Ok(store
+            .iter()
+            .map(|(host, auth)| (host.clone(), auth.clone()))
+            .collect())
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {

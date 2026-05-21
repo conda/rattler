@@ -29,8 +29,8 @@ use opendal::layers::RetryLayer;
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
-    ChannelInfo, ChannelRelations, ExperimentalV3Packages, PackageRecord, PatchInstructions,
-    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
+    ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
+    ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
@@ -193,7 +193,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
-        experimental_extra_depends: index.experimental_extra_depends,
+        extra_depends: index.extra_depends,
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
@@ -891,7 +891,7 @@ async fn index_subdir_inner(
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
-    let mut experimental_v3 = ExperimentalV3Packages::default();
+    let mut v3 = V3Packages::default();
     let latest_revision = latest_repodata_revision(&repodata_revisions);
     for (filename, package) in registered_packages {
         let revision =
@@ -899,7 +899,7 @@ async fn index_subdir_inner(
         insert_package_record_by_revision(
             &mut packages,
             &mut conda_packages,
-            &mut experimental_v3,
+            &mut v3,
             filename,
             package,
             revision,
@@ -911,15 +911,12 @@ async fn index_subdir_inner(
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: channel_metadata.base_url,
-            repodata_revisions: repodata_revisions_for_packages(
-                &repodata_revisions,
-                &experimental_v3,
-            ),
+            repodata_revisions: repodata_revisions_for_packages(&repodata_revisions, &v3),
             channel_relations: channel_metadata.channel_relations,
         }),
         packages,
         conda_packages,
-        experimental_v3,
+        v3,
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -979,18 +976,21 @@ fn package_records_from_repodata(
             }),
     );
 
-    packages.extend(repodata.experimental_v3.into_records_with_url().map(
-        |(identifier, record, wheel_url)| {
-            (
-                identifier,
-                IndexedPackageRecord {
-                    record,
-                    repodata_revision: RepodataRevision::V3,
-                    wheel_url,
-                },
-            )
-        },
-    ));
+    packages.extend(
+        repodata
+            .v3
+            .into_records_with_url()
+            .map(|(identifier, record, wheel_url)| {
+                (
+                    identifier,
+                    IndexedPackageRecord {
+                        record,
+                        repodata_revision: RepodataRevision::V3,
+                        wheel_url,
+                    },
+                )
+            }),
+    );
 
     packages
 }
@@ -999,7 +999,7 @@ fn package_records_from_repodata(
 fn insert_package_record_by_revision(
     packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    experimental_v3: &mut ExperimentalV3Packages,
+    v3: &mut V3Packages,
     filename: DistArchiveIdentifier,
     package: IndexedPackageRecord,
     revision: RepodataRevision,
@@ -1025,10 +1025,10 @@ fn insert_package_record_by_revision(
         },
         RepodataRevision::V3 => match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                experimental_v3.tar_bz2.insert(filename.identifier, record);
+                v3.tar_bz2.insert(filename.identifier, record);
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                experimental_v3.conda.insert(filename.identifier, record);
+                v3.conda.insert(filename.identifier, record);
             }
             DistArchiveType::Wheel(WheelArchiveType::Whl) => {
                 let url = wheel_url.ok_or_else(|| {
@@ -1036,7 +1036,7 @@ fn insert_package_record_by_revision(
                         "indexing new wheel packages into v3 repodata is not supported yet"
                     ))
                 })?;
-                experimental_v3.whl.insert(
+                v3.whl.insert(
                     filename.identifier,
                     WhlPackageRecord {
                         package_record: record,
@@ -1080,7 +1080,7 @@ impl RevisionStats {
 
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionInfo],
-    experimental_v3: &ExperimentalV3Packages,
+    v3: &V3Packages,
 ) -> Vec<RepodataRevisionInfo> {
     let mut revisions = configured
         .iter()
@@ -1089,7 +1089,7 @@ fn repodata_revisions_for_packages(
         .collect::<BTreeMap<_, _>>();
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for (_, record) in experimental_v3.records() {
+    for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
 
@@ -1221,26 +1221,26 @@ pub async fn write_repodata(
                 .or_default();
             shard.packages.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.conda {
+        for (k, package_record) in repodata.v3.conda {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.conda.insert(k, package_record);
+            shard.v3.conda.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.tar_bz2 {
+        for (k, package_record) in repodata.v3.tar_bz2 {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.tar_bz2.insert(k, package_record);
+            shard.v3.tar_bz2.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.whl {
+        for (k, package_record) in repodata.v3.whl {
             let package_name = package_record.package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.whl.insert(k, package_record);
+            shard.v3.whl.insert(k, package_record);
         }
         for package in repodata.removed {
             let package_name = package.identifier.name.clone();
@@ -1704,7 +1704,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        experimental_v3: ExperimentalV3Packages::default(),
+        v3: V3Packages::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1807,11 +1807,11 @@ mod tests {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: HashSet::default(),
             version: None,
         };
-        repodata.experimental_v3.whl.insert(
+        repodata.v3.whl.insert(
             identifier.clone(),
             WhlPackageRecord {
                 package_record,
@@ -1833,11 +1833,11 @@ mod tests {
             .expect("v3 wheel should be present");
         let mut packages = IndexMap::default();
         let mut conda_packages = IndexMap::default();
-        let mut experimental_v3 = ExperimentalV3Packages::default();
+        let mut v3 = V3Packages::default();
         insert_package_record_by_revision(
             &mut packages,
             &mut conda_packages,
-            &mut experimental_v3,
+            &mut v3,
             dist_identifier,
             indexed_record,
             RepodataRevision::V3,
@@ -1846,6 +1846,6 @@ mod tests {
 
         assert!(packages.is_empty());
         assert!(conda_packages.is_empty());
-        assert!(experimental_v3.whl.contains_key(&identifier));
+        assert!(v3.whl.contains_key(&identifier));
     }
 }

@@ -41,7 +41,7 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
@@ -119,13 +119,10 @@ impl PackageBuilder {
         extra: &str,
         deps: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.record
-            .package_record
-            .experimental_extra_depends
-            .insert(
-                extra.to_string(),
-                deps.into_iter().map(Into::into).collect(),
-            );
+        self.record.package_record.extra_depends.insert(
+            extra.to_string(),
+            deps.into_iter().map(Into::into).collect(),
+        );
         self
     }
 

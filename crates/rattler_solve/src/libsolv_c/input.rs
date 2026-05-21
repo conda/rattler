@@ -206,8 +206,8 @@ pub fn add_repodata_records<'a>(
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
         }
 
-        // Process experimental_extra_depends: convert them into conditional requirements
-        for (extra_name, deps) in record.experimental_extra_depends.iter() {
+        // Process extra_depends: convert them into conditional requirements
+        for (extra_name, deps) in record.extra_depends.iter() {
             // Track this extra for synthetic solvable creation
             extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 

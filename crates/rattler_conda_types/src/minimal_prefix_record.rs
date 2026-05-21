@@ -244,7 +244,7 @@ impl MinimalPrefixRecord {
             timestamp: None,
             track_features: Vec::new(),
             python_site_packages_path: None,
-            experimental_extra_depends: std::collections::BTreeMap::new(),
+            extra_depends: std::collections::BTreeMap::new(),
             legacy_bz2_md5: None,
         }
     }

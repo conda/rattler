@@ -69,8 +69,7 @@ pub(crate) struct SourcePackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Metadata
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -149,7 +148,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 platform,
                 constrains: self.constrains.into_owned(),
                 depends: self.depends.into_owned(),
-                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                extra_depends: self.extra_depends.into_owned(),
                 features: self.features.into_owned(),
                 flags: self.flags.into_owned(),
                 legacy_bz2_md5: None,
@@ -170,7 +169,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 name,
                 depends: self.depends.into_owned(),
                 constrains: self.constrains.into_owned(),
-                experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+                extra_depends: self.extra_depends.into_owned(),
                 flags: self.flags.into_owned(),
                 license: self.license.into_owned(),
                 purls: self.purls.into_owned(),
@@ -223,7 +222,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     .unwrap_or_default(),
                 depends: Cow::Borrowed(&full.depends),
                 constrains: Cow::Borrowed(&full.constrains),
-                experimental_extra_depends: Cow::Borrowed(&full.experimental_extra_depends),
+                extra_depends: Cow::Borrowed(&full.extra_depends),
                 size: Cow::Borrowed(&full.size),
                 features: Cow::Borrowed(&full.features),
                 flags: Cow::Borrowed(&full.flags),
@@ -252,7 +251,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                     .unwrap_or_default(),
                 depends: Cow::Borrowed(&partial.depends),
                 constrains: Cow::Borrowed(&partial.constrains),
-                experimental_extra_depends: Cow::Borrowed(&partial.experimental_extra_depends),
+                extra_depends: Cow::Borrowed(&partial.extra_depends),
                 size: Cow::Owned(None),
                 features: Cow::Owned(None),
                 flags: Cow::Borrowed(&partial.flags),
