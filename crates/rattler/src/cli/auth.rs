@@ -7,9 +7,9 @@ use base64::{
     Engine as _,
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
 };
-use chrono::{DateTime, Utc};
 use clap::Parser;
 use console::style;
+use jiff::Timestamp;
 use rattler_networking::{
     Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
 };
@@ -631,9 +631,9 @@ fn now_unix_timestamp() -> i64 {
 }
 
 fn format_timestamp(timestamp: i64) -> String {
-    DateTime::<Utc>::from_timestamp(timestamp, 0).map_or_else(
-        || format!("unix timestamp {timestamp}"),
-        |dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+    Timestamp::from_second(timestamp).map_or_else(
+        |_| format!("unix timestamp {timestamp}"),
+        |ts| ts.strftime("%Y-%m-%d %H:%M:%S UTC").to_string(),
     )
 }
 

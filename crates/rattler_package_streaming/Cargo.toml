@@ -12,7 +12,7 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 http = { workspace = true, optional = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }

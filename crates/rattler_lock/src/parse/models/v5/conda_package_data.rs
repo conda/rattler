@@ -91,7 +91,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default)]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
 }
 
 fn find_build_and_build_number(

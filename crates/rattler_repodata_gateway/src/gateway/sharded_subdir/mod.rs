@@ -214,7 +214,7 @@ mod tests {
                     subdir: "linux-64".to_string(),
                     base_url: "./".to_string(),
                     shards_base_url: "./shards/".to_string(),
-                    created_at: Some(chrono::Utc::now()),
+                    created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: Vec::new(),
                     channel_relations: None,
                 },
