@@ -8,13 +8,6 @@ use crate::{
     authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
-/// Account name used by older rattler/pixi versions to store a JSON-encoded
-/// list of hosts under the `rattler` service. Newer rattler versions enumerate
-/// entries via `CredentialStore::search`, so this entry is no longer written
-/// — but we still filter it out of `list()` results and opportunistically
-/// delete it during `store`/`delete` so it doesn't linger in users' keychains.
-const LEGACY_INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
-
 fn configure_default_store() -> Result<(), KeyringAuthenticationStorageError> {
     if keyring_core::get_default_store().is_some() {
         Ok(())
@@ -114,19 +107,6 @@ impl KeyringAuthenticationStorage {
             }
         })
     }
-
-    /// Delete the legacy index entry written by older rattler/pixi versions if
-    /// it's still around. Failures are logged but don't propagate — this is a
-    /// best-effort cleanup.
-    fn purge_legacy_index(&self) {
-        let Ok(entry) = self.entry(LEGACY_INDEX_ACCOUNT) else {
-            return;
-        };
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring_core::Error::NoEntry) => {}
-            Err(err) => tracing::debug!("Could not remove legacy keyring index entry: {err}"),
-        }
-    }
 }
 
 /// An error that can occur when accessing the authentication storage
@@ -199,8 +179,6 @@ impl StorageBackend for KeyringAuthenticationStorage {
             .set_password(&password)
             .map_err(KeyringAuthenticationStorageError::from)?;
 
-        self.purge_legacy_index();
-
         Ok(())
     }
 
@@ -246,9 +224,6 @@ impl StorageBackend for KeyringAuthenticationStorage {
             if service != self.store_key {
                 continue;
             }
-            if account == LEGACY_INDEX_ACCOUNT {
-                continue;
-            }
 
             let password = match entry.get_password() {
                 Ok(password) => password,
@@ -275,8 +250,6 @@ impl StorageBackend for KeyringAuthenticationStorage {
             Ok(()) | Err(keyring_core::Error::NoEntry) => {}
             Err(err) => return Err(KeyringAuthenticationStorageError::from(err).into()),
         }
-
-        self.purge_legacy_index();
 
         Ok(())
     }
