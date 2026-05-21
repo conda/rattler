@@ -26,6 +26,7 @@ lto = true
 ahash = "0.8.12"
 ambient-id = { version = "0.0.11", default-features = false }
 anyhow = "1.0.98"
+apple-native-keyring-store = { version = "1.0.0", default-features = false }
 archspec = "0.2.0"
 assert_matches = "1.5.0"
 async-compression = { version = "0.4", features = [
@@ -68,6 +69,7 @@ dashmap = "6.1.0"
 difference = "2.0.0"
 digest = "0.11"
 dirs = "6.0.0"
+dbus-secret-service-keyring-store = { version = "1.0.0", default-features = false }
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
 fancy-regex = "0.18.0"
@@ -100,7 +102,7 @@ indicatif = "0.18.0"
 insta = { version = "1.44.3" }
 itertools = "0.14.0"
 json-patch = "4.0.0"
-keyring = "3.6.2"
+keyring-core = "1.0.0"
 lazy-regex = "3.4.1"
 libc = { version = "0.2" }
 libloading = "0.9.0"
@@ -190,6 +192,7 @@ walkdir = "2.5.0"
 wasmtimer = "0.4.1"
 which = "8.0.0"
 windows-sys = { version = "0.61.2", default-features = false }
+windows-native-keyring-store = "1.0.0"
 winver = { version = "1.0.0" }
 xxhash-rust = "0.8.15"
 zip = { version = "8.5.1", default-features = false }
