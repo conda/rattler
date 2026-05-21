@@ -399,7 +399,12 @@ async fn auth_code_flow(
 
     // Verify CSRF state
     if callback.state != *csrf_token.secret() {
-        send_callback_response(&callback.stream, false, "CSRF state mismatch", callback_page);
+        send_callback_response(
+            &callback.stream,
+            false,
+            "CSRF state mismatch",
+            callback_page,
+        );
         return Err(OAuthError::CsrfMismatch);
     }
 
