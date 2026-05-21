@@ -100,14 +100,14 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 .map_err(FetchRepoDataError::IoError)?;
 
             // Chain v3 tar.bz2/conda packages into the main iteration
-            let v3_tar_bz2 = shard.experimental_v3.tar_bz2.into_iter().map(|(id, rec)| {
+            let v3_tar_bz2 = shard.v3.tar_bz2.into_iter().map(|(id, rec)| {
                 (
                     DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
                     rec,
                 )
             });
             let v3_conda =
-                shard.experimental_v3.conda.into_iter().map(|(id, rec)| {
+                shard.v3.conda.into_iter().map(|(id, rec)| {
                     (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec)
                 });
 
@@ -138,7 +138,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                     url,
                     package_record,
                 },
-            ) in shard.experimental_v3.whl
+            ) in shard.v3.whl
             {
                 let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
                 let url = match url {

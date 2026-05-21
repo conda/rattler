@@ -267,7 +267,7 @@ pub struct PartialSourceMetadata {
     pub constrains: Vec<String>,
 
     /// Additional dependencies grouped by an extra/feature key.
-    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Variant-selection flags declared by the recipe.
     pub flags: Vec<Flag>,
@@ -461,7 +461,7 @@ impl CondaSourceData<SourceMetadata> {
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
         constrains: Vec<String>,
-        experimental_extra_depends: BTreeMap<String, Vec<String>>,
+        extra_depends: BTreeMap<String, Vec<String>>,
         flags: Vec<Flag>,
         license: Option<String>,
         purls: Option<BTreeSet<PackageUrl>>,
@@ -479,7 +479,7 @@ impl CondaSourceData<SourceMetadata> {
                 name,
                 depends,
                 constrains,
-                experimental_extra_depends,
+                extra_depends,
                 flags,
                 license,
                 purls,

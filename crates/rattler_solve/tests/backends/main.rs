@@ -122,7 +122,7 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
@@ -1105,11 +1105,7 @@ fn solve<T: SolverImpl + Default>(
         .specs
         .iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
@@ -1117,11 +1113,7 @@ fn solve<T: SolverImpl + Default>(
         .constraints
         .into_iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 

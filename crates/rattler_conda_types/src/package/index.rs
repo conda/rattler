@@ -45,8 +45,7 @@ pub struct IndexJson {
     /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
     /// The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -135,7 +134,7 @@ impl IndexJson {
             return revision;
         }
 
-        if !self.experimental_extra_depends.is_empty() || !self.flags.is_empty() {
+        if !self.extra_depends.is_empty() || !self.flags.is_empty() {
             return RepodataRevision::V3;
         }
 
@@ -157,9 +156,7 @@ impl IndexJson {
     /// required repodata revision.
     pub fn validate(&self) -> Result<(), ValidateIndexJsonError> {
         let required_revision = self.required_repodata_revision();
-        if matches!(required_revision, RepodataRevision::Legacy)
-            && !self.experimental_extra_depends.is_empty()
-        {
+        if matches!(required_revision, RepodataRevision::Legacy) && !self.extra_depends.is_empty() {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
 
@@ -186,7 +183,7 @@ impl IndexJson {
             Self::validate_matchspec(required_revision, "constrains", spec, parse_options)?;
         }
 
-        for (group, specs) in &self.experimental_extra_depends {
+        for (group, specs) in &self.extra_depends {
             for spec in specs {
                 Self::validate_matchspec(
                     required_revision,
