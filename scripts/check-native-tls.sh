@@ -14,7 +14,12 @@ FORBIDDEN_CRATE="rustls"
 # Features to exclude when testing (space-separated)
 # These features will NOT be enabled during the check
 # Note: Auto-generated features for optional deps (dep:X) are automatically excluded
-EXCLUDE_FEATURES="rustls default s3 gcs"
+# sigstore-sign is excluded because it transitively depends on `tough`, which
+# pulls in rustls unconditionally (rustls is a non-optional dep of tough 0.22,
+# even though it is only used in tough's `http` module). See upstream:
+# https://github.com/awslabs/tough — once tough makes rustls optional behind
+# its `http` feature, this exclusion can be removed.
+EXCLUDE_FEATURES="rustls default s3 gcs sigstore-sign"
 
 # Packages to skip entirely (space-separated)
 # Use this for packages that are known to require the forbidden crate
