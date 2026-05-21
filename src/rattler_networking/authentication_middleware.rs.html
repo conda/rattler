@@ -253,7 +253,7 @@
 <a href=#251 id=251 data-nosnippet>251</a>        <span class="kw">let </span>host = <span class="string">"conda.example.com"</span>;
 <a href=#252 id=252 data-nosnippet>252</a>
 <a href=#253 id=253 data-nosnippet>253</a>        <span class="comment">// Make sure the keyring is empty
-<a href=#254 id=254 data-nosnippet>254</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring::Entry::new(<span class="string">"rattler_test"</span>, host) {
+<a href=#254 id=254 data-nosnippet>254</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring_core::Entry::new(<span class="string">"rattler_test"</span>, host) {
 <a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">let _ </span>= entry.delete_credential();
 <a href=#256 id=256 data-nosnippet>256</a>        }
 <a href=#257 id=257 data-nosnippet>257</a>
@@ -308,7 +308,7 @@
 <a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>host = <span class="string">"bearer.example.com"</span>;
 <a href=#307 id=307 data-nosnippet>307</a>
 <a href=#308 id=308 data-nosnippet>308</a>        <span class="comment">// Make sure the keyring is empty
-<a href=#309 id=309 data-nosnippet>309</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring::Entry::new(<span class="string">"rattler_test"</span>, host) {
+<a href=#309 id=309 data-nosnippet>309</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring_core::Entry::new(<span class="string">"rattler_test"</span>, host) {
 <a href=#310 id=310 data-nosnippet>310</a>            <span class="kw">let _ </span>= entry.delete_credential();
 <a href=#311 id=311 data-nosnippet>311</a>        }
 <a href=#312 id=312 data-nosnippet>312</a>
@@ -369,7 +369,7 @@
 <a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>host = <span class="string">"basic.example.com"</span>;
 <a href=#368 id=368 data-nosnippet>368</a>
 <a href=#369 id=369 data-nosnippet>369</a>        <span class="comment">// Make sure the keyring is empty
-<a href=#370 id=370 data-nosnippet>370</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring::Entry::new(<span class="string">"rattler_test"</span>, host) {
+<a href=#370 id=370 data-nosnippet>370</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(entry) = keyring_core::Entry::new(<span class="string">"rattler_test"</span>, host) {
 <a href=#371 id=371 data-nosnippet>371</a>            <span class="kw">let _ </span>= entry.delete_credential();
 <a href=#372 id=372 data-nosnippet>372</a>        }
 <a href=#373 id=373 data-nosnippet>373</a>
