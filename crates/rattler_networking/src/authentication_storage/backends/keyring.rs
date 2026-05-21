@@ -1,28 +1,19 @@
 //! Backend to store credentials in the operating system's keyring
 
-use keyring_core::Entry;
-use std::str::FromStr;
+use keyring_core::{Entry, api::CredentialStore};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
     Authentication,
     authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
-const INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
-
-/// Hosts that rattler historically stored credentials for under the keyring
-/// `rattler` service name, before the `__rattler_authentication_hosts` index
-/// was introduced. Probed during [`list`](StorageBackend::list) so that
-/// `auth status` can still surface legacy keychain entries written by older
-/// rattler / pixi versions. New stores are tracked via the index and don't
-/// need to appear here.
-const LEGACY_FALLBACK_HOSTS: &[&str] = &[
-    "prefix.dev",
-    "*.prefix.dev",
-    "repo.prefix.dev",
-    "anaconda.org",
-    "*.anaconda.org",
-];
+/// Account name used by older rattler/pixi versions to store a JSON-encoded
+/// list of hosts under the `rattler` service. Newer rattler versions enumerate
+/// entries via `CredentialStore::search`, so this entry is no longer written
+/// — but we still filter it out of `list()` results and opportunistically
+/// delete it during `store`/`delete` so it doesn't linger in users' keychains.
+const LEGACY_INDEX_ACCOUNT: &str = "__rattler_authentication_hosts";
 
 fn configure_default_store() -> Result<(), KeyringAuthenticationStorageError> {
     if keyring_core::get_default_store().is_some() {
@@ -61,6 +52,39 @@ fn configure_platform_default_store() -> Result<(), KeyringAuthenticationStorage
     })
 }
 
+/// Build the platform-specific [`CredentialStore::search`] spec that enumerates
+/// every entry written by this storage instance.
+///
+/// macOS and the dbus secret service filter on the `service` attribute
+/// directly. Windows has no notion of a "service" field — the keyring-core
+/// store encodes `service` into the credential target as `{user}.{service}`
+/// (default delimiters) and exposes a `pattern` (regex) filter, so we match on
+/// the suffix.
+#[cfg(any(
+    target_os = "macos",
+    all(unix, not(any(target_os = "macos", target_os = "ios")))
+))]
+fn search_spec(store_key: &str) -> HashMap<String, String> {
+    HashMap::from([("service".to_string(), store_key.to_string())])
+}
+
+#[cfg(target_os = "windows")]
+fn search_spec(store_key: &str) -> HashMap<String, String> {
+    // `\Q...\E` quotes the store_key as a literal so any future caller using a
+    // custom (possibly regex-meaningful) store key still gets the expected
+    // entries back.
+    HashMap::from([("pattern".to_string(), format!(r"\.\Q{store_key}\E\z"))])
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(unix, not(any(target_os = "macos", target_os = "ios")))
+)))]
+fn search_spec(_store_key: &str) -> HashMap<String, String> {
+    HashMap::new()
+}
+
 #[derive(Clone, Debug)]
 /// A storage backend that stores credentials in the operating system's keyring
 pub struct KeyringAuthenticationStorage {
@@ -82,47 +106,26 @@ impl KeyringAuthenticationStorage {
         Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)
     }
 
-    fn index_entry(&self) -> Result<Entry, KeyringAuthenticationStorageError> {
-        self.entry(INDEX_ACCOUNT)
+    fn credential_store(&self) -> Result<Arc<CredentialStore>, KeyringAuthenticationStorageError> {
+        configure_default_store()?;
+        keyring_core::get_default_store().ok_or_else(|| {
+            KeyringAuthenticationStorageError::UnsupportedTarget {
+                target: std::env::consts::OS.to_string(),
+            }
+        })
     }
 
-    fn read_index(&self) -> Result<Vec<String>, KeyringAuthenticationStorageError> {
-        let entry = self.index_entry()?;
-        let password = match entry.get_password() {
-            Ok(password) => password,
-            Err(keyring_core::Error::NoEntry) => return Ok(Vec::new()),
-            Err(err) => return Err(KeyringAuthenticationStorageError::from(err)),
+    /// Delete the legacy index entry written by older rattler/pixi versions if
+    /// it's still around. Failures are logged but don't propagate — this is a
+    /// best-effort cleanup.
+    fn purge_legacy_index(&self) {
+        let Ok(entry) = self.entry(LEGACY_INDEX_ACCOUNT) else {
+            return;
         };
-
-        serde_json::from_str(&password).map_err(KeyringAuthenticationStorageError::from)
-    }
-
-    fn write_index(&self, hosts: &[String]) -> Result<(), KeyringAuthenticationStorageError> {
-        let password =
-            serde_json::to_string(hosts).map_err(KeyringAuthenticationStorageError::from)?;
-        self.index_entry()?
-            .set_password(&password)
-            .map_err(KeyringAuthenticationStorageError::from)
-    }
-
-    fn add_to_index(&self, host: &str) -> Result<(), KeyringAuthenticationStorageError> {
-        let mut hosts = self.read_index()?;
-        if !hosts.iter().any(|existing| existing == host) {
-            hosts.push(host.to_string());
-            hosts.sort();
-            self.write_index(&hosts)?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring_core::Error::NoEntry) => {}
+            Err(err) => tracing::debug!("Could not remove legacy keyring index entry: {err}"),
         }
-        Ok(())
-    }
-
-    fn remove_from_index(&self, host: &str) -> Result<(), KeyringAuthenticationStorageError> {
-        let mut hosts = self.read_index()?;
-        let previous_len = hosts.len();
-        hosts.retain(|existing| existing != host);
-        if hosts.len() != previous_len {
-            self.write_index(&hosts)?;
-        }
-        Ok(())
     }
 }
 
@@ -196,9 +199,7 @@ impl StorageBackend for KeyringAuthenticationStorage {
             .set_password(&password)
             .map_err(KeyringAuthenticationStorageError::from)?;
 
-        if let Err(err) = self.add_to_index(host) {
-            tracing::debug!("Error updating keyring credential index: {err}");
-        }
+        self.purge_legacy_index();
 
         Ok(())
     }
@@ -226,18 +227,45 @@ impl StorageBackend for KeyringAuthenticationStorage {
     }
 
     fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
-        let mut hosts = self.read_index()?;
-        hosts.extend(LEGACY_FALLBACK_HOSTS.iter().map(ToString::to_string));
-        hosts.sort();
-        hosts.dedup();
+        let store = self.credential_store()?;
+        let spec = search_spec(&self.store_key);
+        let spec_refs: HashMap<&str, &str> =
+            spec.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
 
-        let mut entries = Vec::new();
-        for host in hosts {
-            if let Some(auth) = self.get(&host)? {
-                entries.push((host, auth));
+        let entries = store
+            .search(&spec_refs)
+            .map_err(KeyringAuthenticationStorageError::from)?;
+
+        let mut results = Vec::new();
+        for entry in entries {
+            let Some((service, account)) = entry.get_specifiers() else {
+                continue;
+            };
+            // Defensive: on Windows the regex may match credentials whose
+            // service component coincidentally ends in our store_key.
+            if service != self.store_key {
+                continue;
+            }
+            if account == LEGACY_INDEX_ACCOUNT {
+                continue;
+            }
+
+            let password = match entry.get_password() {
+                Ok(password) => password,
+                Err(keyring_core::Error::NoEntry) => continue,
+                Err(err) => return Err(KeyringAuthenticationStorageError::from(err).into()),
+            };
+
+            match Authentication::from_str(&password) {
+                Ok(auth) => results.push((account, auth)),
+                Err(err) => {
+                    tracing::warn!("Error parsing credentials for {account}: {err:?}");
+                }
             }
         }
-        Ok(entries)
+
+        results.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(results)
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
@@ -248,9 +276,7 @@ impl StorageBackend for KeyringAuthenticationStorage {
             Err(err) => return Err(KeyringAuthenticationStorageError::from(err).into()),
         }
 
-        if let Err(err) = self.remove_from_index(host) {
-            tracing::debug!("Error updating keyring credential index: {err}");
-        }
+        self.purge_legacy_index();
 
         Ok(())
     }
