@@ -281,8 +281,8 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
-        use chrono::{DateTime, Utc};
         use itertools::Itertools;
+        use jiff::Timestamp;
 
         #[test]
         fn test_solve_quetz() {
@@ -853,7 +853,7 @@ mod resolvo {
 
     #[test]
     fn test_exclude_newer_error() {
-        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+        let date = "2021-12-12T12:12:12Z".parse::<Timestamp>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],

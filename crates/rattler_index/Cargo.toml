@@ -38,7 +38,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
-chrono = { workspace = true, features = ["clock"] }
+jiff = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }

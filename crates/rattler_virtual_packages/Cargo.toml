@@ -26,3 +26,6 @@ plist = { workspace = true }
 
 [target.'cfg(target_os="windows")'.dependencies]
 winver = { workspace = true }
+
+[dev-dependencies]
+temp-env = { workspace = true }

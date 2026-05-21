@@ -3,8 +3,8 @@
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
 use crate::repo_data::{ChannelRelations, RepodataRevisionInfo, V3Packages};
-use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
+use jiff::Timestamp;
 use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +43,7 @@ pub struct ShardedSubdirInfo {
 
     /// The date at which this entry was created.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<DateTime<Utc>>,
+    pub created_at: Option<Timestamp>,
 
     /// Repodata revisions available through this sharded index.
     ///

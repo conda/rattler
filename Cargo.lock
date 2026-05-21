@@ -5194,7 +5194,6 @@ version = "0.1.12"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
- "chrono",
  "clap",
  "clap_complete",
  "clap_complete_nushell",
@@ -5203,6 +5202,7 @@ dependencies = [
  "hex",
  "indicatif",
  "itertools 0.14.0",
+ "jiff",
  "miette",
  "once_cell",
  "rattler",
@@ -5268,7 +5268,6 @@ version = "0.46.4"
 dependencies = [
  "ahash",
  "assert_matches",
- "chrono",
  "core-foundation 0.10.1",
  "criterion",
  "dirs",
@@ -5282,6 +5281,7 @@ dependencies = [
  "indexmap 2.14.0",
  "insta",
  "itertools 0.14.0",
+ "jiff",
  "lazy-regex",
  "memmap2",
  "nom 8.0.0",
@@ -5381,7 +5381,6 @@ dependencies = [
  "ahash",
  "anyhow",
  "bytes",
- "chrono",
  "clap",
  "clap-verbosity-flag",
  "console",
@@ -5390,6 +5389,7 @@ dependencies = [
  "hex",
  "indexmap 2.14.0",
  "indicatif",
+ "jiff",
  "opendal",
  "rattler_conda_types",
  "rattler_config",
@@ -5431,11 +5431,11 @@ name = "rattler_lock"
 version = "0.30.3"
 dependencies = [
  "ahash",
- "chrono",
  "file_url",
  "indexmap 2.14.0",
  "insta",
  "itertools 0.14.0",
+ "jiff",
  "pep440_rs",
  "pep508_rs",
  "rattler_conda_types",
@@ -5470,7 +5470,6 @@ dependencies = [
 name = "rattler_menuinst"
 version = "0.2.62"
 dependencies = [
- "chrono",
  "configparser",
  "dirs",
  "fs-err",
@@ -5551,7 +5550,6 @@ dependencies = [
  "async-spooled-tempfile",
  "axum",
  "bzip2",
- "chrono",
  "fs-err",
  "futures",
  "futures-util",
@@ -5560,6 +5558,7 @@ dependencies = [
  "hex",
  "http 1.4.0",
  "insta",
+ "jiff",
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
@@ -5631,7 +5630,6 @@ dependencies = [
  "bytes",
  "cache_control",
  "cfg-if",
- "chrono",
  "coalesced_map",
  "criterion",
  "dashmap",
@@ -5650,6 +5648,7 @@ dependencies = [
  "indicatif",
  "insta",
  "itertools 0.14.0",
+ "jiff",
  "json-patch",
  "libc",
  "memmap2",
@@ -5740,13 +5739,12 @@ dependencies = [
 name = "rattler_solve"
 version = "7.1.1"
 dependencies = [
- "chrono",
  "criterion",
  "futures",
  "hex",
- "humantime",
  "insta",
  "itertools 0.14.0",
+ "jiff",
  "libc",
  "once_cell",
  "rattler_conda_types",
@@ -5814,6 +5812,7 @@ dependencies = [
  "rattler_conda_types",
  "regex",
  "serde",
+ "temp-env",
  "thiserror 2.0.18",
  "tracing",
  "winver",

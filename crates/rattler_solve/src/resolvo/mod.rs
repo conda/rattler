@@ -15,7 +15,6 @@ use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
     ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, SolverResult,
     package::{ArchiveIdentifier, DistArchiveType},
-    utils::TimestampMs,
 };
 use resolvo::{
     Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
@@ -42,9 +41,15 @@ fn exclude_newer_reason(
 ) -> Option<String> {
     let cutoff = config.cutoff_for_package(package, channel);
     match timestamp {
-        Some(timestamp) if *timestamp > cutoff => Some(format!(
-            "the package is uploaded after the cutoff date of {cutoff}"
-        )),
+        Some(timestamp) if *timestamp > cutoff => {
+            // Display in user's local timezone for better readability
+            let display_time = cutoff
+                .to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%Y-%m-%d %H:%M:%S");
+            Some(format!(
+                "the package is uploaded after the cutoff date of {display_time}"
+            ))
+        }
         None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
         _ => None,
     }
@@ -191,13 +196,11 @@ impl SolverPackageRecord<'_> {
         }
     }
 
-    fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
+    fn timestamp(&self) -> Option<jiff::Timestamp> {
         match self {
-            SolverPackageRecord::Record(rec) => rec
-                .package_record
-                .timestamp
-                .as_ref()
-                .map(TimestampMs::datetime),
+            SolverPackageRecord::Record(rec) => {
+                rec.package_record.timestamp.map(|ts| ts.jiff_timestamp())
+            }
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }
