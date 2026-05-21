@@ -1466,10 +1466,10 @@
 <a href=#1464 id=1464 data-nosnippet>1464</a>            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
 <a href=#1465 id=1465 data-nosnippet>1465</a>        };
 <a href=#1466 id=1466 data-nosnippet>1466</a>
-<a href=#1467 id=1467 data-nosnippet>1467</a>        <span class="kw">let </span><span class="kw-2">mut </span>experimental_extra_depends: std::collections::BTreeMap&lt;String, Vec&lt;String&gt;&gt; =
+<a href=#1467 id=1467 data-nosnippet>1467</a>        <span class="kw">let </span><span class="kw-2">mut </span>extra_depends_map: std::collections::BTreeMap&lt;String, Vec&lt;String&gt;&gt; =
 <a href=#1468 id=1468 data-nosnippet>1468</a>            std::collections::BTreeMap::default();
 <a href=#1469 id=1469 data-nosnippet>1469</a>        <span class="kw">for </span>(extra, items) <span class="kw">in </span>extra_depends {
-<a href=#1470 id=1470 data-nosnippet>1470</a>            experimental_extra_depends.insert(
+<a href=#1470 id=1470 data-nosnippet>1470</a>            extra_depends_map.insert(
 <a href=#1471 id=1471 data-nosnippet>1471</a>                (<span class="kw-2">*</span>extra).to_string(),
 <a href=#1472 id=1472 data-nosnippet>1472</a>                items.iter().map(|s| (<span class="kw-2">*</span>s).to_string()).collect(),
 <a href=#1473 id=1473 data-nosnippet>1473</a>            );
@@ -1500,7 +1500,7 @@
 <a href=#1498 id=1498 data-nosnippet>1498</a>            purls: <span class="prelude-val">None</span>,
 <a href=#1499 id=1499 data-nosnippet>1499</a>            run_exports: <span class="prelude-val">None</span>,
 <a href=#1500 id=1500 data-nosnippet>1500</a>            python_site_packages_path: <span class="prelude-val">None</span>,
-<a href=#1501 id=1501 data-nosnippet>1501</a>            experimental_extra_depends,
+<a href=#1501 id=1501 data-nosnippet>1501</a>            extra_depends: extra_depends_map,
 <a href=#1502 id=1502 data-nosnippet>1502</a>        };
 <a href=#1503 id=1503 data-nosnippet>1503</a>
 <a href=#1504 id=1504 data-nosnippet>1504</a>        RepoDataRecord {
@@ -2171,7 +2171,7 @@
 <a href=#2169 id=2169 data-nosnippet>2169</a>    }
 <a href=#2170 id=2170 data-nosnippet>2170</a>
 <a href=#2171 id=2171 data-nosnippet>2171</a>    <span class="kw">fn </span>extras_options() -&gt; rattler_conda_types::ParseMatchSpecOptions {
-<a href=#2172 id=2172 data-nosnippet>2172</a>        rattler_conda_types::ParseMatchSpecOptions::default().with_experimental_extras(<span class="bool-val">true</span>)
+<a href=#2172 id=2172 data-nosnippet>2172</a>        rattler_conda_types::ParseMatchSpecOptions::default().with_extras(<span class="bool-val">true</span>)
 <a href=#2173 id=2173 data-nosnippet>2173</a>    }
 <a href=#2174 id=2174 data-nosnippet>2174</a>
 <a href=#2175 id=2175 data-nosnippet>2175</a>    <span class="doccomment">/// User asks for `black` directly (Input). Black has extras `d` and
@@ -2305,7 +2305,7 @@
 <a href=#2303 id=2303 data-nosnippet>2303</a>            <span class="string">"bla*[extras=[d]]"</span>,
 <a href=#2304 id=2304 data-nosnippet>2304</a>            ParseMatchSpecOptions::strict()
 <a href=#2305 id=2305 data-nosnippet>2305</a>                .with_exact_names_only(<span class="bool-val">false</span>)
-<a href=#2306 id=2306 data-nosnippet>2306</a>                .with_experimental_extras(<span class="bool-val">true</span>),
+<a href=#2306 id=2306 data-nosnippet>2306</a>                .with_extras(<span class="bool-val">true</span>),
 <a href=#2307 id=2307 data-nosnippet>2307</a>        )
 <a href=#2308 id=2308 data-nosnippet>2308</a>        .unwrap();
 <a href=#2309 id=2309 data-nosnippet>2309</a>
@@ -2362,7 +2362,7 @@
 <a href=#2360 id=2360 data-nosnippet>2360</a>            <span class="string">"bla*[extras=[d]]"</span>,
 <a href=#2361 id=2361 data-nosnippet>2361</a>            ParseMatchSpecOptions::strict()
 <a href=#2362 id=2362 data-nosnippet>2362</a>                .with_exact_names_only(<span class="bool-val">false</span>)
-<a href=#2363 id=2363 data-nosnippet>2363</a>                .with_experimental_extras(<span class="bool-val">true</span>),
+<a href=#2363 id=2363 data-nosnippet>2363</a>                .with_extras(<span class="bool-val">true</span>),
 <a href=#2364 id=2364 data-nosnippet>2364</a>        )
 <a href=#2365 id=2365 data-nosnippet>2365</a>        .unwrap();
 <a href=#2366 id=2366 data-nosnippet>2366</a>

@@ -269,7 +269,7 @@
 <a href=#267 id=267 data-nosnippet>267</a>    </span><span class="kw">pub </span>constrains: Vec&lt;String&gt;,
 <a href=#268 id=268 data-nosnippet>268</a>
 <a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// Additional dependencies grouped by an extra/feature key.
-<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">pub </span>experimental_extra_depends: BTreeMap&lt;String, Vec&lt;String&gt;&gt;,
+<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">pub </span>extra_depends: BTreeMap&lt;String, Vec&lt;String&gt;&gt;,
 <a href=#271 id=271 data-nosnippet>271</a>
 <a href=#272 id=272 data-nosnippet>272</a>    <span class="doccomment">/// Variant-selection flags declared by the recipe.
 <a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub </span>flags: Vec&lt;Flag&gt;,
@@ -463,7 +463,7 @@
 <a href=#461 id=461 data-nosnippet>461</a>        name: rattler_conda_types::PackageName,
 <a href=#462 id=462 data-nosnippet>462</a>        depends: Vec&lt;String&gt;,
 <a href=#463 id=463 data-nosnippet>463</a>        constrains: Vec&lt;String&gt;,
-<a href=#464 id=464 data-nosnippet>464</a>        experimental_extra_depends: BTreeMap&lt;String, Vec&lt;String&gt;&gt;,
+<a href=#464 id=464 data-nosnippet>464</a>        extra_depends: BTreeMap&lt;String, Vec&lt;String&gt;&gt;,
 <a href=#465 id=465 data-nosnippet>465</a>        flags: Vec&lt;Flag&gt;,
 <a href=#466 id=466 data-nosnippet>466</a>        license: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#467 id=467 data-nosnippet>467</a>        purls: <span class="prelude-ty">Option</span>&lt;BTreeSet&lt;PackageUrl&gt;&gt;,
@@ -481,7 +481,7 @@
 <a href=#479 id=479 data-nosnippet>479</a>                name,
 <a href=#480 id=480 data-nosnippet>480</a>                depends,
 <a href=#481 id=481 data-nosnippet>481</a>                constrains,
-<a href=#482 id=482 data-nosnippet>482</a>                experimental_extra_depends,
+<a href=#482 id=482 data-nosnippet>482</a>                extra_depends,
 <a href=#483 id=483 data-nosnippet>483</a>                flags,
 <a href=#484 id=484 data-nosnippet>484</a>                license,
 <a href=#485 id=485 data-nosnippet>485</a>                purls,

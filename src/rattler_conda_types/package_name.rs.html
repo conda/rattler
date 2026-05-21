@@ -174,7 +174,7 @@
 <a href=#172 id=172 data-nosnippet>172</a>
 <a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">let </span>name = <span class="self">Self</span>::normalized_name_from_matchspec_str(spec);
 <a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span>options = <span class="kw">crate</span>::ParseMatchSpecOptions::default().with_experimental_extras(<span class="bool-val">true</span>);
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span>options = <span class="kw">crate</span>::ParseMatchSpecOptions::default().with_extras(<span class="bool-val">true</span>);
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">match </span><span class="kw">crate</span>::MatchSpec::from_str(spec, options) {
 <a href=#177 id=177 data-nosnippet>177</a>            <span class="prelude-val">Ok</span>(parsed) =&gt; (name, parsed.extras.unwrap_or_default()),
 <a href=#178 id=178 data-nosnippet>178</a>            <span class="prelude-val">Err</span>(err) =&gt; {

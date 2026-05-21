@@ -208,8 +208,8 @@
 <a href=#206 id=206 data-nosnippet>206</a>            </span>data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
 <a href=#207 id=207 data-nosnippet>207</a>        }
 <a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="comment">// Process experimental_extra_depends: convert them into conditional requirements
-<a href=#210 id=210 data-nosnippet>210</a>        </span><span class="kw">for </span>(extra_name, deps) <span class="kw">in </span>record.experimental_extra_depends.iter() {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="comment">// Process extra_depends: convert them into conditional requirements
+<a href=#210 id=210 data-nosnippet>210</a>        </span><span class="kw">for </span>(extra_name, deps) <span class="kw">in </span>record.extra_depends.iter() {
 <a href=#211 id=211 data-nosnippet>211</a>            <span class="comment">// Track this extra for synthetic solvable creation
 <a href=#212 id=212 data-nosnippet>212</a>            </span>extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 <a href=#213 id=213 data-nosnippet>213</a>

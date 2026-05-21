@@ -31,8 +31,8 @@
 <a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">use </span>opendal::services::S3Config;
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>opendal::{Configurator, Operator, services::FsConfig};
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>rattler_conda_types::{
-<a href=#32 id=32 data-nosnippet>32</a>    ChannelInfo, ChannelRelations, ExperimentalV3Packages, PackageRecord, PatchInstructions,
-<a href=#33 id=33 data-nosnippet>33</a>    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
+<a href=#32 id=32 data-nosnippet>32</a>    ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
+<a href=#33 id=33 data-nosnippet>33</a>    ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
 <a href=#34 id=34 data-nosnippet>34</a>    package::{
 <a href=#35 id=35 data-nosnippet>35</a>        CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
 <a href=#36 id=36 data-nosnippet>36</a>        RunExportsJson, WheelArchiveType,
@@ -195,7 +195,7 @@
 <a href=#193 id=193 data-nosnippet>193</a>        arch: index.arch,
 <a href=#194 id=194 data-nosnippet>194</a>        platform: index.platform,
 <a href=#195 id=195 data-nosnippet>195</a>        depends: index.depends,
-<a href=#196 id=196 data-nosnippet>196</a>        experimental_extra_depends: index.experimental_extra_depends,
+<a href=#196 id=196 data-nosnippet>196</a>        extra_depends: index.extra_depends,
 <a href=#197 id=197 data-nosnippet>197</a>        constrains: index.constrains,
 <a href=#198 id=198 data-nosnippet>198</a>        track_features: index.track_features,
 <a href=#199 id=199 data-nosnippet>199</a>        features: index.features,
@@ -893,7 +893,7 @@
 <a href=#891 id=891 data-nosnippet>891</a>        IndexMap::default();
 <a href=#892 id=892 data-nosnippet>892</a>    <span class="kw">let </span><span class="kw-2">mut </span>conda_packages: IndexMap&lt;DistArchiveIdentifier, PackageRecord, ahash::RandomState&gt; =
 <a href=#893 id=893 data-nosnippet>893</a>        IndexMap::default();
-<a href=#894 id=894 data-nosnippet>894</a>    <span class="kw">let </span><span class="kw-2">mut </span>experimental_v3 = ExperimentalV3Packages::default();
+<a href=#894 id=894 data-nosnippet>894</a>    <span class="kw">let </span><span class="kw-2">mut </span>v3 = V3Packages::default();
 <a href=#895 id=895 data-nosnippet>895</a>    <span class="kw">let </span>latest_revision = latest_repodata_revision(<span class="kw-2">&amp;</span>repodata_revisions);
 <a href=#896 id=896 data-nosnippet>896</a>    <span class="kw">for </span>(filename, package) <span class="kw">in </span>registered_packages {
 <a href=#897 id=897 data-nosnippet>897</a>        <span class="kw">let </span>revision =
@@ -901,7 +901,7 @@
 <a href=#899 id=899 data-nosnippet>899</a>        insert_package_record_by_revision(
 <a href=#900 id=900 data-nosnippet>900</a>            <span class="kw-2">&amp;mut </span>packages,
 <a href=#901 id=901 data-nosnippet>901</a>            <span class="kw-2">&amp;mut </span>conda_packages,
-<a href=#902 id=902 data-nosnippet>902</a>            <span class="kw-2">&amp;mut </span>experimental_v3,
+<a href=#902 id=902 data-nosnippet>902</a>            <span class="kw-2">&amp;mut </span>v3,
 <a href=#903 id=903 data-nosnippet>903</a>            filename,
 <a href=#904 id=904 data-nosnippet>904</a>            package,
 <a href=#905 id=905 data-nosnippet>905</a>            revision,
@@ -913,86 +913,86 @@
 <a href=#911 id=911 data-nosnippet>911</a>        info: <span class="prelude-val">Some</span>(ChannelInfo {
 <a href=#912 id=912 data-nosnippet>912</a>            subdir: <span class="prelude-val">Some</span>(subdir.to_string()),
 <a href=#913 id=913 data-nosnippet>913</a>            base_url: channel_metadata.base_url,
-<a href=#914 id=914 data-nosnippet>914</a>            repodata_revisions: repodata_revisions_for_packages(
-<a href=#915 id=915 data-nosnippet>915</a>                <span class="kw-2">&amp;</span>repodata_revisions,
-<a href=#916 id=916 data-nosnippet>916</a>                <span class="kw-2">&amp;</span>experimental_v3,
-<a href=#917 id=917 data-nosnippet>917</a>            ),
-<a href=#918 id=918 data-nosnippet>918</a>            channel_relations: channel_metadata.channel_relations,
-<a href=#919 id=919 data-nosnippet>919</a>        }),
-<a href=#920 id=920 data-nosnippet>920</a>        packages,
-<a href=#921 id=921 data-nosnippet>921</a>        conda_packages,
-<a href=#922 id=922 data-nosnippet>922</a>        experimental_v3,
-<a href=#923 id=923 data-nosnippet>923</a>        removed: HashSet::default(),
-<a href=#924 id=924 data-nosnippet>924</a>        version: <span class="prelude-val">Some</span>(<span class="number">2</span>),
-<a href=#925 id=925 data-nosnippet>925</a>    };
-<a href=#926 id=926 data-nosnippet>926</a>
-<a href=#927 id=927 data-nosnippet>927</a>    write_repodata(
-<a href=#928 id=928 data-nosnippet>928</a>        repodata_before_patches,
-<a href=#929 id=929 data-nosnippet>929</a>        repodata_patch,
-<a href=#930 id=930 data-nosnippet>930</a>        subdir,
-<a href=#931 id=931 data-nosnippet>931</a>        op,
-<a href=#932 id=932 data-nosnippet>932</a>        <span class="kw-2">&amp;</span>metadata,
-<a href=#933 id=933 data-nosnippet>933</a>    )
-<a href=#934 id=934 data-nosnippet>934</a>    .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#935 id=935 data-nosnippet>935</a>
-<a href=#936 id=936 data-nosnippet>936</a>    <span class="prelude-val">Ok</span>(SubdirIndexStats {
-<a href=#937 id=937 data-nosnippet>937</a>        packages_added: packages_to_add.len(),
-<a href=#938 id=938 data-nosnippet>938</a>        packages_removed: packages_to_delete.len(),
-<a href=#939 id=939 data-nosnippet>939</a>        retries: <span class="number">0</span>, <span class="comment">// Will be set by index_subdir
-<a href=#940 id=940 data-nosnippet>940</a>    </span>})
-<a href=#941 id=941 data-nosnippet>941</a>}
-<a href=#942 id=942 data-nosnippet>942</a>
-<a href=#943 id=943 data-nosnippet>943</a><span class="kw">fn </span>serialize_msgpack_zst&lt;T&gt;(val: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, RepodataError&gt;
-<a href=#944 id=944 data-nosnippet>944</a><span class="kw">where
-<a href=#945 id=945 data-nosnippet>945</a>    </span>T: Serialize + <span class="question-mark">?</span>Sized,
-<a href=#946 id=946 data-nosnippet>946</a>{
-<a href=#947 id=947 data-nosnippet>947</a>    <span class="kw">let </span>msgpack = rmp_serde::to_vec_named(val)<span class="question-mark">?</span>;
-<a href=#948 id=948 data-nosnippet>948</a>    <span class="kw">let </span>encoded = zstd::stream::encode_all(<span class="kw-2">&amp;</span>msgpack[..], <span class="number">0</span>)<span class="question-mark">?</span>;
-<a href=#949 id=949 data-nosnippet>949</a>    <span class="prelude-val">Ok</span>(encoded)
-<a href=#950 id=950 data-nosnippet>950</a>}
-<a href=#951 id=951 data-nosnippet>951</a>
-<a href=#952 id=952 data-nosnippet>952</a><span class="kw">fn </span>latest_repodata_revision(revisions: <span class="kw-2">&amp;</span>[RepodataRevisionInfo]) -&gt; RepodataRevision {
-<a href=#953 id=953 data-nosnippet>953</a>    revisions
-<a href=#954 id=954 data-nosnippet>954</a>        .iter()
-<a href=#955 id=955 data-nosnippet>955</a>        .map(|revision| revision.revision)
-<a href=#956 id=956 data-nosnippet>956</a>        .max()
-<a href=#957 id=957 data-nosnippet>957</a>        .unwrap_or(RepodataRevision::Legacy)
-<a href=#958 id=958 data-nosnippet>958</a>}
-<a href=#959 id=959 data-nosnippet>959</a>
-<a href=#960 id=960 data-nosnippet>960</a><span class="kw">fn </span>package_records_from_repodata(
-<a href=#961 id=961 data-nosnippet>961</a>    repodata: RepoData,
-<a href=#962 id=962 data-nosnippet>962</a>) -&gt; ahash::HashMap&lt;DistArchiveIdentifier, IndexedPackageRecord&gt; {
-<a href=#963 id=963 data-nosnippet>963</a>    <span class="kw">let </span><span class="kw-2">mut </span>packages = ahash::HashMap::default();
-<a href=#964 id=964 data-nosnippet>964</a>
-<a href=#965 id=965 data-nosnippet>965</a>    packages.extend(
-<a href=#966 id=966 data-nosnippet>966</a>        repodata
-<a href=#967 id=967 data-nosnippet>967</a>            .packages
-<a href=#968 id=968 data-nosnippet>968</a>            .into_iter()
-<a href=#969 id=969 data-nosnippet>969</a>            .chain(repodata.conda_packages)
-<a href=#970 id=970 data-nosnippet>970</a>            .map(|(identifier, record)| {
-<a href=#971 id=971 data-nosnippet>971</a>                (
-<a href=#972 id=972 data-nosnippet>972</a>                    identifier,
-<a href=#973 id=973 data-nosnippet>973</a>                    IndexedPackageRecord {
-<a href=#974 id=974 data-nosnippet>974</a>                        record,
-<a href=#975 id=975 data-nosnippet>975</a>                        repodata_revision: RepodataRevision::Legacy,
-<a href=#976 id=976 data-nosnippet>976</a>                        wheel_url: <span class="prelude-val">None</span>,
-<a href=#977 id=977 data-nosnippet>977</a>                    },
-<a href=#978 id=978 data-nosnippet>978</a>                )
-<a href=#979 id=979 data-nosnippet>979</a>            }),
-<a href=#980 id=980 data-nosnippet>980</a>    );
-<a href=#981 id=981 data-nosnippet>981</a>
-<a href=#982 id=982 data-nosnippet>982</a>    packages.extend(repodata.experimental_v3.into_records_with_url().map(
-<a href=#983 id=983 data-nosnippet>983</a>        |(identifier, record, wheel_url)| {
-<a href=#984 id=984 data-nosnippet>984</a>            (
-<a href=#985 id=985 data-nosnippet>985</a>                identifier,
-<a href=#986 id=986 data-nosnippet>986</a>                IndexedPackageRecord {
-<a href=#987 id=987 data-nosnippet>987</a>                    record,
-<a href=#988 id=988 data-nosnippet>988</a>                    repodata_revision: RepodataRevision::V3,
-<a href=#989 id=989 data-nosnippet>989</a>                    wheel_url,
-<a href=#990 id=990 data-nosnippet>990</a>                },
-<a href=#991 id=991 data-nosnippet>991</a>            )
-<a href=#992 id=992 data-nosnippet>992</a>        },
-<a href=#993 id=993 data-nosnippet>993</a>    ));
+<a href=#914 id=914 data-nosnippet>914</a>            repodata_revisions: repodata_revisions_for_packages(<span class="kw-2">&amp;</span>repodata_revisions, <span class="kw-2">&amp;</span>v3),
+<a href=#915 id=915 data-nosnippet>915</a>            channel_relations: channel_metadata.channel_relations,
+<a href=#916 id=916 data-nosnippet>916</a>        }),
+<a href=#917 id=917 data-nosnippet>917</a>        packages,
+<a href=#918 id=918 data-nosnippet>918</a>        conda_packages,
+<a href=#919 id=919 data-nosnippet>919</a>        v3,
+<a href=#920 id=920 data-nosnippet>920</a>        removed: HashSet::default(),
+<a href=#921 id=921 data-nosnippet>921</a>        version: <span class="prelude-val">Some</span>(<span class="number">2</span>),
+<a href=#922 id=922 data-nosnippet>922</a>    };
+<a href=#923 id=923 data-nosnippet>923</a>
+<a href=#924 id=924 data-nosnippet>924</a>    write_repodata(
+<a href=#925 id=925 data-nosnippet>925</a>        repodata_before_patches,
+<a href=#926 id=926 data-nosnippet>926</a>        repodata_patch,
+<a href=#927 id=927 data-nosnippet>927</a>        subdir,
+<a href=#928 id=928 data-nosnippet>928</a>        op,
+<a href=#929 id=929 data-nosnippet>929</a>        <span class="kw-2">&amp;</span>metadata,
+<a href=#930 id=930 data-nosnippet>930</a>    )
+<a href=#931 id=931 data-nosnippet>931</a>    .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#932 id=932 data-nosnippet>932</a>
+<a href=#933 id=933 data-nosnippet>933</a>    <span class="prelude-val">Ok</span>(SubdirIndexStats {
+<a href=#934 id=934 data-nosnippet>934</a>        packages_added: packages_to_add.len(),
+<a href=#935 id=935 data-nosnippet>935</a>        packages_removed: packages_to_delete.len(),
+<a href=#936 id=936 data-nosnippet>936</a>        retries: <span class="number">0</span>, <span class="comment">// Will be set by index_subdir
+<a href=#937 id=937 data-nosnippet>937</a>    </span>})
+<a href=#938 id=938 data-nosnippet>938</a>}
+<a href=#939 id=939 data-nosnippet>939</a>
+<a href=#940 id=940 data-nosnippet>940</a><span class="kw">fn </span>serialize_msgpack_zst&lt;T&gt;(val: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, RepodataError&gt;
+<a href=#941 id=941 data-nosnippet>941</a><span class="kw">where
+<a href=#942 id=942 data-nosnippet>942</a>    </span>T: Serialize + <span class="question-mark">?</span>Sized,
+<a href=#943 id=943 data-nosnippet>943</a>{
+<a href=#944 id=944 data-nosnippet>944</a>    <span class="kw">let </span>msgpack = rmp_serde::to_vec_named(val)<span class="question-mark">?</span>;
+<a href=#945 id=945 data-nosnippet>945</a>    <span class="kw">let </span>encoded = zstd::stream::encode_all(<span class="kw-2">&amp;</span>msgpack[..], <span class="number">0</span>)<span class="question-mark">?</span>;
+<a href=#946 id=946 data-nosnippet>946</a>    <span class="prelude-val">Ok</span>(encoded)
+<a href=#947 id=947 data-nosnippet>947</a>}
+<a href=#948 id=948 data-nosnippet>948</a>
+<a href=#949 id=949 data-nosnippet>949</a><span class="kw">fn </span>latest_repodata_revision(revisions: <span class="kw-2">&amp;</span>[RepodataRevisionInfo]) -&gt; RepodataRevision {
+<a href=#950 id=950 data-nosnippet>950</a>    revisions
+<a href=#951 id=951 data-nosnippet>951</a>        .iter()
+<a href=#952 id=952 data-nosnippet>952</a>        .map(|revision| revision.revision)
+<a href=#953 id=953 data-nosnippet>953</a>        .max()
+<a href=#954 id=954 data-nosnippet>954</a>        .unwrap_or(RepodataRevision::Legacy)
+<a href=#955 id=955 data-nosnippet>955</a>}
+<a href=#956 id=956 data-nosnippet>956</a>
+<a href=#957 id=957 data-nosnippet>957</a><span class="kw">fn </span>package_records_from_repodata(
+<a href=#958 id=958 data-nosnippet>958</a>    repodata: RepoData,
+<a href=#959 id=959 data-nosnippet>959</a>) -&gt; ahash::HashMap&lt;DistArchiveIdentifier, IndexedPackageRecord&gt; {
+<a href=#960 id=960 data-nosnippet>960</a>    <span class="kw">let </span><span class="kw-2">mut </span>packages = ahash::HashMap::default();
+<a href=#961 id=961 data-nosnippet>961</a>
+<a href=#962 id=962 data-nosnippet>962</a>    packages.extend(
+<a href=#963 id=963 data-nosnippet>963</a>        repodata
+<a href=#964 id=964 data-nosnippet>964</a>            .packages
+<a href=#965 id=965 data-nosnippet>965</a>            .into_iter()
+<a href=#966 id=966 data-nosnippet>966</a>            .chain(repodata.conda_packages)
+<a href=#967 id=967 data-nosnippet>967</a>            .map(|(identifier, record)| {
+<a href=#968 id=968 data-nosnippet>968</a>                (
+<a href=#969 id=969 data-nosnippet>969</a>                    identifier,
+<a href=#970 id=970 data-nosnippet>970</a>                    IndexedPackageRecord {
+<a href=#971 id=971 data-nosnippet>971</a>                        record,
+<a href=#972 id=972 data-nosnippet>972</a>                        repodata_revision: RepodataRevision::Legacy,
+<a href=#973 id=973 data-nosnippet>973</a>                        wheel_url: <span class="prelude-val">None</span>,
+<a href=#974 id=974 data-nosnippet>974</a>                    },
+<a href=#975 id=975 data-nosnippet>975</a>                )
+<a href=#976 id=976 data-nosnippet>976</a>            }),
+<a href=#977 id=977 data-nosnippet>977</a>    );
+<a href=#978 id=978 data-nosnippet>978</a>
+<a href=#979 id=979 data-nosnippet>979</a>    packages.extend(
+<a href=#980 id=980 data-nosnippet>980</a>        repodata
+<a href=#981 id=981 data-nosnippet>981</a>            .v3
+<a href=#982 id=982 data-nosnippet>982</a>            .into_records_with_url()
+<a href=#983 id=983 data-nosnippet>983</a>            .map(|(identifier, record, wheel_url)| {
+<a href=#984 id=984 data-nosnippet>984</a>                (
+<a href=#985 id=985 data-nosnippet>985</a>                    identifier,
+<a href=#986 id=986 data-nosnippet>986</a>                    IndexedPackageRecord {
+<a href=#987 id=987 data-nosnippet>987</a>                        record,
+<a href=#988 id=988 data-nosnippet>988</a>                        repodata_revision: RepodataRevision::V3,
+<a href=#989 id=989 data-nosnippet>989</a>                        wheel_url,
+<a href=#990 id=990 data-nosnippet>990</a>                    },
+<a href=#991 id=991 data-nosnippet>991</a>                )
+<a href=#992 id=992 data-nosnippet>992</a>            }),
+<a href=#993 id=993 data-nosnippet>993</a>    );
 <a href=#994 id=994 data-nosnippet>994</a>
 <a href=#995 id=995 data-nosnippet>995</a>    packages
 <a href=#996 id=996 data-nosnippet>996</a>}
@@ -1001,7 +1001,7 @@
 <a href=#999 id=999 data-nosnippet>999</a></span><span class="kw">fn </span>insert_package_record_by_revision(
 <a href=#1000 id=1000 data-nosnippet>1000</a>    packages: <span class="kw-2">&amp;mut </span>IndexMap&lt;DistArchiveIdentifier, PackageRecord, ahash::RandomState&gt;,
 <a href=#1001 id=1001 data-nosnippet>1001</a>    conda_packages: <span class="kw-2">&amp;mut </span>IndexMap&lt;DistArchiveIdentifier, PackageRecord, ahash::RandomState&gt;,
-<a href=#1002 id=1002 data-nosnippet>1002</a>    experimental_v3: <span class="kw-2">&amp;mut </span>ExperimentalV3Packages,
+<a href=#1002 id=1002 data-nosnippet>1002</a>    v3: <span class="kw-2">&amp;mut </span>V3Packages,
 <a href=#1003 id=1003 data-nosnippet>1003</a>    filename: DistArchiveIdentifier,
 <a href=#1004 id=1004 data-nosnippet>1004</a>    package: IndexedPackageRecord,
 <a href=#1005 id=1005 data-nosnippet>1005</a>    revision: RepodataRevision,
@@ -1027,10 +1027,10 @@
 <a href=#1025 id=1025 data-nosnippet>1025</a>        },
 <a href=#1026 id=1026 data-nosnippet>1026</a>        RepodataRevision::V3 =&gt; <span class="kw">match </span>filename.archive_type {
 <a href=#1027 id=1027 data-nosnippet>1027</a>            DistArchiveType::Conda(CondaArchiveType::TarBz2) =&gt; {
-<a href=#1028 id=1028 data-nosnippet>1028</a>                experimental_v3.tar_bz2.insert(filename.identifier, record);
+<a href=#1028 id=1028 data-nosnippet>1028</a>                v3.tar_bz2.insert(filename.identifier, record);
 <a href=#1029 id=1029 data-nosnippet>1029</a>            }
 <a href=#1030 id=1030 data-nosnippet>1030</a>            DistArchiveType::Conda(CondaArchiveType::Conda) =&gt; {
-<a href=#1031 id=1031 data-nosnippet>1031</a>                experimental_v3.conda.insert(filename.identifier, record);
+<a href=#1031 id=1031 data-nosnippet>1031</a>                v3.conda.insert(filename.identifier, record);
 <a href=#1032 id=1032 data-nosnippet>1032</a>            }
 <a href=#1033 id=1033 data-nosnippet>1033</a>            DistArchiveType::Wheel(WheelArchiveType::Whl) =&gt; {
 <a href=#1034 id=1034 data-nosnippet>1034</a>                <span class="kw">let </span>url = wheel_url.ok_or_else(|| {
@@ -1038,7 +1038,7 @@
 <a href=#1036 id=1036 data-nosnippet>1036</a>                        <span class="string">"indexing new wheel packages into v3 repodata is not supported yet"
 <a href=#1037 id=1037 data-nosnippet>1037</a>                    </span>))
 <a href=#1038 id=1038 data-nosnippet>1038</a>                })<span class="question-mark">?</span>;
-<a href=#1039 id=1039 data-nosnippet>1039</a>                experimental_v3.whl.insert(
+<a href=#1039 id=1039 data-nosnippet>1039</a>                v3.whl.insert(
 <a href=#1040 id=1040 data-nosnippet>1040</a>                    filename.identifier,
 <a href=#1041 id=1041 data-nosnippet>1041</a>                    WhlPackageRecord {
 <a href=#1042 id=1042 data-nosnippet>1042</a>                        package_record: record,
@@ -1082,7 +1082,7 @@
 <a href=#1080 id=1080 data-nosnippet>1080</a>
 <a href=#1081 id=1081 data-nosnippet>1081</a><span class="kw">fn </span>repodata_revisions_for_packages(
 <a href=#1082 id=1082 data-nosnippet>1082</a>    configured: <span class="kw-2">&amp;</span>[RepodataRevisionInfo],
-<a href=#1083 id=1083 data-nosnippet>1083</a>    experimental_v3: <span class="kw-2">&amp;</span>ExperimentalV3Packages,
+<a href=#1083 id=1083 data-nosnippet>1083</a>    v3: <span class="kw-2">&amp;</span>V3Packages,
 <a href=#1084 id=1084 data-nosnippet>1084</a>) -&gt; Vec&lt;RepodataRevisionInfo&gt; {
 <a href=#1085 id=1085 data-nosnippet>1085</a>    <span class="kw">let </span><span class="kw-2">mut </span>revisions = configured
 <a href=#1086 id=1086 data-nosnippet>1086</a>        .iter()
@@ -1091,7 +1091,7 @@
 <a href=#1089 id=1089 data-nosnippet>1089</a>        .collect::&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;();
 <a href=#1090 id=1090 data-nosnippet>1090</a>
 <a href=#1091 id=1091 data-nosnippet>1091</a>    <span class="kw">let </span><span class="kw-2">mut </span>stats = BTreeMap::&lt;RepodataRevision, RevisionStats&gt;::new();
-<a href=#1092 id=1092 data-nosnippet>1092</a>    <span class="kw">for </span>(<span class="kw">_</span>, record) <span class="kw">in </span>experimental_v3.records() {
+<a href=#1092 id=1092 data-nosnippet>1092</a>    <span class="kw">for </span>(<span class="kw">_</span>, record) <span class="kw">in </span>v3.records() {
 <a href=#1093 id=1093 data-nosnippet>1093</a>        stats.entry(RepodataRevision::V3).or_default().add(record);
 <a href=#1094 id=1094 data-nosnippet>1094</a>    }
 <a href=#1095 id=1095 data-nosnippet>1095</a>
@@ -1223,26 +1223,26 @@
 <a href=#1221 id=1221 data-nosnippet>1221</a>                .or_default();
 <a href=#1222 id=1222 data-nosnippet>1222</a>            shard.packages.insert(k, package_record);
 <a href=#1223 id=1223 data-nosnippet>1223</a>        }
-<a href=#1224 id=1224 data-nosnippet>1224</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.experimental_v3.conda {
+<a href=#1224 id=1224 data-nosnippet>1224</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.v3.conda {
 <a href=#1225 id=1225 data-nosnippet>1225</a>            <span class="kw">let </span>package_name = package_record.name.as_normalized();
 <a href=#1226 id=1226 data-nosnippet>1226</a>            <span class="kw">let </span>shard = shards_by_package_names
 <a href=#1227 id=1227 data-nosnippet>1227</a>                .entry(package_name.into())
 <a href=#1228 id=1228 data-nosnippet>1228</a>                .or_default();
-<a href=#1229 id=1229 data-nosnippet>1229</a>            shard.experimental_v3.conda.insert(k, package_record);
+<a href=#1229 id=1229 data-nosnippet>1229</a>            shard.v3.conda.insert(k, package_record);
 <a href=#1230 id=1230 data-nosnippet>1230</a>        }
-<a href=#1231 id=1231 data-nosnippet>1231</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.experimental_v3.tar_bz2 {
+<a href=#1231 id=1231 data-nosnippet>1231</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.v3.tar_bz2 {
 <a href=#1232 id=1232 data-nosnippet>1232</a>            <span class="kw">let </span>package_name = package_record.name.as_normalized();
 <a href=#1233 id=1233 data-nosnippet>1233</a>            <span class="kw">let </span>shard = shards_by_package_names
 <a href=#1234 id=1234 data-nosnippet>1234</a>                .entry(package_name.into())
 <a href=#1235 id=1235 data-nosnippet>1235</a>                .or_default();
-<a href=#1236 id=1236 data-nosnippet>1236</a>            shard.experimental_v3.tar_bz2.insert(k, package_record);
+<a href=#1236 id=1236 data-nosnippet>1236</a>            shard.v3.tar_bz2.insert(k, package_record);
 <a href=#1237 id=1237 data-nosnippet>1237</a>        }
-<a href=#1238 id=1238 data-nosnippet>1238</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.experimental_v3.whl {
+<a href=#1238 id=1238 data-nosnippet>1238</a>        <span class="kw">for </span>(k, package_record) <span class="kw">in </span>repodata.v3.whl {
 <a href=#1239 id=1239 data-nosnippet>1239</a>            <span class="kw">let </span>package_name = package_record.package_record.name.as_normalized();
 <a href=#1240 id=1240 data-nosnippet>1240</a>            <span class="kw">let </span>shard = shards_by_package_names
 <a href=#1241 id=1241 data-nosnippet>1241</a>                .entry(package_name.into())
 <a href=#1242 id=1242 data-nosnippet>1242</a>                .or_default();
-<a href=#1243 id=1243 data-nosnippet>1243</a>            shard.experimental_v3.whl.insert(k, package_record);
+<a href=#1243 id=1243 data-nosnippet>1243</a>            shard.v3.whl.insert(k, package_record);
 <a href=#1244 id=1244 data-nosnippet>1244</a>        }
 <a href=#1245 id=1245 data-nosnippet>1245</a>        <span class="kw">for </span>package <span class="kw">in </span>repodata.removed {
 <a href=#1246 id=1246 data-nosnippet>1246</a>            <span class="kw">let </span>package_name = package.identifier.name.clone();
@@ -1706,7 +1706,7 @@
 <a href=#1704 id=1704 data-nosnippet>1704</a>        }),
 <a href=#1705 id=1705 data-nosnippet>1705</a>        packages: IndexMap::default(),
 <a href=#1706 id=1706 data-nosnippet>1706</a>        conda_packages: IndexMap::default(),
-<a href=#1707 id=1707 data-nosnippet>1707</a>        experimental_v3: ExperimentalV3Packages::default(),
+<a href=#1707 id=1707 data-nosnippet>1707</a>        v3: V3Packages::default(),
 <a href=#1708 id=1708 data-nosnippet>1708</a>        removed: HashSet::default(),
 <a href=#1709 id=1709 data-nosnippet>1709</a>        version: <span class="prelude-val">Some</span>(<span class="number">2</span>),
 <a href=#1710 id=1710 data-nosnippet>1710</a>    };
@@ -1809,11 +1809,11 @@
 <a href=#1807 id=1807 data-nosnippet>1807</a>            info: <span class="prelude-val">None</span>,
 <a href=#1808 id=1808 data-nosnippet>1808</a>            packages: IndexMap::default(),
 <a href=#1809 id=1809 data-nosnippet>1809</a>            conda_packages: IndexMap::default(),
-<a href=#1810 id=1810 data-nosnippet>1810</a>            experimental_v3: ExperimentalV3Packages::default(),
+<a href=#1810 id=1810 data-nosnippet>1810</a>            v3: V3Packages::default(),
 <a href=#1811 id=1811 data-nosnippet>1811</a>            removed: HashSet::default(),
 <a href=#1812 id=1812 data-nosnippet>1812</a>            version: <span class="prelude-val">None</span>,
 <a href=#1813 id=1813 data-nosnippet>1813</a>        };
-<a href=#1814 id=1814 data-nosnippet>1814</a>        repodata.experimental_v3.whl.insert(
+<a href=#1814 id=1814 data-nosnippet>1814</a>        repodata.v3.whl.insert(
 <a href=#1815 id=1815 data-nosnippet>1815</a>            identifier.clone(),
 <a href=#1816 id=1816 data-nosnippet>1816</a>            WhlPackageRecord {
 <a href=#1817 id=1817 data-nosnippet>1817</a>                package_record,
@@ -1835,11 +1835,11 @@
 <a href=#1833 id=1833 data-nosnippet>1833</a>            .expect(<span class="string">"v3 wheel should be present"</span>);
 <a href=#1834 id=1834 data-nosnippet>1834</a>        <span class="kw">let </span><span class="kw-2">mut </span>packages = IndexMap::default();
 <a href=#1835 id=1835 data-nosnippet>1835</a>        <span class="kw">let </span><span class="kw-2">mut </span>conda_packages = IndexMap::default();
-<a href=#1836 id=1836 data-nosnippet>1836</a>        <span class="kw">let </span><span class="kw-2">mut </span>experimental_v3 = ExperimentalV3Packages::default();
+<a href=#1836 id=1836 data-nosnippet>1836</a>        <span class="kw">let </span><span class="kw-2">mut </span>v3 = V3Packages::default();
 <a href=#1837 id=1837 data-nosnippet>1837</a>        insert_package_record_by_revision(
 <a href=#1838 id=1838 data-nosnippet>1838</a>            <span class="kw-2">&amp;mut </span>packages,
 <a href=#1839 id=1839 data-nosnippet>1839</a>            <span class="kw-2">&amp;mut </span>conda_packages,
-<a href=#1840 id=1840 data-nosnippet>1840</a>            <span class="kw-2">&amp;mut </span>experimental_v3,
+<a href=#1840 id=1840 data-nosnippet>1840</a>            <span class="kw-2">&amp;mut </span>v3,
 <a href=#1841 id=1841 data-nosnippet>1841</a>            dist_identifier,
 <a href=#1842 id=1842 data-nosnippet>1842</a>            indexed_record,
 <a href=#1843 id=1843 data-nosnippet>1843</a>            RepodataRevision::V3,
@@ -1848,7 +1848,7 @@
 <a href=#1846 id=1846 data-nosnippet>1846</a>
 <a href=#1847 id=1847 data-nosnippet>1847</a>        <span class="macro">assert!</span>(packages.is_empty());
 <a href=#1848 id=1848 data-nosnippet>1848</a>        <span class="macro">assert!</span>(conda_packages.is_empty());
-<a href=#1849 id=1849 data-nosnippet>1849</a>        <span class="macro">assert!</span>(experimental_v3.whl.contains_key(<span class="kw-2">&amp;</span>identifier));
+<a href=#1849 id=1849 data-nosnippet>1849</a>        <span class="macro">assert!</span>(v3.whl.contains_key(<span class="kw-2">&amp;</span>identifier));
 <a href=#1850 id=1850 data-nosnippet>1850</a>    }
 <a href=#1851 id=1851 data-nosnippet>1851</a>}
 </code></pre></div></section></main></body></html>

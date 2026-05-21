@@ -258,7 +258,7 @@
 <a href=#256 id=256 data-nosnippet>256</a>                build_number,
 <a href=#257 id=257 data-nosnippet>257</a>                constrains,
 <a href=#258 id=258 data-nosnippet>258</a>                depends,
-<a href=#259 id=259 data-nosnippet>259</a>                experimental_extra_depends,
+<a href=#259 id=259 data-nosnippet>259</a>                extra_depends,
 <a href=#260 id=260 data-nosnippet>260</a>                flags,
 <a href=#261 id=261 data-nosnippet>261</a>                noarch,
 <a href=#262 id=262 data-nosnippet>262</a>                purls,
@@ -298,8 +298,8 @@
 <a href=#296 id=296 data-nosnippet>296</a>                fields.insert(<span class="string">"constrains"</span>, constrains);
 <a href=#297 id=297 data-nosnippet>297</a>            }
 <a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a>            <span class="kw">if </span>!experimental_extra_depends.is_empty() {
-<a href=#300 id=300 data-nosnippet>300</a>                fields.insert(<span class="string">"extra_depends"</span>, experimental_extra_depends);
+<a href=#299 id=299 data-nosnippet>299</a>            <span class="kw">if </span>!extra_depends.is_empty() {
+<a href=#300 id=300 data-nosnippet>300</a>                fields.insert(<span class="string">"extra_depends"</span>, extra_depends);
 <a href=#301 id=301 data-nosnippet>301</a>            }
 <a href=#302 id=302 data-nosnippet>302</a>
 <a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">if </span>!flags.is_empty() {
@@ -319,8 +319,8 @@
 <a href=#317 id=317 data-nosnippet>317</a>                fields.insert(<span class="string">"constrains"</span>, <span class="kw-2">&amp;</span>partial.constrains);
 <a href=#318 id=318 data-nosnippet>318</a>            }
 <a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">if </span>!partial.experimental_extra_depends.is_empty() {
-<a href=#321 id=321 data-nosnippet>321</a>                fields.insert(<span class="string">"extra_depends"</span>, <span class="kw-2">&amp;</span>partial.experimental_extra_depends);
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">if </span>!partial.extra_depends.is_empty() {
+<a href=#321 id=321 data-nosnippet>321</a>                fields.insert(<span class="string">"extra_depends"</span>, <span class="kw-2">&amp;</span>partial.extra_depends);
 <a href=#322 id=322 data-nosnippet>322</a>            }
 <a href=#323 id=323 data-nosnippet>323</a>
 <a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">if </span>!partial.flags.is_empty() {
