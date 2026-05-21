@@ -10,6 +10,7 @@ use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -770,6 +771,12 @@ impl Matches<RepoDataRecord> for MatchSpec {
             return false;
         }
 
+        if let Some(file_name) = self.file_name.as_ref()
+            && !file_name_matches(file_name, &other.identifier.to_file_name())
+        {
+            return false;
+        }
+
         if !self.matches(&other.package_record) {
             return false;
         }
@@ -783,6 +790,12 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     fn matches(&self, other: &RepoDataRecord) -> bool {
         if let Some(url_spec) = self.url.as_ref()
             && url_spec != &other.url
+        {
+            return false;
+        }
+
+        if let Some(file_name) = self.file_name.as_ref()
+            && !file_name_matches(file_name, &other.identifier.to_file_name())
         {
             return false;
         }
@@ -814,6 +827,28 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
             return false;
         }
         true
+    }
+}
+
+fn file_name_matches(spec_file_name: &str, record_file_name: &str) -> bool {
+    spec_file_name_basename(spec_file_name) == record_file_name
+}
+
+fn spec_file_name_basename(value: &str) -> Cow<'_, str> {
+    if let Ok(url) = Url::parse(value)
+        && let Some(segment) = url
+            .path_segments()
+            .and_then(Iterator::last)
+            .filter(|segment| !segment.is_empty())
+    {
+        return Cow::Owned(segment.to_string());
+    }
+
+    let value = value.trim_end_matches(['/', '\\']);
+    if let Some(index) = value.rfind(['/', '\\']) {
+        Cow::Borrowed(&value[index + 1..])
+    } else {
+        Cow::Borrowed(value)
     }
 }
 
@@ -1206,6 +1241,38 @@ mod tests {
         assert!(match_spec.matches(&package_record));
         assert!(nameless_spec.matches(&repodata_record));
         assert!(nameless_spec.matches(&package_record));
+    }
+
+    #[test]
+    fn test_file_name_matches_repodata_identifier() {
+        let repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            url: url::Url::parse("file:///tmp/mamba-1.0-py37_0.conda").unwrap(),
+            channel: None,
+        };
+
+        let match_spec = MatchSpec::from_str("mamba[fn=mamba-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&repodata_record));
+
+        let match_spec =
+            MatchSpec::from_str("mamba[fn=file:///tmp/mamba-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&repodata_record));
+
+        let match_spec = MatchSpec::from_str("mamba[fn=other-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(!match_spec.matches(&repodata_record));
+        assert!(!nameless_spec.matches(&repodata_record));
     }
 
     #[test]
