@@ -98,15 +98,15 @@ impl KeyringAuthenticationStorage {
         configure_default_store()?;
         Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)
     }
+}
 
-    fn credential_store(&self) -> Result<Arc<CredentialStore>, KeyringAuthenticationStorageError> {
-        configure_default_store()?;
-        keyring_core::get_default_store().ok_or_else(|| {
-            KeyringAuthenticationStorageError::UnsupportedTarget {
-                target: std::env::consts::OS.to_string(),
-            }
-        })
-    }
+fn credential_store() -> Result<Arc<CredentialStore>, KeyringAuthenticationStorageError> {
+    configure_default_store()?;
+    keyring_core::get_default_store().ok_or_else(|| {
+        KeyringAuthenticationStorageError::UnsupportedTarget {
+            target: std::env::consts::OS.to_string(),
+        }
+    })
 }
 
 /// An error that can occur when accessing the authentication storage
@@ -205,7 +205,7 @@ impl StorageBackend for KeyringAuthenticationStorage {
     }
 
     fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
-        let store = self.credential_store()?;
+        let store = credential_store()?;
         let spec = search_spec(&self.store_key);
         let spec_refs: HashMap<&str, &str> =
             spec.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
