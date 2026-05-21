@@ -16,10 +16,12 @@ pub mod build;
 pub mod channel_config;
 pub mod concurrency;
 pub mod index;
+pub mod link_config;
 pub mod proxy;
 pub mod repodata_config;
 pub mod run_post_link_scripts;
 pub mod s3;
+pub mod tls;
 use crate::config::channel_config::default_channel_config;
 #[cfg(feature = "edit")]
 use crate::edit::ConfigEditError;
@@ -79,11 +81,20 @@ pub struct ConfigBase<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication_override_file: Option<PathBuf>,
 
-    /// If set to true, pixi will not verify the TLS certificate of the server.
+    /// If set to true, the HTTPS client will not verify TLS server
+    /// certificates.
     #[serde(default)]
     #[serde(alias = "tls_no_verify")] // BREAK: remove to stop supporting snake_case alias
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_no_verify: Option<bool>,
+
+    /// Which TLS root certificates to use (webpki vs system).
+    /// Accepts legacy spellings `"native"` and `"all"` as aliases for
+    /// `"system"`. See [`tls::TlsRootCerts`] for details.
+    #[serde(default)]
+    #[serde(alias = "tls_root_certs")] // BREAK: remove to stop supporting snake_case alias
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_root_certs: Option<tls::TlsRootCerts>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
@@ -151,6 +162,7 @@ where
             default_channels: None,
             authentication_override_file: None,
             tls_no_verify: Some(false), // Default to false if not set
+            tls_root_certs: None,
             mirrors: IndexMap::new(),
             build: BuildConfig::default(),
             channel_config: default_channel_config(),
@@ -266,6 +278,7 @@ where
                 .or(self.authentication_override_file.as_ref())
                 .cloned(),
             tls_no_verify: other.tls_no_verify.or(self.tls_no_verify).or(Some(false)), // Default to false if not set
+            tls_root_certs: other.tls_root_certs.or(self.tls_root_certs),
             mirrors: self
                 .mirrors
                 .iter()
@@ -318,6 +331,7 @@ where
         keys.push("default_channels".to_string());
         keys.push("authentication_override_file".to_string());
         keys.push("tls_no_verify".to_string());
+        keys.push("tls_root_certs".to_string());
         keys.push("mirrors".to_string());
         keys.push("loaded_from".to_string());
         keys.push("extensions".to_string());
