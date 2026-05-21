@@ -29,7 +29,7 @@ native-tls = [
   "sigstore-sign?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
-sigstore-sign = ["dep:sigstore-sign"]
+sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -75,6 +75,7 @@ tokio = { workspace = true, features = [
   "process",
 ] }
 sigstore-sign = { workspace = true, optional = true, default-features = false }
+sigstore-trust-root = { workspace = true, optional = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
