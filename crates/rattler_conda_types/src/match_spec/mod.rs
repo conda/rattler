@@ -830,6 +830,10 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
 }
 
 fn file_name_matches(spec_file_name: &str, record_file_name: &str) -> bool {
+    // Conda matches MatchSpec `fn` against PackageRecord.fn, which is the
+    // archive file name. RepoDataRecord stores the same value in its archive
+    // identifier, so callers should pass identifier.to_file_name() instead of
+    // deriving it from the record URL.
     spec_file_name_basename(spec_file_name) == record_file_name
 }
 
@@ -1255,6 +1259,8 @@ mod tests {
             channel: None,
         };
 
+        // Match against the archive identifier, mirroring conda's PackageRecord.fn
+        // semantics without parsing the record URL during matching.
         let match_spec = MatchSpec::from_str("mamba[fn=mamba-1.0-py37_0.conda]", Strict).unwrap();
         let nameless_spec = match_spec.clone().into_nameless().1;
         assert!(match_spec.matches(&repodata_record));
