@@ -243,6 +243,34 @@ impl StorageBackend for KeyringAuthenticationStorage {
         Ok(results)
     }
 
+    /// Enumerate stored hosts without reading their passwords. On macOS this
+    /// avoids one keychain ACL prompt per entry — important for callers like
+    /// the `auth logout` interactive picker that only need host metadata to
+    /// build their UI.
+    fn list_keys(&self) -> Result<Vec<String>, AuthenticationStorageError> {
+        let store = credential_store()?;
+        let spec = search_spec(&self.store_key);
+        let spec_refs: HashMap<&str, &str> =
+            spec.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+
+        let entries = store
+            .search(&spec_refs)
+            .map_err(KeyringAuthenticationStorageError::from)?;
+
+        let mut hosts = Vec::new();
+        for entry in entries {
+            let Some((service, account)) = entry.get_specifiers() else {
+                continue;
+            };
+            if service != self.store_key {
+                continue;
+            }
+            hosts.push(account);
+        }
+        hosts.sort();
+        Ok(hosts)
+    }
+
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let entry = self.entry(host)?;
 

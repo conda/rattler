@@ -21,6 +21,21 @@ use crate::authentication_storage::backends::keyring::KeyringAuthenticationStora
 #[cfg(feature = "keyring")]
 use super::backends::keyring::KeyringAuthenticationStorage;
 
+/// A single entry returned by [`AuthenticationStorage::list_keys_with_sources`].
+/// Carries host metadata without the stored credential, so callers can build
+/// UIs (pickers, status displays) without forcing a secret read from every
+/// backend.
+#[derive(Debug, Clone)]
+pub struct LazyListedEntry {
+    /// The host this credential is stored under.
+    pub host: String,
+    /// Human-readable name of the backend the entry came from.
+    pub source: String,
+    /// `true` if this is the entry [`get`](AuthenticationStorage::get) would
+    /// return; later backends with the same host are "shadowed".
+    pub active: bool,
+}
+
 /// A single entry returned by [`AuthenticationStorage::list_with_sources`].
 /// Carries the host and credential along with the backend's display name and
 /// a flag indicating whether this is the entry [`get`](AuthenticationStorage::get)
@@ -348,7 +363,88 @@ impl AuthenticationStorage {
         Ok((url, auth))
     }
 
-    /// Delete the authentication information for the given host
+    /// Lightweight variant of [`list_with_sources`](Self::list_with_sources)
+    /// that returns only host metadata — never reading stored secrets.
+    ///
+    /// This lets callers build UIs (e.g. an interactive picker) without paying
+    /// the per-entry keychain ACL prompts that `list_with_sources` would
+    /// trigger on macOS. Callers that need the actual credential should call
+    /// [`get_entry`](Self::get_entry) on the chosen `(host, source)` pair.
+    pub fn list_keys_with_sources(&self) -> Result<Vec<LazyListedEntry>> {
+        let mut entries: Vec<LazyListedEntry> = Vec::new();
+        let mut seen_hosts: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for backend in &self.backends {
+            match backend.list_keys() {
+                Ok(hosts) => {
+                    let source = backend.name();
+                    for host in hosts {
+                        let active = seen_hosts.insert(host.clone());
+                        entries.push(LazyListedEntry {
+                            host,
+                            source: source.clone(),
+                            active,
+                        });
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!("Error listing credentials from backend: {}", error);
+                }
+            }
+        }
+
+        entries.sort_by(|a, b| a.host.cmp(&b.host));
+        Ok(entries)
+    }
+
+    /// Fetch the credential for a specific `(host, source)` pair — i.e. read
+    /// from the backend whose [`name`](StorageBackend::name) matches `source`.
+    ///
+    /// Used together with [`list_keys_with_sources`](Self::list_keys_with_sources)
+    /// to defer secret reads until needed.
+    pub fn get_entry(&self, host: &str, source: &str) -> Result<Option<Authentication>> {
+        let backend = self
+            .backends
+            .iter()
+            .find(|b| b.name() == source)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No configured backend named '{source}' is available to read the entry from"
+                )
+            })?;
+        backend.get(host).map_err(Into::into)
+    }
+
+    /// Delete the entry stored under `host` in the backend identified by
+    /// `source` (matching [`StorageBackend::name`]).
+    ///
+    /// Use this when callers want to surgically remove one backend's copy of a
+    /// host without touching shadowed copies in other backends. For deleting
+    /// every backend's copy of a host, see [`delete`](Self::delete).
+    pub fn delete_entry(&self, host: &str, source: &str) -> Result<()> {
+        // Invalidate the cache. The cache is keyed by host, not (host, source),
+        // so this also clears any stale read of a shadowed copy — `get()` will
+        // re-resolve on the next call.
+        {
+            let mut cache = self.cache.lock().unwrap();
+            cache.insert(host.to_string(), None);
+        }
+
+        let backend = self
+            .backends
+            .iter()
+            .find(|b| b.name() == source)
+            .ok_or_else(|| {
+                anyhow!(
+                    "No configured backend named '{source}' is available to delete the entry from"
+                )
+            })?;
+
+        backend.delete(host).map_err(Into::into)
+    }
+
+    /// Delete the authentication information for the given host from every
+    /// backend that holds it.
     pub fn delete(&self, host: &str) -> Result<()> {
         {
             let mut cache = self.cache.lock().unwrap();
@@ -358,17 +454,9 @@ impl AuthenticationStorage {
         let mut all_failed = true;
 
         for backend in &self.backends {
-            #[allow(unused_variables)]
             if let Err(error) = backend.delete(host) {
-                #[cfg(feature = "keyring")]
-                if matches!(
-                    error,
-                    AuthenticationStorageError::KeyringStorageError(
-                        KeyringAuthenticationStorageError::StorageError(_)
-                            | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
-                    )
-                ) {
-                    tracing::debug!("Error deleting credentials in keyring: {}", error);
+                if is_benign_storage_error(&error) {
+                    tracing::debug!("Backend ignored delete request: {}", error);
                 } else {
                     tracing::warn!("Error deleting credentials from backend: {}", error);
                 }
@@ -383,6 +471,34 @@ impl AuthenticationStorage {
             Ok(())
         }
     }
+}
+
+/// Errors that mean "this backend can't or doesn't need to do this" rather
+/// than a real failure: read-only backends (netrc), platform keyrings that
+/// don't support the requested operation, etc. These shouldn't WARN — they're
+/// expected when multiple backends are layered.
+fn is_benign_storage_error(error: &AuthenticationStorageError) -> bool {
+    #[cfg(feature = "keyring")]
+    if matches!(
+        error,
+        AuthenticationStorageError::KeyringStorageError(
+            KeyringAuthenticationStorageError::StorageError(_)
+                | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+        )
+    ) {
+        return true;
+    }
+    #[cfg(feature = "netrc-rs")]
+    if matches!(
+        error,
+        AuthenticationStorageError::NetRcStorageError(
+            crate::authentication_storage::backends::netrc::NetRcStorageError::NotSupportedError(_)
+        )
+    ) {
+        return true;
+    }
+    let _ = error;
+    false
 }
 
 #[cfg(test)]

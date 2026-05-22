@@ -124,7 +124,12 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
-struct StatusArgs {}
+struct StatusArgs {
+    /// Show endpoint URLs, client ID, and other IdP-introspection fields
+    /// that are only useful for debugging.
+    #[clap(short, long)]
+    verbose: bool,
+}
 
 #[derive(Parser, Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -552,9 +557,9 @@ async fn validate_prefix_dev_token(
 /// hang or error obscurely in that case).
 #[cfg(feature = "auth-interactive")]
 fn interactive_pick(
-    entries: Vec<rattler_networking::authentication_storage::storage::ListedEntry>,
+    entries: Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
 ) -> Result<
-    Vec<rattler_networking::authentication_storage::storage::ListedEntry>,
+    Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
     AuthenticationCLIError,
 > {
     use std::io::IsTerminal;
@@ -568,17 +573,14 @@ fn interactive_pick(
         return Err(AuthenticationCLIError::NotInteractive);
     }
 
+    // Auth method isn't shown here — it would require reading the secret,
+    // which on macOS prompts the keychain once per entry. Host + source is
+    // enough to disambiguate every entry in practice.
     let items: Vec<String> = entries
         .iter()
         .map(|e| {
             let shadowed = if e.active { "" } else { " (shadowed)" };
-            format!(
-                "{} [{}] ({}){}",
-                e.host,
-                e.auth.method(),
-                e.source,
-                shadowed
-            )
+            format!("{} ({}){}", e.host, e.source, shadowed)
         })
         .collect();
 
@@ -614,13 +616,16 @@ async fn logout(
     args: LogoutArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
-    let all_entries = storage.list_with_sources()?;
+    // Enumerate hosts without reading secrets — important on macOS where each
+    // keychain read prompts the user. We fetch credentials lazily, once per
+    // entry we actually touch.
+    let lazy_entries = storage.list_keys_with_sources()?;
 
-    let matched: Vec<_> = match (args.all, args.host.as_deref()) {
-        (true, _) => all_entries,
+    let targets: Vec<_> = match (args.all, args.host.as_deref()) {
+        (true, _) => lazy_entries,
         (false, Some(host)) => {
             let candidates = logout_candidate_keys(host)?;
-            all_entries
+            lazy_entries
                 .into_iter()
                 .filter(|e| candidates.contains(&e.host))
                 .collect()
@@ -632,38 +637,45 @@ async fn logout(
         (false, None) => {
             #[cfg(feature = "auth-interactive")]
             {
-                interactive_pick(all_entries)?
+                interactive_pick(lazy_entries)?
             }
             #[cfg(not(feature = "auth-interactive"))]
             {
-                all_entries
+                lazy_entries
             }
         }
     };
 
-    if matched.is_empty() {
-        if args.all {
-            // `--all` is a "clean everything" intent — nothing to clean is a
-            // no-op, not an error.
-            eprintln!("No stored credentials to remove.");
+    if targets.is_empty() {
+        // No-op cases:
+        // - `--all` with nothing stored
+        // - interactive picker confirmed with nothing selected (host is None
+        //   because clap allows that under `auth-interactive`)
+        // The only real "error" case is an explicit host that doesn't match.
+        if args.all || args.host.is_none() {
+            eprintln!("No credentials to remove.");
             return Ok(());
         }
-        let target = args.host.unwrap_or_default();
-        return Err(AuthenticationCLIError::NotLoggedIn(target));
+        return Err(AuthenticationCLIError::NotLoggedIn(args.host.unwrap()));
     }
 
-    // Revoke OAuth tokens for every matched entry — including shadowed ones,
-    // so a token sitting in a lower-priority backend doesn't stay valid on the
-    // IdP after deletion.
-    #[cfg(feature = "oauth")]
-    for entry in &matched {
+    // Single fetch per target — for an entry stored in the macOS keychain
+    // this is one prompt per entry being touched, not per entry in storage.
+    for entry in &targets {
+        let Some(auth) = storage.get_entry(&entry.host, &entry.source)? else {
+            // Disappeared between the lazy list and now (concurrent edit, or
+            // a backend that lies about its keys). Skip.
+            continue;
+        };
+
+        #[cfg(feature = "oauth")]
         if let Authentication::OAuth {
             access_token,
             refresh_token,
             revocation_endpoint: Some(revocation_endpoint),
             client_id,
             ..
-        } = &entry.auth
+        } = &auth
         {
             eprintln!(
                 "Revoking OAuth tokens for {} ({})",
@@ -678,14 +690,14 @@ async fn logout(
             )
             .await;
         }
-    }
+        // Silence unused-variable warning when oauth is off.
+        let _ = auth;
 
-    let mut deleted_hosts = std::collections::HashSet::new();
-    for entry in &matched {
-        if deleted_hosts.insert(entry.host.clone()) {
-            eprintln!("Removing authentication for {}", entry.host);
-            storage.delete(&entry.host)?;
-        }
+        eprintln!(
+            "Removing authentication for {} ({})",
+            entry.host, entry.source
+        );
+        storage.delete_entry(&entry.host, &entry.source)?;
     }
 
     Ok(())
@@ -796,7 +808,7 @@ fn format_validity(expires_at: Option<i64>, now: i64) -> String {
     }
 }
 
-fn print_token_metadata(metadata: Option<&TokenMetadata>) {
+fn print_token_metadata(metadata: Option<&TokenMetadata>, verbose: bool) {
     let Some(metadata) = metadata else {
         return;
     };
@@ -809,6 +821,11 @@ fn print_token_metadata(metadata: Option<&TokenMetadata>) {
             .collect::<Vec<_>>()
             .join(", ");
         println!("  - Token scopes: {scopes}");
+    }
+    if !verbose {
+        // Issuer/audience/subject are JWT introspection fields — useful for
+        // debugging, noisy for a typical "am I logged in?" check.
+        return;
     }
     if let Some(issuer) = &metadata.issuer {
         println!("  - Issuer: {issuer}");
@@ -828,6 +845,7 @@ fn print_authentication_status(
     active: bool,
     account: Option<&str>,
     now: i64,
+    verbose: bool,
 ) {
     if active {
         println!("{host}");
@@ -860,7 +878,7 @@ fn print_authentication_status(
                     now
                 )
             );
-            print_token_metadata(metadata.as_ref());
+            print_token_metadata(metadata.as_ref(), verbose);
         }
         Authentication::OAuth {
             access_token,
@@ -871,24 +889,35 @@ fn print_authentication_status(
             client_id,
         } => {
             let metadata = token_metadata(access_token);
+            // OAuth's `expires_at` always refers to the short-lived ACCESS
+            // token (RFC 6749 §5.1). Refresh tokens are separate and the
+            // standard response doesn't expose their expiry — they're
+            // typically valid for days/weeks and we only learn they're gone
+            // when a refresh fails.
             println!(
-                "  - Token validity: {}",
+                "  - Access token expires: {}",
                 format_validity(
                     expires_at
                         .or_else(|| metadata.as_ref().and_then(|metadata| metadata.expires_at)),
                     now,
                 )
             );
-            println!("  - Client ID: {client_id}");
             println!(
                 "  - Refresh token: {}",
-                if refresh_token.is_some() { "yes" } else { "no" }
+                if refresh_token.is_some() {
+                    "yes (lifetime not exposed by the provider)"
+                } else {
+                    "no"
+                }
             );
-            println!("  - Token endpoint: {token_endpoint}");
-            if let Some(revocation_endpoint) = revocation_endpoint {
-                println!("  - Revocation endpoint: {revocation_endpoint}");
+            if verbose {
+                println!("  - Client ID: {client_id}");
+                println!("  - Token endpoint: {token_endpoint}");
+                if let Some(revocation_endpoint) = revocation_endpoint {
+                    println!("  - Revocation endpoint: {revocation_endpoint}");
+                }
             }
-            print_token_metadata(metadata.as_ref());
+            print_token_metadata(metadata.as_ref(), verbose);
         }
         Authentication::BasicHTTP { username, .. } => {
             println!("  - Username: {username}");
@@ -940,7 +969,7 @@ async fn lookup_prefix_dev_account(host: &str, auth: &Authentication) -> Option<
 }
 
 async fn status(
-    _args: StatusArgs,
+    args: StatusArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
     let entries = storage.list_with_sources()?;
@@ -974,6 +1003,7 @@ async fn status(
             entry.active,
             account.as_deref(),
             now,
+            args.verbose,
         );
     }
 
@@ -1435,6 +1465,52 @@ mod tests {
         logout(logout_args(None, true), storage).await.unwrap();
     }
 
+    /// `delete_entry` must remove the host from ONLY the selected backend,
+    /// leaving shadowed copies in other backends intact. This is what makes
+    /// the interactive picker work correctly: picking one entry doesn't wipe
+    /// every backend's copy.
+    #[tokio::test]
+    async fn delete_entry_only_touches_the_named_backend() {
+        use rattler_networking::authentication_storage::StorageBackend;
+        let mut storage = AuthenticationStorage::empty();
+        let backend_a = std::sync::Arc::new(MemoryStorage::with_name("a"));
+        let backend_b = std::sync::Arc::new(MemoryStorage::with_name("b"));
+        storage.add_backend(backend_a.clone());
+        storage.add_backend(backend_b.clone());
+
+        backend_a
+            .store("prefix.dev", &Authentication::BearerToken("tok-a".into()))
+            .unwrap();
+        backend_b
+            .store("prefix.dev", &Authentication::BearerToken("tok-b".into()))
+            .unwrap();
+
+        // Find the listed entry for backend B and ask storage to delete just it.
+        let entries = storage.list_with_sources().unwrap();
+        let b_entry = entries
+            .iter()
+            .find(|e| e.source == backend_b.name())
+            .expect("backend B's entry should be listed");
+        storage
+            .delete_entry(&b_entry.host, &b_entry.source)
+            .unwrap();
+
+        // Backend B is empty…
+        assert!(
+            backend_b.list().unwrap().is_empty(),
+            "selected backend should be cleared"
+        );
+        // …but backend A still holds its copy.
+        assert_eq!(
+            backend_a.list().unwrap(),
+            vec![(
+                "prefix.dev".to_string(),
+                Authentication::BearerToken("tok-a".into())
+            )],
+            "unselected backend must keep its copy"
+        );
+    }
+
     /// When the same host has OAuth credentials in multiple backends (i.e.
     /// one entry is "active" and the rest are "shadowed"), logout must
     /// revoke every copy's tokens at the `IdP` — not just the active one —
@@ -1453,8 +1529,11 @@ mod tests {
             .await;
 
         let mut storage = AuthenticationStorage::empty();
-        let backend_a = std::sync::Arc::new(MemoryStorage::new());
-        let backend_b = std::sync::Arc::new(MemoryStorage::new());
+        // Distinct names so `delete_entry` can identify each backend
+        // unambiguously (production backends always have unique identifiers
+        // — file paths, keyring type, etc.).
+        let backend_a = std::sync::Arc::new(MemoryStorage::with_name("a"));
+        let backend_b = std::sync::Arc::new(MemoryStorage::with_name("b"));
         storage.add_backend(backend_a.clone());
         storage.add_backend(backend_b.clone());
 
