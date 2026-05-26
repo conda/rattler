@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use rattler_conda_types::{PackageName, PackageRecord, package::BuildString};
+use rattler_conda_types::{PackageName, PackageRecord};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -283,7 +283,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 track_features: _,
             } = &**full;
 
-            build_str = build.as_ref().map_or("", BuildString::as_str);
+            build_str = build.as_str();
             fields.insert("build", &build_str);
             fields.insert("build_number", build_number);
             fields.insert("noarch", noarch);

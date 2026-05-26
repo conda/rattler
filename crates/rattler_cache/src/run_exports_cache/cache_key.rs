@@ -1,7 +1,4 @@
-use rattler_conda_types::{
-    PackageRecord,
-    package::{BuildString, CondaArchiveIdentifier},
-};
+use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
 use rattler_digest::{Md5Hash, Sha256Hash};
 use std::fmt::{Display, Formatter};
 
@@ -54,10 +51,7 @@ impl CacheKey {
         Ok(Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record
-                .build
-                .as_ref()
-                .map_or_else(String::new, BuildString::to_string),
+            build_string: record.build.to_string(),
             sha256: record.sha256,
             md5: record.md5,
             extension: archive_identifier.archive_type.extension().to_string(),

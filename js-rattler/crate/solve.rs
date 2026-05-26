@@ -136,10 +136,7 @@ pub async fn simple_solve(
                         identifier: ArchiveIdentifier {
                             name: rec.name.as_source().to_string(),
                             version: rec.version.to_string(),
-                            build_string: rec
-                                .build
-                                .as_ref()
-                                .map_or_else(String::new, BuildString::to_string),
+                            build_string: rec.build.to_string(),
                         },
                         archive_type,
                     }
@@ -171,13 +168,13 @@ pub async fn simple_solve(
         .await?;
 
     // We need this to find depends for locked packages
-    let repodata_keys: HashMap<(&str, String, Option<&BuildString>), &Vec<String>> = repodata
+    let repodata_keys: HashMap<(&str, String, &BuildString), &Vec<String>> = repodata
         .iter()
         .flat_map(|r| r.iter())
         .map(|rec| {
             let name = rec.package_record.name.as_normalized();
             let version = rec.package_record.version.to_string();
-            let build = rec.package_record.build.as_ref();
+            let build = &rec.package_record.build;
             ((name, version, build), &rec.package_record.depends)
         })
         .collect();
@@ -187,7 +184,7 @@ pub async fn simple_solve(
         let key = (
             records.package_record.name.as_normalized(),
             records.package_record.version.to_string(),
-            records.package_record.build.as_ref(),
+            &records.package_record.build,
         );
 
         if records.package_record.depends.is_empty()
@@ -211,11 +208,7 @@ pub async fn simple_solve(
         .map(|r| SolvedPackage {
             url: r.url.to_string(),
             package_name: r.package_record.name.as_source().to_string(),
-            build: r
-                .package_record
-                .build
-                .as_ref()
-                .map_or_else(String::new, BuildString::to_string),
+            build: r.package_record.build.to_string(),
             build_number: Some(r.package_record.build_number),
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),

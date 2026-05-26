@@ -165,11 +165,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
 
         for record in records.iter().take(limit_versions) {
             let channel = record.channel.as_deref().unwrap_or("unknown");
-            let build = record
-                .package_record
-                .build
-                .as_ref()
-                .map_or_else(String::new, ToString::to_string);
+            let build = record.package_record.build.to_string();
             println!(
                 "  {} {} [{}] {}",
                 console::style(&record.package_record.version).cyan(),

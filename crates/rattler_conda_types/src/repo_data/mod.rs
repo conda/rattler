@@ -366,9 +366,10 @@ pub struct PackageRecord {
     /// the package is `noarch`.
     pub arch: Option<String>,
 
-    /// The build string of the package, if known. Source packages without a
-    /// built artifact have `None` here.
-    pub build: Option<BuildString>,
+    /// The build string of the package. Source packages without a built
+    /// artifact carry an empty build string.
+    #[serde(default, skip_serializing_if = "BuildString::is_empty")]
+    pub build: BuildString,
 
     /// The build number of the package
     pub build_number: BuildNumber,
@@ -576,15 +577,16 @@ impl FromStr for UrlOrPath {
 
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.build {
-            Some(build) => write!(
+        if self.build.is_empty() {
+            write!(f, "{} {}", self.name.as_normalized(), self.version)
+        } else {
+            write!(
                 f,
                 "{}={}={}",
                 self.name.as_normalized(),
                 self.version,
-                build
-            ),
-            None => write!(f, "{} {}", self.name.as_normalized(), self.version),
+                self.build
+            )
         }
     }
 }
@@ -738,7 +740,7 @@ impl PackageRecord {
     pub fn new(
         name: PackageName,
         version: impl Into<VersionWithSource>,
-        build: Option<BuildString>,
+        build: BuildString,
     ) -> Self {
         Self {
             arch: None,
@@ -1003,7 +1005,7 @@ impl PackageRecord {
 
         Ok(PackageRecord {
             arch: index.arch,
-            build: Some(index.build),
+            build: index.build,
             build_number: index.build_number,
             constrains: index.constrains,
             depends: index.depends,
@@ -1520,9 +1522,10 @@ mod test {
             .iter()
             .map(|r| {
                 let name = r.name.as_normalized();
-                match &r.build {
-                    Some(build) => format!("{}/{name}-{}-{build}", r.subdir, r.version),
-                    None => format!("{}/{name}-{}", r.subdir, r.version),
+                if r.build.is_empty() {
+                    format!("{}/{name}-{}", r.subdir, r.version)
+                } else {
+                    format!("{}/{name}-{}-{}", r.subdir, r.version, r.build)
                 }
             })
             .collect();

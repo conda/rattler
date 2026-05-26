@@ -98,7 +98,7 @@ fn find_build_and_build_number(
     read_build: &str,
     read_build_number: u64,
     file_id: &DistArchiveIdentifier,
-) -> (Option<BuildString>, u64) {
+) -> (BuildString, u64) {
     let build = if read_build.is_empty() {
         file_id.identifier.build_string.clone()
     } else {

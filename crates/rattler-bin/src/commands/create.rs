@@ -367,11 +367,7 @@ fn print_transaction(
             String::new()
         };
 
-        let build = r
-            .package_record
-            .build
-            .as_ref()
-            .map_or_else(String::new, ToString::to_string);
+        let build = r.package_record.build.to_string();
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
                 "{}[{}] {} {} {}",

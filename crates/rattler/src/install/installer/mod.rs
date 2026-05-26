@@ -460,9 +460,11 @@ impl Installer {
                     let subdir = &package_record.subdir;
                     let name = package_record.name.as_normalized();
                     let version = &package_record.version;
-                    match &package_record.build {
-                        Some(build) => format!("{subdir}/{name}-{version}-{build}"),
-                        None => format!("{subdir}/{name}-{version}"),
+                    let build = &package_record.build;
+                    if build.is_empty() {
+                        format!("{subdir}/{name}-{version}")
+                    } else {
+                        format!("{subdir}/{name}-{version}-{build}")
                     }
                 })
                 .collect();
@@ -981,9 +983,11 @@ fn update_existing_records<'p>(
                 let conda_meta_path = prefix.path().join("conda-meta");
                 let name = new_record.name().as_normalized();
                 let version = new_record.version();
-                let pkg_meta_path = match new_record.build() {
-                    Some(build) => format!("{name}-{version}-{build}.json"),
-                    None => format!("{name}-{version}.json"),
+                let build = new_record.build();
+                let pkg_meta_path = if build.is_empty() {
+                    format!("{name}-{version}.json")
+                } else {
+                    format!("{name}-{version}-{build}.json")
                 };
                 let full_path = conda_meta_path.join(&pkg_meta_path);
 
@@ -1058,9 +1062,10 @@ mod tests {
         let conda_meta_path = prefix.path().join("conda-meta");
         let record = &repo_record.package_record;
         let name = record.name.as_normalized();
-        let expected_filename = match &record.build {
-            Some(build) => format!("{name}-{}-{build}.json", record.version),
-            None => format!("{name}-{}.json", record.version),
+        let expected_filename = if record.build.is_empty() {
+            format!("{name}-{}.json", record.version)
+        } else {
+            format!("{name}-{}-{}.json", record.version, record.build)
         };
         conda_meta_path.join(&expected_filename)
     }

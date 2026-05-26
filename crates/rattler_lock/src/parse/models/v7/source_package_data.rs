@@ -135,11 +135,7 @@ impl<'a> SourcePackageDataModel<'a> {
         // Only build a PackageRecord when version (and subdir) are present.
         let metadata = if let (Some(version), Some(subdir)) = (self.version, self.subdir) {
             let subdir = subdir.into_owned();
-            // An explicit `build: ""` in the lockfile collapses to `None`.
-            let build = self
-                .build
-                .map(Cow::into_owned)
-                .filter(|b| !b.as_str().is_empty());
+            let build = self.build.map(Cow::into_owned).unwrap_or_default();
             let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
             SourceMetadata::Full(Box::new(PackageRecord {
                 name: name.clone(),
@@ -214,7 +210,7 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
                 conda_source: identifier,
                 version: Some(Cow::Borrowed(&full.version)),
                 subdir: Some(Cow::Borrowed(&full.subdir)),
-                build: full.build.as_ref().map(Cow::Borrowed),
+                build: (!full.build.is_empty()).then_some(Cow::Borrowed(&full.build)),
                 build_number: full.build_number,
                 noarch: full.noarch,
                 variants,

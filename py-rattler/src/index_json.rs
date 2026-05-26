@@ -133,9 +133,8 @@ impl PyIndexJson {
 
     #[setter]
     pub fn set_build(&mut self, build: String) -> PyResult<()> {
-        self.inner.build = BuildString::new(build)
-            .map_err(|err| PyValueError::new_err(err.to_string()))?
-            .ok_or_else(|| PyValueError::new_err("build string must not be empty"))?;
+        self.inner.build =
+            BuildString::new(build).map_err(|err| PyValueError::new_err(err.to_string()))?;
         Ok(())
     }
 

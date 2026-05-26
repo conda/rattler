@@ -184,7 +184,7 @@ fn indexed_package_record_from_index_json<T: Read>(
     let package_record = PackageRecord {
         name: index.name,
         version: index.version,
-        build: Some(index.build),
+        build: index.build,
         build_number: index.build_number,
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
         md5: Some(md5_result),

@@ -56,7 +56,7 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
             let fields = [
                 name.to_string(),
                 record.version().as_str().to_string(),
-                record.build().map(ToString::to_string).unwrap_or_default(),
+                record.build().to_string(),
                 record.repodata_record.channel.clone().unwrap_or_default(),
             ];
             for (i, (field, width)) in fields.iter().zip(widths).enumerate() {
