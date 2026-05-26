@@ -1,5 +1,5 @@
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord, package::BuildString,
+    GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
 use rattler_solve::{ExcludeNewer, SolveStrategy, SolverImpl, SolverTask};
 use std::collections::HashMap;
@@ -271,11 +271,7 @@ impl PkgMatcher {
             } => {
                 record.package_record.name.as_normalized() == name
                     && record.package_record.version.as_str() == version.as_str()
-                    && record
-                        .package_record
-                        .build
-                        .as_ref()
-                        .is_some_and(|b| b == build)
+                    && record.package_record.build == *build
             }
             MatcherKind::Exact { fingerprint } => fingerprint.matches(record),
         }
@@ -317,11 +313,7 @@ impl PackageFingerprint {
         Self {
             name: record.package_record.name.as_normalized().to_string(),
             version: record.package_record.version.as_str().to_string(),
-            build: record
-                .package_record
-                .build
-                .as_ref()
-                .map_or_else(String::new, BuildString::to_string),
+            build: record.package_record.build.to_string(),
             build_number: record.package_record.build_number,
             channel: record.channel.clone(),
             subdir: record.package_record.subdir.clone(),
@@ -330,11 +322,7 @@ impl PackageFingerprint {
     }
 
     fn matches(&self, record: &RepoDataRecord) -> bool {
-        let record_build = record
-            .package_record
-            .build
-            .as_ref()
-            .map_or("", BuildString::as_str);
+        let record_build = record.package_record.build.as_str();
         self.name == record.package_record.name.as_normalized()
             && self.version == record.package_record.version.as_str()
             && self.build == record_build
@@ -353,9 +341,11 @@ impl IntoPkgMatcher for &RepoDataRecord {
     fn into_pkg_matcher(self) -> PkgMatcher {
         let name = self.package_record.name.as_normalized();
         let version = &self.package_record.version;
-        let display = match &self.package_record.build {
-            Some(build) => format!("{name}={version}={build}"),
-            None => format!("{name}={version}"),
+        let build = &self.package_record.build;
+        let display = if build.is_empty() {
+            format!("{name}={version}")
+        } else {
+            format!("{name}={version}={build}")
         };
         PkgMatcher {
             display,
@@ -453,9 +443,11 @@ fn format_records(records: &[RepoDataRecord]) -> String {
         .map(|record| {
             let name = record.package_record.name.as_normalized();
             let version = &record.package_record.version;
-            match &record.package_record.build {
-                Some(build) => format!("{name}={version}={build}"),
-                None => format!("{name}={version}"),
+            let build = &record.package_record.build;
+            if build.is_empty() {
+                format!("{name}={version}")
+            } else {
+                format!("{name}={version}={build}")
             }
         })
         .collect::<Vec<_>>()

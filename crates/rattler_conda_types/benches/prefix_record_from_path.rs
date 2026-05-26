@@ -134,9 +134,10 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let record = &super_long_file.repodata_record.package_record;
     let name = record.name.as_normalized();
-    let filename = match &record.build {
-        Some(build) => format!("{name}-{}-{build}.json", record.version),
-        None => format!("{name}-{}.json", record.version),
+    let filename = if record.build.is_empty() {
+        format!("{name}-{}.json", record.version)
+    } else {
+        format!("{name}-{}-{}.json", record.version, record.build)
     };
     let new_long_file_path = temp_dir.path().join(filename);
     serde_json::to_writer(File::create(&new_long_file_path).unwrap(), &super_long_file).unwrap();

@@ -154,10 +154,7 @@ pub async fn simple_solve(
                         identifier: ArchiveIdentifier {
                             name: rec.name.as_source().to_string(),
                             version: rec.version.to_string(),
-                            build_string: rec
-                                .build
-                                .as_ref()
-                                .map_or_else(String::new, BuildString::to_string),
+                            build_string: rec.build.to_string(),
                         },
                         archive_type,
                     }
@@ -225,11 +222,7 @@ pub async fn simple_solve(
         .map(|r| SolvedPackage {
             url: r.url.to_string(),
             package_name: r.package_record.name.as_source().to_string(),
-            build: r
-                .package_record
-                .build
-                .as_ref()
-                .map_or_else(String::new, BuildString::to_string),
+            build: r.package_record.build.to_string(),
             build_number: Some(r.package_record.build_number),
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),

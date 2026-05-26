@@ -140,10 +140,7 @@ impl From<&PackageRecord> for CacheKey {
         Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record
-                .build
-                .as_ref()
-                .map_or_else(String::new, BuildString::to_string),
+            build_string: record.build.to_string(),
             sha256: record.sha256,
             md5: record.md5,
             origin_hash: None,
