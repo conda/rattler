@@ -631,10 +631,7 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !other
-                .build
-                .as_ref()
-                .is_some_and(|b| build_string.matches(b.as_str()))
+            && !build_string.matches(other.build.as_str())
         {
             return false;
         }
@@ -707,10 +704,7 @@ impl Matches<PackageRecord> for MatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !other
-                .build
-                .as_ref()
-                .is_some_and(|b| build_string.matches(b.as_str()))
+            && !build_string.matches(other.build.as_str())
         {
             return false;
         }
@@ -817,10 +811,7 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
         }
 
         if let Some(build_string) = self.build.as_ref()
-            && !other
-                .build_string
-                .as_ref()
-                .is_some_and(|b| build_string.matches(b.as_str()))
+            && !build_string.matches(other.build_string.as_str())
         {
             return false;
         }
@@ -1192,7 +1183,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                None,
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1228,7 +1219,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                None,
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1257,7 +1248,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                None,
+                BuildString::default(),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1411,17 +1402,17 @@ mod tests {
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("13.0").unwrap(),
-            None,
+            BuildString::default(),
         )));
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("11.0").unwrap(),
-            None,
+            BuildString::default(),
         )));
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            None,
+            BuildString::default(),
         )));
 
         let spec = MatchSpec::from_str(
@@ -1435,13 +1426,13 @@ mod tests {
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            None,
+            BuildString::default(),
         )));
         assert!(spec.matches(&{
             let mut record = PackageRecord::new(
                 PackageName::from_str("foo-bar").unwrap(),
                 Version::from_str("12.0").unwrap(),
-                None,
+                BuildString::default(),
             );
             record.license = Some("MIT".into());
             record

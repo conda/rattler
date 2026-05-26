@@ -374,10 +374,7 @@ impl PyRecord {
     /// package has no build (e.g. a source package without a built artifact).
     #[getter]
     pub fn build(&self) -> String {
-        self.as_package_record()
-            .build
-            .as_ref()
-            .map_or_else(String::new, BuildString::to_string)
+        self.as_package_record().build.to_string()
     }
 
     #[setter]

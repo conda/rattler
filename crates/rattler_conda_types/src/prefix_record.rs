@@ -277,13 +277,15 @@ impl PrefixRecord {
     /// when the package has no build string.
     pub fn file_name(&self) -> String {
         let record = &self.repodata_record.package_record;
-        match &record.build {
-            Some(build) => format!(
-                "{}-{}-{build}.json",
+        if record.build.is_empty() {
+            format!("{}-{}.json", record.name.as_normalized(), record.version)
+        } else {
+            format!(
+                "{}-{}-{}.json",
                 record.name.as_normalized(),
                 record.version,
-            ),
-            None => format!("{}-{}.json", record.name.as_normalized(), record.version),
+                record.build,
+            )
         }
     }
 

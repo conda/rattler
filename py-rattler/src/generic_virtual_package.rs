@@ -67,9 +67,6 @@ impl PyGenericVirtualPackage {
     /// virtual package has no build identifier (e.g. `__cuda`).
     #[getter]
     pub fn build_string(&self) -> String {
-        self.inner
-            .build_string
-            .as_ref()
-            .map_or_else(String::new, BuildString::to_string)
+        self.inner.build_string.to_string()
     }
 }

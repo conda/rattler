@@ -71,12 +71,7 @@ impl PackageBuilder {
             identifier: ArchiveIdentifier {
                 name: self.record.package_record.name.as_normalized().to_string(),
                 version: self.record.package_record.version.as_str().to_string(),
-                build_string: self
-                    .record
-                    .package_record
-                    .build
-                    .as_ref()
-                    .map_or_else(String::new, BuildString::to_string),
+                build_string: self.record.package_record.build.to_string(),
             },
             archive_type: DistArchiveType::Conda(self.archive_type),
         };

@@ -60,10 +60,8 @@ impl JsPackageRecord {
     #[wasm_bindgen(constructor)]
     pub fn new(json: JsPackageRecordJson) -> Result<JsPackageRecord, crate::error::JsError> {
         let package_record: PackageRecord = serde_wasm_bindgen::from_value(json.into())?;
-        if let Some(build) = package_record.build.as_ref() {
-            rattler_conda_types::package::BuildString::new(build.as_str())
-                .map_err(crate::error::JsError::from)?;
-        }
+        rattler_conda_types::package::BuildString::new(package_record.build.as_str())
+            .map_err(crate::error::JsError::from)?;
         Ok(JsPackageRecord::from(package_record))
     }
 
@@ -104,10 +102,7 @@ macro_rules! impl_package_record {
             /// The build string of the package.
             #[wasm_bindgen::prelude::wasm_bindgen(getter)]
             pub fn build(&self) -> String {
-                AsRef::<PackageRecord>::as_ref(self)
-                    .build
-                    .as_ref()
-                    .map_or_else(String::new, ToString::to_string)
+                AsRef::<PackageRecord>::as_ref(self).build.to_string()
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
