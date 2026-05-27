@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
 mod error;
