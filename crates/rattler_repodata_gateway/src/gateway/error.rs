@@ -62,6 +62,11 @@ pub enum GatewayError {
 
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
+
+    /// Raised in [`ChannelRelationsMode::Strict`](crate::gateway::ChannelRelationsMode::Strict)
+    /// when the declared CEP-42 relations are malformed.
+    #[error("malformed CEP-42 channel relations: {0}")]
+    ChannelRelationsError(String),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
