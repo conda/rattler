@@ -31,7 +31,7 @@ pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, MatchSpec, Platform, RepoDataRecord};
+use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
@@ -182,6 +182,26 @@ impl Gateway {
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
         )
+    }
+
+    /// Returns the [CEP-42] `channel_relations` declared by the given
+    /// `(channel, platform)` subdirectory, or `None` if none were
+    /// declared or the subdirectory doesn't exist.
+    ///
+    /// Reuses the internal subdir cache: if the pair has already been
+    /// fetched by a [`Gateway::query`] this is free.
+    ///
+    /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+    pub async fn channel_relations(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<Option<ChannelRelations>, GatewayError> {
+        let subdir = self
+            .inner
+            .get_or_create_subdir(channel, platform, None)
+            .await?;
+        Ok(subdir.channel_relations().cloned())
     }
 
     /// Ensure that given repodata records contain `RunExportsJson`.
@@ -2582,5 +2602,124 @@ mod test {
             names.contains(&"dep_from_source_b".to_string()),
             "late activation should walk cached pkg records from source B; got {names:?}",
         );
+    }
+
+    /// Repodata with CEP-42 `channel_relations` in `info`.
+    fn make_repodata_with_relations(
+        name: &str,
+        version: &str,
+        base: Option<&str>,
+        overrides: Option<&str>,
+    ) -> String {
+        let mut relations = String::from("{");
+        let mut first = true;
+        if let Some(b) = base {
+            relations.push_str(&format!("\"base\": \"{b}\""));
+            first = false;
+        }
+        if let Some(o) = overrides {
+            if !first {
+                relations.push_str(", ");
+            }
+            relations.push_str(&format!("\"overrides\": \"{o}\""));
+        }
+        relations.push('}');
+        format!(
+            r#"{{
+    "info": {{
+        "subdir": "linux-64",
+        "channel_relations": {relations}
+    }},
+    "packages.conda": {{
+        "{name}-{version}-0.conda": {{
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "md5": "00000000000000000000000000000000",
+            "name": "{name}",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 1000,
+            "subdir": "linux-64",
+            "timestamp": 1700000000000,
+            "version": "{version}"
+        }}
+    }}
+}}"#
+        )
+    }
+
+    /// `Gateway::channel_relations` round-trips declared relations.
+    #[tokio::test]
+    async fn test_gateway_channel_relations_roundtrip() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+
+        let repodata = make_repodata_with_relations(
+            "testpkg",
+            "1.0.0",
+            Some("../conda-forge"),
+            Some("../legacy"),
+        );
+        std::fs::write(subdir_path.join("repodata.json"), &repodata).unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        let gateway = Gateway::new();
+
+        let relations = gateway
+            .channel_relations(&channel, Platform::Linux64)
+            .await
+            .unwrap()
+            .expect("repodata declares channel_relations");
+        assert_eq!(relations.base.as_deref(), Some("../conda-forge"));
+        assert_eq!(relations.overrides.as_deref(), Some("../legacy"));
+    }
+
+    /// No declared relations returns `None`, not an error.
+    #[tokio::test]
+    async fn test_gateway_channel_relations_absent() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        std::fs::write(
+            subdir_path.join("repodata.json"),
+            make_repodata("testpkg", "1.0.0"),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        let gateway = Gateway::new();
+        let relations = gateway
+            .channel_relations(&channel, Platform::Linux64)
+            .await
+            .unwrap();
+        assert!(relations.is_none());
+    }
+
+    /// A subdir the channel doesn't publish returns `None`, not an error.
+    #[tokio::test]
+    async fn test_gateway_channel_relations_missing_subdir() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        std::fs::write(
+            subdir_path.join("repodata.json"),
+            make_repodata("testpkg", "1.0.0"),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        let gateway = Gateway::new();
+        let relations = gateway
+            .channel_relations(&channel, Platform::Osx64)
+            .await
+            .unwrap();
+        assert!(relations.is_none());
     }
 }
