@@ -68,6 +68,9 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    /// The platform subdirectory (e.g. `linux-64`), used to disambiguate
+    /// packages that share name/version/build across different platforms.
+    subdir: Option<String>,
     origin_hash: Option<String>,
 }
 
@@ -77,6 +80,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name,
             version: key.version,
             build_string: key.build_string,
+            subdir: key.subdir,
             origin_hash: key.origin_hash,
         }
     }
