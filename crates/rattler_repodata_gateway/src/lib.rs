@@ -75,8 +75,8 @@ mod gateway;
 
 #[cfg(feature = "gateway")]
 pub use gateway::{
-    CacheClearMode, ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData,
-    RepoDataSource, Source, SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, GatewayBuilder, GatewayError,
+    MaxConcurrency, RepoData, RepoDataSource, Source, SourceConfig, SubdirSelection,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};

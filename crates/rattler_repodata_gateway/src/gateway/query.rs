@@ -7,12 +7,15 @@ use std::{
 use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform, RepoDataRecord,
+    Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
+    RepoDataRecord,
 };
 use url::Url;
 
 use super::{
     BarrierCell, GatewayError, GatewayInner, RepoData,
+    channel_expander::{ChannelExpander, ChannelRelationsMode},
+    channel_relations::DEFAULT_MAX_DEPTH,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData},
 };
@@ -48,6 +51,12 @@ pub struct RepoDataQuery {
 
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
+
+    /// CEP-42 channel relations handling mode.
+    channel_relations_mode: ChannelRelationsMode,
+
+    /// Maximum recursion depth when following CEP-42 `channel_relations`.
+    channel_relations_max_depth: usize,
 }
 
 /// Tracks whether specs came from user input or transitive dependencies.
@@ -90,10 +99,31 @@ struct DirectUrlSpec {
     name: PackageName,
 }
 
-/// Handle to a pending subdirectory.
+/// Subdirectory slot: its in-flight fetch barrier, source-kind
+/// metadata, and the accumulated records.
 struct SubdirHandle {
-    result_index: usize,
     barrier: Arc<BarrierCell<Arc<Subdir>>>,
+    kind: SubdirKind,
+    data: RepoData,
+}
+
+/// Origin of a [`SubdirHandle`]; drives final-result reordering.
+#[derive(Clone)]
+enum SubdirKind {
+    /// Channel subdirectory; `url` is the canonical base URL used as
+    /// the CEP-42 resolver's identifier.
+    Channel { url: ChannelUrl, platform: Platform },
+    /// Custom source; not subject to CEP-42 ordering.
+    Custom,
+}
+
+/// Where a fetched batch of records should land.
+#[derive(Clone, Copy, Debug)]
+enum AccumulateTarget {
+    // Only constructed by `spawn_direct_url_fetches` which is non-wasm.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    DirectUrl,
+    Subdir(usize),
 }
 
 impl RepoDataQuery {
@@ -113,6 +143,29 @@ impl RepoDataQuery {
 
             recursive: false,
             reporter: None,
+            channel_relations_mode: ChannelRelationsMode::default(),
+            channel_relations_max_depth: DEFAULT_MAX_DEPTH,
+        }
+    }
+
+    /// How to treat CEP-42 `channel_relations`. Defaults to
+    /// [`ChannelRelationsMode::Warn`].
+    #[must_use]
+    pub fn channel_relations(self, mode: ChannelRelationsMode) -> Self {
+        Self {
+            channel_relations_mode: mode,
+            ..self
+        }
+    }
+
+    /// Maximum CEP-42 recursion depth. Defaults to
+    /// [`DEFAULT_MAX_DEPTH`](super::channel_relations::DEFAULT_MAX_DEPTH).
+    /// No effect when the mode is [`ChannelRelationsMode::Disabled`].
+    #[must_use]
+    pub fn channel_relations_max_depth(self, depth: usize) -> Self {
+        Self {
+            channel_relations_max_depth: depth,
+            ..self
         }
     }
 
@@ -160,6 +213,10 @@ struct QueryExecutor {
 
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
+    /// `Some` when the query contains direct-URL specs; their records
+    /// accumulate here and the bucket is emitted at the head of the
+    /// final result.
+    direct_url_result: Option<RepoData>,
 
     /// Specs with glob/regex patterns that need expansion
     pending_pattern_specs: Vec<(PackageNameMatcher, MatchSpec)>,
@@ -170,6 +227,9 @@ struct QueryExecutor {
     /// Normalized (lowercase) package names we've already queued.
     seen: hashbrown::HashMap<String, (), ahash::RandomState>,
     pending_package_specs: ahash::HashMap<PackageName, PendingRequest>,
+    /// Every queued name kept around so subdirs that come online
+    /// mid-query (via CEP-42 discovery) can still fetch for them.
+    all_queued_specs: ahash::HashMap<PackageName, PendingRequest>,
     /// Per-name set of extras that are currently active. Grows monotonically
     /// as new extras are discovered via top-level specs and dep parsing.
     active_extras: ahash::HashMap<PackageName, ahash::HashSet<String>>,
@@ -177,15 +237,15 @@ struct QueryExecutor {
     /// records when an extra activates after the first arrival.
     fetched: ahash::HashMap<PackageName, FetchedEntry>,
 
-    // Subdir management
+    // Subdir management; each handle owns its accumulated records.
     subdir_handles: Vec<SubdirHandle>,
     pending_subdirs: FuturesUnordered<BoxFuture<PendingSubdirResult>>,
 
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
 
-    // Results
-    result: Vec<RepoData>,
+    /// CEP-42 expansion state.
+    expander: ChannelExpander,
 }
 
 impl QueryExecutor {
@@ -199,6 +259,8 @@ impl QueryExecutor {
             specs,
             recursive,
             reporter,
+            channel_relations_mode,
+            channel_relations_max_depth,
         } = query;
 
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
@@ -255,71 +317,83 @@ impl QueryExecutor {
             }
         }
 
-        // Result offset for direct url queries
-        let direct_url_offset = usize::from(!direct_url_specs.is_empty());
+        let direct_url_result = (!direct_url_specs.is_empty()).then(RepoData::default);
 
-        // Expand sources into (source, platform) pairs for each platform
-        // For channels: use gateway's get_or_create_subdir
-        // For custom sources: create CustomSourceClient adapters
+        let mut expander = ChannelExpander::new(
+            channel_relations_mode,
+            channel_relations_max_depth,
+            platforms.clone(),
+        );
+
         let sources_and_platforms = sources
             .into_iter()
             .cartesian_product(platforms)
             .collect_vec();
 
-        // Create barrier cells for each subdirectory
         let mut subdir_handles = Vec::with_capacity(sources_and_platforms.len());
         let pending_subdirs = FuturesUnordered::new();
 
-        for (subdir_idx, (source, platform)) in sources_and_platforms.into_iter().enumerate() {
+        for (source, platform) in sources_and_platforms {
             let barrier = Arc::new(BarrierCell::new());
-            subdir_handles.push(SubdirHandle {
-                result_index: subdir_idx + direct_url_offset,
-                barrier: barrier.clone(),
-            });
 
-            let pending = match source {
+            let (kind, pending) = match source {
                 Source::Channel(channel) => {
-                    let inner = gateway.clone();
-                    let reporter = reporter.clone();
-                    box_future(async move {
-                        let subdir = inner
-                            .get_or_create_subdir(&channel, platform, reporter)
-                            .await?;
-                        barrier.set(subdir.clone()).expect("subdir was set twice");
-                        Ok(subdir)
-                    })
+                    let (url, channel) = expander.register_user_channel(channel);
+                    let kind = SubdirKind::Channel {
+                        url: url.clone(),
+                        platform,
+                    };
+                    let fut = build_channel_subdir_future(
+                        gateway.clone(),
+                        channel,
+                        platform,
+                        url,
+                        reporter.clone(),
+                        barrier.clone(),
+                        FetchErrorPolicy::Propagate,
+                    );
+                    (kind, fut)
                 }
                 Source::Custom(custom_source) => {
-                    // For custom sources, create an adapter that wraps the source
-                    // for the specific platform.
                     let client = CustomSourceClient::new(custom_source, platform);
                     let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
-                    box_future(async move {
-                        barrier.set(subdir.clone()).expect("subdir was set twice");
-                        Ok(subdir)
-                    })
+                    let b = barrier.clone();
+                    let fut = box_future(async move {
+                        b.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(PendingSubdirOk {
+                            subdir,
+                            kind_url_and_platform: None,
+                        })
+                    });
+                    (SubdirKind::Custom, fut)
                 }
             };
+
+            subdir_handles.push(SubdirHandle {
+                barrier,
+                kind,
+                data: RepoData::default(),
+            });
             pending_subdirs.push(pending);
         }
-
-        let result_len = subdir_handles.len() + direct_url_offset;
 
         Ok(Self {
             gateway,
             recursive,
             reporter,
             direct_url_specs,
+            direct_url_result,
             pending_pattern_specs,
             pattern_names_seen,
             seen,
             pending_package_specs,
+            all_queued_specs: ahash::HashMap::default(),
             active_extras,
             fetched: ahash::HashMap::default(),
             subdir_handles,
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
-            result: vec![RepoData::default(); result_len],
+            expander,
         })
     }
 
@@ -355,11 +429,10 @@ impl QueryExecutor {
                     ));
                 }
 
-                // Push the direct url in the first subdir result for channel priority logic
                 let (unique_base_deps, unique_extra_deps) =
                     super::subdir::extract_unique_deps_split(records.iter().map(|r| &**r));
                 Ok((
-                    0,
+                    AccumulateTarget::DirectUrl,
                     PendingRequest {
                         name: name.clone(),
                         specs: SourceSpecs::Input(vec![spec]),
@@ -389,25 +462,37 @@ impl QueryExecutor {
 
     /// Drain `pending_package_specs` and spawn fetch futures for each.
     fn spawn_package_fetches(&mut self) {
+        let pending_records = &mut self.pending_records;
+        let reporter = &self.reporter;
+        let subdir_handles = &self.subdir_handles;
         for (package_name, request) in self.pending_package_specs.drain() {
-            for handle in &self.subdir_handles {
-                let request = request.clone();
-                let package_name = package_name.clone();
-                let reporter = self.reporter.clone();
-                let result_index = handle.result_index;
-                let barrier = handle.barrier.clone();
-
-                self.pending_records.push(box_future(async move {
-                    let subdir = barrier.wait().await;
-                    match subdir.as_ref() {
-                        Subdir::Found(subdir) => subdir
-                            .get_or_fetch_package_records(&package_name, reporter)
-                            .await
-                            .map(|pkg| (result_index, request, pkg)),
-                        Subdir::NotFound => Ok((result_index, request, PackageRecords::default())),
-                    }
-                }));
+            for (idx, handle) in subdir_handles.iter().enumerate() {
+                spawn_one_package_fetch(
+                    pending_records,
+                    package_name.clone(),
+                    request.clone(),
+                    AccumulateTarget::Subdir(idx),
+                    handle.barrier.clone(),
+                    reporter.clone(),
+                );
             }
+            self.all_queued_specs.insert(package_name, request);
+        }
+    }
+
+    /// Spawn fetches for every already-queued spec against a newly
+    /// registered handle (used when CEP-42 introduces a subdir mid-query).
+    fn spawn_package_fetches_for_new_handle(&mut self, handle_idx: usize) {
+        let barrier = self.subdir_handles[handle_idx].barrier.clone();
+        for (package_name, request) in &self.all_queued_specs {
+            spawn_one_package_fetch(
+                &mut self.pending_records,
+                package_name.clone(),
+                request.clone(),
+                AccumulateTarget::Subdir(handle_idx),
+                barrier.clone(),
+                self.reporter.clone(),
+            );
         }
     }
 
@@ -559,22 +644,26 @@ impl QueryExecutor {
         }
     }
 
-    /// Add matching records to the result.
+    /// Add matching records to the slot indicated by `target`.
     fn accumulate_records(
         &mut self,
-        result_idx: usize,
+        target: AccumulateTarget,
         records: Vec<Arc<RepoDataRecord>>,
         request: &PendingRequest,
     ) {
-        let result = &mut self.result[result_idx];
+        let result = match target {
+            AccumulateTarget::DirectUrl => self
+                .direct_url_result
+                .as_mut()
+                .expect("direct-url fetch spawned without a direct-url bucket"),
+            AccumulateTarget::Subdir(idx) => &mut self.subdir_handles[idx].data,
+        };
 
         match &request.specs {
             SourceSpecs::Transitive => {
-                // All records match — extend with Arc clones (cheap refcount bumps).
                 result.records.extend(records);
             }
             SourceSpecs::Input(specs) => {
-                // Only a subset matches — filter and clone matching Arcs.
                 for record in &records {
                     if specs.iter().any(|s| s.matches(record.as_ref())) {
                         result.records.push(record.clone());
@@ -637,8 +726,12 @@ impl QueryExecutor {
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs
                 subdir_result = self.pending_subdirs.select_next_some() => {
-                    let subdir = subdir_result?;
+                    let ok = subdir_result?;
+                    let PendingSubdirOk { subdir, kind_url_and_platform } = ok;
                     self.expand_pattern_specs_for_subdir(subdir.as_ref());
+                    if let Some((url, platform)) = kind_url_and_platform {
+                        self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
+                    }
                     if self.pending_subdirs.is_empty() {
                         self.pending_pattern_specs.clear();
                         self.pattern_names_seen.clear();
@@ -647,10 +740,9 @@ impl QueryExecutor {
 
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
-                    let (result_idx, request, pkg) = records?;
+                    let (target, request, pkg) = records?;
 
                     if self.recursive {
-                        // Cache for late activations, then walk deps.
                         let entry =
                             self.fetched.entry(request.name.clone()).or_insert_with(|| {
                                 FetchedEntry {
@@ -663,7 +755,7 @@ impl QueryExecutor {
                         self.queue_dependencies(&pkg, &request);
                     }
 
-                    self.accumulate_records(result_idx, pkg.records, &request);
+                    self.accumulate_records(target, pkg.records, &request);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -674,8 +766,233 @@ impl QueryExecutor {
             }
         }
 
-        Ok(self.result)
+        self.finalize_channel_relations()
     }
+
+    /// Hand a freshly resolved subdir to the expander; schedule fetches
+    /// for any newly discovered (channel, platform) pairs. In `Strict`
+    /// mode propagates an incremental cycle/parse error so the
+    /// executor aborts the remaining in-flight fetches.
+    fn expand_relations_for_subdir(
+        &mut self,
+        channel_url: &ChannelUrl,
+        platform: Platform,
+        subdir: &Subdir,
+    ) -> Result<(), GatewayError> {
+        let new_pairs = self.expander.observe(channel_url, platform, subdir)?;
+        for (url, channel, plat) in new_pairs {
+            self.schedule_transitive_subdir(url, channel, plat);
+        }
+        Ok(())
+    }
+
+    /// Allocate a result slot for a transitively discovered (channel,
+    /// platform) pair, spawn its subdir fetch, and kick off package
+    /// fetches for every spec already queued.
+    fn schedule_transitive_subdir(
+        &mut self,
+        url: ChannelUrl,
+        channel: Arc<Channel>,
+        platform: Platform,
+    ) {
+        let barrier = Arc::new(BarrierCell::new());
+
+        let policy = if self.expander.strict() {
+            FetchErrorPolicy::WrapAsChannelRelationsError
+        } else {
+            FetchErrorPolicy::SwallowAndWarn
+        };
+        let fut = build_channel_subdir_future(
+            self.gateway.clone(),
+            channel,
+            platform,
+            url.clone(),
+            self.reporter.clone(),
+            barrier.clone(),
+            policy,
+        );
+        self.pending_subdirs.push(fut);
+
+        let handle_idx = self.subdir_handles.len();
+        self.subdir_handles.push(SubdirHandle {
+            barrier,
+            kind: SubdirKind::Channel { url, platform },
+            data: RepoData::default(),
+        });
+        self.spawn_package_fetches_for_new_handle(handle_idx);
+    }
+
+    /// Build the final `Vec<RepoData>`. When CEP-42 is enabled AND at
+    /// least one subdir contributed relations, reorder channel entries
+    /// by the resolved priority; otherwise preserve the original
+    /// construction order so mixed channel/custom queries with no
+    /// declared relations are not silently re-tiered.
+    fn finalize_channel_relations(self) -> Result<Vec<RepoData>, GatewayError> {
+        let direct = self.direct_url_result;
+        let mut handles = self.subdir_handles;
+
+        if self.expander.enabled() && self.expander.has_observed_relations() {
+            let resolution = self.expander.finalize();
+
+            if let Some(msg) = self.expander.strict_error(&resolution) {
+                return Err(GatewayError::ChannelRelationsError(msg));
+            }
+
+            // Layout: direct-url bucket at 0, channels by CEP-42 priority
+            // (platform list tiebreaks), custom sources last in construction
+            // order.
+            let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
+                .order
+                .iter()
+                .enumerate()
+                .map(|(i, u)| (u, i))
+                .collect();
+            let platform_idx_of: std::collections::HashMap<Platform, usize> = self
+                .expander
+                .platforms()
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, p)| (p, i))
+                .collect();
+
+            let mut tagged: Vec<(usize, SubdirHandle)> = handles.into_iter().enumerate().collect();
+            tagged.sort_by_key(|(orig_idx, h)| match &h.kind {
+                SubdirKind::Channel { url, platform } => {
+                    let prio = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                    let plat = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
+                    (1_usize, prio, plat, *orig_idx)
+                }
+                SubdirKind::Custom => (2, 0, 0, *orig_idx),
+            });
+            handles = tagged.into_iter().map(|(_, h)| h).collect();
+        }
+
+        let mut final_result: Vec<RepoData> =
+            Vec::with_capacity(handles.len() + usize::from(direct.is_some()));
+        if let Some(d) = direct {
+            final_result.push(d);
+        }
+        final_result.extend(handles.into_iter().map(|h| h.data));
+        Ok(final_result)
+    }
+}
+
+/// How a channel subdir fetch should handle errors from
+/// `get_or_create_subdir`.
+#[derive(Clone, Copy)]
+enum FetchErrorPolicy {
+    /// Surface the error to the caller (user-supplied channels).
+    Propagate,
+    /// Log via `tracing::warn!` and treat the subdir as empty.
+    SwallowAndWarn,
+    /// Wrap in [`GatewayError::ChannelRelationsError`] (Strict mode for
+    /// transitively discovered channels).
+    WrapAsChannelRelationsError,
+}
+
+/// Build a future that fetches a channel subdir, sets the barrier, and
+/// applies `policy` to any fetch error. Used by `RepoDataQuery`'s
+/// executor; `NamesQuery` uses the simpler [`spawn_names_fetch`]
+/// wrapper around the same [`fetch_subdir_with_policy`] core.
+fn build_channel_subdir_future(
+    gateway: Arc<GatewayInner>,
+    channel: Arc<Channel>,
+    platform: Platform,
+    url: ChannelUrl,
+    reporter: Option<Arc<dyn Reporter>>,
+    barrier: Arc<BarrierCell<Arc<Subdir>>>,
+    policy: FetchErrorPolicy,
+) -> BoxFuture<PendingSubdirResult> {
+    box_future(async move {
+        let subdir =
+            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        barrier.set(subdir.clone()).expect("subdir was set twice");
+        Ok(PendingSubdirOk {
+            subdir,
+            kind_url_and_platform: Some((url, platform)),
+        })
+    })
+}
+
+/// Fetch a channel subdir and apply `policy` to any error. Shared core
+/// for the channel-fetch futures spawned by both `RepoDataQuery` and
+/// `NamesQuery`.
+async fn fetch_subdir_with_policy(
+    gateway: &GatewayInner,
+    channel: &Channel,
+    platform: Platform,
+    url: &ChannelUrl,
+    reporter: Option<Arc<dyn Reporter>>,
+    policy: FetchErrorPolicy,
+) -> Result<Arc<Subdir>, GatewayError> {
+    match gateway
+        .get_or_create_subdir(channel, platform, reporter)
+        .await
+    {
+        Ok(subdir) => Ok(subdir),
+        Err(err) => apply_fetch_error_policy(err, url, platform, policy),
+    }
+}
+
+/// Translate a subdir fetch error into the policy-prescribed outcome.
+/// Returns `Ok(Subdir::NotFound)` for `SwallowAndWarn` so callers can
+/// proceed as if the subdir were absent; returns `Err` for `Propagate`
+/// or `WrapAsChannelRelationsError`.
+fn apply_fetch_error_policy(
+    err: GatewayError,
+    url: &ChannelUrl,
+    platform: Platform,
+    policy: FetchErrorPolicy,
+) -> Result<Arc<Subdir>, GatewayError> {
+    match policy {
+        FetchErrorPolicy::Propagate => Err(err),
+        FetchErrorPolicy::WrapAsChannelRelationsError => {
+            Err(GatewayError::ChannelRelationsError(format!(
+                "failed to fetch transitively discovered channel \
+                 `{url}` for platform `{platform}`: {err}"
+            )))
+        }
+        FetchErrorPolicy::SwallowAndWarn => {
+            tracing::warn!(
+                "failed to fetch transitively discovered channel \
+                 `{url}` for platform `{platform}`: {err}. \
+                 treating the subdir as empty."
+            );
+            Ok(Arc::new(Subdir::NotFound))
+        }
+    }
+}
+
+/// Outcome of a pending subdir fetch. The key is `Some` for channel
+/// sources (used to register CEP-42 relations) and `None` for custom
+/// sources.
+struct PendingSubdirOk {
+    subdir: Arc<Subdir>,
+    kind_url_and_platform: Option<(ChannelUrl, Platform)>,
+}
+
+/// Push a future onto `pending_records` that awaits the subdir's
+/// barrier, fetches records for `package_name`, and tags the outcome
+/// with `target`.
+fn spawn_one_package_fetch(
+    pending_records: &mut FuturesUnordered<BoxFuture<PendingRecordsResult>>,
+    package_name: PackageName,
+    request: PendingRequest,
+    target: AccumulateTarget,
+    barrier: Arc<BarrierCell<Arc<Subdir>>>,
+    reporter: Option<Arc<dyn Reporter>>,
+) {
+    pending_records.push(box_future(async move {
+        let subdir = barrier.wait().await;
+        match subdir.as_ref() {
+            Subdir::Found(subdir) => subdir
+                .get_or_fetch_package_records(&package_name, reporter)
+                .await
+                .map(|pkg| (target, request, pkg)),
+            Subdir::NotFound => Ok((target, request, PackageRecords::default())),
+        }
+    }));
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -695,8 +1012,9 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 }
 
 /// Result type for pending record fetches.
-type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
-type PendingRecordsResult = Result<(usize, PendingRequest, PackageRecords), GatewayError>;
+type PendingSubdirResult = Result<PendingSubdirOk, GatewayError>;
+type PendingRecordsResult =
+    Result<(AccumulateTarget, PendingRequest, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
@@ -724,6 +1042,12 @@ pub struct NamesQuery {
 
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
+
+    /// CEP-42 channel relations handling mode.
+    channel_relations_mode: ChannelRelationsMode,
+
+    /// Maximum recursion depth when following CEP-42 `channel_relations`.
+    channel_relations_max_depth: usize,
 }
 
 impl NamesQuery {
@@ -740,6 +1064,8 @@ impl NamesQuery {
             platforms,
 
             reporter: None,
+            channel_relations_mode: ChannelRelationsMode::default(),
+            channel_relations_max_depth: DEFAULT_MAX_DEPTH,
         }
     }
 
@@ -754,39 +1080,80 @@ impl NamesQuery {
         }
     }
 
+    /// How to treat CEP-42 `channel_relations`. Defaults to
+    /// [`ChannelRelationsMode::Warn`].
+    #[must_use]
+    pub fn channel_relations(self, mode: ChannelRelationsMode) -> Self {
+        Self {
+            channel_relations_mode: mode,
+            ..self
+        }
+    }
+
+    /// Maximum CEP-42 recursion depth. Defaults to
+    /// [`DEFAULT_MAX_DEPTH`](super::channel_relations::DEFAULT_MAX_DEPTH).
+    /// No effect when the mode is [`ChannelRelationsMode::Disabled`].
+    #[must_use]
+    pub fn channel_relations_max_depth(self, depth: usize) -> Self {
+        Self {
+            channel_relations_max_depth: depth,
+            ..self
+        }
+    }
+
     /// Execute the query and return the package names.
     pub async fn execute(self) -> Result<Vec<PackageName>, GatewayError> {
-        // Collect all the channels and platforms together
-        let channels_and_platforms = self
-            .channels
-            .iter()
-            .cartesian_product(self.platforms)
-            .collect_vec();
+        let mut expander = ChannelExpander::new(
+            self.channel_relations_mode,
+            self.channel_relations_max_depth,
+            self.platforms.clone(),
+        );
 
-        // Create barrier cells for each subdirectory.
-        // This can be used to wait until the subdir becomes available.
-        let mut pending_subdirs = FuturesUnordered::new();
-        for (channel, platform) in channels_and_platforms {
-            // Create a barrier so work that need this subdir can await it.
-            // Set the subdir to prepend the direct url queries in the result.
-
-            let inner = self.gateway.clone();
-            let reporter = self.reporter.clone();
-            pending_subdirs.push(async move {
-                match inner
-                    .get_or_create_subdir(channel, platform, reporter)
-                    .await
-                {
-                    Ok(subdir) => Ok(subdir.package_names().unwrap_or_default()),
-                    Err(e) => Err(e),
-                }
-            });
+        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
+        for channel in self.channels {
+            let (url, channel_arc) = expander.register_user_channel(channel);
+            for &platform in &self.platforms {
+                pending.push(spawn_names_fetch(
+                    self.gateway.clone(),
+                    channel_arc.clone(),
+                    platform,
+                    url.clone(),
+                    self.reporter.clone(),
+                    FetchErrorPolicy::Propagate,
+                ));
+            }
         }
-        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
 
-        while let Some(result) = pending_subdirs.next().await {
-            let subdir_names = result?;
-            names.extend(subdir_names);
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
+        let strict = expander.strict();
+        let policy = if strict {
+            FetchErrorPolicy::WrapAsChannelRelationsError
+        } else {
+            FetchErrorPolicy::SwallowAndWarn
+        };
+
+        while let Some(result) = pending.next().await {
+            let (url, platform, subdir) = result?;
+            if let Some(subdir_names) = subdir.package_names() {
+                names.extend(subdir_names);
+            }
+            for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
+                pending.push(spawn_names_fetch(
+                    self.gateway.clone(),
+                    new_channel,
+                    new_plat,
+                    new_url,
+                    self.reporter.clone(),
+                    policy,
+                ));
+            }
+        }
+
+        if expander.enabled() && expander.has_observed_relations() {
+            let resolution = expander.finalize();
+            if let Some(msg) = expander.strict_error(&resolution) {
+                return Err(GatewayError::ChannelRelationsError(msg));
+            }
         }
 
         Ok(names
@@ -794,6 +1161,25 @@ impl NamesQuery {
             .map(PackageName::try_from)
             .collect::<Result<Vec<PackageName>, _>>()?)
     }
+}
+
+type NamesFetchResult = Result<(ChannelUrl, Platform, Arc<Subdir>), GatewayError>;
+
+/// Build a future that fetches a channel subdir for `NamesQuery` and
+/// applies `policy` to any fetch error.
+fn spawn_names_fetch(
+    gateway: Arc<GatewayInner>,
+    channel: Arc<Channel>,
+    platform: Platform,
+    url: ChannelUrl,
+    reporter: Option<Arc<dyn Reporter>>,
+    policy: FetchErrorPolicy,
+) -> BoxFuture<NamesFetchResult> {
+    box_future(async move {
+        let subdir =
+            fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
+        Ok((url, platform, subdir))
+    })
 }
 
 impl IntoFuture for NamesQuery {

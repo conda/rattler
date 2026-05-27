@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+mod channel_expander;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
@@ -24,6 +25,7 @@ use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
+pub use channel_expander::ChannelRelationsMode;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
@@ -2721,5 +2723,430 @@ mod test {
             .await
             .unwrap();
         assert!(relations.is_none());
+    }
+
+    // ----------------------------------------------------------------------
+    // CEP-42 integration tests
+    // ----------------------------------------------------------------------
+
+    /// Write a linux-64 subdir with one package and optional relations.
+    fn write_test_subdir(
+        root: &std::path::Path,
+        pkg: &str,
+        version: &str,
+        base: Option<&str>,
+        overrides: Option<&str>,
+    ) {
+        let subdir = root.join("linux-64");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let json = make_repodata_with_relations(pkg, version, base, overrides);
+        std::fs::write(subdir.join("repodata.json"), json).unwrap();
+    }
+
+    /// Run a linux-64 query for `pkg` and return per-bucket package names.
+    async fn query_channels(
+        gateway: &Gateway,
+        channels: Vec<Channel>,
+        pkg: &str,
+        mode: Option<crate::ChannelRelationsMode>,
+        max_depth: Option<usize>,
+    ) -> Result<Vec<Vec<String>>, crate::GatewayError> {
+        let mut q = gateway
+            .query(
+                channels,
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str(pkg, Strict).unwrap()],
+            )
+            .recursive(false);
+        if let Some(m) = mode {
+            q = q.channel_relations(m);
+        }
+        if let Some(d) = max_depth {
+            q = q.channel_relations_max_depth(d);
+        }
+        let result = q.execute().await?;
+        Ok(result
+            .into_iter()
+            .map(|rd| {
+                rd.iter()
+                    .map(|r| r.package_record.name.as_normalized().to_string())
+                    .collect()
+            })
+            .collect())
+    }
+
+    /// A declared `base` puts the referenced channel ahead of the
+    /// declaring one in the final order.
+    #[tokio::test]
+    async fn test_cep42_base_expands_and_orders() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let server_url = server.url();
+        let bioconda_url = server_url.join("bioconda/").unwrap();
+        let bioconda = Channel::from_url(bioconda_url);
+
+        let gateway = Gateway::new();
+        let results = query_channels(&gateway, vec![bioconda], "shared", None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert!(!results[0].is_empty(), "conda-forge bucket non-empty");
+        assert!(!results[1].is_empty(), "bioconda bucket non-empty");
+    }
+
+    /// `Disabled` ignores declared relations.
+    #[tokio::test]
+    async fn test_cep42_disabled_mode_ignores_relations() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let gateway = Gateway::new();
+        let results = query_channels(
+            &gateway,
+            vec![bioconda],
+            "shared",
+            Some(crate::ChannelRelationsMode::Disabled),
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(results.len(), 1, "no expansion in Disabled mode");
+    }
+
+    /// `max_depth = 1` follows `a -> b` but stops short of `c`.
+    #[tokio::test]
+    async fn test_cep42_max_depth_truncates_recursion() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        let c = dir.path().join("c");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "shared", "2.0.0", Some("../c"), None);
+        write_test_subdir(&c, "shared", "3.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let results = query_channels(&gateway, vec![a_ch], "shared", None, Some(1))
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+    }
+
+    /// `Strict` surfaces a broken cycle as a `GatewayError`.
+    #[tokio::test]
+    async fn test_cep42_strict_mode_errors_on_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "shared", "2.0.0", Some("../a"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let err = query_channels(
+            &gateway,
+            vec![a_ch],
+            "shared",
+            Some(crate::ChannelRelationsMode::Strict),
+            None,
+        )
+        .await
+        .expect_err("cycle must error in Strict mode");
+        assert!(matches!(err, crate::GatewayError::ChannelRelationsError(_)));
+    }
+
+    /// Regression: the Strict-mode cycle error must include the
+    /// offending edges, not just a count. The check runs incrementally
+    /// during `observe`, so this also asserts the message survives the
+    /// early-exit path.
+    #[tokio::test]
+    async fn test_cep42_strict_mode_cycle_error_includes_edges() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "shared", "2.0.0", Some("../a"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let err = query_channels(
+            &gateway,
+            vec![a_ch],
+            "shared",
+            Some(crate::ChannelRelationsMode::Strict),
+            None,
+        )
+        .await
+        .expect_err("cycle must error in Strict mode");
+        let crate::GatewayError::ChannelRelationsError(msg) = err else {
+            panic!("expected ChannelRelationsError, got {err:?}");
+        };
+        assert!(msg.contains("cycle"), "message missing 'cycle': {msg}");
+        assert!(
+            msg.contains("/a/") && msg.contains("/b/"),
+            "cycle error must name the offending channels; got: {msg}"
+        );
+    }
+
+    /// `Warn` (default) tolerates a broken cycle.
+    #[tokio::test]
+    async fn test_cep42_warn_mode_tolerates_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "shared", "2.0.0", Some("../a"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let results = query_channels(&gateway, vec![a_ch], "shared", None, None)
+            .await
+            .expect("Warn mode must not error on cycle");
+        assert_eq!(results.len(), 2);
+    }
+
+    /// An absent discovered subdir produces an empty bucket, not an
+    /// error (same as for user-supplied channels).
+    #[tokio::test]
+    async fn test_cep42_missing_discovered_channel_is_an_empty_bucket() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let results = query_channels(&gateway, vec![a_ch.clone()], "shared", None, None)
+            .await
+            .expect("absent subdir must not fail the query");
+        assert_eq!(results.len(), 2);
+        let empty_count = results.iter().filter(|r| r.is_empty()).count();
+        assert_eq!(empty_count, 1);
+    }
+
+    /// CEP-42 only reorders channels; custom sources stay last.
+    #[tokio::test]
+    async fn test_cep42_custom_source_stays_at_the_end_after_reorder() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let mut mock = MockRepoDataSource::new();
+        mock.add_record(
+            Platform::Linux64,
+            make_test_record("shared", "9.9.9", "linux-64"),
+        );
+        let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
+
+        let gateway = Gateway::new();
+        let result = gateway
+            .query(
+                vec![
+                    super::Source::Channel(bioconda),
+                    super::Source::Custom(custom),
+                ],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert!(
+            result[2]
+                .iter()
+                .any(|r| r.package_record.version.as_str() == "9.9.9")
+        );
+    }
+
+    /// Regression: when no channel declares relations, the default
+    /// `Warn` mode must NOT silently push custom sources behind
+    /// channels. Caller-supplied order must be preserved.
+    #[tokio::test]
+    async fn test_cep42_no_relations_preserves_caller_source_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        // No relations declared.
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let conda_forge = Channel::from_url(server.url().join("conda-forge/").unwrap());
+
+        // Custom source FIRST, then channel.
+        let mut mock = MockRepoDataSource::new();
+        mock.add_record(
+            Platform::Linux64,
+            make_test_record("shared", "9.9.9", "linux-64"),
+        );
+        let custom: Arc<dyn super::RepoDataSource> = Arc::new(mock);
+
+        let gateway = Gateway::new();
+        let result = gateway
+            .query(
+                vec![
+                    super::Source::Custom(custom),
+                    super::Source::Channel(conda_forge),
+                ],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        // First bucket should be the custom source (version 9.9.9), not the channel.
+        assert!(
+            result[0]
+                .iter()
+                .any(|r| r.package_record.version.as_str() == "9.9.9"),
+            "custom source must remain at its caller-supplied position when no \
+             relations are declared; got buckets {:?}",
+            result
+                .iter()
+                .map(|b| b
+                    .iter()
+                    .map(|r| r.package_record.version.as_str())
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Regression: in `Strict` mode an unparseable `base`/`overrides`
+    /// reference must surface as a `ChannelRelationsError`, not be
+    /// silently swallowed with a warning. `http://` (a scheme with no
+    /// host) reliably fails `Url::join` with `EmptyHost`.
+    #[tokio::test]
+    async fn test_cep42_strict_mode_errors_on_unparseable_reference() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        write_test_subdir(&a, "shared", "1.0.0", Some("http://"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let err = query_channels(
+            &gateway,
+            vec![a_ch],
+            "shared",
+            Some(crate::ChannelRelationsMode::Strict),
+            None,
+        )
+        .await
+        .expect_err("unparseable reference must error in Strict mode");
+        assert!(matches!(err, crate::GatewayError::ChannelRelationsError(_)));
+    }
+
+    /// `Gateway::names` follows CEP-42 relations: a query against
+    /// `bioconda` (which declares `conda-forge` as base) returns names
+    /// from both channels.
+    #[tokio::test]
+    async fn test_cep42_names_query_follows_relations() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "from-cf", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "from-bc", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let gateway = Gateway::new();
+        let names = gateway
+            .names(vec![bioconda], vec![Platform::Linux64])
+            .execute()
+            .await
+            .unwrap();
+        let name_strs: std::collections::HashSet<_> = names
+            .iter()
+            .map(|n| n.as_normalized().to_string())
+            .collect();
+        assert!(name_strs.contains("from-bc"), "bioconda's package present");
+        assert!(
+            name_strs.contains("from-cf"),
+            "conda-forge's package surfaced via CEP-42 expansion"
+        );
+    }
+
+    /// In `Disabled` mode, `Gateway::names` does NOT follow relations.
+    #[tokio::test]
+    async fn test_cep42_names_query_disabled_mode_ignores_relations() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "from-cf", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "from-bc", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let gateway = Gateway::new();
+        let names = gateway
+            .names(vec![bioconda], vec![Platform::Linux64])
+            .channel_relations(crate::ChannelRelationsMode::Disabled)
+            .execute()
+            .await
+            .unwrap();
+        let name_strs: std::collections::HashSet<_> = names
+            .iter()
+            .map(|n| n.as_normalized().to_string())
+            .collect();
+        assert!(name_strs.contains("from-bc"));
+        assert!(!name_strs.contains("from-cf"));
+    }
+
+    /// `Strict` mode on `NamesQuery` surfaces a cycle as a
+    /// `GatewayError::ChannelRelationsError`.
+    #[tokio::test]
+    async fn test_cep42_names_query_strict_mode_errors_on_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        write_test_subdir(&a, "pkg-a", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "pkg-b", "2.0.0", Some("../a"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let err = gateway
+            .names(vec![a_ch], vec![Platform::Linux64])
+            .channel_relations(crate::ChannelRelationsMode::Strict)
+            .execute()
+            .await
+            .expect_err("cycle must error in Strict mode");
+        assert!(matches!(err, crate::GatewayError::ChannelRelationsError(_)));
     }
 }

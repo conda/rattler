@@ -1,7 +1,3 @@
-// Wired into the gateway in a follow-up commit; suppress dead-code
-// warnings on the public surface until then.
-#![allow(dead_code)]
-
 //! [CEP-42] channel-relations resolution.
 //!
 //! Given user-specified channels and a registry mapping each channel to
@@ -348,12 +344,19 @@ where
 
         // User edges form a linear chain and are acyclic with unique
         // user channels; only `[a, b, a]`-style duplicates can introduce
-        // a cycle.
+        // a cycle, and `[a, a]`-style self-edges are dropped (no
+        // topological order respects a node coming before itself).
         let mut seen_user: HashSet<(usize, usize)> = HashSet::new();
         for edge in user_edges {
             let from = index[&edge.from];
             let to = index[&edge.to];
-            if from == to || !seen_user.insert((from, to)) {
+            if from == to {
+                broken.push(edge);
+                continue;
+            }
+            if !seen_user.insert((from, to)) {
+                // Exact duplicate: redundant with the already-accepted
+                // copy, but the order does respect it.
                 kept.push(edge);
                 continue;
             }
@@ -820,6 +823,21 @@ mod tests {
         ]);
         let r = resolve(&["a"], &reg);
         assert_eq!(r.channels, vec!["a", "b", "c", "d"]);
+    }
+
+    /// User input `[a, a]` produces a self-edge `a -> a`. No
+    /// topological order respects it, so it must not appear in
+    /// `kept` (`Resolution::edges`). It belongs in `broken_cycle_edges`.
+    #[test]
+    fn user_self_edge_is_not_kept() {
+        let reg: ChannelRegistry<&str> = ChannelRegistry::new();
+        let r = resolve(&["a", "a"], &reg);
+        for edge in &r.edges {
+            assert_ne!(
+                edge.from, edge.to,
+                "Resolution::edges must not contain a self-edge"
+            );
+        }
     }
 
     #[test]
