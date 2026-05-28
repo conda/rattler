@@ -3,6 +3,7 @@ pub mod client;
 pub mod completion;
 pub mod create;
 pub mod download;
+pub mod exec;
 pub mod extract;
 pub mod fetch_file;
 pub mod inspect;

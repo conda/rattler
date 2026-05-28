@@ -420,7 +420,7 @@ fn print_transaction(
 
 /// Displays a spinner with the given message while running the specified
 /// function to completion.
-fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func: F) -> T {
+pub fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func: F) -> T {
     let pb = ProgressBar::new_spinner();
     pb.enable_steady_tick(Duration::from_millis(100));
     pb.set_style(long_running_progress_style());
@@ -432,7 +432,7 @@ fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func
 
 /// Displays a spinner with the given message while running the specified
 /// function to completion.
-async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
+pub async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
     msg: impl Into<Cow<'static, str>>,
     fut: F,
 ) -> T {

@@ -4,7 +4,7 @@ use miette::IntoDiagnostic;
 use once_cell::sync::Lazy;
 use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
-use crate::writer::IndicatifWriter;
+use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
@@ -57,6 +57,7 @@ enum Command {
     Link(commands::link::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
+    Exec(commands::exec::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -120,5 +121,6 @@ async fn async_main() -> miette::Result<()> {
         Command::Extract(opts) => commands::extract::extract(opts).await,
         Command::Link(opts) => commands::link::link(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
+        Command::Exec(opts) => exec::exec(opts).await,
     }
 }
