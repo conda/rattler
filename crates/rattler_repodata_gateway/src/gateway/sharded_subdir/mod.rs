@@ -4,16 +4,16 @@ use std::sync::Arc;
 use cfg_if::cfg_if;
 use http::StatusCode;
 use rattler_conda_types::{
-    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
     ChannelUrl, RepoDataRecord, Shard, UrlOrPath, WhlPackageRecord,
+    package::{CondaArchiveType, DistArchiveIdentifier, WheelArchiveType},
 };
 use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    fetch::FetchRepoDataError,
-    gateway::subdir::{extract_unique_deps, PackageRecords},
     GatewayError,
+    fetch::FetchRepoDataError,
+    gateway::subdir::{PackageRecords, extract_unique_deps_split},
 };
 
 /// Returns `true` if the HTTP status indicates that the server does not expose
@@ -100,14 +100,14 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 .map_err(FetchRepoDataError::IoError)?;
 
             // Chain v3 tar.bz2/conda packages into the main iteration
-            let v3_tar_bz2 = shard.experimental_v3.tar_bz2.into_iter().map(|(id, rec)| {
+            let v3_tar_bz2 = shard.v3.tar_bz2.into_iter().map(|(id, rec)| {
                 (
                     DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
                     rec,
                 )
             });
             let v3_conda =
-                shard.experimental_v3.conda.into_iter().map(|(id, rec)| {
+                shard.v3.conda.into_iter().map(|(id, rec)| {
                     (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec)
                 });
 
@@ -138,7 +138,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                     url,
                     package_record,
                 },
-            ) in shard.experimental_v3.whl
+            ) in shard.v3.whl
             {
                 let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
                 let url = match url {
@@ -154,10 +154,12 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 }));
             }
 
-            let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
+            let (unique_base_deps, unique_extra_deps) =
+                extract_unique_deps_split(records.iter().map(|r| &**r));
             Ok(PackageRecords {
                 records,
-                unique_deps,
+                unique_base_deps,
+                unique_extra_deps,
             })
         };
 
@@ -175,13 +177,13 @@ mod tests {
     use crate::gateway::error::GatewayError;
     use crate::gateway::subdir::SubdirClient;
     use axum::{
+        Router,
         body::Body,
         http::{Response, StatusCode},
         routing::get,
-        Router,
     };
     use rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use tokio::sync::oneshot;
@@ -212,7 +214,7 @@ mod tests {
                     subdir: "linux-64".to_string(),
                     base_url: "./".to_string(),
                     shards_base_url: "./shards/".to_string(),
-                    created_at: Some(chrono::Utc::now()),
+                    created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: Vec::new(),
                     channel_relations: None,
                 },

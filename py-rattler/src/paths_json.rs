@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use pyo3::{
-    exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, Py, PyAny, PyErr,
-    PyResult, Python,
+    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
+    types::PyBytes,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{

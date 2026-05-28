@@ -8,15 +8,15 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::RunExportsJson, ChannelUrl, Flag, MatchSpec, Matches, NamelessMatchSpec,
-    PackageRecord, PackageUrl, RepoDataRecord,
+    ChannelUrl, Flag, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, PackageUrl,
+    RepoDataRecord, package::RunExportsJson,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{source::SourceLocation, SourceData, UrlOrPath};
+use crate::{SourceData, UrlOrPath, source::SourceLocation};
 
 /// Represents a conda-build variant value.
 ///
@@ -185,15 +185,14 @@ impl From<CondaBinaryData> for CondaPackageData {
 
 impl CondaBinaryData {
     pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        if self.location == other.location {
-            if let Cow::Owned(merged) =
+        if self.location == other.location
+            && let Cow::Owned(merged) =
                 merge_package_record(&self.package_record, &other.package_record)
-            {
-                return Cow::Owned(Self {
-                    package_record: merged,
-                    ..self.clone()
-                });
-            }
+        {
+            return Cow::Owned(Self {
+                package_record: merged,
+                ..self.clone()
+            });
         }
 
         Cow::Borrowed(self)
@@ -268,7 +267,7 @@ pub struct PartialSourceMetadata {
     pub constrains: Vec<String>,
 
     /// Additional dependencies grouped by an extra/feature key.
-    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Variant-selection flags declared by the recipe.
     pub flags: Vec<Flag>,
@@ -462,7 +461,7 @@ impl CondaSourceData<SourceMetadata> {
         name: rattler_conda_types::PackageName,
         depends: Vec<String>,
         constrains: Vec<String>,
-        experimental_extra_depends: BTreeMap<String, Vec<String>>,
+        extra_depends: BTreeMap<String, Vec<String>>,
         flags: Vec<Flag>,
         license: Option<String>,
         purls: Option<BTreeSet<PackageUrl>>,
@@ -480,7 +479,7 @@ impl CondaSourceData<SourceMetadata> {
                 name,
                 depends,
                 constrains,
-                experimental_extra_depends,
+                extra_depends,
                 flags,
                 license,
                 purls,
@@ -651,10 +650,10 @@ impl Matches<MatchSpec> for CondaPackageData {
         if let Some(channel) = &spec.channel {
             match self {
                 CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
+                    if let Some(record_channel) = &binary.channel
+                        && &channel.base_url != record_channel
+                    {
+                        return false;
                     }
                 }
                 CondaPackageData::Source(_) => {
@@ -686,10 +685,10 @@ impl Matches<NamelessMatchSpec> for CondaPackageData {
         if let Some(channel) = &spec.channel {
             match self {
                 CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
+                    if let Some(record_channel) = &binary.channel
+                        && &channel.base_url != record_channel
+                    {
+                        return false;
                     }
                 }
                 CondaPackageData::Source(_) => {
@@ -736,13 +735,13 @@ fn merge_package_record<'a>(
             run_exports: right.run_exports.clone(),
             ..result.into_owned()
         });
-    } else if let (Some(l), Some(r)) = (&left.run_exports, &right.run_exports) {
-        if l != r {
-            tracing::debug!(
-                package = %left.name.as_normalized(),
-                "merging two records with conflicting run_exports; keeping the existing one"
-            );
-        }
+    } else if let (Some(l), Some(r)) = (&left.run_exports, &right.run_exports)
+        && l != r
+    {
+        tracing::debug!(
+            package = %left.name.as_normalized(),
+            "merging two records with conflicting run_exports; keeping the existing one"
+        );
     }
 
     // Merge hashes if the left package doesn't contain them.

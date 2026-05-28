@@ -1,39 +1,38 @@
 use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
+    Finish, IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
     character::complete::{char, multispace0, multispace1, one_of, space0},
     combinator::{opt, recognize},
-    error::{context, ContextError, ParseError},
+    error::{ContextError, ParseError, context},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
-    Finish, IResult, Parser,
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use smallvec::SmallVec;
 use thiserror::Error;
 use typed_path::Utf8TypedPath;
 use url::Url;
 
 use super::{
-    matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
+    matcher::{StringMatcher, StringMatcherParseError},
 };
 use crate::match_spec::condition::parse_condition;
 use crate::{
+    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
+    ParseStrictness, ParseVersionError, Platform, VersionSpec,
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     flags::is_valid_matchspec_flag,
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::CondaArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
-        is_start_of_version_constraint,
+        ParseVersionSpecError, is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
-        ParseVersionSpecError,
     },
-    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-    ParseStrictness, ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -110,7 +109,9 @@ pub enum ParseMatchSpecError {
     MoreThanOneSemicolon,
 
     /// Deprecated `; if` syntax used
-    #[error("the '; if' syntax for conditional dependencies is deprecated, use '[when=\"...\"]' bracket syntax instead")]
+    #[error(
+        "the '; if' syntax for conditional dependencies is deprecated, use '[when=\"...\"]' bracket syntax instead"
+    )]
     DeprecatedIfSyntax,
 
     /// Invalid condition in match spec
@@ -122,11 +123,15 @@ pub enum ParseMatchSpecError {
     InvalidFlagMatcher(String),
 
     /// Only exact package name matchers are allowed but a glob was provided
-    #[error("\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     OnlyExactPackageNameMatchersAllowedGlob(String),
 
     /// Only exact package name matchers are allowed but a regex was provided
-    #[error("\"{0}\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "\"{0}\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     OnlyExactPackageNameMatchersAllowedRegex(String),
 }
 
@@ -478,15 +483,14 @@ fn parse_bracket_vec_into_components(
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "extras" => {
-                // Optional features are still experimental
-                if options.allow_experimental_extras() {
+                if options.allow_extras() {
                     match_spec.extras = Some(parse_extras(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
                 }
             }
             "flags" => {
-                if options.allow_experimental_flags() {
+                if options.allow_flags() {
                     match_spec.flags = Some(parse_flags(value)?);
                 } else {
                     return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
@@ -540,7 +544,7 @@ fn parse_bracket_vec_into_components(
             }
             "when" => {
                 // Conditional dependencies using bracket syntax
-                if options.allow_experimental_conditionals() {
+                if options.allow_conditionals() {
                     // Unescape the value in case it contains escaped quotes
                     let unescaped_value = unescape_string(value);
                     let (remainder, condition) =
@@ -561,6 +565,7 @@ fn parse_bracket_vec_into_components(
                 }
             }
             "license_family" => match_spec.license_family = Some(value.to_string()),
+            "namespace" => match_spec.namespace = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
@@ -893,25 +898,25 @@ pub(crate) fn matchspec_parser(
     // TODO: What is this? I've never seen it
 
     // 4. Parse as url
-    if nameless_match_spec.url.is_none() {
-        if let Some(url) = parse_url_like(&input)? {
-            let archive = CondaArchiveIdentifier::try_from_url(&url);
-            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
+    if nameless_match_spec.url.is_none()
+        && let Some(url) = parse_url_like(&input)?
+    {
+        let archive = CondaArchiveIdentifier::try_from_url(&url);
+        let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
-            if let Some(name) = name {
-                // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-                // information. e.g. when a version is provided in the url is not the
-                // actual version this might be a problem when solving.
-                return Ok(MatchSpec {
-                    url: Some(url),
-                    name,
-                    ..Default::default()
-                });
-            } else {
-                // TODO: This should also work without a proper name from the url filename
-                // If we can't figure out the name from the URL, return an error
-                return Err(ParseMatchSpecError::MissingPackageName);
-            }
+        if let Some(name) = name {
+            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+            // information. e.g. when a version is provided in the url is not the
+            // actual version this might be a problem when solving.
+            return Ok(MatchSpec {
+                url: Some(url),
+                name,
+                ..Default::default()
+            });
+        } else {
+            // TODO: This should also work without a proper name from the url filename
+            // If we can't figure out the name from the URL, return an error
+            return Err(ParseMatchSpecError::MissingPackageName);
         }
     }
 
@@ -1023,21 +1028,21 @@ mod tests {
 
     use assert_matches::assert_matches;
     use indexmap::IndexMap;
-    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+    use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
     use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
     use url::Url;
 
     use super::{
-        parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
-        unescape_string, BracketVec, MatchSpec, ParseMatchSpecError,
+        BracketVec, MatchSpec, ParseMatchSpecError, parse_channel_and_subdir,
+        split_version_and_build, strip_brackets, strip_package_name, unescape_string,
     };
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions, ParseStrictness,
-        ParseStrictness::*, Version, VersionSpec,
+        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
+        ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version, VersionSpec,
+        match_spec::parse::parse_bracket_list,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1661,7 +1666,7 @@ mod tests {
 
     #[test]
     fn test_license_family_matching() {
-        use crate::{match_spec::Matches, PackageName, PackageRecord, Version};
+        use crate::{PackageName, PackageRecord, Version, match_spec::Matches};
 
         let mut record = PackageRecord::new(
             PackageName::from_str("numpy").unwrap(),
@@ -1818,13 +1823,13 @@ mod tests {
         // Basic usage with new bracket syntax
         let spec = MatchSpec::from_str(
             r#"foo[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.6".to_string()
+            "python>=3.6".to_string()
         );
     }
 
@@ -1833,7 +1838,7 @@ mod tests {
         // Bracket syntax with version spec
         let spec = MatchSpec::from_str(
             r#"numpy >=2.0[when="python >=3.10"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "numpy".parse().unwrap());
@@ -1843,7 +1848,7 @@ mod tests {
         );
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.10".to_string()
+            "python>=3.10".to_string()
         );
     }
 
@@ -1852,13 +1857,13 @@ mod tests {
         // Single quotes for the when value
         let spec = MatchSpec::from_str(
             r#"foo[when='python >=3.6']"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec.name, "foo".parse().unwrap());
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "python >=3.6".to_string()
+            "python>=3.6".to_string()
         );
     }
 
@@ -1866,7 +1871,7 @@ mod tests {
     fn parse_conditional(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         MatchSpec::from_str(
             input,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
     }
 
@@ -1876,7 +1881,7 @@ mod tests {
         let spec = parse_conditional(r#"foo[when="python >=3.6 and linux"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python >=3.6 and linux)"
+            "(python>=3.6 and linux)"
         );
     }
 
@@ -1894,13 +1899,13 @@ mod tests {
     fn test_conditional_parsing_complex_version() {
         // Complex version constraints in condition
         let spec = parse_conditional(r#"foo[when="python >=3.6,<4.0"]"#).unwrap();
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6,<4.0");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6,<4.0");
 
         // Multiple conditions with or
         let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python >=3.6 or python <3.0)"
+            "(python>=3.6 or python<3.0)"
         );
     }
 
@@ -1916,7 +1921,7 @@ mod tests {
         // Old "; if" syntax should return an error
         let spec = MatchSpec::from_str(
             "foo; if python >=3.6",
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert_matches!(spec, Err(ParseMatchSpecError::DeprecatedIfSyntax));
 
@@ -1930,7 +1935,7 @@ mod tests {
         // Test that parsing and displaying a conditional spec produces a valid spec
         let spec = MatchSpec::from_str(
             r#"foo >=1.0[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
 
@@ -1940,7 +1945,7 @@ mod tests {
         // Parse the displayed string back
         let reparsed = MatchSpec::from_str(
             &spec_str,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(spec, reparsed);
@@ -1956,7 +1961,7 @@ mod tests {
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
         );
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6");
         assert_eq!(spec.build.unwrap().to_string(), "py*");
     }
 
@@ -2007,13 +2012,13 @@ mod tests {
     #[test]
     fn test_nested_when_conditions_not_allowed() {
         // According to the CEP, inner MatchSpec queries MUST NOT feature their own `when` field.
-        // The inner condition parser uses strict mode without experimental conditionals,
+        // The inner condition parser uses strict mode without conditionals enabled,
         // so nested when conditions should fail with an InvalidCondition error.
 
         // Test case 1: Simple nested when
         let spec = MatchSpec::from_str(
             r#"foo[when="bar[when=\"baz\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         let err = spec.unwrap_err();
@@ -2023,7 +2028,7 @@ mod tests {
         // Test case 2: Nested when in OR condition
         let spec = MatchSpec::from_str(
             r#"foo[when="bar or baz[when=\"qux\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2034,7 +2039,7 @@ mod tests {
         // Test case 3: Nested when in AND condition
         let spec = MatchSpec::from_str(
             r#"foo[when="bar and baz[when=\"qux\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2045,7 +2050,7 @@ mod tests {
         // Test case 4: Deeply nested when (when inside when inside when)
         let spec = MatchSpec::from_str(
             r#"foo[when="bar[when=\"baz[when=\\\"qux\\\"]\"]"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert!(spec.is_err());
         assert_matches!(
@@ -2070,7 +2075,7 @@ mod tests {
         // Multiple when keys in strict mode should error
         let spec = MatchSpec::from_str(
             r#"foo[when="a", when="b"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         );
         assert_matches!(spec, Err(ParseMatchSpecError::MultipleValueForKey(_)));
     }
@@ -2079,7 +2084,7 @@ mod tests {
     fn test_conditional_package_name_with_and_or_substring() {
         // Package names containing "and"/"or" substrings should not be split
         let spec = parse_conditional(r#"foo[when="pandoc >=2.0"]"#).unwrap();
-        assert_eq!(spec.condition.unwrap().to_string(), "pandoc >=2.0");
+        assert_eq!(spec.condition.unwrap().to_string(), "pandoc>=2.0");
     }
 
     #[test]
@@ -2105,18 +2110,104 @@ mod tests {
     }
 
     #[test]
+    fn test_conditional_render_bracket_form_with_build() {
+        // A leaf with a build constraint cannot use the compact `name op version`
+        // form, so the renderer falls back to the bracket syntax.
+        let spec = parse_conditional(r#"foo[when="python >=3.8[build=\"py39*\"]"]"#).unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(condition, r#"python[version=">=3.8", build="py39*"]"#);
+
+        // Round-trip: the rendered MatchSpec parses back to the same value.
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_startswith_version() {
+        // Bare `3.9.*` parses to StrictRange(StartsWith, ...) which renders as
+        // `3.9.*` — no leading operator char. The compact form `python3.9.*`
+        // would not parse back, so we must fall back to the bracket form.
+        let spec = parse_conditional(r#"foo[when="python 3.9.*"]"#).unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(condition, r#"python[version="3.9.*"]"#);
+
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_extra_keys() {
+        // Each non-version bracket key forces the bracket form. Round-trip
+        // every supported key to keep `fmt_in_condition` aligned with the
+        // parser's accepted set.
+        let cases = [
+            r#"foo[when="python[md5=\"8b1a9953c4611296a827abf8c47804d7\"]"]"#,
+            r#"foo[when="python[sha256=\"315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3\"]"]"#,
+            r#"foo[when="python >=3.8[build_number=\">=6\"]"]"#,
+            r#"foo[when="python[fn=\"python-3.9-0.tar.bz2\"]"]"#,
+            r#"foo[when="python[license=\"MIT\"]"]"#,
+            r#"foo[when="python[license_family=\"MIT\"]"]"#,
+            r#"foo[when="python[track_features=\"feat1 feat2\"]"]"#,
+        ];
+        for input in cases {
+            let spec = parse_conditional(input).expect(input);
+            let reparsed = parse_conditional(&spec.to_string()).expect(input);
+            assert_eq!(spec, reparsed, "round-trip failed for {input}");
+        }
+    }
+
+    #[test]
+    fn test_conditional_render_bracket_form_channel_subdir_namespace() {
+        // Channel, subdir, and namespace must be expressed via bracket keys
+        // inside a `when=` condition (no `channel/subdir:namespace:name`
+        // prefix), since the spec mandates pure square-bracket syntax.
+        let spec = parse_conditional(
+            r#"foo[when="python[channel=\"conda-forge\", subdir=\"linux-64\", namespace=\"py\"]"]"#,
+        )
+        .unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(
+            condition,
+            r#"python[channel="conda-forge", subdir="linux-64", namespace="py"]"#
+        );
+
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_render_compound_with_bracket_leaf() {
+        // A compound expression where one leaf must use the bracket form.
+        // Confirms that inner double quotes get escaped at the outer
+        // `when="..."` boundary and the whole thing parses back.
+        let spec = parse_conditional(
+            r#"foo[when="(python >=3.8[build=\"py39*\"] and __linux) or __win"]"#,
+        )
+        .unwrap();
+        let condition = spec.condition.as_ref().unwrap().to_string();
+        assert_eq!(
+            condition,
+            r#"((python[version=">=3.8", build="py39*"] and __linux) or __win)"#
+        );
+
+        let rendered = spec.to_string();
+        let reparsed = parse_conditional(&rendered).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
     fn test_nameless_match_spec_with_when() {
         // NamelessMatchSpec with when should work
         let spec = NamelessMatchSpec::from_str(
             r#">=1.0[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+            ParseMatchSpecOptions::strict().with_conditionals(true),
         )
         .unwrap();
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
         );
-        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6");
     }
 
     #[test]
@@ -2147,23 +2238,25 @@ mod tests {
     fn test_simple_extras() {
         let spec = MatchSpec::from_str(
             "foo[extras=[bar]]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true),
+            ParseMatchSpecOptions::strict().with_extras(true),
         )
         .unwrap();
 
         assert_eq!(spec.extras, Some(vec!["bar".to_string()]));
-        assert!(MatchSpec::from_str(
-            "foo[extras=[bar,baz]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true)
-        )
-        .is_err());
+        assert!(
+            MatchSpec::from_str(
+                "foo[extras=[bar,baz]",
+                ParseMatchSpecOptions::strict().with_extras(true)
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn test_multiple_extras() {
         let spec = MatchSpec::from_str(
             "foo[extras=[bar,baz]]",
-            ParseMatchSpecOptions::strict().with_experimental_extras(true),
+            ParseMatchSpecOptions::strict().with_extras(true),
         )
         .unwrap();
         assert_eq!(
@@ -2188,7 +2281,7 @@ mod tests {
 
     #[test]
     fn test_invalid_extras() {
-        let opts = ParseMatchSpecOptions::strict().with_experimental_extras(true);
+        let opts = ParseMatchSpecOptions::strict().with_extras(true);
 
         // Empty extras value
         assert!(MatchSpec::from_str("foo[extras=]", opts).is_err());

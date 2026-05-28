@@ -10,6 +10,7 @@ use super::add_trailing_slash;
 mod index;
 
 use crate::{
+    GatewayError, Reporter,
     fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
@@ -19,7 +20,6 @@ use crate::{
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    GatewayError, Reporter,
 };
 
 pub struct ShardedSubdir {
@@ -113,7 +113,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{shard:x}.msgpack.zst"))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
             .expect("invalid shard url");
 
         let shard_request = self

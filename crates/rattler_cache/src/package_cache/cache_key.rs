@@ -1,6 +1,6 @@
-use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
-use rattler_digest::{compute_bytes_digest, compute_url_digest, Md5Hash, Sha256, Sha256Hash};
+use rattler_conda_types::package::CondaArchiveIdentifier;
+use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
 use std::{
     fmt::{Display, Formatter},
     path::Path,
@@ -46,14 +46,14 @@ impl CacheKey {
     /// Adds a hash of the Url to the cache key
     pub fn with_url(mut self, url: url::Url) -> Self {
         let url_hash = compute_url_digest::<Sha256>(url);
-        self.origin_hash = Some(format!("{url_hash:x}"));
+        self.origin_hash = Some(hex::encode(url_hash));
         self
     }
 
     /// Adds a hash of the Path to the cache key
     pub fn with_path(mut self, path: &Path) -> Self {
         let path_hash = compute_bytes_digest::<Sha256>(path.as_os_str().as_encoded_bytes());
-        self.origin_hash = Some(format!("{path_hash:x}"));
+        self.origin_hash = Some(hex::encode(path_hash));
         self
     }
 }

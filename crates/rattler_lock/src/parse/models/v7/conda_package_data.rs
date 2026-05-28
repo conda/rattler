@@ -4,20 +4,19 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::{DistArchiveIdentifier, RunExportsJson},
-    utils::TimestampMs,
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
+    package::{DistArchiveIdentifier, RunExportsJson},
 };
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
 use crate::{
+    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
     conda::CondaBinaryData,
     utils::derived_fields::{self, LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
 };
 
 fn skip_variant_serialization(input: &Option<Cow<'_, BTreeMap<String, VariantValue>>>) -> bool {
@@ -89,8 +88,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,7 +124,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
@@ -167,7 +165,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
-            experimental_extra_depends: value.experimental_extra_depends.into_owned(),
+            extra_depends: value.extra_depends.into_owned(),
             features: value.features.into_owned(),
             flags: value.flags.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
@@ -280,13 +278,13 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
-            experimental_extra_depends: Cow::Borrowed(&package_record.experimental_extra_depends),
+            extra_depends: Cow::Borrowed(&package_record.extra_depends),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
+            timestamp: package_record.timestamp.map(|ts| ts.jiff_timestamp()),
             features: Cow::Borrowed(&package_record.features),
             flags: Cow::Borrowed(&package_record.flags),
             track_features: Cow::Borrowed(&package_record.track_features),

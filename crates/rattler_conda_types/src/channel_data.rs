@@ -9,11 +9,11 @@
 //! a single package variant) and therefore the `ChannelData` struct is not really used much more.
 //!
 use crate::{
-    utils::serde::{LossyUrl, VecSkipNone},
     Version,
+    utils::serde::{LossyUrl, VecSkipNone},
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
+use serde_with::{DisplayFromStr, OneOrMany, Same, serde_as, skip_serializing_none};
 use std::collections::HashMap;
 use url::Url;
 

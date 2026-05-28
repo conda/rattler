@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs};
+use serde_with::{DeserializeAs, serde_as};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 

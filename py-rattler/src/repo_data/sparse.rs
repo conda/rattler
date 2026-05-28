@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use pyo3::{pyclass, pymethods, Bound, PyRef, PyResult, Python};
+use pyo3::{Bound, PyRef, PyResult, Python, pyclass, pymethods};
 
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 

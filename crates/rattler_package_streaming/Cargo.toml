@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version = "0.25.1"
+version = "0.26.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -12,7 +12,7 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 http = { workspace = true, optional = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }
@@ -22,6 +22,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
   "tokio",
 ] }
 rattler_networking = { workspace = true, default-features = false }
+hex = { workspace = true }
 rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",
@@ -61,9 +62,9 @@ getrandom = { workspace = true, features = ["wasm_js"] }
 getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
-rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
+rustls = ["rattler_networking/rustls", "rattler_redaction/rustls"]
 reqwest = [
   "dep:reqwest-middleware",
   "dep:reqwest",

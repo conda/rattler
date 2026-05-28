@@ -2,12 +2,12 @@ use std::borrow::Cow;
 
 use fs_err::tokio as fs;
 use miette::IntoDiagnostic;
+use rattler_conda_types::PackageName;
 use rattler_conda_types::package::AboutJson;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use rattler_conda_types::PackageName;
+use reqwest::Client;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use tracing::info;
@@ -22,9 +22,7 @@ use crate::tool_configuration::APP_USER_AGENT;
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum AnacondaError {
     /// A conda token is required but a different authentication type was found.
-    #[error(
-        "conda token required for anaconda.org, but a different authentication type was found"
-    )]
+    #[error("conda token required for anaconda.org, but a different authentication type was found")]
     WrongAuthenticationType,
 
     /// No API key was provided and none was found in the keychain.
@@ -510,9 +508,9 @@ mod test {
     use std::net::SocketAddr;
 
     use axum::{
+        Router,
         http::StatusCode,
         routing::{get, post},
-        Router,
     };
     use url::Url;
 

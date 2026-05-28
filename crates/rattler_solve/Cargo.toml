@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "6.0.2"
+version = "7.1.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -13,9 +13,9 @@ readme.workspace = true
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+hex = { workspace = true }
 libc = { workspace = true, optional = true }
-chrono = { workspace = true, features = ["clock"] }
-humantime = { workspace = true }
+jiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
@@ -28,6 +28,7 @@ serde = { workspace = true, optional = true }
 [dev-dependencies]
 criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
+jiff = { workspace = true }
 once_cell = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
     "sparse",

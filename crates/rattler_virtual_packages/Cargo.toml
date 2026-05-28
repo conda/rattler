@@ -1,6 +1,6 @@
 [package]
 name = "rattler_virtual_packages"
-version = "2.3.21"
+version = "2.4.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Library to work with and detect Conda virtual packages"
@@ -26,3 +26,6 @@ plist = { workspace = true }
 
 [target.'cfg(target_os="windows")'.dependencies]
 winver = { workspace = true }
+
+[dev-dependencies]
+temp-env = { workspace = true }

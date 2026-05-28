@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.4.0...rattler_virtual_packages-v2.4.1) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.4.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.22...rattler_virtual_packages-v2.4.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [2.3.22](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.21...rattler_virtual_packages-v2.3.22) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
 ## [2.3.21](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.20...rattler_virtual_packages-v2.3.21) - 2026-05-07
 
 ### Other

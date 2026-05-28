@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.46.1"
+version = "0.46.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -18,7 +18,7 @@ all-features = true
 
 [dependencies]
 ahash = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 file_url = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
@@ -72,7 +72,7 @@ insta = { workspace = true, features = [
   "filters",
 ] }
 rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = [
-  "rustls-tls",
+  "rustls",
 ] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }

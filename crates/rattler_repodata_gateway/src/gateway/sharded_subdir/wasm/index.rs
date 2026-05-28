@@ -7,8 +7,8 @@ use url::Url;
 
 use super::ShardedRepodata;
 use crate::{
-    gateway::sharded_subdir::decode_zst_bytes_async, reporter::ResponseReporterExt, GatewayError,
-    Reporter,
+    GatewayError, Reporter, gateway::sharded_subdir::decode_zst_bytes_async,
+    reporter::ResponseReporterExt,
 };
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";

@@ -5,14 +5,14 @@ use std::{
     sync::OnceLock,
 };
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use url::Url;
 
 use crate::{
-    authentication_storage::AuthenticationStorageError, oauth_refresh, Authentication,
-    AuthenticationStorage,
+    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
+    oauth_refresh,
 };
 
 /// `reqwest` middleware to authenticate requests
@@ -251,7 +251,7 @@ mod tests {
         let host = "conda.example.com";
 
         // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
             let _ = entry.delete_credential();
         }
 
@@ -306,7 +306,7 @@ mod tests {
         let host = "bearer.example.com";
 
         // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
             let _ = entry.delete_credential();
         }
 
@@ -367,7 +367,7 @@ mod tests {
         let host = "basic.example.com";
 
         // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
             let _ = entry.delete_credential();
         }
 

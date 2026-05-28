@@ -3,12 +3,19 @@
 #[cfg(feature = "oauth")]
 pub mod oauth;
 
-use clap::Parser;
-use rattler_networking::{
-    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
+use base64::{
+    Engine as _,
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
 };
-use reqwest::{header::CONTENT_TYPE, Client};
-use serde_json::json;
+use clap::Parser;
+use console::style;
+use jiff::Timestamp;
+use rattler_networking::{
+    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
+};
+use reqwest::{Client, header::CONTENT_TYPE};
+use serde_json::{Value, json};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror;
 use url::Url;
 
@@ -107,12 +114,17 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+struct StatusArgs {}
+
+#[derive(Parser, Debug)]
 #[allow(clippy::large_enum_variant)]
 enum Subcommand {
     /// Store authentication information for a given host
     Login(LoginArgs),
     /// Remove authentication information for a given host
     Logout(LogoutArgs),
+    /// Show stored authentication entries and non-secret token metadata
+    Status(StatusArgs),
 }
 
 /// Login to prefix.dev or anaconda.org servers to access private channels
@@ -541,6 +553,295 @@ async fn logout(
     Ok(())
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct TokenMetadata {
+    expires_at: Option<i64>,
+    scopes: Vec<String>,
+    issuer: Option<String>,
+    subject: Option<String>,
+    audience: Vec<String>,
+}
+
+fn jwt_claims(token: &str) -> Option<Value> {
+    let payload = token.split('.').nth(1)?;
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    serde_json::from_slice(&decoded).ok()
+}
+
+fn string_or_string_array(value: &Value) -> Vec<String> {
+    match value {
+        Value::String(value) => vec![value.clone()],
+        Value::Array(values) => values
+            .iter()
+            .filter_map(|value| value.as_str().map(ToString::to_string))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn token_metadata(token: &str) -> Option<TokenMetadata> {
+    let claims = jwt_claims(token)?;
+
+    let mut scopes = claims
+        .get("scope")
+        .and_then(Value::as_str)
+        .map(|scope| {
+            scope
+                .split_whitespace()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    scopes.extend(
+        claims
+            .get("scp")
+            .map(string_or_string_array)
+            .unwrap_or_default(),
+    );
+    scopes.sort();
+    scopes.dedup();
+
+    Some(TokenMetadata {
+        expires_at: claims.get("exp").and_then(Value::as_i64),
+        scopes,
+        issuer: claims
+            .get("iss")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        subject: claims
+            .get("sub")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        audience: claims
+            .get("aud")
+            .map(string_or_string_array)
+            .unwrap_or_default(),
+    })
+}
+
+fn now_unix_timestamp() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default()
+}
+
+fn format_timestamp(timestamp: i64) -> String {
+    Timestamp::from_second(timestamp).map_or_else(
+        |_| format!("unix timestamp {timestamp}"),
+        |ts| ts.strftime("%Y-%m-%d %H:%M:%S UTC").to_string(),
+    )
+}
+
+fn format_validity(expires_at: Option<i64>, now: i64) -> String {
+    let Some(expires_at) = expires_at else {
+        return "unknown (no expiry metadata)".to_string();
+    };
+
+    let timestamp = format_timestamp(expires_at);
+    if expires_at <= now {
+        let elapsed = Duration::from_secs((now - expires_at) as u64);
+        format!(
+            "expired at {timestamp} ({} ago)",
+            humantime::format_duration(elapsed)
+        )
+    } else {
+        let remaining = Duration::from_secs((expires_at - now) as u64);
+        format!(
+            "valid until {timestamp} (in {})",
+            humantime::format_duration(remaining)
+        )
+    }
+}
+
+fn print_token_metadata(metadata: Option<&TokenMetadata>) {
+    let Some(metadata) = metadata else {
+        return;
+    };
+
+    if !metadata.scopes.is_empty() {
+        let scopes = metadata
+            .scopes
+            .iter()
+            .map(|s| format!("'{s}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!("  - Token scopes: {scopes}");
+    }
+    if let Some(issuer) = &metadata.issuer {
+        println!("  - Issuer: {issuer}");
+    }
+    if !metadata.audience.is_empty() {
+        println!("  - Audience: {}", metadata.audience.join(", "));
+    }
+    if let Some(subject) = &metadata.subject {
+        println!("  - Subject: {subject}");
+    }
+}
+
+fn print_authentication_status(
+    host: &str,
+    auth: &Authentication,
+    source: &str,
+    active: bool,
+    account: Option<&str>,
+    now: i64,
+) {
+    if active {
+        println!("{host}");
+    } else {
+        // Shadowed entry — `get()` would return a different backend's copy
+        // for this host. Dim the heading so it's visually subordinate but
+        // still useful for cleanup.
+        println!("{} {}", host, style("(shadowed)").dim());
+    }
+
+    // Header line. For verified prefix.dev entries (account known) we mirror
+    // `gh auth status` and lead with a "✓ Logged in to ..." line. For
+    // anything else we just report where the entry came from.
+    match account {
+        Some(account) => println!(
+            "  {} Logged in to {host} account {account} ({source})",
+            style("✓").green()
+        ),
+        None => println!("  - Source: {source}"),
+    }
+    println!("  - Method: {}", auth.method());
+
+    match auth {
+        Authentication::BearerToken(token) | Authentication::CondaToken(token) => {
+            let metadata = token_metadata(token);
+            println!(
+                "  - Token validity: {}",
+                format_validity(
+                    metadata.as_ref().and_then(|metadata| metadata.expires_at),
+                    now
+                )
+            );
+            print_token_metadata(metadata.as_ref());
+        }
+        Authentication::OAuth {
+            access_token,
+            refresh_token,
+            expires_at,
+            token_endpoint,
+            revocation_endpoint,
+            client_id,
+        } => {
+            let metadata = token_metadata(access_token);
+            println!(
+                "  - Token validity: {}",
+                format_validity(
+                    expires_at
+                        .or_else(|| metadata.as_ref().and_then(|metadata| metadata.expires_at)),
+                    now,
+                )
+            );
+            println!("  - Client ID: {client_id}");
+            println!(
+                "  - Refresh token: {}",
+                if refresh_token.is_some() { "yes" } else { "no" }
+            );
+            println!("  - Token endpoint: {token_endpoint}");
+            if let Some(revocation_endpoint) = revocation_endpoint {
+                println!("  - Revocation endpoint: {revocation_endpoint}");
+            }
+            print_token_metadata(metadata.as_ref());
+        }
+        Authentication::BasicHTTP { username, .. } => {
+            println!("  - Username: {username}");
+        }
+        Authentication::S3Credentials { session_token, .. } => {
+            println!(
+                "  - Session token: {}",
+                if session_token.is_some() {
+                    "present"
+                } else {
+                    "none"
+                }
+            );
+        }
+    }
+}
+
+/// Returns true if `host` belongs to the prefix.dev family (e.g. `prefix.dev`,
+/// `repo.prefix.dev`, `*.prefix.dev`). Used to decide whether the status
+/// command should look up the account name via prefix.dev's GraphQL API.
+fn is_prefix_dev_host(host: &str) -> bool {
+    let normalized = normalize_login_host(host);
+    normalized == "prefix.dev" || normalized.ends_with(".prefix.dev")
+}
+
+/// Extract a bearer-style token from an authentication entry if one is
+/// available — i.e. something that can be sent as `Authorization: Bearer …`
+/// to prefix.dev's GraphQL API.
+fn bearer_for_prefix_dev(auth: &Authentication) -> Option<&str> {
+    match auth {
+        Authentication::BearerToken(token) => Some(token.as_str()),
+        Authentication::OAuth { access_token, .. } => Some(access_token.as_str()),
+        _ => None,
+    }
+}
+
+/// Best-effort lookup of the prefix.dev account name for an entry. Returns
+/// `None` on any failure (network error, invalid token, non-prefix.dev host)
+/// since this is a display-only enrichment for `auth status`.
+async fn lookup_prefix_dev_account(host: &str, auth: &Authentication) -> Option<String> {
+    if !is_prefix_dev_host(host) {
+        return None;
+    }
+    let token = bearer_for_prefix_dev(auth)?;
+    match validate_prefix_dev_token(token, host, None).await {
+        Ok(ValidationResult::Valid(username, _)) => Some(username),
+        _ => None,
+    }
+}
+
+async fn status(
+    _args: StatusArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    let entries = storage.list_with_sources()?;
+
+    if entries.is_empty() {
+        println!("No stored authentication entries found.");
+        return Ok(());
+    }
+
+    // Only call prefix.dev's API for entries that `get()` would actually
+    // return — there's no point validating shadowed copies.
+    let accounts = futures::future::join_all(entries.iter().map(|entry| async {
+        if entry.active {
+            lookup_prefix_dev_account(&entry.host, &entry.auth).await
+        } else {
+            None
+        }
+    }))
+    .await;
+
+    println!("Stored authentication entries:");
+    let now = now_unix_timestamp();
+    for (index, (entry, account)) in entries.iter().zip(accounts.iter()).enumerate() {
+        if index > 0 {
+            println!();
+        }
+        print_authentication_status(
+            &entry.host,
+            &entry.auth,
+            &entry.source,
+            entry.active,
+            account.as_deref(),
+            now,
+        );
+    }
+
+    Ok(())
+}
+
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
@@ -548,6 +849,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage).await,
         Subcommand::Logout(args) => logout(args, storage).await,
+        Subcommand::Status(args) => status(args, storage).await,
     }
 }
 
@@ -555,7 +857,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 mod tests {
     use mockito::Server;
     use rattler_networking::{
-        authentication_storage::backends::memory::MemoryStorage, AuthenticationStorage,
+        AuthenticationStorage, authentication_storage::backends::memory::MemoryStorage,
     };
     use serde_json::json;
     use temp_env::async_with_vars;
@@ -598,6 +900,43 @@ mod tests {
             oauth_redirect_uri: None,
             user_agent: None,
         }
+    }
+
+    fn unsigned_jwt(payload: Value) -> String {
+        let header = json!({ "alg": "none" });
+        format!(
+            "{}.{}.",
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap()),
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&payload).unwrap())
+        )
+    }
+
+    #[test]
+    fn token_metadata_extracts_expiry_scopes_and_claims() {
+        let token = unsigned_jwt(json!({
+            "exp": 1_900_000_000_i64,
+            "scope": "channel:read channel:upload",
+            "scp": ["openid", "profile"],
+            "iss": "https://prefix.dev",
+            "sub": "user-123",
+            "aud": ["rattler", "prefix"]
+        }));
+
+        assert_eq!(
+            token_metadata(&token),
+            Some(TokenMetadata {
+                expires_at: Some(1_900_000_000),
+                scopes: vec![
+                    "channel:read".to_string(),
+                    "channel:upload".to_string(),
+                    "openid".to_string(),
+                    "profile".to_string()
+                ],
+                issuer: Some("https://prefix.dev".to_string()),
+                subject: Some("user-123".to_string()),
+                audience: vec!["rattler".to_string(), "prefix".to_string()],
+            })
+        );
     }
 
     #[tokio::test]

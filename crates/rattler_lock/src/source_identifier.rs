@@ -256,7 +256,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 build_number,
                 constrains,
                 depends,
-                experimental_extra_depends,
+                extra_depends,
                 flags,
                 noarch,
                 purls,
@@ -296,8 +296,8 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 fields.insert("constrains", constrains);
             }
 
-            if !experimental_extra_depends.is_empty() {
-                fields.insert("extra_depends", experimental_extra_depends);
+            if !extra_depends.is_empty() {
+                fields.insert("extra_depends", extra_depends);
             }
 
             if !flags.is_empty() {
@@ -317,8 +317,8 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 fields.insert("constrains", &partial.constrains);
             }
 
-            if !partial.experimental_extra_depends.is_empty() {
-                fields.insert("extra_depends", &partial.experimental_extra_depends);
+            if !partial.extra_depends.is_empty() {
+                fields.insert("extra_depends", &partial.extra_depends);
             }
 
             if !partial.flags.is_empty() {
@@ -841,7 +841,7 @@ mod tests {
     fn test_different_build_host_packages_produce_different_hashes() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{package::DistArchiveIdentifier, PackageRecord, Version};
+        use rattler_conda_types::{PackageRecord, Version, package::DistArchiveIdentifier};
 
         use crate::{CondaBinaryData, LockFile};
 

@@ -22,11 +22,11 @@
 //! logic is retained here for parsing older format versions.
 
 use crate::{
+    CondaPackageData, UrlOrPath,
     conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, SourceMetadata, VariantValue},
     source::SourceLocation,
-    CondaPackageData, UrlOrPath,
 };
-use rattler_conda_types::{package::DistArchiveIdentifier, ChannelUrl, PackageRecord};
+use rattler_conda_types::{ChannelUrl, PackageRecord, package::DistArchiveIdentifier};
 use std::{borrow::Cow, collections::BTreeMap};
 
 /// Intermediate representation of a conda package during legacy deserialization.

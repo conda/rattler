@@ -20,23 +20,26 @@ use std::{
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, stream::FuturesUnordered};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[cfg(feature = "s3")]
 use opendal::layers::RetryLayer;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
-use opendal::{services::FsConfig, Configurator, Operator};
+use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
+    ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
+    ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
-    ChannelInfo, ExperimentalV3Packages, PackageRecord, PatchInstructions, Platform, RepoData,
-    Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, WhlPackageRecord,
 };
 pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
+pub use rattler_config::config::index::{
+    IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
+};
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
     read,
@@ -44,13 +47,39 @@ use rattler_package_streaming::{
 };
 #[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
-use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
+use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
+
+/// Channel metadata written into generated repodata.
+///
+/// Distinct from [`IndexChannelConfig`] — that type describes the indexer's
+/// behavior knobs (zst, shards, revisions, ...). `ChannelMetadata` is just the
+/// data that ends up under `info` in the generated repodata.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChannelMetadata {
+    /// The `info.base_url` value written to `repodata.json`.
+    pub base_url: Option<String>,
+    /// The `info.channel_relations` value written to `repodata.json`.
+    pub channel_relations: Option<ChannelRelations>,
+}
+
+impl ChannelMetadata {
+    /// Pull the metadata fields out of an [`IndexChannelConfig`].
+    pub fn from_index_config(config: &IndexChannelConfig) -> Self {
+        Self {
+            base_url: config.base_url.clone(),
+            channel_relations: config
+                .channel_relations
+                .clone()
+                .filter(|relations| !relations.is_empty()),
+        }
+    }
+}
 
 /// Configuration for precondition checks during file operations.
 ///
@@ -75,40 +104,11 @@ impl PreconditionChecks {
     }
 }
 
-/// How packages are assigned to repodata revisions while indexing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PackageRevisionAssignment {
-    /// Assign each package to the revision required by its `info/index.json`.
-    ///
-    /// Packages without an explicit `repodata_revision` are assigned to the
-    /// oldest known revision that can represent their fields.
-    #[default]
-    FromIndexJson,
-
-    /// Assign every package to the newest revision configured for the index.
-    ///
-    /// If no revisions are configured, packages are assigned to `Legacy`.
-    Latest,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct IndexedPackageRecord {
     record: PackageRecord,
     repodata_revision: RepodataRevision,
     wheel_url: Option<UrlOrPath>,
-}
-
-impl PackageRevisionAssignment {
-    fn assign(
-        self,
-        package_revision: RepodataRevision,
-        latest_revision: RepodataRevision,
-    ) -> RepodataRevision {
-        match self {
-            PackageRevisionAssignment::FromIndexJson => package_revision,
-            PackageRevisionAssignment::Latest => latest_revision,
-        }
-    }
 }
 
 /// Statistics for a single subdir indexing operation
@@ -193,7 +193,7 @@ fn indexed_package_record_from_index_json<T: Read>(
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
-        experimental_extra_depends: index.experimental_extra_depends,
+        extra_depends: index.extra_depends,
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
@@ -599,6 +599,7 @@ async fn index_subdir(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
@@ -621,6 +622,7 @@ async fn index_subdir(
             write_shards,
             repodata_revisions.clone(),
             package_revision_assignment,
+            channel_metadata.clone(),
             repodata_patch.clone(),
             progress.clone(),
             semaphore.clone(),
@@ -695,6 +697,7 @@ async fn index_subdir_inner(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
@@ -732,7 +735,9 @@ async fn index_subdir_inner(
                 Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
                     Ok(repodata) => package_records_from_repodata(repodata),
                     Err(err) => {
-                        tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+                        tracing::warn!(
+                            "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
+                        );
                         HashMap::default()
                     }
                 },
@@ -886,7 +891,7 @@ async fn index_subdir_inner(
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
-    let mut experimental_v3 = ExperimentalV3Packages::default();
+    let mut v3 = V3Packages::default();
     let latest_revision = latest_repodata_revision(&repodata_revisions);
     for (filename, package) in registered_packages {
         let revision =
@@ -894,7 +899,7 @@ async fn index_subdir_inner(
         insert_package_record_by_revision(
             &mut packages,
             &mut conda_packages,
-            &mut experimental_v3,
+            &mut v3,
             filename,
             package,
             revision,
@@ -905,16 +910,13 @@ async fn index_subdir_inner(
     let repodata_before_patches = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
-            base_url: None,
-            repodata_revisions: repodata_revisions_for_packages(
-                &repodata_revisions,
-                &experimental_v3,
-            ),
-            channel_relations: None,
+            base_url: channel_metadata.base_url,
+            repodata_revisions: repodata_revisions_for_packages(&repodata_revisions, &v3),
+            channel_relations: channel_metadata.channel_relations,
         }),
         packages,
         conda_packages,
-        experimental_v3,
+        v3,
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -974,18 +976,21 @@ fn package_records_from_repodata(
             }),
     );
 
-    packages.extend(repodata.experimental_v3.into_records_with_url().map(
-        |(identifier, record, wheel_url)| {
-            (
-                identifier,
-                IndexedPackageRecord {
-                    record,
-                    repodata_revision: RepodataRevision::V3,
-                    wheel_url,
-                },
-            )
-        },
-    ));
+    packages.extend(
+        repodata
+            .v3
+            .into_records_with_url()
+            .map(|(identifier, record, wheel_url)| {
+                (
+                    identifier,
+                    IndexedPackageRecord {
+                        record,
+                        repodata_revision: RepodataRevision::V3,
+                        wheel_url,
+                    },
+                )
+            }),
+    );
 
     packages
 }
@@ -994,7 +999,7 @@ fn package_records_from_repodata(
 fn insert_package_record_by_revision(
     packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    experimental_v3: &mut ExperimentalV3Packages,
+    v3: &mut V3Packages,
     filename: DistArchiveIdentifier,
     package: IndexedPackageRecord,
     revision: RepodataRevision,
@@ -1020,10 +1025,10 @@ fn insert_package_record_by_revision(
         },
         RepodataRevision::V3 => match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                experimental_v3.tar_bz2.insert(filename.identifier, record);
+                v3.tar_bz2.insert(filename.identifier, record);
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                experimental_v3.conda.insert(filename.identifier, record);
+                v3.conda.insert(filename.identifier, record);
             }
             DistArchiveType::Wheel(WheelArchiveType::Whl) => {
                 let url = wheel_url.ok_or_else(|| {
@@ -1031,7 +1036,7 @@ fn insert_package_record_by_revision(
                         "indexing new wheel packages into v3 repodata is not supported yet"
                     ))
                 })?;
-                experimental_v3.whl.insert(
+                v3.whl.insert(
                     filename.identifier,
                     WhlPackageRecord {
                         package_record: record,
@@ -1075,7 +1080,7 @@ impl RevisionStats {
 
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionInfo],
-    experimental_v3: &ExperimentalV3Packages,
+    v3: &V3Packages,
 ) -> Vec<RepodataRevisionInfo> {
     let mut revisions = configured
         .iter()
@@ -1084,7 +1089,7 @@ fn repodata_revisions_for_packages(
         .collect::<BTreeMap<_, _>>();
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
-    for (_, record) in experimental_v3.records() {
+    for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
 
@@ -1188,11 +1193,20 @@ pub async fn write_repodata(
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
+        let sharded_base_url = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.base_url.clone())
+            .unwrap_or_default();
         let sharded_repodata_revisions = repodata
             .info
             .as_ref()
             .map(|info| info.repodata_revisions.clone())
             .unwrap_or_default();
+        let sharded_channel_relations = repodata
+            .info
+            .as_ref()
+            .and_then(|info| info.channel_relations.clone());
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
@@ -1207,26 +1221,26 @@ pub async fn write_repodata(
                 .or_default();
             shard.packages.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.conda {
+        for (k, package_record) in repodata.v3.conda {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.conda.insert(k, package_record);
+            shard.v3.conda.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.tar_bz2 {
+        for (k, package_record) in repodata.v3.tar_bz2 {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.tar_bz2.insert(k, package_record);
+            shard.v3.tar_bz2.insert(k, package_record);
         }
-        for (k, package_record) in repodata.experimental_v3.whl {
+        for (k, package_record) in repodata.v3.whl {
             let package_name = package_record.package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
                 .or_default();
-            shard.experimental_v3.whl.insert(k, package_record);
+            shard.v3.whl.insert(k, package_record);
         }
         for package in repodata.removed {
             let package_name = package.identifier.name.clone();
@@ -1250,11 +1264,11 @@ pub async fn write_repodata(
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
                 subdir: subdir.to_string(),
-                base_url: "".into(),
+                base_url: sharded_base_url,
                 shards_base_url: "./shards/".into(),
-                created_at: Some(chrono::Utc::now()),
+                created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
-                channel_relations: None,
+                channel_relations: sharded_channel_relations,
             },
             shards: shards
                 .iter()
@@ -1267,7 +1281,7 @@ pub async fn write_repodata(
         for (_, (digest, encoded_shard)) in shards {
             let op = op.clone();
             let future = async move || {
-                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+                let shard_path = format!("{subdir}/shards/{}.msgpack.zst", hex::encode(digest));
                 tracing::trace!("Writing repodata shard to {shard_path}");
                 match op
                     .write_with(&shard_path, encoded_shard)
@@ -1337,7 +1351,13 @@ pub struct IndexFsConfig {
 
 /// Create a new `repodata.json` for all packages in the channel at the given
 /// directory.
-pub async fn index_fs(
+pub async fn index_fs(config: IndexFsConfig) -> anyhow::Result<()> {
+    index_fs_with_channel_metadata(config, ChannelMetadata::default()).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// directory and write channel metadata into the generated repodata.
+pub async fn index_fs_with_channel_metadata(
     IndexFsConfig {
         channel,
         target_platform,
@@ -1350,12 +1370,13 @@ pub async fn index_fs(
         max_parallel,
         multi_progress,
     }: IndexFsConfig,
+    channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
-    index(
+    index_with_channel_metadata(
         target_platform,
         op,
         repodata_patch,
@@ -1367,6 +1388,7 @@ pub async fn index_fs(
         max_parallel,
         multi_progress,
         PreconditionChecks::Disabled,
+        channel_metadata,
     )
     .await
     .map(|_| ())
@@ -1426,7 +1448,14 @@ fn s3_config(
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
 #[cfg(feature = "s3")]
-pub async fn index_s3(
+pub async fn index_s3(config: IndexS3Config) -> anyhow::Result<()> {
+    index_s3_with_channel_metadata(config, ChannelMetadata::default()).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given S3
+/// URL and write channel metadata into the generated repodata.
+#[cfg(feature = "s3")]
+pub async fn index_s3_with_channel_metadata(
     IndexS3Config {
         channel,
         credentials,
@@ -1441,13 +1470,14 @@ pub async fn index_s3(
         multi_progress,
         precondition_checks,
     }: IndexS3Config,
+    channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     // Create the S3 configuration for opendal.
     let s3_config = s3_config(&credentials, &channel)?;
     let builder = s3_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
-    index(
+    index_with_channel_metadata(
         target_platform,
         op,
         repodata_patch,
@@ -1459,6 +1489,7 @@ pub async fn index_s3(
         max_parallel,
         multi_progress,
         precondition_checks,
+        channel_metadata,
     )
     .await
     .map(|_| ())
@@ -1493,6 +1524,40 @@ pub async fn index(
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
     precondition_checks: PreconditionChecks,
+) -> anyhow::Result<IndexStats> {
+    index_with_channel_metadata(
+        target_platform,
+        op,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+        precondition_checks,
+        ChannelMetadata::default(),
+    )
+    .await
+}
+
+/// Create a new `repodata.json` for all packages in the given operator's root
+/// and write channel metadata into the generated repodata.
+#[allow(clippy::too_many_arguments)]
+pub async fn index_with_channel_metadata(
+    target_platform: Option<Platform>,
+    op: Operator,
+    repodata_patch: Option<String>,
+    write_zst: bool,
+    write_shards: bool,
+    repodata_revisions: Vec<RepodataRevisionInfo>,
+    package_revision_assignment: PackageRevisionAssignment,
+    force: bool,
+    max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
+    precondition_checks: PreconditionChecks,
+    channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
     let entries = op.list_with("").await?;
 
@@ -1541,7 +1606,7 @@ pub async fn index(
             | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
-                ))
+                ));
             }
         }
         let repodata_patch_path = format!("noarch/{path}");
@@ -1570,6 +1635,7 @@ pub async fn index(
             write_shards,
             repodata_revisions.clone(),
             package_revision_assignment,
+            channel_metadata.clone(),
             repodata_patch
                 .as_ref()
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
@@ -1606,6 +1672,15 @@ pub async fn index(
 /// This is useful when publishing to a new channel to ensure it's
 /// immediately usable.
 pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
+    ensure_channel_initialized_with_channel_metadata(op, ChannelMetadata::default()).await
+}
+
+/// Ensures that a channel has a valid `noarch/repodata.json` file and writes
+/// channel metadata into the generated file if initialization is needed.
+pub async fn ensure_channel_initialized_with_channel_metadata(
+    op: &Operator,
+    channel_metadata: ChannelMetadata,
+) -> anyhow::Result<()> {
     let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
 
     if op.exists(&noarch_repodata_path).await? {
@@ -1623,13 +1698,13 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
     let empty_repodata = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(Platform::NoArch.to_string()),
-            base_url: None,
+            base_url: channel_metadata.base_url,
             repodata_revisions: Vec::new(),
-            channel_relations: None,
+            channel_relations: channel_metadata.channel_relations,
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        experimental_v3: ExperimentalV3Packages::default(),
+        v3: V3Packages::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1658,10 +1733,20 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
 ///
 /// See [`ensure_channel_initialized`] for details.
 pub async fn ensure_channel_initialized_fs(channel: &Path) -> anyhow::Result<()> {
+    ensure_channel_initialized_fs_with_channel_metadata(channel, ChannelMetadata::default()).await
+}
+
+/// Ensures that a filesystem channel has a valid `noarch/repodata.json` file
+/// and writes channel metadata into the generated file if initialization is
+/// needed.
+pub async fn ensure_channel_initialized_fs_with_channel_metadata(
+    channel: &Path,
+    channel_metadata: ChannelMetadata,
+) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
     let op = Operator::new(config.into_builder())?.finish();
-    ensure_channel_initialized(&op).await
+    ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 
 /// Ensures that an S3 channel has a valid `noarch/repodata.json` file.
@@ -1672,12 +1757,28 @@ pub async fn ensure_channel_initialized_s3(
     channel: &Url,
     credentials: &ResolvedS3Credentials,
 ) -> anyhow::Result<()> {
+    ensure_channel_initialized_s3_with_channel_metadata(
+        channel,
+        credentials,
+        ChannelMetadata::default(),
+    )
+    .await
+}
+
+/// Ensures that an S3 channel has a valid `noarch/repodata.json` file and
+/// writes channel metadata into the generated file if initialization is needed.
+#[cfg(feature = "s3")]
+pub async fn ensure_channel_initialized_s3_with_channel_metadata(
+    channel: &Url,
+    credentials: &ResolvedS3Credentials,
+    channel_metadata: ChannelMetadata,
+) -> anyhow::Result<()> {
     let s3_config = s3_config(credentials, channel)?;
 
     let op = Operator::new(s3_config.into_builder())?
         .layer(RetryLayer::new())
         .finish();
-    ensure_channel_initialized(&op).await
+    ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 
 #[cfg(test)]
@@ -1687,7 +1788,7 @@ mod tests {
     use indexmap::IndexMap;
     use rattler_conda_types::Version;
     use rattler_conda_types::{
-        package::ArchiveIdentifier, PackageName, UrlOrPath, WhlPackageRecord,
+        PackageName, UrlOrPath, WhlPackageRecord, package::ArchiveIdentifier,
     };
 
     use super::*;
@@ -1706,11 +1807,11 @@ mod tests {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: HashSet::default(),
             version: None,
         };
-        repodata.experimental_v3.whl.insert(
+        repodata.v3.whl.insert(
             identifier.clone(),
             WhlPackageRecord {
                 package_record,
@@ -1732,11 +1833,11 @@ mod tests {
             .expect("v3 wheel should be present");
         let mut packages = IndexMap::default();
         let mut conda_packages = IndexMap::default();
-        let mut experimental_v3 = ExperimentalV3Packages::default();
+        let mut v3 = V3Packages::default();
         insert_package_record_by_revision(
             &mut packages,
             &mut conda_packages,
-            &mut experimental_v3,
+            &mut v3,
             dist_identifier,
             indexed_record,
             RepodataRevision::V3,
@@ -1745,6 +1846,6 @@ mod tests {
 
         assert!(packages.is_empty());
         assert!(conda_packages.is_empty());
-        assert!(experimental_v3.whl.contains_key(&identifier));
+        assert!(v3.whl.contains_key(&identifier));
     }
 }

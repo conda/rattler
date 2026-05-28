@@ -2,7 +2,7 @@ use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use miette::IntoDiagnostic;
 use once_cell::sync::Lazy;
-use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
 use crate::writer::IndicatifWriter;
 

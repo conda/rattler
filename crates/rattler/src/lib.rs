@@ -52,7 +52,7 @@ use rattler_conda_types::RepoDataRecord;
 pub(crate) fn get_repodata_record(package_path: impl AsRef<std::path::Path>) -> RepoDataRecord {
     use std::fs;
 
-    use rattler_conda_types::{package::IndexJson, PackageRecord};
+    use rattler_conda_types::{PackageRecord, package::IndexJson};
     use rattler_digest::{Md5, Sha256};
     use rattler_package_streaming::seek::read_package_file;
 

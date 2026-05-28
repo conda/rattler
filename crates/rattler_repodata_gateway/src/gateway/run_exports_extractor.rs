@@ -7,7 +7,7 @@ use std::{
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
-use rattler_conda_types::{package::RunExportsJson, RepoDataRecord, SubdirRunExportsJson};
+use rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
 use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
@@ -207,7 +207,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             err,
-                        ))
+                        ));
                     }
                 };
                 let run_exports = match serde_json::from_slice(&decoded) {
@@ -216,7 +216,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             e.into(),
-                        ))
+                        ));
                     }
                 };
 
@@ -265,7 +265,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             e.into(),
-                        ))
+                        ));
                     }
                 };
                 Ok(run_exports)

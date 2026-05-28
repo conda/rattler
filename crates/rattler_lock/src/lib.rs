@@ -946,9 +946,9 @@ mod test {
     use rattler_conda_types::RepoDataRecord;
     use rstest::*;
 
-    use crate::{platform::PlatformName, LockedPackage};
+    use crate::{LockedPackage, platform::PlatformName};
 
-    use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
+    use super::{DEFAULT_ENVIRONMENT_NAME, LockFile};
 
     fn test_path() -> PathBuf {
         if cfg!(windows) {
@@ -1077,21 +1077,25 @@ mod test {
         let linux = conda_lock.platform("linux-64").unwrap();
         let osx = conda_lock.platform("osx-64").unwrap();
 
-        insta::assert_yaml_snapshot!(conda_lock
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(linux)
-            .unwrap()
-            .map(|p| p.location().to_string())
-            .collect::<Vec<_>>());
+        insta::assert_yaml_snapshot!(
+            conda_lock
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .packages(linux)
+                .unwrap()
+                .map(|p| p.location().to_string())
+                .collect::<Vec<_>>()
+        );
 
-        insta::assert_yaml_snapshot!(conda_lock
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .packages(osx)
-            .unwrap()
-            .map(|p| p.location().to_string())
-            .collect::<Vec<_>>());
+        insta::assert_yaml_snapshot!(
+            conda_lock
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .packages(osx)
+                .unwrap()
+                .map(|p| p.location().to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1104,10 +1108,12 @@ mod test {
 
         let linux = conda_lock.platform("linux-64").unwrap();
 
-        assert!(conda_lock
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .has_pypi_packages(linux));
+        assert!(
+            conda_lock
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .has_pypi_packages(linux)
+        );
 
         // v6
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1117,10 +1123,12 @@ mod test {
 
         let osx_arm64 = conda_lock.platform("osx-arm64").unwrap();
 
-        assert!(conda_lock
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .has_pypi_packages(osx_arm64));
+        assert!(
+            conda_lock
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .has_pypi_packages(osx_arm64)
+        );
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -1129,10 +1137,12 @@ mod test {
 
         let osx_arm64 = conda_lock.platform("osx-arm64").unwrap();
 
-        assert!(!conda_lock
-            .environment(DEFAULT_ENVIRONMENT_NAME)
-            .unwrap()
-            .has_pypi_packages(osx_arm64));
+        assert!(
+            !conda_lock
+                .environment(DEFAULT_ENVIRONMENT_NAME)
+                .unwrap()
+                .has_pypi_packages(osx_arm64)
+        );
     }
 
     #[test]
@@ -2377,7 +2387,7 @@ packages:
         };
 
         use rattler_conda_types::{
-            package::DistArchiveIdentifier, PackageName, PackageRecord, Version,
+            PackageName, PackageRecord, Version, package::DistArchiveIdentifier,
         };
         use url::Url;
 
@@ -2491,9 +2501,10 @@ packages:
         fn insert_duplicate_pair_returns_false() {
             let packages = packages();
             let mut env = env_with(&[0, 1], &packages);
-            assert!(!env
-                .insert(PackageHandle::new(PackageIndex(0), &packages[0]))
-                .unwrap());
+            assert!(
+                !env.insert(PackageHandle::new(PackageIndex(0), &packages[0]))
+                    .unwrap()
+            );
         }
 
         #[test]

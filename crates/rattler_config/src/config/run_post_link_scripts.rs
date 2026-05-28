@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use serde::{de::IntoDeserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]

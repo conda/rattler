@@ -14,18 +14,17 @@ use std::{
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url,
+    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
+    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord, compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
     },
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
-    de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
+    de::{Error, MapAccess, Visitor},
 };
 use serde_json::value::RawValue;
 use superslice::Ext;
@@ -232,21 +231,9 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let tar_bz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
-        let v3_tar = repo_data
-            .experimental_v3
-            .tar_bz2
-            .iter()
-            .map(select_package_name);
-        let v3_conda = repo_data
-            .experimental_v3
-            .conda
-            .iter()
-            .map(select_package_name);
-        let v3_whl = repo_data
-            .experimental_v3
-            .whl
-            .iter()
-            .map(select_package_name);
+        let v3_tar = repo_data.v3.tar_bz2.iter().map(select_package_name);
+        let v3_conda = repo_data.v3.conda.iter().map(select_package_name);
+        let v3_whl = repo_data.v3.whl.iter().map(select_package_name);
 
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
@@ -287,7 +274,7 @@ impl SparseRepoData {
                         .unwrap_or(filename.filename)
                 });
                 let v3_tar = repo_data
-                    .experimental_v3
+                    .v3
                     .tar_bz2
                     .iter()
                     .map(|(filename, _)| filename.filename);
@@ -298,14 +285,14 @@ impl SparseRepoData {
                         .unwrap_or(filename.filename)
                 });
                 let v3_conda = repo_data
-                    .experimental_v3
+                    .v3
                     .conda
                     .iter()
                     .map(|(filename, _)| filename.filename);
 
                 if package_format_selection == PackageFormatSelection::PreferCondaWithWhl {
                     let v3_whl = repo_data
-                        .experimental_v3
+                        .v3
                         .whl
                         .iter()
                         .map(|(filename, _)| filename.filename);
@@ -326,14 +313,14 @@ impl SparseRepoData {
             PackageFormatSelection::Both => {
                 repo_data.packages.len()
                     + repo_data.conda_packages.len()
-                    + repo_data.experimental_v3.tar_bz2.len()
-                    + repo_data.experimental_v3.conda.len()
+                    + repo_data.v3.tar_bz2.len()
+                    + repo_data.v3.conda.len()
             }
             PackageFormatSelection::OnlyTarBz2 => {
-                repo_data.packages.len() + repo_data.experimental_v3.tar_bz2.len()
+                repo_data.packages.len() + repo_data.v3.tar_bz2.len()
             }
             PackageFormatSelection::OnlyConda => {
-                repo_data.conda_packages.len() + repo_data.experimental_v3.conda.len()
+                repo_data.conda_packages.len() + repo_data.v3.conda.len()
             }
         }
     }
@@ -354,7 +341,7 @@ impl SparseRepoData {
                 package_name.as_exact(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
-                &repo_data.experimental_v3,
+                &repo_data.v3,
                 variant_consolidation,
                 base_url,
                 &self.channel,
@@ -384,7 +371,7 @@ impl SparseRepoData {
             Some(package_name),
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_v3,
+            &repo_data.v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -405,7 +392,7 @@ impl SparseRepoData {
             None,
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_v3,
+            &repo_data.v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -453,7 +440,7 @@ impl SparseRepoData {
                     Some(&next_package),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
-                    &repo_data_packages.experimental_v3,
+                    &repo_data_packages.v3,
                     variant_consolidation,
                     base_url,
                     &repo_data.channel,
@@ -521,8 +508,8 @@ struct LazyRepoData<'i> {
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(borrow, default, rename = "v3")]
-    experimental_v3: LazyV3Packages<'i>,
+    #[serde(borrow, default)]
+    v3: LazyV3Packages<'i>,
 }
 
 /// Lazily parsed `v3` section of repodata containing sub-maps for each archive
@@ -1093,7 +1080,7 @@ mod test {
     use rstest::rstest;
 
     use super::{
-        load_repo_data_recursively, PackageFilename, PackageFormatSelection, SparseRepoData,
+        PackageFilename, PackageFormatSelection, SparseRepoData, load_repo_data_recursively,
     };
 
     fn test_dir() -> PathBuf {

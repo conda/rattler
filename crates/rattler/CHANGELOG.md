@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.2](https://github.com/conda/rattler/compare/rattler-v0.43.1...rattler-v0.43.2) - 2026-05-19
+
+### Fixed
+
+- reject path traversal in python entrypoints ([#2445](https://github.com/conda/rattler/pull/2445))
+
+## [0.43.1](https://github.com/conda/rattler/compare/rattler-v0.43.0...rattler-v0.43.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.43.0](https://github.com/conda/rattler/compare/rattler-v0.42.0...rattler-v0.43.0) - 2026-05-13
+
+### Added
+
+- implement shell flavors and fix workspace-wide initialization ([#2259](https://github.com/conda/rattler/pull/2259))
+
+### Fixed
+
+- sort paths returned by link_package_sync ([#2418](https://github.com/conda/rattler/pull/2418))
+- accept full URL as oauth issuer host argument ([#2397](https://github.com/conda/rattler/pull/2397))
+- handle missing symlinks on Windows install path ([#2399](https://github.com/conda/rattler/pull/2399))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
 ## [0.42.0](https://github.com/conda/rattler/compare/rattler-v0.41.0...rattler-v0.42.0) - 2026-05-07
 
 ### Added

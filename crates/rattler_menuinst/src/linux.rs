@@ -17,8 +17,8 @@ use rattler_shell::shell;
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::utils::{log_output, run_pre_create_command, slugify};
 use crate::{
-    schema::{Linux, MenuItemCommand},
     MenuInstError,
+    schema::{Linux, MenuItemCommand},
 };
 
 pub struct LinuxMenu {
@@ -710,8 +710,10 @@ mod tests {
             let data_directory = tmp_dir.path().join("data");
             let config_directory = tmp_dir.path().join("config");
 
-            std::env::set_var("XDG_DATA_HOME", &data_directory);
-            std::env::set_var("XDG_CONFIG_HOME", &config_directory);
+            unsafe {
+                std::env::set_var("XDG_DATA_HOME", &data_directory);
+                std::env::set_var("XDG_CONFIG_HOME", &config_directory);
+            }
 
             let directories = Directories {
                 menu_name: "Test".to_string(),
@@ -739,8 +741,10 @@ mod tests {
 
     impl Drop for FakeDirectories {
         fn drop(&mut self) {
-            std::env::remove_var("XDG_DATA_HOME");
-            std::env::remove_var("XDG_CONFIG_HOME");
+            unsafe {
+                std::env::remove_var("XDG_DATA_HOME");
+                std::env::remove_var("XDG_CONFIG_HOME");
+            }
         }
     }
 

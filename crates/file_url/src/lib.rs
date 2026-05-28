@@ -5,7 +5,7 @@
 use std::{fmt::Write, path::PathBuf, str::FromStr};
 
 use itertools::Itertools;
-use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode, percent_encode};
 use thiserror::Error;
 use typed_path::{
     Utf8TypedComponent, Utf8TypedPath, Utf8TypedPathBuf, Utf8UnixComponent, Utf8WindowsComponent,
@@ -18,17 +18,17 @@ use url::{Host, Url};
 /// letter segment.
 fn is_windows_drive_letter_segment(segment: &str) -> Option<String> {
     // Segment is a simple drive letter: X:
-    if let Some((drive_letter, ':')) = segment.chars().collect_tuple() {
-        if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{drive_letter}:\\"));
-        }
+    if let Some((drive_letter, ':')) = segment.chars().collect_tuple()
+        && drive_letter.is_ascii_alphabetic()
+    {
+        return Some(format!("{drive_letter}:\\"));
     }
 
     // Segment is a simple drive letter but the colon is percent escaped: E.g. X%3A
-    if let Some((drive_letter, '%', '3', 'a' | 'A')) = segment.chars().collect_tuple() {
-        if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{drive_letter}:\\"));
-        }
+    if let Some((drive_letter, '%', '3', 'a' | 'A')) = segment.chars().collect_tuple()
+        && drive_letter.is_ascii_alphabetic()
+    {
+        return Some(format!("{drive_letter}:\\"));
     }
 
     None

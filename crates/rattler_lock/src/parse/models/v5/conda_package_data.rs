@@ -2,10 +2,10 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use super::super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData};
 use crate::{
+    UrlOrPath,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
     },
-    UrlOrPath,
 };
 use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
@@ -14,7 +14,7 @@ use rattler_conda_types::{
     BuildNumber, ChannelUrl, Flag, NoArchType, PackageName, PackageRecord, PackageUrl,
     VersionWithSource,
 };
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use serde::Deserialize;
 use serde_with::serde_as;
 use url::Url;
@@ -91,7 +91,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default)]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
 }
 
 fn find_build_and_build_number(
@@ -142,7 +142,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
                 build_number,
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
-                experimental_extra_depends: std::collections::BTreeMap::new(),
+                extra_depends: std::collections::BTreeMap::new(),
                 features: value.features.into_owned(),
                 flags: value.flags.into_owned(),
                 legacy_bz2_md5: value.legacy_bz2_md5,

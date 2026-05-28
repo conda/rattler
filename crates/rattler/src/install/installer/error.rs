@@ -3,11 +3,11 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     install::{
+        InstallError, TransactionError,
         clobber_registry::{ClobberError, ClobberedPath},
         driver::PostProcessingError,
         link_script::PrePostLinkError,
         unlink::UnlinkError,
-        InstallError, TransactionError,
     },
     package_cache::PackageCacheError,
 };

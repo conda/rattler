@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.28.2"
+version = "0.29.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -21,7 +21,7 @@ async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
 bytes = { workspace = true }
 cache_control = { workspace = true }
-chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
+jiff = { workspace = true }
 dashmap = { workspace = true }
 dirs = { workspace = true }
 file_url = { workspace = true }
@@ -103,9 +103,9 @@ tracing-test = { workspace = true }
 url = { workspace = true }
 
 [features]
-default = ['rustls-tls']
-native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
+default = ['rustls']
+native-tls = ['reqwest/native-tls', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
+rustls = ['reqwest/rustls', 'rattler_networking/rustls', 'rattler_cache/rustls', 'rattler_redaction/rustls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
 

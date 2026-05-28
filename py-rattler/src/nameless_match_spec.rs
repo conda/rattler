@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions};
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
@@ -34,22 +34,23 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = false, experimental_extras = false, experimental_conditionals = false, experimental_flags = false))]
+    #[pyo3(signature = (spec, strict = false, extras = true, conditionals = true, flags = true))]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn __init__(
         spec: &str,
         strict: bool,
-        experimental_extras: bool,
-        experimental_conditionals: bool,
-        experimental_flags: bool,
+        extras: bool,
+        conditionals: bool,
+        flags: bool,
     ) -> PyResult<Self> {
         let options = if strict {
             ParseMatchSpecOptions::strict()
         } else {
             ParseMatchSpecOptions::lenient()
         }
-        .with_experimental_extras(experimental_extras)
-        .with_experimental_conditionals(experimental_conditionals)
-        .with_experimental_flags(experimental_flags);
+        .with_extras(extras)
+        .with_conditionals(conditionals)
+        .with_flags(flags);
 
         Ok(NamelessMatchSpec::from_str(spec, options)
             .map(Into::into)

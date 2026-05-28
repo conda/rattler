@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2](https://github.com/conda/rattler/compare/rattler_cache-v0.8.1...rattler_cache-v0.8.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.8.1](https://github.com/conda/rattler/compare/rattler_cache-v0.8.0...rattler_cache-v0.8.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.8.0](https://github.com/conda/rattler/compare/rattler_cache-v0.7.1...rattler_cache-v0.8.0) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
 ## [0.7.1](https://github.com/conda/rattler/compare/rattler_cache-v0.7.0...rattler_cache-v0.7.1) - 2026-05-07
 
 ### Other

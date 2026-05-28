@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Flag, NoArchType, PackageRecord, RepoDataRecord, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use url::Url;
 
@@ -41,7 +41,7 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
@@ -119,13 +119,10 @@ impl PackageBuilder {
         extra: &str,
         deps: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.record
-            .package_record
-            .experimental_extra_depends
-            .insert(
-                extra.to_string(),
-                deps.into_iter().map(Into::into).collect(),
-            );
+        self.record.package_record.extra_depends.insert(
+            extra.to_string(),
+            deps.into_iter().map(Into::into).collect(),
+        );
         self
     }
 
@@ -138,8 +135,8 @@ impl PackageBuilder {
     }
 
     pub fn timestamp(mut self, timestamp: &str) -> Self {
-        let dt: DateTime<Utc> = timestamp.parse().expect("invalid timestamp format");
-        self.record.package_record.timestamp = Some(dt.into());
+        let ts: Timestamp = timestamp.parse().expect("invalid timestamp format");
+        self.record.package_record.timestamp = Some(ts.into());
         self
     }
 

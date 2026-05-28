@@ -1,8 +1,8 @@
 //! Functionality to stream parts of a `.conda` archive for objects that implement both
 //! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor<T>`].
 
-use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
+use crate::read::{stream_tar_bz2, stream_tar_zst};
 use rattler_conda_types::package::CondaArchiveType;
 use rattler_conda_types::package::PackageFile;
 use std::fs::File;
@@ -14,10 +14,10 @@ use std::{
 use tar::Archive;
 use zip::CompressionMethod;
 
-fn stream_conda_zip_entry<'a>(
-    mut archive: zip::ZipArchive<impl Read + Seek + 'a>,
+fn stream_conda_zip_entry<'a, R: Read + Seek + 'a>(
+    mut archive: zip::ZipArchive<R>,
     file_name: &str,
-) -> Result<tar::Archive<impl Read + Sized + 'a>, ExtractError> {
+) -> Result<tar::Archive<impl Read + Sized + use<'a, R>>, ExtractError> {
     // Find the offset and size of the file in the zip.
     let (offset, size) = {
         let entry = archive.by_name(file_name)?;
