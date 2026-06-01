@@ -55,7 +55,7 @@ enum Command {
     Run(commands::run::Opt),
     Extract(commands::extract::Opt),
     Link(commands::link::Opt),
-    Inject(commands::prefix::InjectOpt),
+    InjectIntoPrefix(commands::prefix::InjectOpt),
     RemoveFromPrefix(commands::prefix::RemoveFromPrefixOpt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
@@ -121,7 +121,7 @@ async fn async_main() -> miette::Result<()> {
         Command::Run(opts) => commands::run::run(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts).await,
         Command::Link(opts) => commands::link::link(opts).await,
-        Command::Inject(opts) => commands::prefix::inject(opts).await,
+        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
     }
