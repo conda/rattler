@@ -1,16 +1,30 @@
-use std::{collections::{BTreeSet, HashMap}, env, path::{Path, PathBuf}, str::FromStr, sync::Arc,};
 use clap::{Parser, ValueHint};
 use miette::{Context, IntoDiagnostic};
-use rattler::{default_cache_dir, install::{IndicatifReporter, Installer}, package_cache::PackageCache,};
+use rattler::{
+    default_cache_dir, 
+    install::{IndicatifReporter, Installer}, 
+    package_cache::PackageCache,
+};
 use rattler_cache::EXEC_ENVS_DIR;
-use rattler_conda_types::{Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName, Platform, ParseMatchSpecOptions,};
+use rattler_conda_types::{
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName, 
+    ParseMatchSpecOptions, Platform, 
+};
 use rattler_networking::AuthenticationMiddleware;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_shell::shell::ShellEnum;
-use rattler_solve::{resolvo::Solver, SolverImpl, SolverTask};
+use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
 use reqwest::Client;
 use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeSet, HashMap}, 
+    env, 
+    path::{Path, PathBuf}, 
+    str::FromStr, 
+    sync::Arc,
+};
+use tokio;
 
 use crate::{
     commands::create::{wrap_in_async_progress, wrap_in_progress},
@@ -34,7 +48,7 @@ pub struct Opt {
     /// from the command.
     #[clap(long, short = 'w', conflicts_with = "specs")]
     pub with: Vec<String>,
-    
+
     /// Channels to search for packages.
     #[clap(short, long = "channel")]
     pub channels: Option<Vec<String>>,
@@ -56,7 +70,6 @@ pub struct Opt {
     #[clap(long)]
     pub no_modify_ps1: bool,
 }
-
 
 /// CLI entry point for `rattler exec`.
 pub async fn exec(opt: Opt) -> miette::Result<()> {
@@ -99,16 +112,17 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     rattler_cache::ensure_cache_dir(&cache_dir)
         .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
 
+    let dir_prefix = exec_dir_prefix(&install_specs, Some(command), should_guess);
+
     // Solve + install (or reuse) the cached environment
     let prefix = create_exec_prefix(
         &install_specs,
         &channels,
         opt.platform,
+        dir_prefix,
         opt.force_reinstall,
         opt.list.as_deref(),
         &cache_dir,
-        should_guess,
-        command,
     )
     .await?;
 
@@ -127,20 +141,17 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
             "temp:{}",
             display_names.iter().cloned().collect::<Vec<_>>().join(",")
         );
-        extra_env.insert("PIXI_ENVIRONMENT_NAME".into(), env_name.clone());
+        extra_env.insert("RATTLER_ENVIRONMENT_NAME".into(), env_name.clone());
 
         if !opt.no_modify_ps1 {
             // Mirror pixi exec's prompt formatting exactly
             let (var, val) = if cfg!(windows) {
                 (
-                    "_PIXI_PROMPT".to_string(),
+                    "_RATTLER_PROMPT".to_string(),
                     format!("(rattler:{env_name}) $P$G"),
                 )
             } else {
-                (
-                    "PS1".to_string(),
-                    format!(r"(rattler:{env_name}) [\w] \$"),
-                )
+                ("PS1".to_string(), format!(r"(rattler:{env_name}) [\w] \$"),)
             };
             extra_env.insert(var, val);
 
@@ -157,17 +168,12 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
 
     // Ignore CTRL+C so that the child is solely responsible for its own signal handling.
     let _ctrl_c = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
-    
+
     let shell = ShellEnum::from_env().unwrap_or_default();
-    let status = rattler_shell::run_command_in_environment(
-        &prefix,
-        &full_command,
-        shell,
-        &extra_env,
-        None,
-    )
-    .await
-    .map_err(|e| miette::miette!("failed to execute '{}': {}", command, e))?;
+    let status = 
+        rattler_shell::run_command_in_environment(&prefix, &full_command, shell, &extra_env, None,)
+            .await
+            .map_err(|e| miette::miette!("failed to execute '{}': {}", command, e))?;
 
     std::process::exit(status.code().unwrap_or(1));
 }
@@ -177,16 +183,14 @@ async fn create_exec_prefix(
     specs: &[MatchSpec],
     channels: &[Channel],
     platform: Platform,
+    dir_prefix: Option<String>,
     force_reinstall: bool,
     list: Option<&str>,
     cache_dir: &Path,
-    has_guessed_package: bool,
-    command: &str,
 ) -> miette::Result<PathBuf> {
     let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
 
-    let dir_prefix = exec_dir_prefix(specs, Some(command), has_guessed_package);
     let dir_name = match dir_prefix {
         Some(ref p) => format!("{}-{}", p, &env_hash[..8]),
         None => env_hash[..16].to_string(),
@@ -307,7 +311,7 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
         .map(|s| {
             MatchSpec::from_str(s, ParseMatchSpecOptions::default())
                 .into_diagnostic()
-                .with_context(|| format!("failed to parse matchspec '{}'", s))
+                .with_context(|| format!("failed to parse matchspec '{s}'"))
         })
         .collect()
 }
@@ -317,7 +321,7 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
 /// Two invocations with the same logical environment always produce the same
 /// hash, regardless of argument order.
 fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Platform) -> String {
-    let mut sorted_specs: Vec<String> = specs.iter().map(|s| s.to_string()).collect();
+    let mut sorted_specs: Vec<String> = specs.iter().map(std::string::ToString::to_string).collect();
     sorted_specs.sort_unstable();
 
     let mut sorted_channels = channels.to_vec();
@@ -356,7 +360,7 @@ fn exec_dir_prefix(
     None
 }
 
-/// Converts a command name into a best-guess package MatchSpec by replacing
+/// Converts a command name into a best-guess package `MatchSpec` by replacing
 /// every character that is illegal in conda package names with a dash.
 fn guess_package_spec(command: &str) -> MatchSpec {
     let sanitized = command.replace(
@@ -387,9 +391,9 @@ fn list_environment(
     let mut packages: Vec<_> = records
         .iter()
         .filter(|r| {
-            regex_filter
-                .as_ref()
-                .map_or(true, |re| re.is_match(r.package_record.name.as_normalized()))
+            regex_filter.as_ref().is_none_or(|re| {
+                re.is_match(r.package_record.name.as_normalized())
+            })
         })
         .collect();
 
@@ -471,9 +475,7 @@ mod tests {
     #[test]
     fn env_hash_is_deterministic() {
         let specs = vec![spec("python=3.12"), spec("numpy")];
-        let channels = vec![
-            "https://conda.anaconda.org/conda-forge/".to_string(),
-        ];
+        let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
         let h1 = compute_env_hash(&specs, &channels, Platform::Linux64);
         let h2 = compute_env_hash(&specs, &channels, Platform::Linux64);
         assert_eq!(h1, h2);
@@ -481,9 +483,7 @@ mod tests {
 
     #[test]
     fn env_hash_is_order_independent() {
-        let channels = vec![
-            "https://conda.anaconda.org/conda-forge/".to_string(),
-        ];
+        let channels = vec!["https://conda.anaconda.org/conda-forge/".to_string()];
         let h1 = compute_env_hash(
             &[spec("numpy"), spec("python=3.12")],
             &channels,
