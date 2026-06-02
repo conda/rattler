@@ -1406,14 +1406,18 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
+        let url = server_url.join(archive_name).unwrap();
+
+        // Derive the key from the file name only; the path prefix would make an unsafe key.
+        let identifier = CondaArchiveIdentifier::try_from_url(&url).unwrap();
 
         let client = ClientBuilder::new(Client::default()).build();
 
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
+                identifier.clone(),
+                url.clone(),
                 client.clone().into(),
                 DoNotRetryPolicy,
                 None,
@@ -1434,13 +1438,7 @@ mod test {
 
         // The second one should fail after the 2nd try
         let result = cache
-            .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
-                client.into(),
-                retry_policy,
-                None,
-            )
+            .get_or_fetch_from_url_with_retry(identifier, url, client.into(), retry_policy, None)
             .await;
 
         assert!(result.is_ok());
