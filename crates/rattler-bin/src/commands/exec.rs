@@ -321,7 +321,8 @@ fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {
 /// Two invocations with the same logical environment always produce the same
 /// hash, regardless of argument order.
 fn compute_env_hash(specs: &[MatchSpec], channels: &[String], platform: Platform) -> String {
-    let mut sorted_specs: Vec<String> = specs.iter().map(std::string::ToString::to_string).collect();
+    let mut sorted_specs: Vec<String> = 
+        specs.iter().map(std::string::ToString::to_string).collect();
     sorted_specs.sort_unstable();
 
     let mut sorted_channels = channels.to_vec();
@@ -392,8 +393,8 @@ fn list_environment(
         .iter()
         .filter(|r| {
             regex_filter
-            .as_ref()
-            .is_none_or(|re| {re.is_match(r.package_record.name.as_normalized())})
+                .as_ref()
+                .is_none_or(|re| {re.is_match(r.package_record.name.as_normalized())})
         })
         .collect();
 
