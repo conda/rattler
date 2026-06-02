@@ -13,12 +13,12 @@ use url::Url;
 
 const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 
-/// Add a single conda package archive to a prefix without solving.
+/// Add one or more conda package archives to a prefix without solving.
 #[derive(Debug, clap::Parser)]
 pub struct InjectOpt {
-    /// Local path to a conda package archive (.conda or .tar.bz2)
+    /// Local paths to conda package archives (.conda or .tar.bz2)
     #[clap(required = true)]
-    package: PathBuf,
+    packages: Vec<PathBuf>,
 
     /// Target prefix to inject the package into
     #[clap(short = 'p', long = "prefix", default_value = ".prefix")]
@@ -29,12 +29,12 @@ pub struct InjectOpt {
     skip_compatibility_checks: bool,
 }
 
-/// Remove a single installed conda package from a prefix without solving.
+/// Remove one or more installed conda packages from a prefix without solving.
 #[derive(Debug, clap::Parser)]
 pub struct RemoveFromPrefixOpt {
-    /// Exact package name of the installed package to remove
+    /// Exact package names of installed packages to remove
     #[clap(required = true)]
-    package: PackageName,
+    packages: Vec<PackageName>,
 
     /// Target prefix to remove the package from
     #[clap(short = 'p', long = "prefix", default_value = ".prefix")]
@@ -47,48 +47,72 @@ pub struct RemoveFromPrefixOpt {
 
 pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
-    let package_path = std::path::absolute(opt.package).into_diagnostic()?;
-    let package_record = package_record_from_archive(&package_path)?;
+    let packages = opt
+        .packages
+        .into_iter()
+        .map(|package_path| {
+            let package_path = std::path::absolute(package_path).into_diagnostic()?;
+            let package_record = package_record_from_archive(&package_path)?;
 
-    if !opt.skip_compatibility_checks {
-        validate_package_compatibility(&package_record)?;
-    }
+            if !opt.skip_compatibility_checks {
+                validate_package_compatibility(&package_record)?;
+            }
+
+            Ok((package_path, package_record))
+        })
+        .collect::<miette::Result<Vec<_>>>()?;
 
     let installed_packages =
         PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix).into_diagnostic()?;
 
-    reject_already_installed(&installed_packages, &package_record.name)?;
+    for (_, package_record) in &packages {
+        reject_already_installed(&installed_packages, &package_record.name)?;
+    }
+    reject_duplicate_package_records(packages.iter().map(|(_, package_record)| package_record))?;
 
     if !opt.skip_compatibility_checks {
         let records = installed_packages
             .iter()
             .map(|record| &record.repodata_record.package_record)
-            .chain(std::iter::once(&package_record))
+            .chain(packages.iter().map(|(_, package_record)| package_record))
             .collect::<Vec<_>>();
         PackageRecord::validate(records)
             .into_diagnostic()
-            .context("injecting this package would make the prefix incompatible")?;
+            .context("injecting these packages would make the prefix incompatible")?;
     }
 
-    let repodata_record = RepoDataRecord {
-        package_record,
-        identifier: DistArchiveIdentifier::try_from_path(&package_path).ok_or_else(|| {
-            miette::miette!(
-                "could not derive package identity from {}",
-                package_path.display()
-            )
-        })?,
-        url: Url::from_file_path(&package_path).map_err(|_err| {
-            miette::miette!("could not convert {} to a file URL", package_path.display())
-        })?,
-        channel: None,
-    };
+    let repodata_records = packages
+        .into_iter()
+        .map(|(package_path, package_record)| {
+            let repodata_record = RepoDataRecord {
+                package_record,
+                identifier: DistArchiveIdentifier::try_from_path(&package_path).ok_or_else(
+                    || {
+                        miette::miette!(
+                            "could not derive package identity from {}",
+                            package_path.display()
+                        )
+                    },
+                )?,
+                url: Url::from_file_path(&package_path).map_err(|_err| {
+                    miette::miette!("could not convert {} to a file URL", package_path.display())
+                })?,
+                channel: None,
+            };
+
+            Ok((package_path, repodata_record))
+        })
+        .collect::<miette::Result<Vec<_>>>()?;
 
     let mut desired_records = installed_packages
         .iter()
         .map(|record| record.repodata_record.clone())
         .collect::<Vec<_>>();
-    desired_records.push(repodata_record.clone());
+    desired_records.extend(
+        repodata_records
+            .iter()
+            .map(|(_, repodata_record)| repodata_record.clone()),
+    );
 
     let transaction = Transaction::from_current_and_desired(
         installed_packages.clone(),
@@ -104,28 +128,39 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .with_prefix_records(&installed_packages)
         .finish();
     let prefix = Prefix::create(&target_prefix).into_diagnostic()?;
-    let extract_dir = tempfile::tempdir().into_diagnostic()?;
+    let mut prefix_records = Vec::with_capacity(repodata_records.len());
 
-    extract(&package_path, extract_dir.path())
+    for (package_path, repodata_record) in repodata_records {
+        let extract_dir = tempfile::tempdir().into_diagnostic()?;
+
+        extract(&package_path, extract_dir.path())
+            .into_diagnostic()
+            .with_context(|| format!("failed to extract {}", package_path.display()))?;
+
+        let paths = link_package(
+            extract_dir.path(),
+            &prefix,
+            &driver,
+            InstallOptions {
+                platform: Some(Platform::current()),
+                python_info: transaction.python_info.clone(),
+                ..InstallOptions::default()
+            },
+        )
+        .await
         .into_diagnostic()
-        .with_context(|| format!("failed to extract {}", package_path.display()))?;
+        .with_context(|| {
+            format!(
+                "failed to link {} into {}",
+                repodata_record.package_record,
+                target_prefix.display()
+            )
+        })?;
 
-    let paths = link_package(
-        extract_dir.path(),
-        &prefix,
-        &driver,
-        InstallOptions {
-            platform: Some(Platform::current()),
-            python_info: transaction.python_info.clone(),
-            ..InstallOptions::default()
-        },
-    )
-    .await
-    .into_diagnostic()
-    .with_context(|| format!("failed to link package into {}", target_prefix.display()))?;
-
-    let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
-    write_prefix_record(&target_prefix, &prefix_record)?;
+        let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
+        write_prefix_record(&target_prefix, &prefix_record)?;
+        prefix_records.push(prefix_record);
+    }
 
     driver
         .post_process(&transaction, &prefix, None)
@@ -134,12 +169,14 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
-    println!(
-        "{} Injected {} into {}",
-        console::style(console::Emoji("✔", "")).green(),
-        prefix_record.repodata_record.package_record,
-        target_prefix.display()
-    );
+    for prefix_record in prefix_records {
+        println!(
+            "{} Injected {} into {}",
+            console::style(console::Emoji("✔", "")).green(),
+            prefix_record.repodata_record.package_record,
+            target_prefix.display()
+        );
+    }
 
     Ok(())
 }
@@ -148,10 +185,19 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
     let installed_packages =
         PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix).into_diagnostic()?;
-    let remove_record = select_installed_record(&installed_packages, &opt.package)?;
+    reject_duplicate_package_names(&opt.packages)?;
+    let remove_records = opt
+        .packages
+        .iter()
+        .map(|package| select_installed_record(&installed_packages, package))
+        .collect::<miette::Result<Vec<_>>>()?;
     let remaining_packages = installed_packages
         .iter()
-        .filter(|record| *record != remove_record)
+        .filter(|record| {
+            !remove_records
+                .iter()
+                .any(|remove_record| *record == *remove_record)
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -162,7 +208,7 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
             .collect::<Vec<_>>();
         PackageRecord::validate(records)
             .into_diagnostic()
-            .context("removing this package would make the prefix incompatible")?;
+            .context("removing these packages would make the prefix incompatible")?;
     }
 
     let desired_records = remaining_packages
@@ -189,16 +235,18 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .into_diagnostic()
         .context("failed to pre-process prefix before removal")?;
 
-    driver.clobber_registry().unregister_paths(remove_record);
-    unlink_package(&prefix, remove_record)
-        .await
-        .into_diagnostic()
-        .with_context(|| {
-            format!(
-                "failed to unlink {}",
-                remove_record.repodata_record.package_record
-            )
-        })?;
+    for remove_record in &remove_records {
+        driver.clobber_registry().unregister_paths(remove_record);
+        unlink_package(&prefix, remove_record)
+            .await
+            .into_diagnostic()
+            .with_context(|| {
+                format!(
+                    "failed to unlink {}",
+                    remove_record.repodata_record.package_record
+                )
+            })?;
+    }
 
     driver
         .remove_empty_directories(
@@ -216,12 +264,14 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
-    println!(
-        "{} Removed {} from {}",
-        console::style(console::Emoji("✔", "")).green(),
-        remove_record.repodata_record.package_record,
-        target_prefix.display()
-    );
+    for remove_record in remove_records {
+        println!(
+            "{} Removed {} from {}",
+            console::style(console::Emoji("✔", "")).green(),
+            remove_record.repodata_record.package_record,
+            target_prefix.display()
+        );
+    }
 
     Ok(())
 }
@@ -311,6 +361,47 @@ fn reject_already_installed(
     Ok(())
 }
 
+fn reject_duplicate_package_records<'a>(
+    package_records: impl IntoIterator<Item = &'a PackageRecord>,
+) -> miette::Result<()> {
+    let mut seen_package_names = Vec::<&PackageName>::new();
+
+    for package_record in package_records {
+        if seen_package_names
+            .iter()
+            .any(|package_name| package_name.as_normalized() == package_record.name.as_normalized())
+        {
+            return Err(miette::miette!(
+                "package {} was specified multiple times",
+                package_record.name.as_normalized()
+            ));
+        }
+
+        seen_package_names.push(&package_record.name);
+    }
+
+    Ok(())
+}
+
+fn reject_duplicate_package_names(package_names: &[PackageName]) -> miette::Result<()> {
+    let mut seen_package_names = Vec::<&PackageName>::new();
+
+    for package_name in package_names {
+        if seen_package_names.iter().any(|seen_package_name| {
+            seen_package_name.as_normalized() == package_name.as_normalized()
+        }) {
+            return Err(miette::miette!(
+                "package {} was specified multiple times",
+                package_name.as_normalized()
+            ));
+        }
+
+        seen_package_names.push(package_name);
+    }
+
+    Ok(())
+}
+
 fn write_prefix_record(target_prefix: &Path, prefix_record: &PrefixRecord) -> miette::Result<()> {
     let conda_meta_path = target_prefix.join("conda-meta");
     std::fs::create_dir_all(&conda_meta_path)
@@ -371,12 +462,13 @@ fn select_installed_record<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
+    use std::{fs::File, str::FromStr};
 
-    use rattler_conda_types::Version;
+    use rattler_conda_types::{Version, compression_level::CompressionLevel};
+    use rattler_package_streaming::write::write_tar_bz2_package;
 
     #[tokio::test]
-    async fn test_inject_and_remove_local_package() {
+    async fn test_inject_and_remove_local_packages() {
         let prefix = tempfile::tempdir().unwrap();
         let fingerprint_path = prefix
             .path()
@@ -388,9 +480,10 @@ mod tests {
             .join("test-data")
             .join("packages")
             .join("empty-0.1.0-h4616a5c_0.conda");
+        let other_package = write_empty_package(prefix.path(), "other-empty");
 
         inject(InjectOpt {
-            package,
+            packages: vec![package, other_package],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -398,21 +491,29 @@ mod tests {
         .unwrap();
 
         let records = PrefixRecord::collect_from_prefix::<PrefixRecord>(prefix.path()).unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(
-            records[0]
-                .repodata_record
-                .package_record
-                .name
-                .as_normalized(),
-            "empty"
-        );
+        assert_eq!(records.len(), 2);
+        let package_names = records
+            .iter()
+            .map(|record| {
+                record
+                    .repodata_record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert!(package_names.iter().any(|name| name == "empty"));
+        assert!(package_names.iter().any(|name| name == "other-empty"));
         assert!(!fingerprint_path.exists());
 
         std::fs::write(&fingerprint_path, "stale").unwrap();
 
         remove_from_prefix(RemoveFromPrefixOpt {
-            package: PackageName::new_unchecked("empty"),
+            packages: vec![
+                PackageName::new_unchecked("empty"),
+                PackageName::new_unchecked("other-empty"),
+            ],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -433,7 +534,7 @@ mod tests {
             .join("empty-0.1.0-h4616a5c_0.conda");
 
         inject(InjectOpt {
-            package: package.clone(),
+            packages: vec![package.clone()],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -441,7 +542,7 @@ mod tests {
         .unwrap();
 
         let result = inject(InjectOpt {
-            package,
+            packages: vec![package],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -452,6 +553,63 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("already installed")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_inject_duplicate_requested_package_errors() {
+        let prefix = tempfile::tempdir().unwrap();
+        let package = workspace_root()
+            .join("test-data")
+            .join("packages")
+            .join("empty-0.1.0-h4616a5c_0.conda");
+
+        let result = inject(InjectOpt {
+            packages: vec![package.clone(), package],
+            target_prefix: prefix.path().to_path_buf(),
+            skip_compatibility_checks: false,
+        })
+        .await;
+
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("specified multiple times")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remove_duplicate_requested_package_errors() {
+        let prefix = tempfile::tempdir().unwrap();
+        let package = workspace_root()
+            .join("test-data")
+            .join("packages")
+            .join("empty-0.1.0-h4616a5c_0.conda");
+
+        inject(InjectOpt {
+            packages: vec![package],
+            target_prefix: prefix.path().to_path_buf(),
+            skip_compatibility_checks: false,
+        })
+        .await
+        .unwrap();
+
+        let result = remove_from_prefix(RemoveFromPrefixOpt {
+            packages: vec![
+                PackageName::new_unchecked("empty"),
+                PackageName::new_unchecked("empty"),
+            ],
+            target_prefix: prefix.path().to_path_buf(),
+            skip_compatibility_checks: false,
+        })
+        .await;
+
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("specified multiple times")
         );
     }
 
@@ -496,6 +654,49 @@ mod tests {
             select_installed_record(&installed, &PackageName::new_unchecked("other-package"))
                 .is_err()
         );
+    }
+
+    fn write_empty_package(root: &Path, package_name: &str) -> PathBuf {
+        let package_build_dir = root.join(package_name);
+        let package_info_dir = package_build_dir.join("info");
+        std::fs::create_dir(&package_build_dir).unwrap();
+        std::fs::create_dir(&package_info_dir).unwrap();
+        std::fs::write(
+            package_info_dir.join("index.json"),
+            format!(
+                r#"{{
+                    "build": "h123456_0",
+                    "build_number": 0,
+                    "name": "{package_name}",
+                    "noarch": "generic",
+                    "subdir": "noarch",
+                    "version": "0.1.0"
+                }}"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            package_info_dir.join("paths.json"),
+            r#"{"paths":[],"paths_version":1}"#,
+        )
+        .unwrap();
+
+        let target_package = root.join(format!("{package_name}-0.1.0-h123456_0.tar.bz2"));
+        let writer = File::create(&target_package).unwrap();
+        write_tar_bz2_package(
+            writer,
+            &package_build_dir,
+            &[
+                package_info_dir.join("index.json"),
+                package_info_dir.join("paths.json"),
+            ],
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
+
+        target_package
     }
 
     fn workspace_root() -> PathBuf {
