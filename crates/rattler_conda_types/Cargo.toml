@@ -1,4 +1,5 @@
 [package]
+exclude = ["**/snapshots/**", "benches/**"]
 name = "rattler_conda_types"
 version = "0.46.4"
 edition.workspace = true

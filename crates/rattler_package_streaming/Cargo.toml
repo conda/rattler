@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
 version = "0.26.2"
 edition.workspace = true

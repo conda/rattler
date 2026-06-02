@@ -1,4 +1,5 @@
 [package]
+exclude = ["**/snapshots/**"]
 name = "rattler"
 version = "0.43.2"
 edition.workspace = true
