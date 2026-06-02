@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_networking-v0.27.2...rattler_networking-v0.28.0) - 2026-06-02
+
+### Added
+
+- add auth status command and update to keyring-core ([#2448](https://github.com/conda/rattler/pull/2448))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.27.2](https://github.com/conda/rattler/compare/rattler_networking-v0.27.1...rattler_networking-v0.27.2) - 2026-05-19
 
 ### Other
