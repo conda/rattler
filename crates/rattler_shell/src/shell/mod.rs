@@ -406,7 +406,10 @@ impl Shell for Bash {
             } else {
                 completions_dir.to_string_lossy().to_string()
             };
-            writeln!(f, "source {completions_dir_str}/*")?;
+            writeln!(f, "for _pixi_f in {completions_dir_str}/*; do")?;
+            writeln!(f, "    [ -r \"$_pixi_f\" ] && . \"$_pixi_f\"")?;
+            writeln!(f, "done")?;
+            writeln!(f, "unset _pixi_f")?;
         }
         Ok(())
     }
