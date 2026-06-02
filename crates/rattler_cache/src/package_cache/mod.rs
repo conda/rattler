@@ -1408,11 +1408,7 @@ mod test {
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
         let url = server_url.join(archive_name).unwrap();
 
-        // The cache key must be derived from the archive's file name only. The
-        // `archive_name` includes the `channel/subdir/` URL prefix so the test
-        // server route matches, but feeding that whole path to
-        // `try_from_filename` would parse path separators into the package name
-        // and produce an unsafe cache key (rejected by `to_path_segment`).
+        // Derive the key from the file name only; the path prefix would make an unsafe key.
         let identifier = CondaArchiveIdentifier::try_from_url(&url).unwrap();
 
         let client = ClientBuilder::new(Client::default()).build();
