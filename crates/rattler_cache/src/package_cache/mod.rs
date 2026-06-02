@@ -103,6 +103,10 @@ pub enum PackageCacheError {
     /// There are no writable layers to cache package to
     #[error("no writable layers to cache package to")]
     NoWritableLayers,
+
+    /// The cache key contains metadata that could lead to path traversal.
+    #[error(transparent)]
+    UnsafeCacheKey(#[from] rattler_conda_types::utils::InvalidPathComponentError),
 }
 
 /// Errors specific to individual layers in the `PackageCache`
@@ -131,6 +135,10 @@ pub enum PackageCacheLayerError {
 
     #[error("package cache layer error: {0}")]
     OtherError(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    /// The cache key contains metadata that could lead to path traversal.
+    #[error(transparent)]
+    UnsafeCacheKey(#[from] rattler_conda_types::utils::InvalidPathComponentError),
 }
 
 impl From<Cancelled> for PackageCacheError {
@@ -171,7 +179,7 @@ impl PackageCacheLayer {
             .ok_or(PackageCacheLayerError::PackageNotFound)?
             .clone();
         let mut cache_entry = cache_entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_string());
+        let cache_path = self.path.join(cache_key.to_path_segment()?);
 
         match validate_package_common::<
             fn(PathBuf) -> _,
@@ -215,7 +223,7 @@ impl PackageCacheLayer {
             .clone();
 
         let mut cache_entry = entry.lock().await;
-        let cache_path = self.path.join(cache_key.to_string());
+        let cache_path = self.path.join(cache_key.to_path_segment()?);
 
         match validate_package_common(
             cache_path,
@@ -355,10 +363,14 @@ impl PackageCache {
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_key = pkg.into();
+
+        // Reject keys that could escape the cache root (GHSA-h672-p7h7-97v9).
+        let cache_segment = cache_key.to_path_segment()?;
+
         let (_, writable_layers) = self.split_layers();
 
         for layer in self.inner.layers.iter() {
-            let cache_path = layer.path.join(cache_key.to_string());
+            let cache_path = layer.path.join(&cache_segment);
 
             if cache_path.exists() {
                 match layer.try_validate(&cache_key).await {
@@ -1394,14 +1406,18 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
+        let url = server_url.join(archive_name).unwrap();
+
+        // Derive the key from the file name only; the path prefix would make an unsafe key.
+        let identifier = CondaArchiveIdentifier::try_from_url(&url).unwrap();
 
         let client = ClientBuilder::new(Client::default()).build();
 
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
+                identifier.clone(),
+                url.clone(),
                 client.clone().into(),
                 DoNotRetryPolicy,
                 None,
@@ -1422,13 +1438,7 @@ mod test {
 
         // The second one should fail after the 2nd try
         let result = cache
-            .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
-                client.into(),
-                retry_policy,
-                None,
-            )
+            .get_or_fetch_from_url_with_retry(identifier, url, client.into(), retry_policy, None)
             .await;
 
         assert!(result.is_ok());
@@ -1527,6 +1537,55 @@ mod test {
         let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
         let expected_file_name = format!("clobber-python-0.1.0-cpython-{}", hex::encode(path_hash));
         assert_eq!(file_name, expected_file_name);
+    }
+
+    #[tokio::test]
+    // A malicious channel can put path separators or parent-directory references
+    // in the `build` (or `name`) of a repodata record. These must never be
+    // interpreted as path components when materializing the package into the
+    // cache, otherwise the package escapes the cache root
+    // (GHSA-h672-p7h7-97v9).
+    async fn test_get_or_fetch_rejects_path_traversal_build_string() {
+        use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            "1.0".parse::<VersionWithSource>().unwrap(),
+            r"x\..\..\..\escaped".to_string(),
+        );
+        let key = CacheKey::from(&record);
+
+        // The fetch closure must never run: the malicious key has to be rejected
+        // before any filesystem materialization happens.
+        let fetch_called = Arc::new(AtomicBool::new(false));
+        let fetch_called_inner = fetch_called.clone();
+        let result = cache
+            .get_or_fetch(
+                key,
+                move |destination: PathBuf| {
+                    let fetch_called_inner = fetch_called_inner.clone();
+                    async move {
+                        fetch_called_inner.store(true, Ordering::Release);
+                        std::fs::create_dir_all(&destination).unwrap();
+                        std::fs::write(destination.join("payload.txt"), b"escaped").unwrap();
+                        Ok::<(), Infallible>(())
+                    }
+                },
+                None,
+            )
+            .await;
+
+        assert!(
+            result.is_err(),
+            "malicious build string must be rejected, got {result:?}"
+        );
+        assert!(
+            !fetch_called.load(Ordering::Acquire),
+            "fetch must not run for a rejected cache key"
+        );
     }
 
     #[tokio::test]
