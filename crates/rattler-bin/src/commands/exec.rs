@@ -1,14 +1,14 @@
 use clap::{Parser, ValueHint};
 use miette::{Context, IntoDiagnostic};
 use rattler::{
-    default_cache_dir, 
-    install::{IndicatifReporter, Installer}, 
+    default_cache_dir,
+    install::{IndicatifReporter, Installer},
     package_cache::PackageCache,
 };
 use rattler_cache::EXEC_ENVS_DIR;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName, 
-    ParseMatchSpecOptions, Platform, 
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
+    ParseMatchSpecOptions, Platform,
 };
 use rattler_networking::AuthenticationMiddleware;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
@@ -18,10 +18,10 @@ use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeSet, HashMap}, 
-    env, 
-    path::{Path, PathBuf}, 
-    str::FromStr, 
+    collections::{BTreeSet, HashMap},
+    env,
+    path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 use tokio;
@@ -151,7 +151,7 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
                     format!("(rattler:{env_name}) $P$G"),
                 )
             } else {
-                ("PS1".to_string(), format!(r"(rattler:{env_name}) [\w] \$"),)
+                ("PS1".to_string(), format!(r"(rattler:{env_name}) [\w] \$"))
             };
             extra_env.insert(var, val);
 
@@ -170,8 +170,8 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     let _ctrl_c = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
     let shell = ShellEnum::from_env().unwrap_or_default();
-    let status = 
-        rattler_shell::run_command_in_environment(&prefix, &full_command, shell, &extra_env, None,)
+    let status =
+        rattler_shell::run_command_in_environment(&prefix, &full_command, shell, &extra_env, None)
             .await
             .map_err(|e| miette::miette!("failed to execute '{}': {}", command, e))?;
 
@@ -391,9 +391,9 @@ fn list_environment(
     let mut packages: Vec<_> = records
         .iter()
         .filter(|r| {
-            regex_filter.as_ref().is_none_or(|re| {
-                re.is_match(r.package_record.name.as_normalized())
-            })
+            regex_filter
+            .as_ref()
+            .is_none_or(|re| {re.is_match(r.package_record.name.as_normalized())})
         })
         .collect();
 
