@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/**"]
 name = "rattler_pty"
 version = "0.2.12"
 description = "A crate to create pty"

@@ -1,4 +1,5 @@
 [package]
+exclude = ["**/snapshots/**", "test-data/**"]
 name = "rattler_config"
 version = "0.4.1"
 edition.workspace = true

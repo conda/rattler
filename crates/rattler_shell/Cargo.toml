@@ -1,4 +1,5 @@
 [package]
+exclude = ["**/snapshots/**"]
 name = "rattler_shell"
 version = "0.27.2"
 edition.workspace = true

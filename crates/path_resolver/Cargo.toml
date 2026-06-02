@@ -1,4 +1,5 @@
 [package]
+exclude = ["benches/**"]
 name = "path_resolver"
 version = "0.2.10"
 categories.workspace = true

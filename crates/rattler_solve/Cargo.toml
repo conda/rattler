@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/**", "benches/**"]
 name = "rattler_solve"
 version = "7.1.1"
 edition.workspace = true
