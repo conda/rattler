@@ -10,6 +10,8 @@ use rattler_conda_types::{
 use rattler_package_streaming::fs::extract;
 use url::Url;
 
+const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
+
 /// Add a single conda package archive to a prefix without solving.
 #[derive(Debug, clap::Parser)]
 pub struct InjectOpt {
@@ -129,6 +131,8 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .into_diagnostic()
         .context("failed to post-process prefix after injection")?;
 
+    invalidate_pixi_environment_fingerprint(&target_prefix)?;
+
     println!(
         "{} Injected {} into {}",
         console::style(console::Emoji("✔", "")).green(),
@@ -209,6 +213,8 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .into_diagnostic()
         .context("failed to post-process prefix after removal")?;
 
+    invalidate_pixi_environment_fingerprint(&target_prefix)?;
+
     println!(
         "{} Removed {} from {}",
         console::style(console::Emoji("✔", "")).green(),
@@ -276,6 +282,23 @@ fn write_prefix_record(target_prefix: &Path, prefix_record: &PrefixRecord) -> mi
     Ok(())
 }
 
+fn invalidate_pixi_environment_fingerprint(target_prefix: &Path) -> miette::Result<()> {
+    let fingerprint_path = target_prefix
+        .join("conda-meta")
+        .join(PIXI_ENVIRONMENT_FINGERPRINT_FILE);
+    if fingerprint_path
+        .try_exists()
+        .into_diagnostic()
+        .with_context(|| format!("failed to check {}", fingerprint_path.display()))?
+    {
+        std::fs::remove_file(&fingerprint_path)
+            .into_diagnostic()
+            .with_context(|| format!("failed to remove {}", fingerprint_path.display()))?;
+    }
+
+    Ok(())
+}
+
 fn select_installed_record<'a>(
     installed_packages: &'a [PrefixRecord],
     package_name: &PackageName,
@@ -313,6 +336,12 @@ mod tests {
     #[tokio::test]
     async fn test_inject_and_remove_local_package() {
         let prefix = tempfile::tempdir().unwrap();
+        let fingerprint_path = prefix
+            .path()
+            .join("conda-meta")
+            .join(PIXI_ENVIRONMENT_FINGERPRINT_FILE);
+        std::fs::create_dir_all(fingerprint_path.parent().unwrap()).unwrap();
+        std::fs::write(&fingerprint_path, "stale").unwrap();
         let package = workspace_root()
             .join("test-data")
             .join("packages")
@@ -336,6 +365,9 @@ mod tests {
                 .as_normalized(),
             "empty"
         );
+        assert!(!fingerprint_path.exists());
+
+        std::fs::write(&fingerprint_path, "stale").unwrap();
 
         remove_from_prefix(RemoveFromPrefixOpt {
             package: PackageName::new_unchecked("empty"),
@@ -347,6 +379,7 @@ mod tests {
 
         let records = PrefixRecord::collect_from_prefix::<PrefixRecord>(prefix.path()).unwrap();
         assert!(records.is_empty());
+        assert!(!fingerprint_path.exists());
     }
 
     #[tokio::test]
