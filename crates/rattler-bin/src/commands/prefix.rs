@@ -64,7 +64,7 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
             .collect::<Vec<_>>();
         PackageRecord::validate(records)
             .into_diagnostic()
-            .context("injected package is not compatible with the prefix")?;
+            .context("injecting this package would make the prefix incompatible")?;
     }
 
     let repodata_record = RepoDataRecord {
