@@ -1406,14 +1406,22 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
+        let url = server_url.join(archive_name).unwrap();
+
+        // The cache key must be derived from the archive's file name only. The
+        // `archive_name` includes the `channel/subdir/` URL prefix so the test
+        // server route matches, but feeding that whole path to
+        // `try_from_filename` would parse path separators into the package name
+        // and produce an unsafe cache key (rejected by `to_path_segment`).
+        let identifier = CondaArchiveIdentifier::try_from_url(&url).unwrap();
 
         let client = ClientBuilder::new(Client::default()).build();
 
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
+                identifier.clone(),
+                url.clone(),
                 client.clone().into(),
                 DoNotRetryPolicy,
                 None,
@@ -1434,13 +1442,7 @@ mod test {
 
         // The second one should fail after the 2nd try
         let result = cache
-            .get_or_fetch_from_url_with_retry(
-                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-                server_url.join(archive_name).unwrap(),
-                client.into(),
-                retry_policy,
-                None,
-            )
+            .get_or_fetch_from_url_with_retry(identifier, url, client.into(), retry_policy, None)
             .await;
 
         assert!(result.is_ok());
