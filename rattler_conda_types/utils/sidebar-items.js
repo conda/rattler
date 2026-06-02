@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["url_with_trailing_slash"],"struct":["TimestampMs"]};
+window.SIDEBAR_ITEMS = {"fn":["ensure_safe_path_component"],"mod":["url_with_trailing_slash"],"struct":["InvalidPathComponentError","TimestampMs"]};
