@@ -10,24 +10,21 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform,
 };
-use rattler_networking::AuthenticationMiddleware;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
-use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeSet, HashMap},
     env,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Arc,
 };
 use tokio;
 
 use crate::{
-    commands::create::{wrap_in_async_progress, wrap_in_progress},
+    commands::{client::create_client_with_middleware, progress::{wrap_in_async_progress, wrap_in_progress}},
     global_multi_progress,
 };
 
@@ -141,7 +138,7 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
             "temp:{}",
             display_names.iter().cloned().collect::<Vec<_>>().join(",")
         );
-        extra_env.insert("RATTLER_ENVIRONMENT_NAME".into(), env_name.clone());
+        extra_env.insert("PIXI_ENVIRONMENT_NAME".into(), env_name.clone());
 
         if !opt.no_modify_ps1 {
             // Mirror pixi exec's prompt formatting exactly
@@ -207,15 +204,7 @@ async fn create_exec_prefix(
         return Ok(prefix);
     }
 
-    let download_client = Client::builder()
-        .build()
-        .expect("failed to build HTTP client");
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client.clone())
-        .with_arc(Arc::new(
-            AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
-        ))
-        .with(rattler_networking::OciMiddleware::new(download_client))
-        .build();
+    let download_client = create_client_with_middleware()?;
 
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
@@ -466,7 +455,7 @@ mod tests {
         let prefix = exec_dir_prefix(&[spec("foo"), spec("bar")], Some("cmd"), false);
         assert_eq!(prefix, None);
     }
-
+ 
     #[test]
     fn guess_sanitizes_illegal_chars() {
         let s = guess_package_spec("my/cmd!");

@@ -10,6 +10,7 @@ pub mod inspect;
 pub mod link;
 pub mod list;
 pub mod menu;
+pub mod progress;
 pub mod run;
 pub mod search;
 pub mod shell_hook;
