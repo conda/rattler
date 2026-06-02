@@ -193,11 +193,7 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .collect::<miette::Result<Vec<_>>>()?;
     let remaining_packages = installed_packages
         .iter()
-        .filter(|record| {
-            !remove_records
-                .iter()
-                .any(|remove_record| *record == *remove_record)
-        })
+        .filter(|record| !remove_records.contains(record))
         .cloned()
         .collect::<Vec<_>>();
 
