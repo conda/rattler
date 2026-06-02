@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use miette::{Context, IntoDiagnostic};
 use rattler::install::{InstallDriver, InstallOptions, Transaction, link_package, unlink_package};
 use rattler_conda_types::{
-    PackageName, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, Matches, PackageName, PackageRecord, ParseStrictness, Platform, PrefixRecord,
+    RepoDataRecord,
     package::{CondaArchiveType, DistArchiveIdentifier},
     prefix::Prefix,
 };
@@ -50,7 +51,7 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
     let package_record = package_record_from_archive(&package_path)?;
 
     if !opt.skip_compatibility_checks {
-        validate_package_platform(&package_record)?;
+        validate_package_compatibility(&package_record)?;
     }
 
     let installed_packages =
@@ -237,17 +238,58 @@ fn package_record_from_archive(path: &Path) -> miette::Result<PackageRecord> {
     .with_context(|| format!("failed to read package metadata from {}", path.display()))
 }
 
-fn validate_package_platform(package_record: &PackageRecord) -> miette::Result<()> {
+fn validate_package_compatibility(package_record: &PackageRecord) -> miette::Result<()> {
+    validate_package_compatibility_for_platform(package_record, Platform::current())
+}
+
+fn validate_package_compatibility_for_platform(
+    package_record: &PackageRecord,
+    platform: Platform,
+) -> miette::Result<()> {
     let package_subdir = &package_record.subdir;
-    if package_subdir != &Platform::NoArch.to_string()
-        && package_subdir != &Platform::current().to_string()
-    {
+    if package_subdir != &Platform::NoArch.to_string() && package_subdir != &platform.to_string() {
         return Err(miette::miette!(
             "package {} is for platform {}, but the current platform is {}",
             package_record,
             package_subdir,
-            Platform::current()
+            platform
         ));
+    }
+
+    validate_virtual_package_dependencies(package_record, platform)?;
+
+    Ok(())
+}
+
+fn validate_virtual_package_dependencies(
+    package_record: &PackageRecord,
+    platform: Platform,
+) -> miette::Result<()> {
+    let virtual_packages = rattler_virtual_packages::VirtualPackages::detect_for_platform(
+        platform,
+        &rattler_virtual_packages::VirtualPackageOverrides::default(),
+    )
+    .into_diagnostic()
+    .with_context(|| format!("failed to determine virtual packages for {platform}"))?
+    .into_generic_virtual_packages()
+    .collect::<Vec<_>>();
+
+    for dependency in &package_record.depends {
+        let dependency_spec = MatchSpec::from_str(dependency, ParseStrictness::Lenient)
+            .into_diagnostic()
+            .with_context(|| format!("failed to parse dependency '{dependency}'"))?;
+        if dependency_spec.is_virtual()
+            && !virtual_packages
+                .iter()
+                .any(|virtual_package| dependency_spec.matches(virtual_package))
+        {
+            return Err(miette::miette!(
+                "package {} has virtual dependency '{}', which is not satisfied by platform {}",
+                package_record,
+                dependency,
+                platform
+            ));
+        }
     }
 
     Ok(())
@@ -411,6 +453,23 @@ mod tests {
                 .to_string()
                 .contains("already installed")
         );
+    }
+
+    #[test]
+    fn test_virtual_package_dependencies_are_validated_for_target_platform() {
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("win-only-noarch-package"),
+            Version::from_str("0.0.1").unwrap(),
+            "h123456".to_string(),
+        );
+        record.subdir = Platform::NoArch.to_string();
+        record.depends = vec!["__win".to_string()];
+
+        let err =
+            validate_package_compatibility_for_platform(&record, Platform::OsxArm64).unwrap_err();
+        assert!(err.to_string().contains("virtual dependency '__win'"));
+
+        validate_package_compatibility_for_platform(&record, Platform::Win64).unwrap();
     }
 
     #[test]
