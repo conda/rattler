@@ -9,7 +9,7 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 
 [feature.build.dependencies]
-maturin = "~=1.10.1"
+maturin = "~=1.13.3"
 pip = "~=23.2.1"
 rust = "~=1.95.0"
 

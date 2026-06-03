@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.19...rattler_sandbox-v0.2.20) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
 ## [0.2.19](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.18...rattler_sandbox-v0.2.19) - 2026-05-19
 
 ### Added
