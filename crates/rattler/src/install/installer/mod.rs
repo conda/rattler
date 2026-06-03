@@ -839,7 +839,17 @@ async fn populate_cache(
         }) as _
     });
 
-    if let Ok(path) = record.url.to_file_path() {
+    if record.url.scheme() == "file" {
+        let path = record.url.to_file_path().map_err(|()| {
+            InstallerError::IoError(
+                format!("invalid file URL for {}", record.identifier),
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("could not convert {} to a file path", record.url),
+                ),
+            )
+        })?;
+
         cache
             .get_or_fetch_from_path(&path, reporter)
             .await
