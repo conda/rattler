@@ -449,10 +449,12 @@ impl PyEnvironment {
 #[pymethods]
 impl PyEnvironment {
     #[new]
+    #[pyo3(signature = (name, records, channels, pypi_packages=None))]
     pub fn new(
         name: String,
         records: HashMap<PyPlatform, Vec<PyRecord>>,
         channels: Vec<PyChannel>,
+        pypi_packages: Option<HashMap<PyPlatform, Vec<PyLockedPackage>>>,
     ) -> PyResult<Self> {
         let mut lock = LockFile::builder();
 
@@ -479,6 +481,7 @@ impl PyEnvironment {
             }),
         );
 
+        // Add Conda packages
         for (platform, records) in records {
             let platform_name = platform.inner.to_string();
             for record in records {
@@ -488,6 +491,27 @@ impl PyEnvironment {
                     record.try_as_repodata_record()?.clone().into(),
                 )
                 .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+            }
+        }
+
+        // Add PyPI packages if provided
+        if let Some(pypi_pkgs) = pypi_packages {
+            for (platform, packages) in pypi_pkgs {
+                for pkg in packages {
+                    if pkg.is_pypi() {
+                        lock.add_pypi_package(
+                            &name,
+                            platform.inner,
+                            pkg.as_pypi().clone(),
+                            pkg.as_pypi_env().clone(),
+                        );
+                    } else {
+                        return Err(crate::error::PyRattlerError::RequirementError(
+                            "Expected PypiLockedPackage, found Conda package".into(),
+                        )
+                        .into());
+                    }
+                }
             }
         }
 
