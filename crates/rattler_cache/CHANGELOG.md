@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/conda/rattler/compare/rattler_cache-v0.8.2...rattler_cache-v0.9.0) - 2026-06-02
+
+### Fixed
+
+- *(test)* fix `rattler_cache::package_cache::test_flaky` ([#2471](https://github.com/conda/rattler/pull/2471))
+- retry temp-directory rename on transient Windows errors ([#2453](https://github.com/conda/rattler/pull/2453))
+
+### Other
+
+- Merge commit from fork
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.8.2](https://github.com/conda/rattler/compare/rattler_cache-v0.8.1...rattler_cache-v0.8.2) - 2026-05-19
 
 ### Other

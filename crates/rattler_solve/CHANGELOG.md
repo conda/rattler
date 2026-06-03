@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.1.2](https://github.com/conda/rattler/compare/rattler_solve-v7.1.1...rattler_solve-v7.1.2) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [7.1.1](https://github.com/conda/rattler/compare/rattler_solve-v7.1.0...rattler_solve-v7.1.1) - 2026-05-19
 
 ### Other

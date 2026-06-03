@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.12"
+version = "0.1.15"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -49,6 +49,7 @@ miette = { workspace = true }
 once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
@@ -70,6 +71,7 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }

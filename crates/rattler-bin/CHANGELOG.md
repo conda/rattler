@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15](https://github.com/conda/rattler/compare/rattler-bin-v0.1.14...rattler-bin-v0.1.15) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
+## [0.1.14](https://github.com/conda/rattler/compare/rattler-bin-v0.1.13...rattler-bin-v0.1.14) - 2026-06-03
+
+### Other
+
+- updated the following local packages: rattler_shell, rattler_menuinst, rattler
+
+## [0.1.13](https://github.com/conda/rattler/compare/rattler-bin-v0.1.12...rattler-bin-v0.1.13) - 2026-06-02
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.1.12](https://github.com/conda/rattler/compare/rattler-bin-v0.1.11...rattler-bin-v0.1.12) - 2026-05-19
 
 ### Other

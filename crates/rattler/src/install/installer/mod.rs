@@ -22,8 +22,8 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
-    prefix_record::Link,
+    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, Platform, PrefixRecord,
+    RepoDataRecord, prefix_record::Link, utils::ensure_safe_path_component,
 };
 use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rayon::prelude::*;
@@ -449,6 +449,12 @@ impl Installer {
 
         let transaction = transaction.to_owned();
 
+        // Reject packages whose name/build could escape the prefix once written
+        // to disk, before attempting any installation (GHSA-h672-p7h7-97v9).
+        for record in transaction.installed_packages() {
+            ensure_record_path_safe(&record.package_record)?;
+        }
+
         // Validate that if the target platform is NoArch, all packages to be installed
         // must also be noarch (subdir == "noarch")
         if target_platform == Platform::NoArch {
@@ -826,21 +832,40 @@ async fn populate_cache(
         }
     }
 
-    cache
-        .get_or_fetch_from_url_with_retry(
-            &record.package_record,
-            record.url.clone(),
-            downloader,
-            default_retry_policy(),
-            reporter.map(|(reporter, cache_index)| {
-                Arc::new(CacheReporterBridge {
-                    reporter,
-                    cache_index,
-                }) as _
-            }),
-        )
-        .await
-        .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    let reporter = reporter.map(|(reporter, cache_index)| {
+        Arc::new(CacheReporterBridge {
+            reporter,
+            cache_index,
+        }) as _
+    });
+
+    if record.url.scheme() == "file" {
+        let path = record.url.to_file_path().map_err(|()| {
+            InstallerError::IoError(
+                format!("invalid file URL for {}", record.identifier),
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("could not convert {} to a file path", record.url),
+                ),
+            )
+        })?;
+
+        cache
+            .get_or_fetch_from_path(&path, reporter)
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    } else {
+        cache
+            .get_or_fetch_from_url_with_retry(
+                &record.package_record,
+                record.url.clone(),
+                downloader,
+                default_retry_policy(),
+                reporter,
+            )
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    }
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.
@@ -892,6 +917,15 @@ fn update_requested_specs_in_json(
     fs_err::write(path, updated_content)?;
 
     Ok(())
+}
+
+/// Rejects a record whose `name`/`build` could escape the prefix when written
+/// to disk. Both fields come from lower-trust channel repodata and are
+/// interpolated into `conda-meta` paths (GHSA-h672-p7h7-97v9).
+fn ensure_record_path_safe(record: &PackageRecord) -> Result<(), InstallerError> {
+    ensure_safe_path_component(record.name.as_normalized())
+        .and_then(|()| ensure_safe_path_component(&record.build))
+        .map_err(InstallerError::UnsafePackageRecord)
 }
 
 /// Creates a mapping from package names to their requested spec strings.
@@ -1019,6 +1053,27 @@ mod tests {
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
     use url::Url;
+
+    #[test]
+    fn test_ensure_record_path_safe() {
+        use rattler_conda_types::VersionWithSource;
+
+        let record = |name: &str, build: &str| {
+            PackageRecord::new(
+                PackageName::new_unchecked(name),
+                "1.0".parse::<VersionWithSource>().unwrap(),
+                build.to_string(),
+            )
+        };
+
+        assert!(ensure_record_path_safe(&record("demo", "py39_0")).is_ok());
+        // An empty build string is legitimate and cannot traverse.
+        assert!(ensure_record_path_safe(&record("demo", "")).is_ok());
+        // Path traversal in either field must be rejected.
+        assert!(ensure_record_path_safe(&record("demo", r"x\..\..\..\.git\hooks")).is_err());
+        assert!(ensure_record_path_safe(&record("demo", "a/b")).is_err());
+        assert!(ensure_record_path_safe(&record("../evil", "0")).is_err());
+    }
 
     /// Creates a test environment with a temporary directory and prefix
     fn create_test_environment() -> (TempDir, Prefix) {
