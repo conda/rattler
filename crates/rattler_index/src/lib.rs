@@ -289,6 +289,22 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     package_record_from_conda_reader(BufReader::new(reader))
 }
 
+/// Extract the package record from a conda package archive.
+///
+/// This dispatches to the correct reader for `.conda` and `.tar.bz2` package
+/// archives based on the file extension.
+pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord> {
+    match CondaArchiveType::try_from(file).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unsupported package archive: {}", file.display()),
+        )
+    })? {
+        CondaArchiveType::TarBz2 => package_record_from_tar_bz2(file),
+        CondaArchiveType::Conda => package_record_from_conda(file),
+    }
+}
+
 fn read_indexed_json_from_archive(
     bytes: &Vec<u8>,
     archive: &mut tar::Archive<impl Read>,

@@ -832,21 +832,30 @@ async fn populate_cache(
         }
     }
 
-    cache
-        .get_or_fetch_from_url_with_retry(
-            &record.package_record,
-            record.url.clone(),
-            downloader,
-            default_retry_policy(),
-            reporter.map(|(reporter, cache_index)| {
-                Arc::new(CacheReporterBridge {
-                    reporter,
-                    cache_index,
-                }) as _
-            }),
-        )
-        .await
-        .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    let reporter = reporter.map(|(reporter, cache_index)| {
+        Arc::new(CacheReporterBridge {
+            reporter,
+            cache_index,
+        }) as _
+    });
+
+    if let Ok(path) = record.url.to_file_path() {
+        cache
+            .get_or_fetch_from_path(&path, reporter)
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    } else {
+        cache
+            .get_or_fetch_from_url_with_retry(
+                &record.package_record,
+                record.url.clone(),
+                downloader,
+                default_retry_policy(),
+                reporter,
+            )
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    }
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.

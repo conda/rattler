@@ -1,14 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use miette::{Context, IntoDiagnostic};
-use rattler::install::{InstallDriver, InstallOptions, Transaction, link_package, unlink_package};
+use rattler::install::Installer;
 use rattler_conda_types::{
     MatchSpec, Matches, PackageName, PackageRecord, ParseStrictness, Platform, PrefixRecord,
-    RepoDataRecord,
-    package::{CondaArchiveType, DistArchiveIdentifier},
-    prefix::Prefix,
+    RepoDataRecord, package::DistArchiveIdentifier,
 };
-use rattler_package_streaming::fs::extract;
 use url::Url;
 
 const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
@@ -51,8 +48,15 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .packages
         .into_iter()
         .map(|package_path| {
-            let package_path = std::path::absolute(package_path).into_diagnostic()?;
-            let package_record = package_record_from_archive(&package_path)?;
+            let package_path = package_path.canonicalize().into_diagnostic()?;
+            let package_record = rattler_index::package_record_from_archive(&package_path)
+                .into_diagnostic()
+                .with_context(|| {
+                    format!(
+                        "failed to read package metadata from {}",
+                        package_path.display()
+                    )
+                })?;
 
             if !opt.skip_compatibility_checks {
                 validate_package_compatibility(&package_record)?;
@@ -108,72 +112,32 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .iter()
         .map(|record| record.repodata_record.clone())
         .collect::<Vec<_>>();
+    let injected_package_records = repodata_records
+        .iter()
+        .map(|(_, repodata_record)| repodata_record.package_record.clone())
+        .collect::<Vec<_>>();
     desired_records.extend(
         repodata_records
             .iter()
             .map(|(_, repodata_record)| repodata_record.clone()),
     );
 
-    let transaction = Transaction::from_current_and_desired(
-        installed_packages.clone(),
-        desired_records,
-        None,
-        None,
-        Platform::current(),
-    )
-    .into_diagnostic()?;
-
-    let driver = InstallDriver::builder()
-        .execute_link_scripts(true)
-        .with_prefix_records(&installed_packages)
-        .finish();
-    let prefix = Prefix::create(&target_prefix).into_diagnostic()?;
-    let mut prefix_records = Vec::with_capacity(repodata_records.len());
-
-    for (package_path, repodata_record) in repodata_records {
-        let extract_dir = tempfile::tempdir().into_diagnostic()?;
-
-        extract(&package_path, extract_dir.path())
-            .into_diagnostic()
-            .with_context(|| format!("failed to extract {}", package_path.display()))?;
-
-        let paths = link_package(
-            extract_dir.path(),
-            &prefix,
-            &driver,
-            InstallOptions {
-                platform: Some(Platform::current()),
-                python_info: transaction.python_info.clone(),
-                ..InstallOptions::default()
-            },
-        )
+    Installer::new()
+        .with_target_platform(Platform::current())
+        .with_installed_packages(installed_packages)
+        .with_execute_link_scripts(true)
+        .install(&target_prefix, desired_records)
         .await
         .into_diagnostic()
-        .with_context(|| {
-            format!(
-                "failed to link {} into {}",
-                repodata_record.package_record,
-                target_prefix.display()
-            )
-        })?;
-
-        let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
-        write_prefix_record(&target_prefix, &prefix_record)?;
-        prefix_records.push(prefix_record);
-    }
-
-    driver
-        .post_process(&transaction, &prefix, None)
-        .into_diagnostic()
-        .context("failed to post-process prefix after injection")?;
+        .context("failed to inject packages into prefix")?;
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
-    for prefix_record in prefix_records {
+    for package_record in injected_package_records {
         println!(
             "{} Injected {} into {}",
             console::style(console::Emoji("✔", "")).green(),
-            prefix_record.repodata_record.package_record,
+            package_record,
             target_prefix.display()
         );
     }
@@ -191,6 +155,10 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .iter()
         .map(|package| select_installed_record(&installed_packages, package))
         .collect::<miette::Result<Vec<_>>>()?;
+    let removed_package_records = remove_records
+        .iter()
+        .map(|record| record.repodata_record.package_record.clone())
+        .collect::<Vec<_>>();
     let remaining_packages = installed_packages
         .iter()
         .filter(|record| !remove_records.contains(record))
@@ -211,77 +179,28 @@ pub async fn remove_from_prefix(opt: RemoveFromPrefixOpt) -> miette::Result<()> 
         .iter()
         .map(|record| record.repodata_record.clone())
         .collect::<Vec<_>>();
-    let transaction = Transaction::from_current_and_desired(
-        installed_packages.clone(),
-        desired_records,
-        None,
-        None,
-        Platform::current(),
-    )
-    .into_diagnostic()?;
 
-    let driver = InstallDriver::builder()
-        .execute_link_scripts(true)
-        .with_prefix_records(&installed_packages)
-        .finish();
-    let prefix = Prefix::create(&target_prefix).into_diagnostic()?;
-
-    driver
-        .pre_process(&transaction, &target_prefix, None)
+    Installer::new()
+        .with_target_platform(Platform::current())
+        .with_installed_packages(installed_packages)
+        .with_execute_link_scripts(true)
+        .install(&target_prefix, desired_records)
+        .await
         .into_diagnostic()
-        .context("failed to pre-process prefix before removal")?;
-
-    for remove_record in &remove_records {
-        driver.clobber_registry().unregister_paths(remove_record);
-        unlink_package(&prefix, remove_record)
-            .await
-            .into_diagnostic()
-            .with_context(|| {
-                format!(
-                    "failed to unlink {}",
-                    remove_record.repodata_record.package_record
-                )
-            })?;
-    }
-
-    driver
-        .remove_empty_directories(
-            &transaction.operations,
-            transaction.unchanged_packages(),
-            &target_prefix,
-        )
-        .into_diagnostic()
-        .context("failed to remove empty directories after removal")?;
-
-    driver
-        .post_process(&transaction, &prefix, None)
-        .into_diagnostic()
-        .context("failed to post-process prefix after removal")?;
+        .context("failed to remove packages from prefix")?;
 
     invalidate_pixi_environment_fingerprint(&target_prefix)?;
 
-    for remove_record in remove_records {
+    for package_record in removed_package_records {
         println!(
             "{} Removed {} from {}",
             console::style(console::Emoji("✔", "")).green(),
-            remove_record.repodata_record.package_record,
+            package_record,
             target_prefix.display()
         );
     }
 
     Ok(())
-}
-
-fn package_record_from_archive(path: &Path) -> miette::Result<PackageRecord> {
-    let archive_type = CondaArchiveType::try_from(path)
-        .ok_or_else(|| miette::miette!("unsupported package archive: {}", path.display()))?;
-
-    match archive_type {
-        CondaArchiveType::TarBz2 => rattler_index::package_record_from_tar_bz2(path),
-        CondaArchiveType::Conda => rattler_index::package_record_from_conda(path),
-    }
-    .into_diagnostic()
-    .with_context(|| format!("failed to read package metadata from {}", path.display()))
 }
 
 fn validate_package_compatibility(package_record: &PackageRecord) -> miette::Result<()> {
@@ -394,19 +313,6 @@ fn reject_duplicate_package_names(package_names: &[PackageName]) -> miette::Resu
 
         seen_package_names.push(package_name);
     }
-
-    Ok(())
-}
-
-fn write_prefix_record(target_prefix: &Path, prefix_record: &PrefixRecord) -> miette::Result<()> {
-    let conda_meta_path = target_prefix.join("conda-meta");
-    std::fs::create_dir_all(&conda_meta_path)
-        .into_diagnostic()
-        .with_context(|| format!("failed to create {}", conda_meta_path.display()))?;
-    prefix_record
-        .write_to_path(conda_meta_path.join(prefix_record.file_name()), true)
-        .into_diagnostic()
-        .context("failed to write prefix record")?;
 
     Ok(())
 }
