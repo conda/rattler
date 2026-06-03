@@ -1550,7 +1550,7 @@ mod test {
     #[test]
     fn test_failed_binary_patch_does_not_overwrite_existing_destination() {
         use super::AppleCodeSignBehavior;
-        use rattler_conda_types::package::{PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
         use rattler_conda_types::prefix::Prefix;
         use std::path::PathBuf;
 
@@ -1611,7 +1611,7 @@ mod test {
     #[test]
     fn test_failed_binary_patch_does_not_leave_destination_file() {
         use super::AppleCodeSignBehavior;
-        use rattler_conda_types::package::{PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
         use rattler_conda_types::prefix::Prefix;
         use std::path::PathBuf;
 
