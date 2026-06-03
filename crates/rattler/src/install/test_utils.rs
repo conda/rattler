@@ -93,6 +93,7 @@ pub async fn execute_operation(
                 download_client.clone(),
                 default_retry_policy(),
                 None,
+                None,
             )
             .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))
             .map_err(anyhow::Error::from)

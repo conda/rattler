@@ -1427,6 +1427,7 @@ mod test {
                             package_url.clone(),
                             client.clone(),
                             None,
+                            None,
                         )
                         .await
                         .unwrap();

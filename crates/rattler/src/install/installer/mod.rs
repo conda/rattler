@@ -69,6 +69,7 @@ pub struct Installer {
     downloader: Option<LazyClient>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
@@ -142,6 +143,43 @@ impl Installer {
     /// modifies an existing instance.
     pub fn set_io_concurrency_semaphore(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions. This
+    /// is used to avoid overwhelming a server or saturating the network.
+    #[must_use]
+    pub fn with_max_concurrent_requests(self, limit: usize) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(Arc::new(Semaphore::new(limit))),
+            ..self
+        }
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_max_concurrent_requests`],
+    /// but modifies an existing instance.
+    pub fn set_max_concurrent_requests(&mut self, limit: usize) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    #[must_use]
+    pub fn with_concurrent_requests_semaphore(self, semaphore: Arc<Semaphore>) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(semaphore),
+            ..self
+        }
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_concurrent_requests_semaphore`],
+    /// but modifies an existing instance.
+    pub fn set_concurrent_requests_semaphore(&mut self, semaphore: Arc<Semaphore>) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(semaphore);
         self
     }
 
@@ -552,6 +590,10 @@ impl Installer {
             .await
             .map_err(InstallerError::FailedToAcquireCacheLock)?;
 
+        // Semaphore that limits concurrent package downloads and extractions. The permit
+        // is held for the duration of both. When None, concurrency is unlimited.
+        let concurrent_requests_semaphore = self.concurrent_requests_semaphore;
+
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
@@ -643,6 +685,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
+            let concurrent_requests_semaphore = &concurrent_requests_semaphore;
             let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
                 if let Some(reporter) = &reporter
@@ -657,6 +700,7 @@ impl Installer {
                     let downloader = downloader.clone();
                     let reporter = reporter.clone();
                     let package_cache = package_cache.clone();
+                    let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
@@ -667,6 +711,7 @@ impl Installer {
                             downloader,
                             &package_cache,
                             populate_cache_report.clone(),
+                            concurrent_requests_semaphore,
                         )
                         .await?;
                         if let Some((reporter, index)) = populate_cache_report {
@@ -831,6 +876,7 @@ async fn populate_cache(
     downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
 ) -> Result<CacheMetadata, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
@@ -889,6 +935,7 @@ async fn populate_cache(
                 downloader,
                 default_retry_policy(),
                 reporter,
+                concurrent_requests_semaphore,
             )
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
