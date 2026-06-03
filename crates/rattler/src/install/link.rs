@@ -1801,7 +1801,7 @@ mod test {
         let destination_path = temp_dir.path().join("patched.bin");
 
         let source = b"before /old/prefix/bin\0after";
-        let patched = b"before /new/bin\0\0\0\0\0\0\0after";
+        let patched = b"before /new/bin\0\0\0\0\0\0\0\0after";
 
         fs::write(&destination_path, source).unwrap();
 
