@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.3](https://github.com/conda/rattler/compare/rattler_index-v0.30.2...rattler_index-v0.30.3) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
 ## [0.30.2](https://github.com/conda/rattler/compare/rattler_index-v0.30.1...rattler_index-v0.30.2) - 2026-06-02
 
 ### Fixed
