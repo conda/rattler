@@ -323,6 +323,33 @@ impl Installer {
         self
     }
 
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// When files are linked into the target directory, hardcoded paths in
+    /// those files are "patched" by replacing the placeholder prefix with the
+    /// full path of the target directory. In exceptional cases you might want
+    /// to patch in a different prefix than the directory that is actually being
+    /// installed to. When set, this prefix is used instead of the target
+    /// directory.
+    #[must_use]
+    pub fn with_alternative_target_prefix(self, prefix: impl Into<PathBuf>) -> Self {
+        Self {
+            alternative_target_prefix: Some(prefix.into()),
+            ..self
+        }
+    }
+
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// This function is similar to [`Self::with_alternative_target_prefix`],
+    /// but modifies an existing instance.
+    pub fn set_alternative_target_prefix(&mut self, prefix: impl Into<PathBuf>) -> &mut Self {
+        self.alternative_target_prefix = Some(prefix.into());
+        self
+    }
+
     /// Sets the link options for the installer.
     pub fn with_link_options(self, options: LinkOptions) -> Self {
         Self {
@@ -1551,6 +1578,33 @@ mod tests {
             Some(LinkType::Copy),
             "link_type should be Copy when hard links are disabled"
         );
+    }
+
+    #[test]
+    fn test_alternative_target_prefix_setters() {
+        let prefix = Path::new("/some/other/prefix");
+
+        // The builder-style setter should store the prefix.
+        let installer = Installer::new().with_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+
+        // The mutable setter should store the prefix as well.
+        let mut installer = Installer::new();
+        installer.set_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+    }
+
+    #[tokio::test]
+    async fn test_install_with_alternative_target_prefix() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Installing with an alternative target prefix set should still succeed.
+        let installer = Installer::new().with_alternative_target_prefix("/some/other/prefix");
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "conda-meta file should exist");
     }
 
     /// Test that when hard links are explicitly forced on
