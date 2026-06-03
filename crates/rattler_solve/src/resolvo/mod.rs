@@ -635,15 +635,40 @@ impl Interner for CondaDependencyProvider<'_> {
     }
 
     fn display_merged_solvables(&self, solvables: &[SolvableId]) -> impl Display + '_ {
+        // When abbreviating, the number of versions shown at the start and end of
+        // the list around the ellipsis.
+        const HEAD: usize = 2;
+        const TAIL: usize = 1;
+
         if solvables.is_empty() {
             return String::new();
         }
 
+        // Collect the distinct versions in sorted order. The same version can
+        // appear multiple times when there are several builds of it.
         let versions = solvables
             .iter()
             .filter_map(|&id| self.pool.resolve_solvable(id).record.version())
             .sorted()
-            .format(" | ");
+            .dedup()
+            .collect::<Vec<_>>();
+
+        // Abbreviate long lists with an ellipsis so a package with many versions
+        // does not flood the error message, similar to micromamba.
+        let versions = if versions.len() > HEAD + TAIL + 1 {
+            versions[..HEAD]
+                .iter()
+                .map(ToString::to_string)
+                .chain(std::iter::once("...".to_string()))
+                .chain(
+                    versions[versions.len() - TAIL..]
+                        .iter()
+                        .map(ToString::to_string),
+                )
+                .join(" | ")
+        } else {
+            versions.iter().map(ToString::to_string).join(" | ")
+        };
 
         let name = self.display_solvable_name(solvables[0]);
         let result = format!("{name} {versions}");
