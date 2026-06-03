@@ -501,6 +501,15 @@ fn write_changed_ranges(
     source_bytes: &[u8],
     replacement: &[u8],
 ) -> Result<bool, std::io::Error> {
+    write_changed_ranges_to(destination, start_offset, source_bytes, replacement)
+}
+
+fn write_changed_ranges_to(
+    destination: &mut (impl Seek + Write),
+    start_offset: u64,
+    source_bytes: &[u8],
+    replacement: &[u8],
+) -> Result<bool, std::io::Error> {
     if source_bytes.len() != replacement.len() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -1742,6 +1751,22 @@ mod test {
     }
 
     #[test]
+    fn test_write_changed_ranges_leaves_unchanged_bytes_unwritten() {
+        let mut destination = Cursor::new(b"prefix old middle old suffix".to_vec());
+
+        let changed = super::write_changed_ranges_to(
+            &mut destination,
+            7,
+            b"old middle old",
+            b"new middle new",
+        )
+        .unwrap();
+
+        assert!(changed);
+        assert_eq!(destination.into_inner(), b"prefix new middle new suffix");
+    }
+
+    #[test]
     fn test_patch_copied_destination_rewrites_from_first_difference_when_length_changes() {
         let temp_dir = tempfile::tempdir().unwrap();
         let destination_path = temp_dir.path().join("patched.txt");
@@ -1758,6 +1783,35 @@ mod test {
             "/a/much/longer/prefix",
             &Platform::Linux64,
             super::FileMode::Text,
+        )
+        .unwrap();
+
+        assert_eq!(fs::read(&destination_path).unwrap(), patched);
+        assert!(result.content_changed);
+        assert_eq!(result.file_size, patched.len() as u64);
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_bytes_digest::<Sha256>(patched)
+        );
+    }
+
+    #[test]
+    fn test_patch_copied_destination_handles_binary_cstring_padding() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let destination_path = temp_dir.path().join("patched.bin");
+
+        let source = b"before /old/prefix/bin\0after";
+        let patched = b"before /new/bin\0\0\0\0\0\0\0after";
+
+        fs::write(&destination_path, source).unwrap();
+
+        let result = super::patch_copied_destination(
+            &destination_path,
+            source,
+            "/old/prefix",
+            "/new",
+            &Platform::Linux64,
+            super::FileMode::Binary,
         )
         .unwrap();
 
