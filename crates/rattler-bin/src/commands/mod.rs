@@ -9,6 +9,7 @@ pub mod inspect;
 pub mod link;
 pub mod list;
 pub mod menu;
+pub mod prefix;
 pub mod run;
 pub mod search;
 pub mod shell_hook;
