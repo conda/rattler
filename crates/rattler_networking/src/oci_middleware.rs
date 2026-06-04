@@ -53,6 +53,17 @@ impl OciMiddleware {
     }
 }
 
+/// The file name of the sharded repodata index.
+const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+
+/// Returns `true` if the URL refers to a sharded repodata index, which OCI
+/// registries do not serve.
+fn is_sharded_repodata_url(url: &Url) -> bool {
+    url.path_segments()
+        .and_then(|mut s| s.next_back())
+        .is_some_and(|name| name == REPODATA_SHARDS_FILENAME)
+}
+
 /// The action to perform on the OCI registry
 pub enum OciAction {
     /// Pull an artifact
@@ -304,6 +315,18 @@ impl Middleware for OciMiddleware {
         // if the URL is not an OCI URL, we don't need to do anything
         if req.url().scheme() != "oci" {
             return next.run(req, extensions).await;
+        }
+
+        // OCI registries (conda-oci-mirror layout) only serve `repodata.json`,
+        // never sharded repodata. Return a 404 for sharded repodata requests so
+        // that the gateway falls back to the regular `repodata.json` path
+        // instead of trying (and failing) to fetch a shard index that does not
+        // exist.
+        if is_sharded_repodata_url(req.url()) {
+            return Ok(create_404_response(
+                req.url(),
+                "sharded repodata is not available on OCI registries",
+            ));
         }
 
         let res = OCIUrl::get_blob_url(&self.client, &mut req).await;
