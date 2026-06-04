@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16](https://github.com/conda/rattler/compare/rattler-bin-v0.1.15...rattler-bin-v0.1.16) - 2026-06-04
+
+### Added
+
+- rattler exec implementation ([#2463](https://github.com/conda/rattler/pull/2463))
+- Add --limit to `rattler inspect` ([#2482](https://github.com/conda/rattler/pull/2482))
+- add support for the brush shell ([#2480](https://github.com/conda/rattler/pull/2480))
+
 ## [0.1.15](https://github.com/conda/rattler/compare/rattler-bin-v0.1.14...rattler-bin-v0.1.15) - 2026-06-03
 
 ### Added
