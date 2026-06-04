@@ -1,5 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
-use std::{borrow::Cow, future::IntoFuture, time::{Duration}};
+use std::{borrow::Cow, future::IntoFuture, time::Duration};
 
 /// Displays a spinner with the given message while running the specified
 /// function to completion.
