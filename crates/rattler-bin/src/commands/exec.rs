@@ -26,7 +26,7 @@ use tokio;
 use crate::{
     commands::{
         client::create_client_with_middleware,
-        progress::{wrap_in_async_progress, wrap_in_progress}
+        progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
 };
@@ -357,7 +357,7 @@ fn exec_dir_prefix(
 /// every character that is illegal in conda package names with a dash.
 fn guess_package_spec(command: &str) -> MatchSpec {
     MatchSpec {
-        name: PackageName::from_str(&command)
+        name: PackageName::from_str(command)
             .expect("all illegal characters have been sanitized")
             .into(),
         ..Default::default()
@@ -424,7 +424,7 @@ fn list_environment(
 mod tests {
     use rattler_conda_types::{MatchSpec, ParseStrictness};
 
-    use super::{compute_env_hash, exec_dir_prefix, guess_package_spec};
+    use super::{compute_env_hash, exec_dir_prefix};
     use rattler_conda_types::Platform;
 
     fn spec(s: &str) -> MatchSpec {
