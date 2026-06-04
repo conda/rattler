@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import datetime
+from dataclasses import dataclass
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, TypedDict
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 10):
@@ -38,38 +39,50 @@ class S3Credentials:
     addressing_style: Literal["path", "virtual-host"] = "virtual-host"
 
 
-@dataclass
-class RepodataRevisionInfo:
-    """Metadata for a repodata revision advertised in `info.repodata_revisions`."""
+class RepodataRevisionMetadata(TypedDict, total=False):
+    """Metadata for a single revision in the `vN`-keyed dictionary form of
+    `repodata_revisions`. The revision itself is the dictionary key."""
 
-    revision: Literal["v3"]
-    n_packages: Optional[int] = None
-    oldest: Optional[int] = None
-    newest: Optional[int] = None
-
-
-RepodataRevision: TypeAlias = Union[RepodataRevisionInfo, Mapping[str, Any]]
+    n_packages: Optional[int]
+    oldest: Optional[datetime.datetime]
+    newest: Optional[datetime.datetime]
 
 
-def _revision_to_wire(revision: Any) -> int:
+# Repodata revisions to advertise: a `vN`-keyed dictionary mapping each revision
+# to its metadata (the CEP shape), e.g. `{"v3": {"n_packages": 1}}`.
+RepodataRevisions: TypeAlias = Mapping[str, Optional[RepodataRevisionMetadata]]
+
+
+def _revision_to_wire(revision: str) -> int:
     if revision == "v3":
         return 3
     raise ValueError(f"unsupported repodata revision {revision!r}, expected 'v3'")
 
 
+def _epoch_ms(timestamp: datetime.datetime) -> int:
+    # repodata stores timestamps as Unix milliseconds.
+    return int(round(timestamp.timestamp() * 1000))
+
+
 def _repodata_revisions_to_dicts(
-    revisions: Optional[Sequence[RepodataRevision]],
+    revisions: Optional[RepodataRevisions],
 ) -> Optional[list[dict[str, Any]]]:
     if revisions is None:
         return None
 
     result = []
-    for revision in revisions:
-        if isinstance(revision, RepodataRevisionInfo):
-            revision_dict = asdict(revision)
-        else:
-            revision_dict = dict(revision)
-        revision_dict["revision"] = _revision_to_wire(revision_dict.get("revision"))
+    for revision, metadata in revisions.items():
+        revision_dict: dict[str, Any] = {"revision": _revision_to_wire(revision)}
+        if metadata is not None:
+            n_packages = metadata.get("n_packages")
+            if n_packages is not None:
+                revision_dict["n_packages"] = n_packages
+            oldest = metadata.get("oldest")
+            if oldest is not None:
+                revision_dict["oldest"] = _epoch_ms(oldest)
+            newest = metadata.get("newest")
+            if newest is not None:
+                revision_dict["newest"] = _epoch_ms(newest)
         result.append(revision_dict)
     return result
 
@@ -80,7 +93,7 @@ async def index_fs(
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
     write_shards: bool = True,
-    repodata_revisions: Optional[Sequence[RepodataRevision]] = None,
+    repodata_revisions: Optional[RepodataRevisions] = None,
     package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
     force: bool = False,
     max_parallel: int | None = None,
@@ -99,7 +112,8 @@ async def index_fs(
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
         write_shards: Whether to write sharded repodata.
-        repodata_revisions: Repodata revisions to advertise, including optional `n_packages`, `oldest`, and `newest` metadata.
+        repodata_revisions: Repodata revisions to advertise, with optional `n_packages`, `oldest`, and `newest` metadata.
+                            Either a sequence of revisions or a `vN`-keyed dictionary, e.g. `{"v3": {"n_packages": 1}}`.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
@@ -124,7 +138,7 @@ async def index_s3(
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
     write_shards: bool = True,
-    repodata_revisions: Optional[Sequence[RepodataRevision]] = None,
+    repodata_revisions: Optional[RepodataRevisions] = None,
     package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
     force: bool = False,
     max_parallel: int | None = None,
@@ -146,7 +160,8 @@ async def index_s3(
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
         write_shards: Whether to write sharded repodata.
-        repodata_revisions: Repodata revisions to advertise, including optional `n_packages`, `oldest`, and `newest` metadata.
+        repodata_revisions: Repodata revisions to advertise, with optional `n_packages`, `oldest`, and `newest` metadata.
+                            Either a sequence of revisions or a `vN`-keyed dictionary, e.g. `{"v3": {"n_packages": 1}}`.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
