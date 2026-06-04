@@ -369,7 +369,5 @@ async def install(
         show_progress=show_progress,
         requested_specs=requested_specs,
         reporter=reporter,
-        alternative_target_prefix=str(alternative_target_prefix)
-        if alternative_target_prefix is not None
-        else None,
+        alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
     )
