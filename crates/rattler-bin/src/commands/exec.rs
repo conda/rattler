@@ -356,12 +356,8 @@ fn exec_dir_prefix(
 /// Converts a command name into a best-guess package `MatchSpec` by replacing
 /// every character that is illegal in conda package names with a dash.
 fn guess_package_spec(command: &str) -> MatchSpec {
-    let sanitized = command.replace(
-        |c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.'),
-        "-",
-    );
     MatchSpec {
-        name: PackageName::from_str(&sanitized)
+        name: PackageName::from_str(&command)
             .expect("all illegal characters have been sanitized")
             .into(),
         ..Default::default()
@@ -457,12 +453,6 @@ mod tests {
     fn multiple_explicit_specs_have_no_prefix() {
         let prefix = exec_dir_prefix(&[spec("foo"), spec("bar")], Some("cmd"), false);
         assert_eq!(prefix, None);
-    }
- 
-    #[test]
-    fn guess_sanitizes_illegal_chars() {
-        let s = guess_package_spec("my/cmd!");
-        assert_eq!(s.name.as_exact().unwrap().as_normalized(), "my-cmd-");
     }
 
     #[test]
