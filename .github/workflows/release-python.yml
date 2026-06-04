@@ -420,8 +420,10 @@ jobs:
         with:
           changelog_file: py-rattler/CHANGELOG.md
       - name: Verify release notes
+        env:
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.release_notes }}
         run: |
-          if [ -z '${{ steps.release_notes.outputs.release_notes }}' ]; then
+          if [ -z "$RELEASE_NOTES" ]; then
             echo "No release notes found for the latest version in py-rattler/CHANGELOG.md" >&2
             exit 1
           fi
@@ -475,12 +477,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ needs.extract-changelog.outputs.release_notes }}
         run: |
           gh release create "py-rattler-v${{ inputs.tag }}" \
             --repo "${{ github.repository }}" \
             --target "${{ inputs.sha || github.sha }}" \
             --title "py-rattler v${{ inputs.tag }}" \
-            --notes '${{ needs.extract-changelog.outputs.release_notes }}'
+            --notes "$RELEASE_NOTES"
 
   deploy-release-docs:
     name: Deploy release docs
@@ -500,7 +503,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_shell-v0.27.3...rattler_shell-v0.27.4) - 2026-06-03
+
+### Fixed
+
+- loop over completion files instead of using glob operator ([#2474](https://github.com/conda/rattler/pull/2474))
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_shell-v0.27.2...rattler_shell-v0.27.3) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
 ## [0.27.2](https://github.com/conda/rattler/compare/rattler_shell-v0.27.1...rattler_shell-v0.27.2) - 2026-05-19
 
 ### Other

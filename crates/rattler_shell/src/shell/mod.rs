@@ -268,7 +268,7 @@ type ShellResult = Result<(), ShellError>;
 /// sourcing, `export`, `unset`, etc.).  The differences are:
 /// - `executable()` returns the correct binary name per flavor.
 /// - Bash-specific features like completion sourcing are only enabled for
-///   `BashFlavor::Bash`.
+///   Bash-compatible flavors (`BashFlavor::Bash` and `BashFlavor::Brush`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum BashFlavor {
@@ -283,6 +283,8 @@ pub enum BashFlavor {
     Ksh,
     /// `BusyBox` `sh` (identifies itself as `sh`).
     BusyBox,
+    /// Brush, a Bash-compatible shell written in Rust (<https://brush.sh>).
+    Brush,
 }
 
 /// A [`Shell`] implementation for the Bash shell and compatible sh-family
@@ -378,16 +380,18 @@ impl Shell for Bash {
     }
 
     fn completion_script_location(&self) -> Option<&'static Path> {
-        // Only standard Bash has the bash-completion infrastructure.
+        // Only Bash-compatible flavors have the bash-completion infrastructure.
         match self.flavor {
-            BashFlavor::Bash => Some(Path::new("share/bash-completion/completions")),
+            BashFlavor::Bash | BashFlavor::Brush => {
+                Some(Path::new("share/bash-completion/completions"))
+            }
             _ => None,
         }
     }
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         // The `source dir/*` glob pattern is a bashism – skip for POSIX shells.
-        if self.flavor != BashFlavor::Bash {
+        if !matches!(self.flavor, BashFlavor::Bash | BashFlavor::Brush) {
             return Ok(());
         }
         if completions_dir.exists() {
@@ -406,7 +410,10 @@ impl Shell for Bash {
             } else {
                 completions_dir.to_string_lossy().to_string()
             };
-            writeln!(f, "source {completions_dir_str}/*")?;
+            writeln!(f, "for _pixi_f in {completions_dir_str}/*; do")?;
+            writeln!(f, "    [ -r \"$_pixi_f\" ] && . \"$_pixi_f\"")?;
+            writeln!(f, "done")?;
+            writeln!(f, "unset _pixi_f")?;
         }
         Ok(())
     }
@@ -417,6 +424,7 @@ impl Shell for Bash {
             BashFlavor::Sh | BashFlavor::BusyBox => "sh",
             BashFlavor::Dash => "dash",
             BashFlavor::Ksh => "ksh",
+            BashFlavor::Brush => "brush",
         }
     }
 
@@ -980,7 +988,14 @@ impl ShellEnum {
             let parent_process = system_info.process(parent_process_id)?;
             let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
-            let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
+            let shell: Option<ShellEnum> = if parent_process_name.contains("brush") {
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Brush,
+                    }
+                    .into(),
+                )
+            } else if parent_process_name.contains("bash") {
                 Some(
                     Bash {
                         flavor: BashFlavor::Bash,
@@ -1092,6 +1107,10 @@ impl FromStr for ShellEnum {
             .into()),
             "busybox" => Ok(Bash {
                 flavor: BashFlavor::BusyBox,
+            }
+            .into()),
+            "brush" => Ok(Bash {
+                flavor: BashFlavor::Brush,
             }
             .into()),
             "zsh" => Ok(Zsh.into()),
@@ -1369,6 +1388,9 @@ mod tests {
         // busybox
         let s = ShellEnum::from_str("busybox").unwrap();
         assert_eq!(s.executable(), "sh");
+        // brush
+        let s = ShellEnum::from_str("brush").unwrap();
+        assert_eq!(s.executable(), "brush");
     }
 
     #[test]
@@ -1381,6 +1403,7 @@ mod tests {
             BashFlavor::Dash,
             BashFlavor::Ksh,
             BashFlavor::BusyBox,
+            BashFlavor::Brush,
         ];
         let paths = vec![PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")];
         let reference = {
@@ -1412,6 +1435,14 @@ mod tests {
         assert!(
             Bash {
                 flavor: BashFlavor::Bash
+            }
+            .completion_script_location()
+            .is_some()
+        );
+        // Brush is Bash-compatible and shares the bash-completion infrastructure.
+        assert!(
+            Bash {
+                flavor: BashFlavor::Brush
             }
             .completion_script_location()
             .is_some()

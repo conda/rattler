@@ -1,6 +1,6 @@
+use rattler_conda_types::utils::{InvalidPathComponentError, ensure_safe_path_component};
 use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
 use rattler_digest::{Md5Hash, Sha256Hash};
-use std::fmt::{Display, Formatter};
 
 /// Provides a unique identifier for packages in the cache.
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
@@ -43,6 +43,27 @@ impl CacheKey {
         self.sha256().map(hex::encode).unwrap_or_default()
     }
 
+    /// Renders the cache key as a file name, rejecting metadata-derived
+    /// components that could escape the cache root (GHSA-h672-p7h7-97v9).
+    ///
+    /// This is intentionally the only way to turn a key into a path: there is no
+    /// `Display`/`to_string` that could bypass the check.
+    pub(crate) fn to_path_segment(&self) -> Result<String, InvalidPathComponentError> {
+        // We use either the sha256 or md5 hash to disambiguate the key; if both
+        // are absent we omit it.
+        let hash = match (self.sha256(), self.md5()) {
+            (Some(sha256), _) => format!("-{}", hex::encode(sha256)),
+            (_, Some(md5)) => format!("-{}", hex::encode(md5)),
+            _ => String::new(),
+        };
+        let segment = format!(
+            "{}-{}-{}{}{}",
+            &self.name, &self.version, &self.build_string, hash, self.extension
+        );
+        ensure_safe_path_component(&segment)?;
+        Ok(segment)
+    }
+
     /// Try to create a new cache key from a package record and a filename.
     pub fn create(record: &PackageRecord, filename: &str) -> Result<Self, CacheKeyError> {
         let archive_identifier = CondaArchiveIdentifier::try_from_filename(filename)
@@ -65,20 +86,30 @@ pub enum CacheKeyError {
     InvalidArchiveIdentifier(String),
 }
 
-impl Display for CacheKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // we need to use either sha256 or md5 hash to display the key
-        // if both are none, we ignore them
-        let display_key = match (self.sha256(), self.md5()) {
-            (Some(sha256), _) => format!("-{}", hex::encode(sha256)),
-            (_, Some(md5)) => format!("-{}", hex::encode(md5)),
-            _ => "".to_string(),
-        };
+#[cfg(test)]
+mod tests {
+    use super::CacheKey;
+    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
 
-        write!(
-            f,
-            "{}-{}-{}{}{}",
-            &self.name, &self.version, &self.build_string, display_key, self.extension
-        )
+    #[test]
+    fn to_path_segment_rejects_path_traversal() {
+        let record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            "1.0".parse::<VersionWithSource>().unwrap(),
+            r"x\..\..\..\project\.git\hooks".to_string(),
+        );
+        let key = CacheKey::create(&record, "demo-1.0-0.tar.bz2").unwrap();
+        assert!(key.to_path_segment().is_err());
+    }
+
+    #[test]
+    fn to_path_segment_accepts_well_formed_key() {
+        let record = PackageRecord::new(
+            PackageName::new_unchecked("demo"),
+            "1.0".parse::<VersionWithSource>().unwrap(),
+            "py39h6fdeb60_14".to_string(),
+        );
+        let key = CacheKey::create(&record, "demo-1.0-0.tar.bz2").unwrap();
+        assert!(key.to_path_segment().is_ok());
     }
 }

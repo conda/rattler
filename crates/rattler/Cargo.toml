@@ -1,6 +1,7 @@
 [package]
+exclude = ["**/snapshots/**"]
 name = "rattler"
-version = "0.43.2"
+version = "0.44.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"

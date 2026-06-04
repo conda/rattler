@@ -123,7 +123,7 @@ impl RunExportsCache {
         Fut: Future<Output = Result<Option<NamedTempFile>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_path = self.inner.path.join(cache_key.to_path_segment()?);
         let cache_entry = self
             .inner
             .run_exports
@@ -347,6 +347,10 @@ pub enum RunExportsCacheError {
     /// The operation was cancelled
     #[error("operation was cancelled")]
     Cancelled,
+
+    /// The cache key contains metadata that could lead to path traversal.
+    #[error(transparent)]
+    UnsafeCacheKey(#[from] rattler_conda_types::utils::InvalidPathComponentError),
 }
 
 struct PassthroughReporter {
