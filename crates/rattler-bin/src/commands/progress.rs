@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    future::IntoFuture,
-    time::{Duration},
-};
+use std::{borrow::Cow, future::IntoFuture, time::{Duration}};
 use indicatif::{ProgressBar, ProgressStyle};
 
 /// Displays a spinner with the given message while running the specified

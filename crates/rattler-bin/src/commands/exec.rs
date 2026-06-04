@@ -24,7 +24,10 @@ use std::{
 use tokio;
 
 use crate::{
-    commands::{client::create_client_with_middleware, progress::{wrap_in_async_progress, wrap_in_progress}},
+    commands::{
+        client::create_client_with_middleware,
+        progress::{wrap_in_async_progress, wrap_in_progress}
+    },
     global_multi_progress,
 };
 

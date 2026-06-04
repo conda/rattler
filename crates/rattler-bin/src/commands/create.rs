@@ -27,7 +27,8 @@ use rattler_solve::{
 
 use crate::{
     commands::progress::{wrap_in_async_progress, wrap_in_progress},
-    exclude_newer::ExcludeNewer, global_multi_progress
+    exclude_newer::ExcludeNewer,
+    global_multi_progress,
 };
 
 /// Create a conda environment from package listing
