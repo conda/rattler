@@ -34,10 +34,10 @@ jobs:
     name: Build sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
@@ -73,10 +73,10 @@ jobs:
     #      - target: aarch64-pc-windows-msvc
     #        arch: x64
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
@@ -85,7 +85,7 @@ jobs:
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --no-default-features --features rustls-tls
+          args: --release --out dist --no-default-features --features rustls
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
@@ -108,10 +108,10 @@ jobs:
           - x86_64-unknown-linux-gnu
           - i686-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -121,7 +121,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -146,10 +146,10 @@ jobs:
             arch: armv7
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -158,7 +158,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: "2_28"
-          args: --release --out dist  --no-default-features --features rustls-tls,pty
+          args: --release --out dist  --no-default-features --features rustls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -194,10 +194,10 @@ jobs:
             arch: ppc64
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -237,21 +237,21 @@ jobs:
           - x86_64-unknown-linux-musl
           - i686-unknown-linux-musl
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - name: "Build wheels (rustls-tls)"
+      - name: "Build wheels (rustls)"
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
@@ -289,10 +289,10 @@ jobs:
             arch: armv7
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
@@ -301,7 +301,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: Test wheel
         with:
@@ -323,10 +323,10 @@ jobs:
     runs-on: macos-15-intel # x86_64 runner
     name: Build x86_64-macos
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -335,7 +335,7 @@ jobs:
         with:
           working-directory: py-rattler
           target: x86_64
-          args: --release --out dist --no-default-features --features rustls-tls,pty
+          args: --release --out dist --no-default-features --features rustls,pty
       - name: "Test wheel - x86_64"
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
@@ -350,17 +350,17 @@ jobs:
     runs-on: macos-latest
     name: Build universal2-apple-macos
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
-          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls-tls,pty
+          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls,pty
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |
@@ -378,7 +378,7 @@ jobs:
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main # We checkout the main branch to check for the commit
       - name: Check main branch
@@ -411,7 +411,7 @@ jobs:
     outputs:
       release_notes: ${{ steps.release_notes.outputs.release_notes }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
       - name: Extract release notes
@@ -420,8 +420,10 @@ jobs:
         with:
           changelog_file: py-rattler/CHANGELOG.md
       - name: Verify release notes
+        env:
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.release_notes }}
         run: |
-          if [ -z '${{ steps.release_notes.outputs.release_notes }}' ]; then
+          if [ -z "$RELEASE_NOTES" ]; then
             echo "No release notes found for the latest version in py-rattler/CHANGELOG.md" >&2
             exit 1
           fi
@@ -475,12 +477,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ needs.extract-changelog.outputs.release_notes }}
         run: |
           gh release create "py-rattler-v${{ inputs.tag }}" \
             --repo "${{ github.repository }}" \
             --target "${{ inputs.sha || github.sha }}" \
             --title "py-rattler v${{ inputs.tag }}" \
-            --notes '${{ needs.extract-changelog.outputs.release_notes }}'
+            --notes "$RELEASE_NOTES"
 
   deploy-release-docs:
     name: Deploy release docs
@@ -494,13 +497,13 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
           submodules: recursive
 
-      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
           manifest-path: py-rattler/pixi.toml
           environments: docs

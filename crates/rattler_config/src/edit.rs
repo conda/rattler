@@ -98,6 +98,17 @@ where
                     .transpose()?;
                 Ok(())
             }
+            "tls-root-certs" => {
+                self.tls_root_certs = value
+                    .map(|v| {
+                        v.parse().map_err(|e| ConfigEditError::InvalidValue {
+                            key: key.to_string(),
+                            source: Box::new(e),
+                        })
+                    })
+                    .transpose()?;
+                Ok(())
+            }
             "mirrors" => {
                 self.mirrors = value
                     .map(|v| {

@@ -12,13 +12,13 @@ pub mod resolvo;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
-    utils::TimestampMs, GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
+    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
 };
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
@@ -34,7 +34,7 @@ pub trait SolverImpl {
         TAvailablePackagesIterator: IntoIterator<Item = R>,
     >(
         &mut self,
-        task: SolverTask<TAvailablePackagesIterator>,
+        task: SolverTask<'a, TAvailablePackagesIterator>,
     ) -> Result<SolverResult, SolveError>;
 }
 
@@ -175,31 +175,31 @@ impl CancellationToken {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeNewer {
     /// The default cutoff date. Packages uploaded after this date are excluded.
-    cutoff: DateTime<Utc>,
+    cutoff: Timestamp,
 
     /// Channel-specific cutoff dates that override [`Self::cutoff`] for
     /// records from matching channels.
     ///
     /// The key is matched against [`RepoDataRecord::channel`] exactly.
-    channel_cutoffs: HashMap<String, DateTime<Utc>>,
+    channel_cutoffs: HashMap<String, Timestamp>,
 
     /// Package-specific cutoff dates that override both [`Self::cutoff`] and
     /// [`Self::channel_cutoffs`] for matching package names.
-    package_cutoffs: HashMap<PackageName, DateTime<Utc>>,
+    package_cutoffs: HashMap<PackageName, Timestamp>,
 
     /// Whether to include packages that don't have a timestamp.
     include_unknown_timestamp: bool,
 }
 
 impl ExcludeNewer {
-    fn cutoff_from_duration(duration: std::time::Duration, now: DateTime<Utc>) -> DateTime<Utc> {
-        let duration =
-            chrono::Duration::from_std(duration).expect("exclude_newer duration is too large");
-        now - duration
+    fn cutoff_from_duration(duration: std::time::Duration, now: Timestamp) -> Timestamp {
+        let span = jiff::Span::try_from(duration).expect("exclude_newer duration is too large");
+        now.checked_sub(span)
+            .expect("exclude_newer duration subtraction overflowed")
     }
 
     /// Creates a new configuration from an absolute cutoff date.
-    pub fn from_datetime(cutoff: DateTime<Utc>) -> Self {
+    pub fn from_datetime(cutoff: Timestamp) -> Self {
         Self {
             cutoff,
             channel_cutoffs: HashMap::new(),
@@ -210,12 +210,12 @@ impl ExcludeNewer {
 
     /// Creates a new configuration from a relative duration.
     pub fn from_duration(duration: std::time::Duration) -> Self {
-        Self::from_duration_with_now(duration, Utc::now())
+        Self::from_duration_with_now(duration, Timestamp::now())
     }
 
     /// Creates a new configuration from a relative duration and explicit
     /// reference time.
-    pub fn from_duration_with_now(duration: std::time::Duration, now: DateTime<Utc>) -> Self {
+    pub fn from_duration_with_now(duration: std::time::Duration, now: Timestamp) -> Self {
         Self {
             cutoff: Self::cutoff_from_duration(duration, now),
             channel_cutoffs: HashMap::new(),
@@ -225,7 +225,7 @@ impl ExcludeNewer {
     }
 
     /// Sets the absolute cutoff override for a specific package.
-    pub fn with_package_cutoff(mut self, package: PackageName, cutoff: DateTime<Utc>) -> Self {
+    pub fn with_package_cutoff(mut self, package: PackageName, cutoff: Timestamp) -> Self {
         self.package_cutoffs.insert(package, cutoff);
         self
     }
@@ -236,8 +236,10 @@ impl ExcludeNewer {
         package: PackageName,
         duration: std::time::Duration,
     ) -> Self {
-        self.package_cutoffs
-            .insert(package, Self::cutoff_from_duration(duration, Utc::now()));
+        self.package_cutoffs.insert(
+            package,
+            Self::cutoff_from_duration(duration, Timestamp::now()),
+        );
         self
     }
 
@@ -247,7 +249,7 @@ impl ExcludeNewer {
         mut self,
         package: PackageName,
         duration: std::time::Duration,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Self {
         self.package_cutoffs
             .insert(package, Self::cutoff_from_duration(duration, now));
@@ -262,7 +264,7 @@ impl ExcludeNewer {
     ) -> Self {
         self.channel_cutoffs.insert(
             channel.into(),
-            Self::cutoff_from_duration(duration, Utc::now()),
+            Self::cutoff_from_duration(duration, Timestamp::now()),
         );
         self
     }
@@ -273,7 +275,7 @@ impl ExcludeNewer {
         mut self,
         channel: impl Into<String>,
         duration: std::time::Duration,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> Self {
         self.channel_cutoffs
             .insert(channel.into(), Self::cutoff_from_duration(duration, now));
@@ -281,11 +283,7 @@ impl ExcludeNewer {
     }
 
     /// Sets the absolute cutoff override for a specific channel.
-    pub fn with_channel_cutoff(
-        mut self,
-        channel: impl Into<String>,
-        cutoff: DateTime<Utc>,
-    ) -> Self {
+    pub fn with_channel_cutoff(mut self, channel: impl Into<String>, cutoff: Timestamp) -> Self {
         self.channel_cutoffs.insert(channel.into(), cutoff);
         self
     }
@@ -304,11 +302,7 @@ impl ExcludeNewer {
     }
 
     /// Computes the cutoff time for the given package and channel.
-    pub fn cutoff_for_package(
-        &self,
-        package: &PackageName,
-        channel: Option<&str>,
-    ) -> DateTime<Utc> {
+    pub fn cutoff_for_package(&self, package: &PackageName, channel: Option<&str>) -> Timestamp {
         self.package_cutoffs
             .get(package)
             .copied()
@@ -330,8 +324,8 @@ impl ExcludeNewer {
     }
 }
 
-impl From<DateTime<Utc>> for ExcludeNewer {
-    fn from(value: DateTime<Utc>) -> Self {
+impl From<Timestamp> for ExcludeNewer {
+    fn from(value: Timestamp) -> Self {
         Self::from_datetime(value)
     }
 }
@@ -362,7 +356,7 @@ pub enum ChannelPriority {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends
-pub struct SolverTask<TAvailablePackagesIterator> {
+pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// An iterator over all available packages
     pub available_packages: TAvailablePackagesIterator,
 
@@ -376,7 +370,11 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     ///
     /// Usually you add the currently installed packages or packages from a
     /// lock-file here.
-    pub locked_packages: Vec<RepoDataRecord>,
+    ///
+    /// Records are passed by reference so the caller keeps ownership of the
+    /// underlying storage (whether that is `Vec<RepoDataRecord>`,
+    /// `Vec<Arc<RepoDataRecord>>` from the gateway, or anything else).
+    pub locked_packages: Vec<&'a RepoDataRecord>,
 
     /// Records of packages that are previously selected and CANNOT be changed.
     ///
@@ -385,7 +383,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// best possible version. However, if there is a variant available in
     /// the `pinned_packages` field it will always select that version no matter
     /// what even if that means other packages have to be downgraded.
-    pub pinned_packages: Vec<RepoDataRecord>,
+    ///
+    /// See [`Self::locked_packages`] for the borrowing rationale.
+    pub pinned_packages: Vec<&'a RepoDataRecord>,
 
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
@@ -433,7 +433,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
-    for SolverTask<Vec<RepoDataIter<I>>>
+    for SolverTask<'r, Vec<RepoDataIter<I>>>
 {
     fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
         Self {

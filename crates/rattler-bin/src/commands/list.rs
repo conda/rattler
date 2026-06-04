@@ -70,15 +70,15 @@ pub async fn list(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    if let Some(query) = &opt.name {
-        if lines.is_empty() {
-            // If user queried a package but we didn't get matches, that's an error
-            miette::bail!(
-                "No packages matched {}query '{}'",
-                if opt.full_name { "exact " } else { "" },
-                query.as_normalized()
-            );
-        }
+    if let Some(query) = &opt.name
+        && lines.is_empty()
+    {
+        // If user queried a package but we didn't get matches, that's an error
+        miette::bail!(
+            "No packages matched {}query '{}'",
+            if opt.full_name { "exact " } else { "" },
+            query.as_normalized()
+        );
     }
 
     lines.sort();

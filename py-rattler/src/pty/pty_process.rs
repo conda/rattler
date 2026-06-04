@@ -2,7 +2,7 @@
 //!
 //! This module provides the lower-level PTY process control API.
 
-use pyo3::{exceptions::PyRuntimeError, pyclass, pymethods, Bound, PyAny, PyResult, Python};
+use pyo3::{Bound, PyAny, PyResult, Python, exceptions::PyRuntimeError, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use std::os::fd::{AsRawFd, IntoRawFd};
 use std::process::Command;
@@ -418,8 +418,8 @@ impl PyPtyProcess {
         let child_pid = self.inner.child_pid;
 
         future_into_py(py, async move {
-            use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-            use tokio::time::{sleep, Duration};
+            use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
+            use tokio::time::{Duration, sleep};
 
             loop {
                 match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
@@ -474,9 +474,9 @@ impl PyPtyProcess {
         future_into_py(py, async move {
             use nix::sys::{
                 signal,
-                wait::{waitpid, WaitPidFlag, WaitStatus},
+                wait::{WaitPidFlag, WaitStatus, waitpid},
             };
-            use tokio::time::{sleep, Duration, Instant};
+            use tokio::time::{Duration, Instant, sleep};
 
             let sig = Signal::SIGTERM;
             let start = Instant::now();

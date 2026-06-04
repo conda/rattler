@@ -1,16 +1,16 @@
 //! Storage and access of authentication information
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::IntoUrl;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
 };
 use url::Url;
 
-use crate::authentication_storage::{backends::file::FileStorage, AuthenticationStorageError};
+use crate::authentication_storage::{AuthenticationStorageError, backends::file::FileStorage};
 
-use super::{authentication::Authentication, StorageBackend};
+use super::{StorageBackend, authentication::Authentication};
 
 #[cfg(feature = "netrc-rs")]
 use super::backends::netrc::NetRcStorage;
@@ -20,6 +20,26 @@ use crate::authentication_storage::backends::keyring::KeyringAuthenticationStora
 
 #[cfg(feature = "keyring")]
 use super::backends::keyring::KeyringAuthenticationStorage;
+
+/// A single entry returned by [`AuthenticationStorage::list_with_sources`].
+/// Carries the host and credential along with the backend's display name and
+/// a flag indicating whether this is the entry [`get`](AuthenticationStorage::get)
+/// would actually return (the first backend that knows the host wins).
+#[derive(Debug, Clone)]
+pub struct ListedEntry {
+    /// The host this credential is stored under.
+    pub host: String,
+    /// The credential itself.
+    pub auth: Authentication,
+    /// Human-readable name of the backend the entry came from (see
+    /// [`StorageBackend::name`]).
+    pub source: String,
+    /// `true` if this is the entry `get(host)` would return — i.e. the first
+    /// backend (in priority order) that holds credentials for `host`. Later
+    /// backends with the same host are "shadowed" and have `active = false`.
+    pub active: bool,
+}
+
 #[derive(Debug, Clone)]
 /// This struct implements storage and access of authentication
 /// information backed by multiple storage backends
@@ -90,10 +110,13 @@ impl AuthenticationStorage {
             #[allow(unused_variables)]
             if let Err(error) = backend.store(host, authentication) {
                 #[cfg(feature = "keyring")]
-                if let AuthenticationStorageError::KeyringStorageError(
-                    KeyringAuthenticationStorageError::StorageError(_),
-                ) = error
-                {
+                if matches!(
+                    error,
+                    AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_)
+                            | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                    )
+                ) {
                     tracing::debug!("Error storing credentials in keyring: {}", error);
                 } else {
                     tracing::warn!("Error storing credentials from backend: {}", error);
@@ -128,10 +151,13 @@ impl AuthenticationStorage {
                 Ok(None) => {}
                 Err(_e) => {
                     #[cfg(feature = "keyring")]
-                    if let AuthenticationStorageError::KeyringStorageError(
-                        KeyringAuthenticationStorageError::StorageError(_),
-                    ) = _e
-                    {
+                    if matches!(
+                        _e,
+                        AuthenticationStorageError::KeyringStorageError(
+                            KeyringAuthenticationStorageError::StorageError(_)
+                                | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                        )
+                    ) {
                         tracing::trace!("Error storing credentials in keyring: {}", _e);
                     } else {
                         tracing::warn!("Error retrieving credentials from backend: {}", _e);
@@ -146,6 +172,62 @@ impl AuthenticationStorage {
         cache.insert(host.to_string(), None);
 
         Ok(None)
+    }
+
+    /// List authentication entries known to the configured backends.
+    ///
+    /// Entries are deduplicated by host using backend priority, matching the
+    /// lookup behavior of [`get`](Self::get).
+    pub fn list(&self) -> Result<Vec<(String, Authentication)>> {
+        let mut entries: BTreeMap<String, Authentication> = BTreeMap::new();
+
+        for backend in &self.backends {
+            match backend.list() {
+                Ok(backend_entries) => {
+                    for (host, auth) in backend_entries {
+                        entries.entry(host).or_insert(auth);
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!("Error listing credentials from backend: {}", error);
+                }
+            }
+        }
+
+        Ok(entries.into_iter().collect())
+    }
+
+    /// Like [`list`](Self::list), but reports every entry from every backend
+    /// (not deduplicated) along with the backend's human-readable name (see
+    /// [`StorageBackend::name`]) and whether it's the entry that `get()` would
+    /// return for that host. Used by `auth status` so users can see what's
+    /// stored where, including shadowed entries.
+    pub fn list_with_sources(&self) -> Result<Vec<ListedEntry>> {
+        let mut entries: Vec<ListedEntry> = Vec::new();
+        let mut seen_hosts: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for backend in &self.backends {
+            match backend.list() {
+                Ok(backend_entries) => {
+                    let source = backend.name();
+                    for (host, auth) in backend_entries {
+                        let active = seen_hosts.insert(host.clone());
+                        entries.push(ListedEntry {
+                            host,
+                            auth,
+                            source: source.clone(),
+                            active,
+                        });
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!("Error listing credentials from backend: {}", error);
+                }
+            }
+        }
+
+        entries.sort_by(|a, b| a.host.cmp(&b.host));
+        Ok(entries)
     }
 
     /// Retrieve the authentication information for the given URL, along with the
@@ -243,6 +325,29 @@ impl AuthenticationStorage {
         Ok((url, auth.map(|(_, credentials)| credentials)))
     }
 
+    /// Like [`get_by_url`](Self::get_by_url), but additionally refreshes
+    /// expired OAuth access tokens via the provider's token endpoint
+    /// before returning. Refreshed credentials are written back to the
+    /// storage so subsequent calls see the new token.
+    ///
+    /// Non-OAuth credentials (bearer tokens, basic auth, S3, etc.) are
+    /// returned unchanged.
+    pub async fn get_by_url_refreshed<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth_with_key) = self.get_by_url_with_host(url)?;
+        let auth = match auth_with_key {
+            // `maybe_refresh_oauth` is a no-op for non-OAuth variants and
+            // returns them as-is, so this branch covers every auth type.
+            Some((matched_key, auth)) => {
+                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
+            }
+            None => None,
+        };
+        Ok((url, auth))
+    }
+
     /// Delete the authentication information for the given host
     pub fn delete(&self, host: &str) -> Result<()> {
         {
@@ -256,10 +361,13 @@ impl AuthenticationStorage {
             #[allow(unused_variables)]
             if let Err(error) = backend.delete(host) {
                 #[cfg(feature = "keyring")]
-                if let AuthenticationStorageError::KeyringStorageError(
-                    KeyringAuthenticationStorageError::StorageError(_),
-                ) = error
-                {
+                if matches!(
+                    error,
+                    AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_)
+                            | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                    )
+                ) {
                     tracing::debug!("Error deleting credentials in keyring: {}", error);
                 } else {
                     tracing::warn!("Error deleting credentials from backend: {}", error);
@@ -274,5 +382,68 @@ impl AuthenticationStorage {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::authentication_storage::backends::memory::MemoryStorage;
+
+    fn storage_with(host: &str, auth: Authentication) -> AuthenticationStorage {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(host, &auth).unwrap();
+        storage
+    }
+
+    /// Non-OAuth credentials must pass through `get_by_url_refreshed`
+    /// unchanged — the refresh path only applies to OAuth.
+    #[tokio::test]
+    async fn get_by_url_refreshed_passes_through_non_oauth() {
+        let cases = [
+            Authentication::BearerToken("bearer".into()),
+            Authentication::CondaToken("conda".into()),
+            Authentication::BasicHTTP {
+                username: "u".into(),
+                password: "p".into(),
+            },
+            Authentication::S3Credentials {
+                access_key_id: "k".into(),
+                secret_access_key: "s".into(),
+                session_token: None,
+            },
+        ];
+
+        for auth in cases {
+            let storage = storage_with("example.com", auth.clone());
+            let (_, retrieved) = storage
+                .get_by_url_refreshed("https://example.com/foo")
+                .await
+                .unwrap();
+            assert_eq!(retrieved, Some(auth));
+        }
+    }
+
+    #[test]
+    fn list_returns_entries_from_backends() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage
+            .store(
+                "example.com",
+                &Authentication::BearerToken("token".to_string()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            storage.list().unwrap(),
+            vec![(
+                "example.com".to_string(),
+                Authentication::BearerToken("token".to_string())
+            )]
+        );
     }
 }

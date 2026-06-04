@@ -2,7 +2,7 @@
 //!
 //! This module provides the higher-level interactive PTY session API.
 
-use pyo3::{exceptions::PyRuntimeError, pyclass, pymethods, PyResult};
+use pyo3::{PyResult, exceptions::PyRuntimeError, pyclass, pymethods};
 use std::process::Command;
 
 /// A pseudoterminal (PTY) session for interactive shell use.

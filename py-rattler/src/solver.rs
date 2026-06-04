@@ -1,24 +1,27 @@
-use chrono::DateTime;
+use std::sync::Arc;
+
+use jiff::Timestamp;
 use pyo3::{
-    exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
-    FromPyObject, PyAny, PyErr, PyResult, Python,
+    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
+    pybacked::PyBackedStr, pyfunction, types::PyAnyMethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
+use rattler_conda_types::RepoDataRecord;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
-    resolvo::Solver, ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask,
+    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
 };
 use tokio::task::JoinError;
 
 use crate::{
+    PyPackageFormatSelection, PySparseRepoData, Wrap,
     channel::PyChannelPriority,
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
     platform::PyPlatform,
     record::PyRecord,
-    repo_data::gateway::{py_object_to_source, PyGateway},
-    PyPackageFormatSelection, PySparseRepoData, Wrap,
+    repo_data::gateway::{PyGateway, py_object_to_source},
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -31,7 +34,7 @@ impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'highest', 'lowest', 'lowest-direct'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -43,7 +46,7 @@ fn parse_exclude_newer(
     exclude_newer_duration_seconds: Option<u64>,
 ) -> PyResult<Option<ExcludeNewer>> {
     match (
-        exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis),
+        exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok()),
         exclude_newer_duration_seconds,
     ) {
         (Some(_), Some(_)) => Err(PyValueError::new_err(
@@ -89,7 +92,7 @@ pub fn py_solve<'a>(
             .query(
                 rust_sources,
                 platforms.into_iter().map(Into::into),
-                specs.clone().into_iter(),
+                specs.clone(),
             )
             .recursive(true)
             .execute()
@@ -100,19 +103,22 @@ pub fn py_solve<'a>(
             parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
 
         let solve_result = tokio::task::spawn_blocking(move || {
+            // Keep the Arcs alive as locals; SolverTask only borrows.
+            let locked_arcs: Vec<Arc<RepoDataRecord>> = locked_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
+            let pinned_arcs: Vec<Arc<RepoDataRecord>> = pinned_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
                     .map(RepoDataIter)
                     .collect::<Vec<_>>(),
-                locked_packages: locked_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
-                pinned_packages: pinned_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
+                locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
+                pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),
@@ -203,19 +209,22 @@ pub fn py_solve_with_sparse_repodata<'py>(
             // Force drop the locks to avoid holding them longer than necessary.
             drop(repo_data_locks);
 
+            // Keep the Arcs alive as locals; SolverTask only borrows.
+            let locked_arcs: Vec<Arc<RepoDataRecord>> = locked_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
+            let pinned_arcs: Vec<Arc<RepoDataRecord>> = pinned_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
                     .map(RepoDataIter)
                     .collect::<Vec<_>>(),
-                locked_packages: locked_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
-                pinned_packages: pinned_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
+                locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
+                pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),

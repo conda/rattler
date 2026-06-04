@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.5"
+version = "0.1.15"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -16,7 +16,7 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls-tls", "s3", "gcs"]
+default = ["rustls", "s3", "gcs", "oauth"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
@@ -24,30 +24,32 @@ native-tls = [
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
 ]
-rustls-tls = [
-  "reqwest/rustls-tls",
-  "reqwest/rustls-tls-native-roots",
-  "rattler/rustls-tls",
-  "rattler_repodata_gateway/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_cache/rustls-tls",
+rustls = [
+  "reqwest/rustls",
+  "rattler/rustls",
+  "rattler_repodata_gateway/rustls",
+  "rattler_networking/rustls",
+  "rattler_cache/rustls",
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
+oauth = ["rattler/oauth"]
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 futures-util = { workspace = true }
+hex = { workspace = true }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
@@ -67,9 +69,14 @@ rattler_package_streaming = { workspace = true, default-features = false, featur
 ] }
 rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
-reqwest = { workspace = true, features = ["stream"] }
+reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+dunce = { workspace = true }
+regex = { workspace = true }

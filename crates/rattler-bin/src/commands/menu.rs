@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use miette::IntoDiagnostic;
-use rattler_conda_types::{menuinst::MenuMode, PackageName, Platform, PrefixRecord};
+use rattler_conda_types::{PackageName, Platform, PrefixRecord, menuinst::MenuMode};
 
 /// Install menu items for an installed package.
 #[derive(Debug, Parser)]

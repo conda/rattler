@@ -1,16 +1,12 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     env,
-    future::IntoFuture,
     path::PathBuf,
     str::FromStr,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
 use clap::ValueEnum;
-use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler::{
@@ -22,17 +18,18 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
 };
-use rattler_networking::AuthenticationMiddleware;
-#[cfg(feature = "s3")]
-use rattler_networking::AuthenticationStorage;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
+    SolverImpl, SolverTask,
     libsolv_c::{self},
-    resolvo, SolverImpl, SolverTask,
+    resolvo,
 };
-use reqwest::Client;
 
-use crate::{exclude_newer::ExcludeNewer, global_multi_progress};
+use crate::{
+    commands::progress::{wrap_in_async_progress, wrap_in_progress},
+    exclude_newer::ExcludeNewer,
+    global_multi_progress,
+};
 
 /// Create a conda environment from package listing
 ///
@@ -146,9 +143,9 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // clap to deal with this because we need to parse the `channel_config` when
     // parsing matchspecs.
     let match_spec_options = ParseMatchSpecOptions::strict()
-        .with_experimental_extras(true)
-        .with_experimental_conditionals(true)
-        .with_experimental_flags(true);
+        .with_extras(true)
+        .with_conditionals(true)
+        .with_flags(true);
 
     let specs = opt
         .specs
@@ -182,24 +179,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // `repodata.json` that should be available from the corresponding Url. The
     // code below also displays a nice CLI progress-bar to give users some more
     // information about what is going on.
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .expect("failed to create client");
-
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client.clone())
-        .with_arc(Arc::new(
-            AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
-        ))
-        .with(rattler_networking::OciMiddleware::new(download_client));
-    #[cfg(feature = "s3")]
-    let download_client = download_client.with(rattler_networking::S3Middleware::new(
-        HashMap::new(),
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
-    ));
-    #[cfg(feature = "gcs")]
-    let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
-    let download_client = download_client.build();
+    let download_client = super::client::create_client_with_middleware()?;
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
@@ -285,9 +265,9 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // problem that we need to solve. We do this by constructing a
     // `SolverProblem`. This encapsulates all the information required to be
     // able to solve the problem.
-    let locked_packages = installed_packages
+    let locked_packages: Vec<&RepoDataRecord> = installed_packages
         .iter()
-        .map(|record| record.repodata_record.clone())
+        .map(|record| &record.repodata_record)
         .collect();
 
     let solver_task = SolverTask {
@@ -436,37 +416,4 @@ fn print_transaction(
             }
         }
     }
-}
-
-/// Displays a spinner with the given message while running the specified
-/// function to completion.
-fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func: F) -> T {
-    let pb = ProgressBar::new_spinner();
-    pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_style(long_running_progress_style());
-    pb.set_message(msg);
-    let result = func();
-    pb.finish_and_clear();
-    result
-}
-
-/// Displays a spinner with the given message while running the specified
-/// function to completion.
-async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
-    msg: impl Into<Cow<'static, str>>,
-    fut: F,
-) -> T {
-    let pb = ProgressBar::new_spinner();
-    pb.enable_steady_tick(Duration::from_millis(100));
-    pb.set_style(long_running_progress_style());
-    pb.set_message(msg);
-    let result = fut.into_future().await;
-    pb.finish_and_clear();
-    result
-}
-
-/// Returns the style to use for a progress bar that is indeterminate and simply
-/// shows a spinner.
-fn long_running_progress_style() -> indicatif::ProgressStyle {
-    ProgressStyle::with_template("{spinner:.green} {msg}").unwrap()
 }

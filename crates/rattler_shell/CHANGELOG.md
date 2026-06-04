@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_shell-v0.27.3...rattler_shell-v0.27.4) - 2026-06-03
+
+### Fixed
+
+- loop over completion files instead of using glob operator ([#2474](https://github.com/conda/rattler/pull/2474))
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_shell-v0.27.2...rattler_shell-v0.27.3) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_shell-v0.27.1...rattler_shell-v0.27.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_shell-v0.27.0...rattler_shell-v0.27.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_shell-v0.26.12...rattler_shell-v0.27.0) - 2026-05-13
+
+### Added
+
+- implement shell flavors and fix workspace-wide initialization ([#2259](https://github.com/conda/rattler/pull/2259))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.26.12](https://github.com/conda/rattler/compare/rattler_shell-v0.26.11...rattler_shell-v0.26.12) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.11](https://github.com/conda/rattler/compare/rattler_shell-v0.26.10...rattler_shell-v0.26.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.26.10](https://github.com/conda/rattler/compare/rattler_shell-v0.26.9...rattler_shell-v0.26.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.26.9](https://github.com/conda/rattler/compare/rattler_shell-v0.26.8...rattler_shell-v0.26.9) - 2026-04-13
 
 ### Other

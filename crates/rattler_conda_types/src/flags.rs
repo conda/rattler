@@ -131,7 +131,7 @@ fn is_valid_flag_part(value: &str, allow_glob: bool) -> bool {
 mod tests {
     use std::str::FromStr;
 
-    use super::{is_valid_matchspec_flag, is_valid_record_flag, Flag, InvalidFlagError};
+    use super::{Flag, InvalidFlagError, is_valid_matchspec_flag, is_valid_record_flag};
 
     #[test]
     fn validate_record_flags() {

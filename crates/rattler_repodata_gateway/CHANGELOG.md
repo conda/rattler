@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.2...rattler_repodata_gateway-v0.29.3) - 2026-06-02
+
+### Added
+
+- only walk active extras when fetching repodata ([#2447](https://github.com/conda/rattler/pull/2447))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.29.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.1...rattler_repodata_gateway-v0.29.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.29.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.0...rattler_repodata_gateway-v0.29.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.28.2...rattler_repodata_gateway-v0.29.0) - 2026-05-13
+
+### Fixed
+
+- repodata fallback path ([#2425](https://github.com/conda/rattler/pull/2425))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.28.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.28.1...rattler_repodata_gateway-v0.28.2) - 2026-05-07
+
+### Fixed
+
+- don't assume path is a file:// url ([#2411](https://github.com/conda/rattler/pull/2411))
+
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.28.0...rattler_repodata_gateway-v0.28.1) - 2026-05-04
+
+### Added
+
+- Handle 501 in sharded repodata ([#2401](https://github.com/conda/rattler/pull/2401))
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.7...rattler_repodata_gateway-v0.28.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.6...rattler_repodata_gateway-v0.27.7) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+- add support for CEP-42 channel relations in repodata ([#2370](https://github.com/conda/rattler/pull/2370))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.27.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.27.5...rattler_repodata_gateway-v0.27.6) - 2026-04-13
 
 ### Other

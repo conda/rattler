@@ -234,10 +234,10 @@ mod tests {
         path::Path,
     };
 
-    use rattler_conda_types::{prefix::Prefix, Platform, RepoDataRecord};
+    use rattler_conda_types::{Platform, RepoDataRecord, prefix::Prefix};
 
     use crate::install::test_utils::download_and_get_prefix_record;
-    use crate::install::{empty_trash, unlink_package, InstallDriver, Transaction};
+    use crate::install::{InstallDriver, Transaction, empty_trash, unlink_package};
 
     #[tokio::test]
     async fn test_unlink_package() {
@@ -376,8 +376,8 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_package_in_use() {
         use crate::get_repodata_record;
-        use crate::install::link_package;
         use crate::install::InstallOptions;
+        use crate::install::link_package;
         use rattler_conda_types::PrefixRecord;
         use std::{
             env::{join_paths, split_paths, var_os},

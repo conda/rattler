@@ -29,7 +29,7 @@ use std::{
 
 use bytes::Bytes;
 use opendal::{
-    raw::*, Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result,
+    Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result, raw::*,
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -43,13 +43,13 @@ const SCHEME_NAME: &str = "etag-memory";
 /// read").
 #[inline]
 fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
-    if let Some(if_match) = cond {
-        if if_match != current {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                format!("ETag mismatch{ctx}: expected {if_match}, got {current}"),
-            ));
-        }
+    if let Some(if_match) = cond
+        && if_match != current
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            format!("ETag mismatch{ctx}: expected {if_match}, got {current}"),
+        ));
     }
     Ok(())
 }
@@ -61,13 +61,13 @@ fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
 /// parameter adds context to error messages.
 #[inline]
 fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
-    if let Some(if_none_match) = cond {
-        if if_none_match == "*" || if_none_match == current {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                format!("if_none_match condition failed{ctx}"),
-            ));
-        }
+    if let Some(if_none_match) = cond
+        && (if_none_match == "*" || if_none_match == current)
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            format!("if_none_match condition failed{ctx}"),
+        ));
     }
     Ok(())
 }
@@ -79,13 +79,13 @@ fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<(
 /// provided timestamp.
 #[inline]
 fn check_if_unmodified_since(last_modified: Timestamp, cond: Option<Timestamp>) -> Result<()> {
-    if let Some(if_unmodified_since) = cond {
-        if last_modified > if_unmodified_since {
-            return Err(Error::new(
-                ErrorKind::ConditionNotMatch,
-                "file was modified after if_unmodified_since",
-            ));
-        }
+    if let Some(if_unmodified_since) = cond
+        && last_modified > if_unmodified_since
+    {
+        return Err(Error::new(
+            ErrorKind::ConditionNotMatch,
+            "file was modified after if_unmodified_since",
+        ));
     }
     Ok(())
 }
@@ -117,7 +117,7 @@ impl FileEntry {
     /// objects).
     fn compute_etag(data: &[u8]) -> String {
         let digest = compute_bytes_digest::<rattler_digest::Md5>(data);
-        format!("\"{digest:x}\"")
+        format!("\"{}\"", hex::encode(digest))
     }
 }
 
@@ -351,13 +351,13 @@ impl Access for ETagMemoryBackend {
                 check_if_match(&entry.etag, args.if_match(), " on write")?;
 
                 // Check if_none_match for create-only semantics
-                if let Some(if_none_match) = args.if_none_match() {
-                    if if_none_match == "*" {
-                        return Err(Error::new(
-                            ErrorKind::ConditionNotMatch,
-                            "if_none_match: file already exists",
-                        ));
-                    }
+                if let Some(if_none_match) = args.if_none_match()
+                    && if_none_match == "*"
+                {
+                    return Err(Error::new(
+                        ErrorKind::ConditionNotMatch,
+                        "if_none_match: file already exists",
+                    ));
                 }
 
                 // Check if_not_exists for create-only semantics
@@ -428,45 +428,56 @@ impl Access for ETagMemoryBackend {
             Some(format!("{prefix}/"))
         };
 
-        let mut entries: Vec<(String, bool)> = Vec::new();
+        let mut entries: Vec<ListEntry> = Vec::new();
         let mut seen = HashSet::new();
 
         // Add direct child directories
         for dir in directories.iter() {
             if prefix.is_empty() {
                 // List root level directories
-                if let Some(first) = dir.split('/').next() {
-                    if !first.is_empty() && seen.insert(first) {
-                        entries.push((format!("{first}/"), true));
-                    }
+                if let Some(first) = dir.split('/').next()
+                    && !first.is_empty()
+                    && seen.insert(first)
+                {
+                    entries.push(ListEntry::dir(format!("{first}/")));
                 }
-            } else if let Some(ps) = &prefix_slash {
-                if let Some(stripped) = dir.strip_prefix(ps) {
-                    // List subdirectories under prefix
-                    if let Some(first) = stripped.split('/').next() {
-                        if !first.is_empty() && seen.insert(first) {
-                            entries.push((format!("{first}/"), true));
-                        }
-                    }
+            } else if let Some(ps) = &prefix_slash
+                && let Some(stripped) = dir.strip_prefix(ps)
+            {
+                // List subdirectories under prefix
+                if let Some(first) = stripped.split('/').next()
+                    && !first.is_empty()
+                    && seen.insert(first)
+                {
+                    entries.push(ListEntry::dir(format!("{first}/")));
                 }
             }
         }
 
         // Add direct child files
-        for key in storage.keys() {
-            if prefix.is_empty() {
-                // List root level files (no / in path)
-                if !key.contains('/') {
-                    entries.push((key.clone(), false));
+        for (key, entry_lock) in storage.iter() {
+            let name = if prefix.is_empty() {
+                if key.contains('/') {
+                    continue;
                 }
-            } else if let Some(ps) = &prefix_slash {
-                if let Some(stripped) = key.strip_prefix(ps) {
-                    // List files directly under prefix (no further / in stripped path)
-                    if !stripped.contains('/') {
-                        entries.push((stripped.to_owned(), false));
-                    }
+                key.clone()
+            } else if let Some(stripped) =
+                prefix_slash.as_deref().and_then(|ps| key.strip_prefix(ps))
+            {
+                if stripped.contains('/') {
+                    continue;
                 }
-            }
+                stripped.to_owned()
+            } else {
+                continue;
+            };
+
+            let content_length = entry_lock.read().await.content_length;
+            entries.push(ListEntry {
+                path: name,
+                is_dir: false,
+                content_length,
+            });
         }
 
         drop(storage);
@@ -476,6 +487,24 @@ impl Access for ETagMemoryBackend {
             RpList::default(),
             oio::HierarchyLister::new(ETagMemoryLister { entries, index: 0 }, "/", false),
         ))
+    }
+}
+
+/// A single entry produced by the listing helpers, carrying the metadata that
+/// opendal's `CompleteLister` requires for file entries.
+struct ListEntry {
+    path: String,
+    is_dir: bool,
+    content_length: u64,
+}
+
+impl ListEntry {
+    fn dir(path: String) -> Self {
+        Self {
+            path,
+            is_dir: true,
+            content_length: 0,
+        }
     }
 }
 
@@ -533,7 +562,7 @@ impl oio::OneShotDelete for ETagMemoryDeleter {
 
 /// Lister for `ETag` memory backend
 pub struct ETagMemoryLister {
-    entries: Vec<(String, bool)>, // (path, is_dir)
+    entries: Vec<ListEntry>,
     index: usize,
 }
 
@@ -543,16 +572,18 @@ impl oio::List for ETagMemoryLister {
             return Ok(None);
         }
 
-        let (path, is_dir) = self.entries[self.index].clone();
+        let entry = &self.entries[self.index];
         self.index += 1;
 
-        let mode = if is_dir {
-            EntryMode::DIR
+        // opendal 0.56's CompleteLister silently drops file entries whose
+        // content_length isn't set by issuing an extra stat() that may miss in
+        // this stripped-path lister, so we populate it inline.
+        let metadata = if entry.is_dir {
+            Metadata::new(EntryMode::DIR)
         } else {
-            EntryMode::FILE
+            Metadata::new(EntryMode::FILE).with_content_length(entry.content_length)
         };
-        let entry = oio::Entry::new(&path, Metadata::new(mode));
-        Ok(Some(entry))
+        Ok(Some(oio::Entry::new(&entry.path, metadata)))
     }
 }
 

@@ -1,0 +1,5 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: error_message
+---
+"Environment `default` is using an unknown platform `UNKNOWN`"

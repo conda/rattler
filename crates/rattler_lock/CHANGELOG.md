@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_lock-v0.30.3...rattler_lock-v0.31.0) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+
+## [0.30.3](https://github.com/conda/rattler/compare/rattler_lock-v0.30.2...rattler_lock-v0.30.3) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.30.2](https://github.com/conda/rattler/compare/rattler_lock-v0.30.1...rattler_lock-v0.30.2) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.30.1](https://github.com/conda/rattler/compare/rattler_lock-v0.30.0...rattler_lock-v0.30.1) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- reuse pep508_rs Display via GivenVerbatimUrl ([#2421](https://github.com/conda/rattler/pull/2421))
+
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_lock-v0.29.1...rattler_lock-v0.30.0) - 2026-05-07
+
+### Added
+
+- *(rattler_lock)* preserve license on partial source records ([#2415](https://github.com/conda/rattler/pull/2415))
+
+## [0.29.1](https://github.com/conda/rattler/compare/rattler_lock-v0.29.0...rattler_lock-v0.29.1) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_lock-v0.28.1...rattler_lock-v0.29.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.28.0](https://github.com/conda/rattler/compare/rattler_lock-v0.27.6...rattler_lock-v0.28.0) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+
+### Fixed
+
+- *(rattler_lock)* downgrade version from 0.27.7 to 0.27.6
+- [**breaking**] Fix rattler_lock version to 0.28.0 ([#2338](https://github.com/conda/rattler/pull/2338))
+- [**breaking**] Lockfile version bump ([#2335](https://github.com/conda/rattler/pull/2335))
+
+### Other
+
+- revert lockfile-v7 ([#2339](https://github.com/conda/rattler/pull/2339))
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+- release ([#2323](https://github.com/conda/rattler/pull/2323))
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+
 ## [0.27.7](https://github.com/conda/rattler/compare/rattler_lock-v0.27.6...rattler_lock-v0.27.7) - 2026-04-13
 
 ### Other

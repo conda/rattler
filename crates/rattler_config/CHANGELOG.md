@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_config-v0.4.1...rattler_config-v0.5.0) - 2026-06-02
+
+### Added
+
+- align rattler_config with pixi config fields ([#2439](https://github.com/conda/rattler/pull/2439))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_config-v0.4.0...rattler_config-v0.4.1) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_config-v0.3.13...rattler_config-v0.4.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.3.13](https://github.com/conda/rattler/compare/rattler_config-v0.3.12...rattler_config-v0.3.13) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.3.12](https://github.com/conda/rattler/compare/rattler_config-v0.3.11...rattler_config-v0.3.12) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_config-v0.3.10...rattler_config-v0.3.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_config-v0.3.9...rattler_config-v0.3.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.3.9](https://github.com/conda/rattler/compare/rattler_config-v0.3.8...rattler_config-v0.3.9) - 2026-04-13
 
 ### Other

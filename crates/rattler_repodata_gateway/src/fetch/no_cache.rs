@@ -6,14 +6,14 @@ use futures::TryStreamExt;
 use rattler_networking::retry_policies::default_retry_policy;
 use rattler_redaction::Redact;
 use reqwest::{
-    header::{HeaderMap, HeaderValue},
     Request, Response, StatusCode,
+    header::{HeaderMap, HeaderValue},
 };
 use retry_policies::{RetryDecision, RetryPolicy};
 use std::{io::ErrorKind, sync::Arc};
 use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
-use tracing::{instrument, Level};
+use tracing::{Level, instrument};
 use url::Url;
 
 #[cfg(target_arch = "wasm32")]
@@ -21,10 +21,10 @@ use wasmtimer::std::SystemTime;
 
 use crate::reporter::DownloadReporter;
 use crate::{
+    Reporter,
     fetch::{FetchRepoDataError, RepoDataNotFoundError, Variant},
     reporter::ResponseReporterExt,
     utils::{AsyncEncoding, Encoding},
-    Reporter,
 };
 use rattler_networking::LazyClient;
 #[cfg(not(target_arch = "wasm32"))]
@@ -268,7 +268,7 @@ pub async fn fetch_repo_data(
                 return Err(FetchRepoDataError::FailedToDownload(
                     download_url,
                     stream_error,
-                ))
+                ));
             }
         };
 

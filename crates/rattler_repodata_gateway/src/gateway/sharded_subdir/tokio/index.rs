@@ -1,18 +1,21 @@
 use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 
-use super::{ShardedRepodata, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
+use super::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedRepodata};
 use crate::{
+    GatewayError, Reporter,
     fetch::CacheAction,
-    gateway::{error::SubdirNotFoundError, sharded_subdir::decode_zst_bytes_async},
+    gateway::{
+        error::SubdirNotFoundError,
+        sharded_subdir::{decode_zst_bytes_async, is_missing_sharded_repodata_status},
+    },
     reporter::{DownloadReporter, ResponseReporterExt},
     utils::url_to_cache_filename,
-    GatewayError, Reporter,
 };
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
-use futures::{future::OptionFuture, TryFutureExt};
-use http::{HeaderMap, Method, StatusCode, Uri};
+use futures::{TryFutureExt, future::OptionFuture};
+use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use rattler_conda_types::Channel;
 use rattler_networking::LazyClient;
@@ -161,140 +164,145 @@ pub async fn fetch_index(
     let canonical_request = SimpleRequest::get(&canonical_shards_url);
 
     // Try reading the cached file
-    if cache_action != CacheAction::NoCache {
-        if let Ok(cache_header) = read_cached_index(&mut cache_reader).await {
-            // Check if the cache indicates the resource was not found (404)
-            if cache_header.not_found {
-                tracing::debug!("cached 404 for sharded index at {channel_base_url}");
-                return Err(create_subdir_not_found_error(channel_base_url));
+    if cache_action != CacheAction::NoCache
+        && let Ok(cache_header) = read_cached_index(&mut cache_reader).await
+    {
+        // Check if the cache indicates the resource was unavailable
+        // (404 or 501)
+        if cache_header.not_found {
+            tracing::debug!(
+                "cached not-available response for sharded index at {channel_base_url}"
+            );
+            return Err(create_subdir_not_found_error(channel_base_url));
+        }
+
+        // If we are in cache-only mode we can't fetch the index from the server
+        if cache_action == CacheAction::ForceCacheOnly {
+            if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
+                tracing::debug!("using locally cached shard index for {channel_base_url}");
+                return Ok(shard_index);
             }
-
-            // If we are in cache-only mode we can't fetch the index from the server
-            if cache_action == CacheAction::ForceCacheOnly {
-                if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
-                    tracing::debug!("using locally cached shard index for {channel_base_url}");
-                    return Ok(shard_index);
-                }
-            } else {
-                match cache_header
-                    .policy
-                    .before_request(&canonical_request, SystemTime::now())
-                {
-                    BeforeRequest::Fresh(_) => {
-                        if let Ok(shard_index) =
-                            read_shard_index_from_reader(&mut cache_reader).await
-                        {
-                            tracing::debug!("shard index cache hit");
-                            return Ok(shard_index);
-                        }
+        } else {
+            match cache_header
+                .policy
+                .before_request(&canonical_request, SystemTime::now())
+            {
+                BeforeRequest::Fresh(_) => {
+                    if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
+                        tracing::debug!("shard index cache hit");
+                        return Ok(shard_index);
                     }
-                    BeforeRequest::Stale {
-                        request: state_request,
-                        ..
-                    } => {
-                        if cache_action == CacheAction::UseCacheOnly {
-                            return Err(GatewayError::CacheError(
-                                format!("the sharded index cache for {channel_base_url} is stale and cache-only mode is enabled"),
-                            ));
+                }
+                BeforeRequest::Stale {
+                    request: state_request,
+                    ..
+                } => {
+                    if cache_action == CacheAction::UseCacheOnly {
+                        return Err(GatewayError::CacheError(format!(
+                            "the sharded index cache for {channel_base_url} is stale and cache-only mode is enabled"
+                        )));
+                    }
+
+                    // Determine the actual URL to use for the request
+                    let shards_url = channel_base_url
+                        .join(REPODATA_SHARDS_FILENAME)
+                        .expect("invalid shard base url");
+
+                    // Construct the actual request that we will send
+                    let request = client
+                        .client()
+                        .get(shards_url.clone())
+                        .headers(state_request.headers().clone())
+                        .build()
+                        .expect("failed to build request for shard index");
+
+                    // Acquire a permit to do a request
+                    let request_permit = OptionFuture::from(
+                        concurrent_requests_semaphore
+                            .as_deref()
+                            .map(tokio::sync::Semaphore::acquire),
+                    )
+                    .await
+                    .transpose()
+                    .expect("failed to acquire semaphore permit");
+
+                    // Send the request
+                    let download_reporter = reporter
+                        .and_then(Reporter::download_reporter)
+                        .map(|r| (r, r.on_download_start(&shards_url)));
+                    let response = client.client().execute(request).await?;
+
+                    // Check if the resource was not found (404) or not
+                    // implemented (501). Treat 501 the same as 404 so we
+                    // fall back to repodata.json when a server does not
+                    // support sharded repodata.
+                    if is_missing_sharded_repodata_status(response.status()) {
+                        tracing::debug!(
+                            "sharded index unavailable ({}) at {channel_base_url}, caching this result",
+                            response.status()
+                        );
+
+                        // Cache the not-available response
+                        let policy = CachePolicy::new(&canonical_request, &response);
+                        write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
+                            .await
+                            .map_err(|e| {
+                                GatewayError::IoError(
+                                    format!(
+                                        "failed to write not-found cache for shard index to {}",
+                                        cache_path.display()
+                                    ),
+                                    e,
+                                )
+                            })?;
+
+                        if let Some((reporter, index)) = download_reporter {
+                            reporter.on_download_complete(response.url(), index);
                         }
 
-                        // Determine the actual URL to use for the request
-                        let shards_url = channel_base_url
-                            .join(REPODATA_SHARDS_FILENAME)
-                            .expect("invalid shard base url");
+                        // Return SubdirNotFoundError to trigger fallback
+                        return Err(create_subdir_not_found_error(channel_base_url));
+                    }
 
-                        // Construct the actual request that we will send
-                        let request = client
-                            .client()
-                            .get(shards_url.clone())
-                            .headers(state_request.headers().clone())
-                            .build()
-                            .expect("failed to build request for shard index");
-
-                        // Acquire a permit to do a request
-                        let request_permit = OptionFuture::from(
-                            concurrent_requests_semaphore
-                                .as_deref()
-                                .map(tokio::sync::Semaphore::acquire),
-                        )
-                        .await
-                        .transpose()
-                        .expect("failed to acquire semaphore permit");
-
-                        // Send the request
-                        let download_reporter = reporter
-                            .and_then(Reporter::download_reporter)
-                            .map(|r| (r, r.on_download_start(&shards_url)));
-                        let response = client.client().execute(request).await?;
-
-                        // Check if the resource was not found (404)
-                        if response.status() == StatusCode::NOT_FOUND {
-                            tracing::debug!(
-                                "sharded index not found (404) at {channel_base_url}, caching this result"
-                            );
-
-                            // Cache the 404 response
-                            let policy = CachePolicy::new(&canonical_request, &response);
-                            write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
-                                .await
-                                .map_err(|e| {
-                                    GatewayError::IoError(
-                                        format!(
-                                            "failed to write 404 cache for shard index to {}",
-                                            cache_path.display()
-                                        ),
-                                        e,
-                                    )
-                                })?;
-
-                            if let Some((reporter, index)) = download_reporter {
-                                reporter.on_download_complete(response.url(), index);
-                            }
-
-                            // Return SubdirNotFoundError to trigger fallback
-                            return Err(create_subdir_not_found_error(channel_base_url));
-                        }
-
-                        match cache_header.policy.after_response(
-                            &state_request,
-                            &response,
-                            SystemTime::now(),
-                        ) {
-                            AfterResponse::NotModified(_policy, _) => {
-                                // The cached file is still valid
-                                match read_shard_index_from_reader(&mut cache_reader).await {
-                                    Ok(shard_index) => {
-                                        tracing::debug!("shard index cache was not modified");
-                                        if let Some((reporter, index)) = download_reporter {
-                                            reporter.on_download_complete(response.url(), index);
-                                        }
-                                        // If reading the file failed for some reason we'll just
-                                        // fetch it again.
-                                        return Ok(shard_index);
+                    match cache_header.policy.after_response(
+                        &state_request,
+                        &response,
+                        SystemTime::now(),
+                    ) {
+                        AfterResponse::NotModified(_policy, _) => {
+                            // The cached file is still valid
+                            match read_shard_index_from_reader(&mut cache_reader).await {
+                                Ok(shard_index) => {
+                                    tracing::debug!("shard index cache was not modified");
+                                    if let Some((reporter, index)) = download_reporter {
+                                        reporter.on_download_complete(response.url(), index);
                                     }
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "the cached shard index has been corrupted: {e}"
-                                        );
-                                        if let Some((reporter, index)) = download_reporter {
-                                            reporter.on_download_complete(response.url(), index);
-                                        }
+                                    // If reading the file failed for some reason we'll just
+                                    // fetch it again.
+                                    return Ok(shard_index);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "the cached shard index has been corrupted: {e}"
+                                    );
+                                    if let Some((reporter, index)) = download_reporter {
+                                        reporter.on_download_complete(response.url(), index);
                                     }
                                 }
                             }
-                            AfterResponse::Modified(policy, _) => {
-                                // Close the old file so we can create a new one.
-                                tracing::debug!("shard index cache has become stale");
-                                return from_response(
-                                    cache_reader.into_inner(),
-                                    &cache_path,
-                                    policy,
-                                    response,
-                                    download_reporter,
-                                    request_permit,
-                                )
-                                .await;
-                            }
+                        }
+                        AfterResponse::Modified(policy, _) => {
+                            // Close the old file so we can create a new one.
+                            tracing::debug!("shard index cache has become stale");
+                            return from_response(
+                                cache_reader.into_inner(),
+                                &cache_path,
+                                policy,
+                                response,
+                                download_reporter,
+                                request_permit,
+                            )
+                            .await;
                         }
                     }
                 }
@@ -345,18 +353,23 @@ pub async fn fetch_index(
         )
         .await?;
 
-    // Check if the resource was not found (404)
-    if response.status() == StatusCode::NOT_FOUND {
-        tracing::debug!("sharded index not found (404) at {channel_base_url}, caching this result");
+    // Check if the resource was not found (404) or not implemented (501).
+    // Treat 501 the same as 404 so we fall back to repodata.json when a
+    // server does not support sharded repodata.
+    if is_missing_sharded_repodata_status(response.status()) {
+        tracing::debug!(
+            "sharded index unavailable ({}) at {channel_base_url}, caching this result",
+            response.status()
+        );
 
-        // Cache the 404 response
+        // Cache the not-available response
         let policy = CachePolicy::new(&canonical_request, &response);
         write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
             .await
             .map_err(|e| {
                 GatewayError::IoError(
                     format!(
-                        "failed to write 404 cache for shard index to {}",
+                        "failed to write not-found cache for shard index to {}",
                         cache_path.display()
                     ),
                     e,
@@ -434,7 +447,7 @@ pub async fn write_shard_index_cache(
     .await
 }
 
-/// Writes a 404 (not found) marker to the cache file.
+/// Writes a not-available marker (404 or 501) to the cache file.
 async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> std::io::Result<()> {
     write_cache(
         cache_file,
@@ -471,7 +484,8 @@ pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct CacheHeader {
     pub policy: CachePolicy,
-    /// Indicates whether the resource was not found (404) on the remote.
+    /// Indicates whether the resource was reported as unavailable (404 Not
+    /// Found or 501 Not Implemented) by the remote.
     #[serde(default)]
     pub not_found: bool,
 }

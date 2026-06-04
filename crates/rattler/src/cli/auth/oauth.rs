@@ -9,16 +9,17 @@ use std::{
     time::Duration,
 };
 
+use oauth2_reqwest::ReqwestClient;
 use openidconnect::{
+    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
         CoreResponseType, CoreSubjectIdentifierType,
     },
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -54,6 +55,11 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
+use super::DEFAULT_USER_AGENT;
+
+/// Generic OIDC scopes used when no host-specific defaults apply.
+pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
+
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
     /// The OIDC issuer URL.
@@ -66,6 +72,13 @@ pub struct OAuthConfig {
     pub flow: OAuthFlow,
     /// Additional OAuth scopes to request.
     pub scopes: HashSet<String>,
+    /// Fixed redirect URI for the auth-code flow. When `None`, rattler
+    /// binds to a random localhost port. Required when the OAuth client
+    /// is registered with a specific redirect URI on the `IdP` side.
+    pub redirect_uri: Option<String>,
+    /// Override for the User-Agent header. When `None`, defaults to
+    /// `rattler/<crate version>`.
+    pub user_agent: Option<String>,
 }
 
 /// Which OAuth flow to attempt.
@@ -149,15 +162,28 @@ struct CallbackResult {
 /// Perform an OAuth/OIDC login and return the resulting
 /// `Authentication::OAuth`.
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
-    let http_client = reqwest::Client::builder()
+    let mut config = config;
+    if config.scopes.is_empty() {
+        config.scopes = DEFAULT_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect();
+    }
+
+    let user_agent = config.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT);
+
+    let reqwest_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .user_agent(user_agent)
         .build()
         .map_err(OAuthError::Network)?;
+    let http_client = ReqwestClient::from(reqwest_client);
 
     // 1. OIDC Discovery
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
 
     let client_secret = config.client_secret.as_deref();
+    let redirect_uri = config.redirect_uri.as_deref();
 
     // 2. Run the appropriate flow
     let tokens = match config.flow {
@@ -167,6 +193,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
             )
             .await?
@@ -187,6 +214,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
             )
             .await
@@ -241,7 +269,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
 /// deserialized from the discovery document in a single request.
 async fn discover_endpoints(
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
     issuer_url: &str,
 ) -> Result<DiscoveredEndpoints, OAuthError> {
     let oidc_issuer =
@@ -281,12 +309,27 @@ async fn auth_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
-    http_client: &reqwest::Client,
+    redirect_uri: Option<&str>,
+    http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
-    // Bind to a random port on localhost
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let local_addr = listener.local_addr()?;
-    let redirect_url = format!("http://127.0.0.1:{}", local_addr.port());
+    // If the caller pinned a redirect URI (because the IdP requires an
+    // exact match against what was registered), bind there. Otherwise
+    // pick a random localhost port and use that.
+    let (listener, redirect_url) = if let Some(uri) = redirect_uri {
+        let parsed = Url::parse(uri).map_err(OAuthError::UrlParse)?;
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| OAuthError::Authorization(format!("redirect URI has no host: {uri}")))?;
+        let port = parsed.port().ok_or_else(|| {
+            OAuthError::Authorization(format!("redirect URI has no explicit port: {uri}"))
+        })?;
+        let listener = TcpListener::bind(format!("{host}:{port}")).await?;
+        (listener, uri.to_string())
+    } else {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let local_addr = listener.local_addr()?;
+        (listener, format!("http://127.0.0.1:{}", local_addr.port()))
+    };
 
     let mut client = CoreClient::from_provider_metadata(
         endpoints.provider_metadata.clone(),
@@ -489,7 +532,7 @@ async fn device_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
     let device_auth_url = endpoints
         .device_authorization_endpoint
@@ -579,10 +622,10 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     if let Some(username) = claims.preferred_username() {
         return username.to_string();
     }
-    if let Some(name) = claims.name() {
-        if let Some(n) = name.get(None) {
-            return n.to_string();
-        }
+    if let Some(name) = claims.name()
+        && let Some(n) = name.get(None)
+    {
+        return n.to_string();
     }
     claims.subject().to_string()
 }
@@ -595,8 +638,18 @@ pub async fn revoke_tokens(
     access_token: &str,
     refresh_token: Option<&str>,
     client_id: &str,
+    user_agent: Option<&str>,
 ) {
-    let client = reqwest::Client::new();
+    let client = match reqwest::Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to build HTTP client for token revocation: {e}");
+            return;
+        }
+    };
 
     // Revoke refresh token first (higher priority)
     if let Some(refresh_token) = refresh_token {

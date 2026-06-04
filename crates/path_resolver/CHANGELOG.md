@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11](https://github.com/conda/rattler/compare/path_resolver-v0.2.10...path_resolver-v0.2.11) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.2.10](https://github.com/conda/rattler/compare/path_resolver-v0.2.9...path_resolver-v0.2.10) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.9](https://github.com/conda/rattler/compare/path_resolver-v0.2.8...path_resolver-v0.2.9) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.2.8](https://github.com/conda/rattler/compare/path_resolver-v0.2.7...path_resolver-v0.2.8) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/path_resolver-v0.2.6...path_resolver-v0.2.7) - 2026-03-18
 
 ### Other

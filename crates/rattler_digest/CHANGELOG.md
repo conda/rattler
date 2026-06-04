@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1](https://github.com/conda/rattler/compare/rattler_digest-v1.3.0...rattler_digest-v1.3.1) - 2026-06-02
+
+### Other
+
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [1.3.0](https://github.com/conda/rattler/compare/rattler_digest-v1.2.5...rattler_digest-v1.3.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+- support conda-pypi channel ([#2435](https://github.com/conda/rattler/pull/2435))
+
+## [1.2.5](https://github.com/conda/rattler/compare/rattler_digest-v1.2.4...rattler_digest-v1.2.5) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [1.2.4](https://github.com/conda/rattler/compare/rattler_digest-v1.2.3...rattler_digest-v1.2.4) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [1.2.3](https://github.com/conda/rattler/compare/rattler_digest-v1.2.2...rattler_digest-v1.2.3) - 2026-03-18
 
 ### Other

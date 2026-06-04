@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.2...rattler_package_streaming-v0.26.3) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.1...rattler_package_streaming-v0.26.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.0...rattler_package_streaming-v0.26.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.25.1...rattler_package_streaming-v0.26.0) - 2026-05-13
+
+### Fixed
+
+- handle missing symlinks on Windows install path ([#2399](https://github.com/conda/rattler/pull/2399))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.25.0...rattler_package_streaming-v0.25.1) - 2026-05-07
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.10...rattler_package_streaming-v0.25.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.24.10](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.9...rattler_package_streaming-v0.24.10) - 2026-04-30
+
+### Added
+
+- add repodata revisions as proposed in CEP ([#2379](https://github.com/conda/rattler/pull/2379))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.24.9](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.24.8...rattler_package_streaming-v0.24.9) - 2026-04-13
 
 ### Other

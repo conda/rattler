@@ -13,12 +13,12 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::instrument;
 
 use crate::{
+    GitError, GitUrl, Reporter,
     credentials::GIT_STORE,
     git::{CheckoutOptions, GitRemote},
     resolver::RepositoryReference,
     sha::{GitOid, GitSha},
     url::RepositoryUrl,
-    GitError, GitUrl, Reporter,
 };
 
 /// A remote Git source that can be checked out locally.

@@ -6,7 +6,7 @@ pub mod sandbox_impl;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-pub use sandbox_impl::{sandboxed_command, Exception};
+pub use sandbox_impl::{Exception, sandboxed_command};
 
 #[derive(clap::Parser)]
 pub struct Opts {

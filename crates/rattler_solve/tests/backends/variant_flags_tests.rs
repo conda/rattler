@@ -1,6 +1,6 @@
 //! Tests for V3 package variant flags.
 
-use super::helpers::{run_solver_cases, PackageBuilder, SolverCase};
+use super::helpers::{PackageBuilder, SolverCase, run_solver_cases};
 #[cfg(feature = "libsolv_c")]
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions, RepodataRevision};
 use rattler_solve::SolverImpl;
@@ -64,7 +64,7 @@ fn parse_v3_spec(spec: &str) -> MatchSpec {
         spec,
         ParseMatchSpecOptions::lenient()
             .with_repodata_revision(RepodataRevision::V3)
-            .with_experimental_conditionals(true),
+            .with_conditionals(true),
     )
     .unwrap()
 }

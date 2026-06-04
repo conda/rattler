@@ -66,9 +66,9 @@ impl<'a> SolverCase<'a> {
                 MatchSpec::from_str(
                     spec,
                     ParseMatchSpecOptions::lenient()
-                        .with_experimental_extras(true)
-                        .with_experimental_conditionals(true)
-                        .with_experimental_flags(true),
+                        .with_extras(true)
+                        .with_conditionals(true)
+                        .with_flags(true),
                 )
                 .unwrap()
             })
@@ -84,9 +84,9 @@ impl<'a> SolverCase<'a> {
                 MatchSpec::from_str(
                     spec,
                     ParseMatchSpecOptions::lenient()
-                        .with_experimental_extras(true)
-                        .with_experimental_conditionals(true)
-                        .with_experimental_flags(true),
+                        .with_extras(true)
+                        .with_conditionals(true)
+                        .with_flags(true),
                 )
                 .unwrap()
             })
@@ -187,8 +187,8 @@ impl<'a> SolverCase<'a> {
         let task = SolverTask {
             specs: self.specs.clone(),
             constraints: self.constraints.clone(),
-            locked_packages: self.locked_packages.clone(),
-            pinned_packages: self.pinned_packages.clone(),
+            locked_packages: self.locked_packages.iter().collect(),
+            pinned_packages: self.pinned_packages.iter().collect(),
             virtual_packages: self.virtual_packages.clone(),
             exclude_newer: self.exclude_newer.clone(),
             strategy: self.strategy,

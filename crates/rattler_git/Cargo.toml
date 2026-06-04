@@ -1,6 +1,6 @@
 [package]
 name = "rattler_git"
-version = "0.1.1"
+version = "0.1.3"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,7 +11,7 @@ dashmap = { workspace = true }
 dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 rattler_prefix_guard = { workspace = true }
-reqwest = { workspace = true, features = ["blocking"] }
+reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

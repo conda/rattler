@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13](https://github.com/conda/rattler/compare/rattler_pty-v0.2.12...rattler_pty-v0.2.13) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.2.12](https://github.com/conda/rattler/compare/rattler_pty-v0.2.11...rattler_pty-v0.2.12) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.11](https://github.com/conda/rattler/compare/rattler_pty-v0.2.10...rattler_pty-v0.2.11) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.2.10](https://github.com/conda/rattler/compare/rattler_pty-v0.2.9...rattler_pty-v0.2.10) - 2026-04-30
+
+### Fixed
+
+- simplify netbsd platform handling ([#2350](https://github.com/conda/rattler/pull/2350))
+- Allow compilation on NetBSD ([#2343](https://github.com/conda/rattler/pull/2343))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.2.9](https://github.com/conda/rattler/compare/rattler_pty-v0.2.8...rattler_pty-v0.2.9) - 2026-01-22
 
 ### Fixed

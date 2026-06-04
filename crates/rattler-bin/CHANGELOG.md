@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15](https://github.com/conda/rattler/compare/rattler-bin-v0.1.14...rattler-bin-v0.1.15) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
+## [0.1.14](https://github.com/conda/rattler/compare/rattler-bin-v0.1.13...rattler-bin-v0.1.14) - 2026-06-03
+
+### Other
+
+- updated the following local packages: rattler_shell, rattler_menuinst, rattler
+
+## [0.1.13](https://github.com/conda/rattler/compare/rattler-bin-v0.1.12...rattler-bin-v0.1.13) - 2026-06-02
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.1.12](https://github.com/conda/rattler/compare/rattler-bin-v0.1.11...rattler-bin-v0.1.12) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst, rattler_solve, rattler_repodata_gateway, rattler_upload, rattler_virtual_packages
+
+## [0.1.11](https://github.com/conda/rattler/compare/rattler-bin-v0.1.10...rattler-bin-v0.1.11) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+- support conda-pypi channel ([#2435](https://github.com/conda/rattler/pull/2435))
+
+## [0.1.10](https://github.com/conda/rattler/compare/rattler-bin-v0.1.9...rattler-bin-v0.1.10) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+- preserve Arc when crossing the Python custom-source boundary ([#2400](https://github.com/conda/rattler/pull/2400))
+
+## [0.1.9](https://github.com/conda/rattler/compare/rattler-bin-v0.1.8...rattler-bin-v0.1.9) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
+## [0.1.8](https://github.com/conda/rattler/compare/rattler-bin-v0.1.7...rattler-bin-v0.1.8) - 2026-05-04
+
+### Other
+
+- updated the following local packages: rattler_repodata_gateway
+
+## [0.1.7](https://github.com/conda/rattler/compare/rattler-bin-v0.1.6...rattler-bin-v0.1.7) - 2026-05-01
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.6](https://github.com/conda/rattler/compare/rattler-bin-v0.1.5...rattler-bin-v0.1.6) - 2026-04-30
+
+### Added
+
+- implement simplified variant selection with `flags` ([#2381](https://github.com/conda/rattler/pull/2381))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.1.5](https://github.com/conda/rattler/compare/rattler-bin-v0.1.4...rattler-bin-v0.1.5) - 2026-04-13
 
 ### Fixed

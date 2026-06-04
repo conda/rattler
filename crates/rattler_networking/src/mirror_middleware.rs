@@ -183,8 +183,8 @@ pub(crate) fn create_404_response(_url: &Url, _body: &str) -> Response {
 mod test {
     use std::{future::IntoFuture, net::SocketAddr};
 
-    use axum::{extract::State, http::StatusCode, routing::get, Router};
-    use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+    use axum::{Router, extract::State, http::StatusCode, routing::get};
+    use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
     use url::Url;
 
     use crate::MirrorMiddleware;

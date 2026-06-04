@@ -33,21 +33,26 @@ pub(super) async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     while let Some(entry) = entries.next().await {
         let mut file = entry.map_err(ExtractError::IoError)?;
 
-        // On Windows, skip symlink entries as they require special privileges
-        if cfg!(windows) && file.header().entry_type().is_symlink() {
-            tracing::warn!(
-                "Skipping symlink in tar archive: {}",
-                file.path().map_err(ExtractError::IoError)?.display()
-            );
-            continue;
-        }
-
         // Unpack the file into the destination directory
         #[cfg_attr(not(unix), allow(unused_variables))]
-        let unpacked_path = file
-            .unpack_in_raw(&destination, &mut memo)
-            .await
-            .map_err(ExtractError::IoError)?;
+        let unpacked_path = match file.unpack_in_raw(&destination, &mut memo).await {
+            Ok(path) => path,
+            Err(e) => {
+                // On Windows, creating symlinks requires Developer Mode, admin
+                // privileges, or a Dev Drive. If unpacking a symlink fails (typically
+                // permission denied), warn and skip the entry rather than failing the
+                // whole extraction. Users with the right setup still get the symlink.
+                #[cfg(windows)]
+                if file.header().entry_type().is_symlink() {
+                    tracing::warn!(
+                        "skipping symlink in tar archive: {}: {e}",
+                        file.path().map_err(ExtractError::IoError)?.display()
+                    );
+                    continue;
+                }
+                return Err(ExtractError::IoError(e));
+            }
+        };
 
         // Preserve the executable bit on Unix systems
         #[cfg(unix)]
@@ -59,24 +64,24 @@ pub(super) async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
                 let mode = file.header().mode().map_err(ExtractError::IoError)?;
                 let has_any_executable_bit = mode & EXECUTABLE_MODE_BITS;
 
-                if has_any_executable_bit != 0 {
-                    if let Some(path) = unpacked_path {
-                        let metadata = tokio::fs::metadata(&path)
-                            .await
-                            .map_err(ExtractError::IoError)?;
-                        let permissions = metadata.permissions();
+                if has_any_executable_bit != 0
+                    && let Some(path) = unpacked_path
+                {
+                    let metadata = tokio::fs::metadata(&path)
+                        .await
+                        .map_err(ExtractError::IoError)?;
+                    let permissions = metadata.permissions();
 
-                        // Only update if not already executable
-                        if permissions.mode() & EXECUTABLE_MODE_BITS != EXECUTABLE_MODE_BITS {
-                            tokio::fs::set_permissions(
-                                &path,
-                                std::fs::Permissions::from_mode(
-                                    permissions.mode() | EXECUTABLE_MODE_BITS,
-                                ),
-                            )
-                            .await
-                            .map_err(ExtractError::IoError)?;
-                        }
+                    // Only update if not already executable
+                    if permissions.mode() & EXECUTABLE_MODE_BITS != EXECUTABLE_MODE_BITS {
+                        tokio::fs::set_permissions(
+                            &path,
+                            std::fs::Permissions::from_mode(
+                                permissions.mode() | EXECUTABLE_MODE_BITS,
+                            ),
+                        )
+                        .await
+                        .map_err(ExtractError::IoError)?;
                     }
                 }
             }

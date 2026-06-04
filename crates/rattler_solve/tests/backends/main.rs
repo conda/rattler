@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
@@ -122,7 +122,7 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
@@ -281,8 +281,8 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
-        use chrono::{DateTime, Utc};
         use itertools::Itertools;
+        use jiff::Timestamp;
 
         #[test]
         fn test_solve_quetz() {
@@ -666,8 +666,8 @@ mod libsolv_c {
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
@@ -787,16 +787,16 @@ mod libsolv_c {
 #[cfg(feature = "resolvo")]
 mod resolvo {
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord,
-        VersionWithSource,
+        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
+        package::DistArchiveIdentifier,
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -853,7 +853,7 @@ mod resolvo {
 
     #[test]
     fn test_exclude_newer_error() {
-        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+        let date = "2021-12-12T12:12:12Z".parse::<Timestamp>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],
@@ -1105,11 +1105,7 @@ fn solve<T: SolverImpl + Default>(
         .specs
         .iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
@@ -1117,20 +1113,16 @@ fn solve<T: SolverImpl + Default>(
         .constraints
         .into_iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
     let task = SolverTask {
-        locked_packages: task.installed_packages,
+        locked_packages: task.installed_packages.iter().collect(),
         virtual_packages: task.virtual_packages,
         specs,
         constraints,
-        pinned_packages: task.pinned_packages,
+        pinned_packages: task.pinned_packages.iter().collect(),
         exclude_newer: task.exclude_newer.clone(),
         strategy: task.strategy,
         ..SolverTask::from_iter(&repo_data)

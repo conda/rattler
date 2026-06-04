@@ -243,7 +243,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -273,7 +273,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .legacy_bz2_md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -324,7 +324,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .sha256
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -447,9 +447,11 @@ macro_rules! impl_package_record {
                 unchecked_return_type = "Date | undefined"
             )]
             pub fn timestamp(&self) -> Option<js_sys::Date> {
-                AsRef::<PackageRecord>::as_ref(self)
-                    .timestamp
-                    .map(|ts| ts.into_datetime().into())
+                AsRef::<PackageRecord>::as_ref(self).timestamp.map(|ts| {
+                    js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(
+                        ts.jiff_timestamp().as_millisecond() as f64,
+                    ))
+                })
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
@@ -458,9 +460,10 @@ macro_rules! impl_package_record {
                 #[wasm_bindgen::prelude::wasm_bindgen(unchecked_param_type = "Date | undefined")]
                 timestamp: Option<js_sys::Date>,
             ) {
-                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.map(|date| {
-                    let datetime: chrono::DateTime<chrono::Utc> = date.into();
-                    datetime.into()
+                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.and_then(|date| {
+                    jiff::Timestamp::from_millisecond(date.get_time() as i64)
+                        .ok()
+                        .map(|ts| ts.into())
                 });
             }
 

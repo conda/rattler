@@ -1,11 +1,11 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
-use crate::package::DistArchiveIdentifier;
-use crate::repo_data::{ChannelRelations, ExperimentalV3Packages, RepodataRevisionInfo};
 use crate::PackageRecord;
-use chrono::{DateTime, Utc};
+use crate::package::DistArchiveIdentifier;
+use crate::repo_data::{ChannelRelations, RepodataRevisionInfo, V3Packages};
 use indexmap::IndexMap;
-use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
+use jiff::Timestamp;
+use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
@@ -43,7 +43,7 @@ pub struct ShardedSubdirInfo {
 
     /// The date at which this entry was created.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<DateTime<Utc>>,
+    pub created_at: Option<Timestamp>,
 
     /// Repodata revisions available through this sharded index.
     ///
@@ -106,8 +106,8 @@ pub struct Shard {
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(default, rename = "v3")]
-    pub experimental_v3: ExperimentalV3Packages,
+    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
+    pub v3: V3Packages,
 
     /// The file names of all removed for this shard
     #[serde(default)]

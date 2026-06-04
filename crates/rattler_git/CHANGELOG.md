@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/conda/rattler/compare/rattler_git-v0.1.2...rattler_git-v0.1.3) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_git-v0.1.1...rattler_git-v0.1.2) - 2026-05-07
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.1](https://github.com/conda/rattler/compare/rattler_git-v0.1.0...rattler_git-v0.1.1) - 2026-04-08
 
 ### Added

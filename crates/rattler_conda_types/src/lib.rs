@@ -48,12 +48,12 @@ pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
+    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
-    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
 pub use minimal_prefix_record::{
-    collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
+    MinimalPrefixCollection, MinimalPrefixRecord, collect_minimal_prefix_records,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{
@@ -65,12 +65,11 @@ pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
-    compute_package_url,
+    ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
+    RepodataRevision, RepodataRevisionInfo, SubdirRunExportsJson, UrlOrPath, V3Packages,
+    ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ChannelRelations, ConvertSubdirError, ExperimentalV3Packages, PackageRecord,
-    RecordFromPath, RepoData, RepodataRevision, RepodataRevisionInfo, SubdirRunExportsJson,
-    UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;

@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use clap::{CommandFactory, Parser, ValueEnum};
-use clap_complete::{shells, Generator};
+use clap_complete::{Generator, shells};
 use clap_complete_nushell::Nushell;
 use miette::IntoDiagnostic;
 

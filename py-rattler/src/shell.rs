@@ -1,8 +1,8 @@
 use crate::error::PyRattlerError;
 use crate::platform::PyPlatform;
 use pyo3::{
-    exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pymethods, types::PyAnyMethods,
-    Bound, FromPyObject, PyAny, PyResult,
+    Bound, FromPyObject, PyAny, PyResult, exceptions::PyValueError, pybacked::PyBackedStr, pyclass,
+    pymethods, types::PyAnyMethods,
 };
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
@@ -37,7 +37,7 @@ impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "keep must be one of {{'prepend', 'append', 'replace'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -118,7 +118,7 @@ pub enum PyShellEnum {
 impl PyShellEnum {
     pub fn to_shell_enum(&self) -> ShellEnum {
         match self {
-            PyShellEnum::Bash => Bash.into(),
+            PyShellEnum::Bash => Bash::default().into(),
             PyShellEnum::Zsh => Zsh.into(),
             PyShellEnum::Xonsh => Xonsh.into(),
             PyShellEnum::CmdExe => CmdExe.into(),

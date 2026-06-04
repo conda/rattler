@@ -125,7 +125,7 @@ impl Config for ConcurrencyConfig {
             _ => {
                 return Err(ConfigEditError::UnknownKeyInner {
                     key: key.to_string(),
-                })
+                });
             }
         }
         Ok(())

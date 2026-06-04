@@ -1,12 +1,17 @@
 use fs_err::tokio as tokio_fs;
 use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
-use rattler_networking::{Authentication, AuthenticationStorage};
-use reqwest::{
-    header::{self, HeaderMap, HeaderValue},
-    StatusCode,
+use rattler_networking::{
+    Authentication, AuthenticationStorage,
+    trusted_publishing::{
+        TrustedPublishResult, TrustedPublishingOptions, check_trusted_publishing,
+    },
 };
-use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
+use reqwest::{
+    StatusCode,
+    header::{self, HeaderMap, HeaderValue},
+};
+use reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -18,11 +23,8 @@ use url::Url;
 use super::opt::{AttestationSource, PrefixData};
 
 #[cfg(feature = "sigstore-sign")]
-use crate::upload::attestation::{create_attestation, AttestationConfig};
-use crate::upload::{
-    default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
-};
+use crate::upload::attestation::{AttestationConfig, create_attestation};
+use crate::upload::{default_bytes_style, get_client_with_retry, get_default_client};
 
 use super::package::sha256_sum;
 
@@ -163,21 +165,29 @@ async fn create_upload_form(
     Ok(form)
 }
 
+/// Look up a bearer-style token for `url` from `storage`, automatically
+/// refreshing OAuth tokens whose access token is close to expiring.
+async fn fetch_token_from_storage(
+    storage: &AuthenticationStorage,
+    url: &Url,
+) -> Result<String, PrefixUploadError> {
+    match storage.get_by_url_refreshed(url.clone()).await {
+        Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
+        Ok((_, Some(Authentication::OAuth { access_token, .. }))) => Ok(access_token),
+        Ok((_, Some(_))) => Err(PrefixUploadError::WrongAuthenticationType),
+        Ok((_, None)) => Err(PrefixUploadError::MissingApiKey),
+        Err(e) => Err(PrefixUploadError::KeychainError {
+            message: e.to_string(),
+        }),
+    }
+}
+
 /// Uploads package files to a prefix.dev server.
 pub async fn upload_package_to_prefix(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
     prefix_data: PrefixData,
 ) -> Result<(), PrefixUploadError> {
-    let check_storage = || match storage.get_by_url(Url::from(prefix_data.url.clone())) {
-        Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),
-        Ok((_, Some(_))) => Err(PrefixUploadError::WrongAuthenticationType),
-        Ok((_, None)) => Err(PrefixUploadError::MissingApiKey),
-        Err(e) => Err(PrefixUploadError::KeychainError {
-            message: e.to_string(),
-        }),
-    };
-
     let client = get_client_with_retry().into_diagnostic()?;
 
     let wants_attestation = !matches!(prefix_data.attestation, AttestationSource::NoAttestation);
@@ -201,7 +211,13 @@ pub async fn upload_package_to_prefix(
             }
             (api_key, false)
         }
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::for_prefix_dev(),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => {
                 // When using trusted publishing, we can generate attestations
                 // Note: sigstore-sign handles OIDC token retrieval internally
@@ -211,14 +227,20 @@ pub async fn upload_package_to_prefix(
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                (check_storage()?, false)
+                (
+                    fetch_token_from_storage(storage, &prefix_data.url).await?,
+                    false,
+                )
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                (check_storage()?, false)
+                (
+                    fetch_token_from_storage(storage, &prefix_data.url).await?,
+                    false,
+                )
             }
         },
     };
@@ -226,20 +248,26 @@ pub async fn upload_package_to_prefix(
     #[cfg(not(feature = "sigstore-sign"))]
     let token = match prefix_data.api_key {
         Some(api_key) => api_key,
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::for_prefix_dev(),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => token.secret().to_string(),
             TrustedPublishResult::Skipped => {
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                check_storage()?
+                fetch_token_from_storage(storage, &prefix_data.url).await?
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
                 if wants_attestation {
                     return Err(PrefixUploadError::AttestationRequiresTrustedPublishing);
                 }
-                check_storage()?
+                fetch_token_from_storage(storage, &prefix_data.url).await?
             }
         },
     };
@@ -289,7 +317,9 @@ pub async fn upload_package_to_prefix(
                     warn!("--store-github-attestation requires GITHUB_TOKEN environment variable");
                 }
                 if repo_owner.is_none() {
-                    warn!("--store-github-attestation requires GITHUB_REPOSITORY environment variable");
+                    warn!(
+                        "--store-github-attestation requires GITHUB_REPOSITORY environment variable"
+                    );
                 }
 
                 AttestationConfig {
@@ -444,10 +474,10 @@ pub async fn upload_package_to_prefix(
 
 #[cfg(test)]
 mod test {
-    use axum::{http::StatusCode, Router};
+    use axum::{Router, http::StatusCode};
     use rattler_networking::AuthenticationStorage;
 
-    use super::{upload_package_to_prefix, PrefixUploadError};
+    use super::{PrefixUploadError, upload_package_to_prefix};
     use crate::upload::opt::{AttestationSource, ForceOverwrite, PrefixData, SkipExisting};
     use crate::upload::test_utils::{start_test_server, test_package_path};
 
@@ -506,8 +536,8 @@ mod test {
     async fn test_prefix_upload_skip_existing_continues_remaining() {
         // First package returns 409, second returns 200 — both should succeed overall
         use axum::extract::State;
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         async fn handler(
             State(count): State<Arc<AtomicUsize>>,

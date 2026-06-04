@@ -20,7 +20,7 @@ pub struct Opt {
     )]
     target_prefix: PathBuf,
 
-    /// Shell to generate the hook for (bash, zsh, fish, xonsh, cmd, nushell, powershell)
+    /// Shell to generate the hook for (bash, zsh, fish, xonsh, cmd, nushell, powershell, brush)
     #[clap(short, long)]
     shell: Option<String>,
 }

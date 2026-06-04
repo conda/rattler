@@ -1,8 +1,8 @@
 //! Read authentication credentials from `.netrc` files.
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
@@ -25,6 +25,11 @@ fn default_netrc_path() -> PathBuf {
 /// information backed by a on-disk JSON file
 #[derive(Debug, Clone, Default)]
 pub struct NetRcStorage {
+    /// The path to the netrc file that was loaded, if any. Surfaced via
+    /// [`StorageBackend::name`] so that `auth status` can show users which
+    /// file the credentials came from.
+    path: Option<PathBuf>,
+
     /// The netrc file contents
     machines: HashMap<String, Machine>,
 }
@@ -74,7 +79,10 @@ impl NetRcStorage {
             Err(NetRcStorageError::IOError(err))
                 if err.kind() == ErrorKind::NotFound && !explicit =>
             {
-                Ok(Self::default())
+                Ok(Self {
+                    path: Some(path),
+                    machines: HashMap::new(),
+                })
             }
             Err(err) => Err((path, err)),
         }
@@ -91,7 +99,10 @@ impl NetRcStorage {
             .map(|m| (m.name.clone(), m))
             .filter_map(|(name, value)| name.map(|n| (n, value)))
             .collect();
-        Ok(Self { machines })
+        Ok(Self {
+            path: Some(path.to_path_buf()),
+            machines,
+        })
     }
 
     /// Retrieve the authentication information for the given host
@@ -107,6 +118,13 @@ impl NetRcStorage {
 }
 
 impl StorageBackend for NetRcStorage {
+    fn name(&self) -> String {
+        match &self.path {
+            Some(path) => format!("netrc ({})", path.display()),
+            None => "netrc".to_string(),
+        }
+    }
+
     fn store(
         &self,
         _host: &str,
@@ -129,6 +147,18 @@ impl StorageBackend for NetRcStorage {
             Ok(None) => Ok(None),
             Err(err) => Err(err.into()),
         }
+    }
+
+    fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        self.machines
+            .keys()
+            .map(|host| {
+                self.get_password(host)
+                    .map(|auth| auth.map(|auth| (host.clone(), auth)))
+                    .map_err(AuthenticationStorageError::from)
+            })
+            .filter_map(Result::transpose)
+            .collect()
     }
 }
 
@@ -174,7 +204,9 @@ mod tests {
         netrc.flush().unwrap();
 
         let old_netrc = env::var("NETRC");
-        env::set_var("NETRC", path.as_os_str());
+        unsafe {
+            env::set_var("NETRC", path.as_os_str());
+        }
 
         let storage = NetRcStorage::from_env().unwrap();
 
@@ -188,10 +220,12 @@ mod tests {
 
         assert_eq!(storage.get("test_unknown").unwrap(), None);
 
-        if let Ok(netrc) = old_netrc {
-            env::set_var("NETRC", netrc);
-        } else {
-            env::remove_var("NETRC");
+        unsafe {
+            if let Ok(netrc) = old_netrc {
+                env::set_var("NETRC", netrc);
+            } else {
+                env::remove_var("NETRC");
+            }
         }
     }
 

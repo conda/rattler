@@ -1,7 +1,7 @@
 use miette::IntoDiagnostic;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use tracing::{debug, info};
 
@@ -231,10 +231,11 @@ impl Cloudsmith {
             "uploading {filename} ({} bytes, {total_chunks} chunks)",
             content.len()
         );
-        let mut chunk_number: usize = 1;
-
-        for chunk in content.chunks(CHUNK_SIZE) {
-            debug!("uploading chunk {chunk_number}/{total_chunks} for {filename}");
+        for (chunk_number, chunk) in content.chunks(CHUNK_SIZE).enumerate() {
+            debug!(
+                "uploading chunk {}/{total_chunks} for {filename}",
+                chunk_number + 1
+            );
 
             let resp = reqwest::Client::new()
                 .put(upload_url)
@@ -250,8 +251,6 @@ impl Cloudsmith {
 
             resp.error_for_status()
                 .map_err(CloudsmithError::UploadFailed)?;
-
-            chunk_number += 1;
         }
 
         // Complete the multi-part upload
@@ -330,7 +329,7 @@ impl Cloudsmith {
 mod test {
     use std::net::SocketAddr;
 
-    use axum::{http::StatusCode, routing::post, Router};
+    use axum::{Router, http::StatusCode, routing::post};
     use url::Url;
 
     use super::Cloudsmith;
@@ -386,8 +385,8 @@ mod test {
 
     #[tokio::test]
     async fn test_cloudsmith_multipart_upload_flow() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
