@@ -2531,9 +2531,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edd4f8c914f230834828771125168eaa39bc6602e32cb0316ceeff2add10d449"
+checksum = "f113435a49123cef1217367dc9b30a1cc0b63083df1fd025b807109aa509d61f"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2558,11 +2558,10 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83d597e9e4758fc778a60d8c28a8677629675ae40d8652ec000ae5f53f5ae7ec"
+checksum = "4f60f45dd97ff91cedfcb6b2b9f860d3d84739386c3557027687c52cc0e698fd"
 dependencies = [
- "base64 0.22.1",
  "bytes",
  "futures",
  "google-cloud-rpc",
@@ -2591,9 +2590,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-wkt"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5daa3084991800bcc5333d7e77bb19259a02b34ee35f35c27b49d602732306e"
+checksum = "88e0186e2221bf82c5296500251b4650b111172c324984159a0de9f6bcaa18a5"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3541,9 +3540,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.31"
+version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "113b30b4cd05f7c06868fdb2854f66a7b9fece9a48425351cd532e810d74024f"
+checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "lru"
@@ -4892,7 +4891,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.44.2"
+version = "0.44.3"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4956,7 +4955,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4996,7 +4995,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5240,7 +5239,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.64"
+version = "0.2.65"
 dependencies = [
  "configparser",
  "dirs",
@@ -5391,7 +5390,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.29.3"
+version = "0.29.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5491,7 +5490,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.4"
+version = "0.27.5"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -8719,9 +8718,9 @@ checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yoke"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abe8c5fda708d9ca3df187cae8bfb9ceda00dd96231bed36e445a1a48e66f9ca"
+checksum = "709fe23a0424b6a435d82152b1bd3fdfb0833487d5fa90d05d42762a9891fef5"
 dependencies = [
  "stable_deref_trait",
  "yoke-derive",
