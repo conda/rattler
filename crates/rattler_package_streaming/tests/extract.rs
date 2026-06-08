@@ -319,6 +319,69 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);
 }
 
+/// Regression test: a tar entry with an absolute path must not let the manual
+/// mtime-setting touch a file *outside* the extraction directory. The content
+/// is written safely inside `destination` (tar strips the leading root), and
+/// the mtime must be applied to that sanitized path, never to the raw header
+/// path joined onto `destination`.
+#[cfg(unix)]
+#[test]
+fn test_absolute_path_entry_does_not_set_mtime_outside_destination() {
+    use std::io::{Cursor, Write};
+
+    // A file that lives outside the extraction destination. Kept short so it
+    // fits the 100-byte tar name field.
+    let victim = Path::new("/tmp/rattler_extract_traversal_victim.txt").to_path_buf();
+    std::fs::write(&victim, b"data outside the extraction directory").unwrap();
+    let untouched = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+    filetime::set_file_mtime(&victim, untouched).unwrap();
+
+    // Craft an archive with a regular file whose header path is the victim's
+    // absolute path, and a pre-1980 mtime to take the clamping branch.
+    let content = b"x";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1);
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_path_absolute(&victim).unwrap();
+    header.set_cksum();
+
+    let mut builder = tar::Builder::new(Vec::new());
+    builder.append(&header, &content[..]).unwrap();
+    let tar_data = builder.into_inner().unwrap();
+
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    encoder.write_all(&tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    let target_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("absolute_path_traversal");
+    let _ = std::fs::remove_dir_all(&target_dir);
+    extract_tar_bz2(Cursor::new(bz2_data), &target_dir).unwrap();
+
+    // The victim outside the destination must be completely untouched.
+    let after =
+        filetime::FileTime::from_last_modification_time(&std::fs::metadata(&victim).unwrap());
+    assert_eq!(
+        after.unix_seconds(),
+        1_700_000_000,
+        "mtime of a file outside the extraction directory was modified"
+    );
+
+    // The content is written inside the destination (root stripped) and its
+    // mtime is clamped to the 1980 floor, proving mtimes are still applied to
+    // the correct, sanitized path.
+    let inside = target_dir.join(victim.strip_prefix("/").unwrap());
+    assert!(
+        inside.exists(),
+        "entry should be extracted inside destination"
+    );
+    let inside_mtime =
+        filetime::FileTime::from_last_modification_time(&std::fs::metadata(&inside).unwrap());
+    assert_eq!(inside_mtime.unix_seconds(), 315_532_800);
+}
+
 /// Test that extracting a tar archive containing entries with mtime=1
 /// (Unix epoch + 1 second, a common sentinel value) completes without error.
 /// This verifies the fix for exFAT filesystems that cannot represent

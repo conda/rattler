@@ -4,7 +4,11 @@
 use super::{ExtractError, ExtractResult};
 use std::io::{Seek, SeekFrom, copy};
 use std::mem::ManuallyDrop;
-use std::{ffi::OsStr, io::Read, path::Path};
+use std::{
+    ffi::OsStr,
+    io::Read,
+    path::{Component, Path, PathBuf},
+};
 use tempfile::SpooledTempFile;
 use zip::read::{ZipArchive, ZipFile, read_zipfile_from_stream};
 
@@ -125,20 +129,47 @@ fn unpack_tar_archive_sync<R: Read>(
     for entry in archive.entries().map_err(ExtractError::IoError)? {
         let mut entry = entry.map_err(ExtractError::IoError)?;
         let mtime = entry.header().mtime().unwrap_or(0);
-        let entry_type = entry.header().entry_type();
-        let path = entry.path().map_err(ExtractError::IoError)?.into_owned();
+        let is_symlink = entry.header().entry_type().is_symlink();
+        let entry_path = entry.path().map_err(ExtractError::IoError)?.into_owned();
 
         let unpacked = entry
             .unpack_in(destination)
             .map_err(ExtractError::IoError)?;
 
-        if unpacked {
-            let full_path = destination.join(&path);
-            set_mtime_safe(&full_path, mtime, entry_type.is_symlink());
+        // Set mtime on the path the entry was actually written to, recomputed
+        // with the same sanitization `unpack_in` applies. Joining the raw
+        // header path onto `destination` would let an absolute or `..` entry
+        // point the mtime write at a file outside the extraction directory.
+        if unpacked && let Some(full_path) = unpacked_destination_path(destination, &entry_path) {
+            set_mtime_safe(&full_path, mtime, is_symlink);
         }
     }
 
     Ok(())
+}
+
+/// Resolves the on-disk path a tar entry is unpacked to, mirroring the
+/// sanitization in [`tar::Entry::unpack_in`]: absolute-path roots and `.`
+/// components are stripped and a `..` component makes the entry unsafe.
+///
+/// Returns `None` when the entry would not map to a distinct path inside
+/// `destination`, so callers never set metadata on a path that could resolve
+/// outside the extraction directory.
+fn unpacked_destination_path(destination: &Path, entry_path: &Path) -> Option<PathBuf> {
+    let mut full_path = destination.to_path_buf();
+    for component in entry_path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => return None,
+            Component::Normal(part) => full_path.push(part),
+        }
+    }
+
+    if full_path == destination {
+        return None;
+    }
+
+    Some(full_path)
 }
 
 /// Sets the modification time on a file, clamping to a safe minimum and
