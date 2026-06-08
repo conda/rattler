@@ -115,11 +115,13 @@ impl PyRunExportsJson {
                 rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                     RunExportsJson,
                 >(client.into(), url)
-                .await
-                .map(PyRunExportsJson::from)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                .await;
 
-            Python::with_gil(|py| Ok(Py::new(py, run_exports_json)?.into_any()))
+            Python::with_gil(|py| match run_exports_json {
+                Ok(r) => Ok(Some(Py::new(py, PyRunExportsJson::from(r))?.into_any())),
+                Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
+            })
         })
     }
 
