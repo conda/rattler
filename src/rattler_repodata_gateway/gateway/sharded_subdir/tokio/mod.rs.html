@@ -25,7 +25,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>fs_err::tokio <span class="kw">as </span>tokio_fs;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>futures::future::OptionFuture;
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>http::{HeaderValue, header::CACHE_CONTROL};
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepodataRevisions, ShardedRepodata};
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>rattler_networking::LazyClient;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>simple_spawn_blocking::tokio::run_blocking_task;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>url::Url;
@@ -278,7 +278,7 @@
 <a href=#276 id=276 data-nosnippet>276</a>        <span class="self">self</span>.sharded_repodata.shards.keys().cloned().collect()
 <a href=#277 id=277 data-nosnippet>277</a>    }
 <a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>RepodataRevisions {
 <a href=#280 id=280 data-nosnippet>280</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.sharded_repodata.info.repodata_revisions
 <a href=#281 id=281 data-nosnippet>281</a>    }
 <a href=#282 id=282 data-nosnippet>282</a>}

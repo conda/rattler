@@ -2,7 +2,7 @@
 
 </head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">rattler_repodata_gateway/gateway/</div>local_subdir.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::{path::Path, sync::Arc};
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo};
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>rattler_conda_types::{Channel, PackageName, RepodataRevisions};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>crate::{
 <a href=#6 id=6 data-nosnippet>6</a>    Reporter,
@@ -110,7 +110,7 @@
 <a href=#108 id=108 data-nosnippet>108</a>            .collect()
 <a href=#109 id=109 data-nosnippet>109</a>    }
 <a href=#110 id=110 data-nosnippet>110</a>
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[RepodataRevisionInfo] {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">fn </span>repodata_revisions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>RepodataRevisions {
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="self">self</span>.sparse.repodata_revisions()
 <a href=#113 id=113 data-nosnippet>113</a>    }
 <a href=#114 id=114 data-nosnippet>114</a>}

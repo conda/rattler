@@ -5,7 +5,7 @@
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>bytes::Bytes;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>futures::{Stream, TryStreamExt};
 <a href=#5 id=5 data-nosnippet>5</a><span class="attr">#[cfg(feature = <span class="string">"gateway"</span>)]
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>rattler_conda_types::Channel;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>rattler_conda_types::{Channel, RepodataRevisions};
 <a href=#7 id=7 data-nosnippet>7</a><span class="attr">#[cfg(feature = <span class="string">"sparse"</span>)]
 <a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 <a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[cfg(feature = <span class="string">"gateway"</span>)]
@@ -100,24 +100,24 @@
 <a href=#98 id=98 data-nosnippet>98</a>}
 <a href=#99 id=99 data-nosnippet>99</a>
 <a href=#100 id=100 data-nosnippet>100</a><span class="attr">#[cfg(feature = <span class="string">"gateway"</span>)]
-<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>report_unsupported_repodata_revisions&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>report_unsupported_repodata_revisions(
 <a href=#102 id=102 data-nosnippet>102</a>    reporter: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>Reporter&gt;,
 <a href=#103 id=103 data-nosnippet>103</a>    channel: <span class="kw-2">&amp;</span>Channel,
 <a href=#104 id=104 data-nosnippet>104</a>    subdir: <span class="kw-2">&amp;</span>str,
-<a href=#105 id=105 data-nosnippet>105</a>    revisions: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RepodataRevisionInfo&gt;,
+<a href=#105 id=105 data-nosnippet>105</a>    revisions: <span class="kw-2">&amp;</span>RepodataRevisions,
 <a href=#106 id=106 data-nosnippet>106</a>) {
 <a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(reporter) = reporter <span class="kw">else </span>{
 <a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">return</span>;
 <a href=#109 id=109 data-nosnippet>109</a>    };
 <a href=#110 id=110 data-nosnippet>110</a>
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>channel = channel.base_url.url().clone().redact().to_string();
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">for </span>revision <span class="kw">in </span>revisions {
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">if </span>revision.revision &gt; SUPPORTED_REPODATA_REVISION {
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">for </span>(<span class="kw-2">&amp;</span>revision, metadata) <span class="kw">in </span>revisions {
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">if </span>revision &gt; SUPPORTED_REPODATA_REVISION {
 <a href=#114 id=114 data-nosnippet>114</a>            reporter.on_unsupported_repodata_revision(<span class="kw-2">&amp;</span>UnsupportedRepodataRevision {
 <a href=#115 id=115 data-nosnippet>115</a>                channel: channel.clone(),
 <a href=#116 id=116 data-nosnippet>116</a>                subdir: subdir.to_string(),
 <a href=#117 id=117 data-nosnippet>117</a>                supported_revision: SUPPORTED_REPODATA_REVISION,
-<a href=#118 id=118 data-nosnippet>118</a>                revision: revision.clone(),
+<a href=#118 id=118 data-nosnippet>118</a>                revision: RepodataRevisionInfo::from_metadata(revision, metadata.clone()),
 <a href=#119 id=119 data-nosnippet>119</a>            });
 <a href=#120 id=120 data-nosnippet>120</a>        }
 <a href=#121 id=121 data-nosnippet>121</a>    }
