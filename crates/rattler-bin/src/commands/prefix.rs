@@ -232,7 +232,7 @@ fn validate_virtual_package_dependencies(
 ) -> miette::Result<()> {
     let virtual_packages = rattler_virtual_packages::VirtualPackages::detect_for_platform(
         platform,
-        &rattler_virtual_packages::VirtualPackageOverrides::default(),
+        &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
     )
     .into_diagnostic()
     .with_context(|| format!("failed to determine virtual packages for {platform}"))?
