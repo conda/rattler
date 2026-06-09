@@ -561,10 +561,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.index.RepodataRevisionInfo" class="md-nav__link">
+  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RepodataRevisionInfo
+        RepodataRevisionMetadata
       
     </span>
   </a>
@@ -3031,10 +3031,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.index.RepodataRevisionInfo" class="md-nav__link">
+  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RepodataRevisionInfo
+        RepodataRevisionMetadata
       
     </span>
   </a>
@@ -3132,22 +3132,21 @@
 
 
 
-<h2 id="rattler.index.RepodataRevisionInfo" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">RepodataRevisionInfo</span>
+<h2 id="rattler.index.RepodataRevisionMetadata" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RepodataRevisionMetadata</span>
 
 
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
-  </span>
-
-<a href="#rattler.index.RepodataRevisionInfo" class="headerlink" title="Permanent link">#</a></h2>
+<a href="#rattler.index.RepodataRevisionMetadata" class="headerlink" title="Permanent link">#</a></h2>
 
 
     <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
 
 
 
-        <p>Metadata for a repodata revision advertised in <code>info.repodata_revisions</code>.</p>
+        <p>Metadata for a single revision in the <code>vN</code>-keyed dictionary form of
+<code>repodata_revisions</code>. The revision itself is the dictionary key.</p>
 
 
 
@@ -3360,11 +3359,12 @@ conda channels at a minimum must include this subdirectory.</p>
                 <code>repodata_revisions</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<span title="rattler.index.index.RepodataRevision">RepodataRevision</span>]]</code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="rattler.index.index.RepodataRevisions">RepodataRevisions</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Repodata revisions to advertise, including optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.</p>
+                <p>Repodata revisions to advertise, with optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.
+                Either a sequence of revisions or a <code>vN</code>-keyed dictionary, e.g. <code>{"v3": {"n_packages": 1}}</code>.</p>
               </div>
             </td>
             <td>
@@ -3582,11 +3582,12 @@ conda channels at a minimum must include this subdirectory.</p>
                 <code>repodata_revisions</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="typing.Sequence">Sequence</span>[<span title="rattler.index.index.RepodataRevision">RepodataRevision</span>]]</code>
+                  <code><span title="typing.Optional">Optional</span>[<span title="rattler.index.index.RepodataRevisions">RepodataRevisions</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Repodata revisions to advertise, including optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.</p>
+                <p>Repodata revisions to advertise, with optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.
+                Either a sequence of revisions or a <code>vN</code>-keyed dictionary, e.g. <code>{"v3": {"n_packages": 1}}</code>.</p>
               </div>
             </td>
             <td>
