@@ -149,7 +149,7 @@ impl From<LegacyCondaPackageData> for CondaPackageData {
                     .expect("This file name must be valid here");
                 CondaPackageData::Binary(Box::new(CondaBinaryData {
                     package_record: data.package_record,
-                    location: data.location,
+                    location: crate::Verbatim::new(data.location),
                     file_name: file_id,
                     channel: data.channel,
                 }))
