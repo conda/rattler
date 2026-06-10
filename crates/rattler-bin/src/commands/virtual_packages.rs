@@ -8,7 +8,7 @@ pub struct Opt {}
 
 pub fn virtual_packages(_opt: Opt) -> miette::Result<()> {
     let virtual_packages =
-        rattler_virtual_packages::VirtualPackage::detect(&VirtualPackageOverrides::default())
+        rattler_virtual_packages::VirtualPackage::detect(&VirtualPackageOverrides::from_env())
             .into_diagnostic()?;
     for package in virtual_packages {
         println!("{}", GenericVirtualPackage::from(package.clone()));

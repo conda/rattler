@@ -242,7 +242,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
                 .collect::<miette::Result<Vec<_>>>()?)
         } else {
             rattler_virtual_packages::VirtualPackage::detect(
-                &rattler_virtual_packages::VirtualPackageOverrides::default(),
+                &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
             )
             .map(|vpkgs| {
                 vpkgs
