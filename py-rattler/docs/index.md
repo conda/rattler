@@ -77,6 +77,12 @@ environment.
 
 Next, we will see a quick reference summary of all the methods and properties that you will need when using the library. If you follow the links there, you will expand the documentation for the method and property, with more examples on how to use them.
 
+## py-rattler skill
+
+We provide a py-rattler skill that you can use to give your agent more context about how py-rattler works.
+
+You can use [pixi-skills](https://pixi.prefix.dev/latest/integration/extensions/pixi_skills/) to install it or copy the [skills directory](https://github.com/conda/rattler/tree/main/skills/py-rattler) manually into your repository.
+
 ## Contributing 😍
 
 We would love to have you contribute!
