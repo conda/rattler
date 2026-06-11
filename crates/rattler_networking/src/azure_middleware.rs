@@ -79,6 +79,61 @@ impl AzureMiddleware {
     }
 }
 
+impl AzureMiddleware {
+    /// Sign a reqwest `Request` in place using reqsign.
+    async fn sign(&self, req: &mut Request) -> MiddlewareResult<()> {
+        if !req.headers().contains_key("x-ms-version") {
+            req.headers_mut()
+                .insert("x-ms-version", X_MS_VERSION.parse().unwrap());
+        }
+
+        let mut builder = http::Request::builder()
+            .method(req.method().clone())
+            .uri(req.url().as_str());
+        for (name, value) in req.headers() {
+            builder = builder.header(name, value);
+        }
+        let http_req = builder.body(()).map_err(|e| {
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                "failed to build http request for signing: {e}"
+            ))
+        })?;
+        let (mut parts, ()) = http_req.into_parts();
+
+        self.signer
+            .sign(&mut parts, None)
+            .await
+            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::anyhow!(e)))?;
+
+        *req.headers_mut() = parts.headers;
+        let signed_url = Url::parse(&parts.uri.to_string()).map_err(|e| {
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                "failed to parse signed azure URL '{}': {e}",
+                parts.uri
+            ))
+        })?;
+        *req.url_mut() = signed_url;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Middleware for AzureMiddleware {
+    async fn handle(
+        &self,
+        mut req: Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> MiddlewareResult<Response> {
+        if req.url().scheme() == "az" {
+            let https_url = self.rewrite_url(&req.url().clone())?;
+            *req.url_mut() = https_url;
+            self.sign(&mut req).await?;
+        }
+        next.run(req, extensions).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,5 +185,22 @@ mod tests {
             .rewrite_url(&Url::parse("az://missing/noarch/repodata.json").unwrap())
             .unwrap_err();
         assert!(err.to_string().contains("missing"));
+    }
+
+    #[tokio::test]
+    async fn passes_through_non_az_schemes_unchanged() {
+        use reqwest_middleware::ClientBuilder;
+        let mw = AzureMiddleware::new(HashMap::new());
+        let client = ClientBuilder::new(Client::new()).with(mw).build();
+        let result = client
+            .get("https://this-host-does-not-exist.invalid/x")
+            .send()
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            !err.to_string().contains("azure-options"),
+            "non-az request must not hit azure config lookup: {err}"
+        );
     }
 }
