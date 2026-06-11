@@ -114,3 +114,17 @@ e2e-s3-aws = "nu scripts/e2e/s3-aws.nu"
 [environments.s3]
 features = ["s3"]
 no-default-feature = true
+
+#------------------------------
+# prefix.dev OIDC E2E test
+#------------------------------
+[feature.prefix-dev-e2e.dependencies]
+rattler = { path = "crates/rattler-bin" }
+nushell = ">=0.106.1,<0.107"
+
+[feature.prefix-dev-e2e.tasks]
+e2e-prefix-dev = "nu scripts/e2e/prefix-dev-oidc.nu"
+
+[environments.prefix-dev-e2e]
+features = ["prefix-dev-e2e"]
+no-default-feature = true
