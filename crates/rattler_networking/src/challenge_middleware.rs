@@ -2,8 +2,8 @@
 //! acquiring a bearer token from a pluggable [`AuthFlow`] and replaying the
 //! request once.
 //!
-//! The first [`AuthFlow`] implementation will be
-//! `crate::trusted_publishing::TrustedPublishingFlow` (added in a later task).
+//! The first [`AuthFlow`] implementation is
+//! [`crate::trusted_publishing::TrustedPublishingFlow`].
 
 use std::{
     collections::HashMap,
@@ -204,6 +204,10 @@ pub trait AuthFlow: Send + Sync + fmt::Debug {
     /// concurrently by parallel requests racing on the first challenge;
     /// implementations should tolerate redundant invocations (every returned
     /// token is cached last-write-wins).
+    ///
+    /// Implementations may treat `url`'s origin as a trusted credential sink;
+    /// dispatchers must therefore only invoke flows for URLs on the host they
+    /// are scoped to.
     async fn acquire_token(
         &self,
         url: &Url,

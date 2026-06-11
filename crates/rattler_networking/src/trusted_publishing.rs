@@ -45,8 +45,12 @@ pub struct TrustedPublishingOptions {
     /// this against the trusted-publisher configuration before minting a
     /// token.
     pub audience: String,
-    /// Path on the server (joined onto `server_url`) where the ID token is
-    /// exchanged for a bearer token.
+    /// Path on the server where the ID token is exchanged for a bearer token.
+    ///
+    /// This path is joined onto arbitrary URLs of the challenged server using
+    /// [`Url::join`]. It must start with `/` so that it replaces the full URL
+    /// path; a relative path would resolve against the challenged URL's path
+    /// and could target an unintended endpoint.
     pub mint_path: String,
 }
 
@@ -242,6 +246,15 @@ async fn get_publish_token(
 ///
 /// `client` is used only for the mint exchange; it must not itself layer in
 /// [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
+///
+/// # Security
+///
+/// `acquire_token` sends the CI provider's OIDC ID token — a live
+/// credential — to `url`'s origin (joined with
+/// [`TrustedPublishingOptions::mint_path`]). Only drive this flow from a
+/// dispatcher that is scoped to a single trusted host, such as
+/// [`crate::AuthChallengeMiddleware`]; never pass it URLs derived from
+/// untrusted input.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingFlow {
     options: TrustedPublishingOptions,
