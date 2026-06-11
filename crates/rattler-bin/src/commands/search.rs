@@ -1,9 +1,12 @@
 use std::{collections::HashMap, env, time::Instant};
 
+use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform};
+use rattler_conda_types::{
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
+};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 
 /// Search for packages in conda channels using glob or regex patterns.
@@ -43,13 +46,19 @@ pub struct Opt {
     /// Enable sharded repodata
     #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
     sharded: bool,
+
+    /// Output in JSON format
+    #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
+    json: bool,
 }
 
 pub async fn search(opt: Opt) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    println!("Searching for '{}' on {}", opt.matchspec, opt.platform);
+    if !opt.json {
+        println!("Searching for '{}' on {}", opt.matchspec, opt.platform);
+    }
 
     // Parse the pattern as a matchspec with glob/regex support
     let matchspec = MatchSpec::from_str(
@@ -70,10 +79,12 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    println!(
-        "Channels: {}",
-        channels.iter().map(Channel::canonical_name).join(", ")
-    );
+    if !opt.json {
+        println!(
+            "Channels: {}",
+            channels.iter().map(Channel::canonical_name).join(", ")
+        );
+    }
 
     // Create HTTP client
     let download_client = super::client::create_client_with_middleware()?;
@@ -109,6 +120,23 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .context("failed to query repodata")?;
 
     pb.finish_and_clear();
+
+    if opt.json {
+        // Group records by platform (subdir), same format as `pixi search --json`
+        let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
+        for record in repo_data.iter().flat_map(RepoData::iter) {
+            grouped
+                .entry(record.package_record.subdir.as_str())
+                .or_default()
+                .push(record);
+        }
+        for records in grouped.values_mut() {
+            records.sort_unstable_by(|a, b| b.cmp(a));
+        }
+        let json_str = serde_json::to_string_pretty(&grouped).into_diagnostic()?;
+        println!("{json_str}");
+        return Ok(());
+    }
 
     // Collect all records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();

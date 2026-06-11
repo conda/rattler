@@ -44,6 +44,7 @@ clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 futures-util = { workspace = true }
 hex = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
@@ -71,6 +72,7 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
