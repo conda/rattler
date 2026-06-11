@@ -502,9 +502,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-signin"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f5120c1da89637cc9ca83915a8599fbeb02b3c7e8d03ba5acc4ed2b35950a78"
+checksum = "daa3bd918c9d495bd58515877e54f9e6f5b1603163b0a82238426a8625eca44c"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -4954,7 +4954,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4965,6 +4965,7 @@ dependencies = [
  "dunce",
  "futures-util",
  "hex",
+ "indexmap 2.14.0",
  "indicatif",
  "itertools 0.14.0",
  "jiff",
@@ -4984,6 +4985,7 @@ dependencies = [
  "rattler_virtual_packages",
  "regex",
  "reqwest 0.13.4",
+ "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
