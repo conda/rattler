@@ -1827,13 +1827,14 @@ pub struct IndexAzureConfig {
     pub precondition_checks: PreconditionChecks,
 }
 
-/// Build an OpenDAL `AzblobConfig` for the given account/endpoint/channel.
+/// Build an `OpenDAL` `AzblobConfig` for the given account/endpoint/channel.
 ///
 /// Deliberately sets **no** `account_key` or `sas_token`: with only
-/// `account_name` + `endpoint`, OpenDAL's azblob backend authenticates through
-/// reqsign's `DefaultCredentialProvider` chain (env → Azure CLI → managed
-/// identity → ...), which is exactly what we want for Entra ID.
+/// `account_name` + `endpoint`, `OpenDAL`'s azblob backend authenticates
+/// through reqsign's `DefaultCredentialProvider` chain (env → Azure CLI →
+/// managed identity → ...), which is exactly what we want for Entra ID.
 #[cfg(feature = "azure")]
+#[allow(clippy::field_reassign_with_default)]
 fn azblob_config(
     account: &str,
     endpoint_url: Option<&Url>,
