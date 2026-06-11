@@ -13,7 +13,7 @@ const DESIRED_CHUNK_SIZE: usize = 1024 * 1024 * 10;
 
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
-/// Credentials are resolved ambiently by OpenDAL's azblob backend via reqsign's
+/// Credentials are resolved ambiently by `OpenDAL`'s azblob backend via reqsign's
 /// `DefaultCredentialProvider` (env → Azure CLI → managed identity → ...): this
 /// function sets only the account name and endpoint, never an account key or
 /// SAS token.
@@ -29,14 +29,16 @@ pub async fn upload_package_to_azure(
         .ok_or(miette::miette!("No container in Azure URL"))?;
 
     // Create the Azblob configuration for opendal.
-    let mut cfg = AzblobConfig::default();
-    cfg.root = Some(channel.path().to_string());
-    cfg.container = container.to_string();
-    cfg.account_name = Some(account.clone());
-    cfg.endpoint = Some(match &endpoint_url {
-        Some(url) => url.as_str().trim_end_matches('/').to_string(),
-        None => format!("https://{account}.blob.core.windows.net"),
-    });
+    let cfg = AzblobConfig {
+        root: Some(channel.path().to_string()),
+        container: container.to_string(),
+        account_name: Some(account.clone()),
+        endpoint: Some(match &endpoint_url {
+            Some(url) => url.as_str().trim_end_matches('/').to_string(),
+            None => format!("https://{account}.blob.core.windows.net"),
+        }),
+        ..Default::default()
+    };
 
     let builder = cfg.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();
