@@ -84,13 +84,20 @@ let oidc_token = (
     fail "could not fetch the GitHub Actions OIDC token — runner/permissions problem"
   }
 )
-let minted = (
+let mint_resp = (
   try {
-    http post --max-time 30sec --content-type application/json $"($host)/api/oidc/mint_token" { token: $oidc_token }
+    http post --full --allow-errors --max-time 30sec --content-type application/json $"($host)/api/oidc/mint_token" { token: $oidc_token }
   } catch {
-    fail $"mint endpoint ($host)/api/oidc/mint_token rejected the OIDC token — check the repository-access config \(repo + audience ($audience)\) on the server"
+    fail $"mint endpoint ($host)/api/oidc/mint_token unreachable — connection/DNS failure"
   }
 )
+if $mint_resp.status != 200 {
+  # The server's error body is a plain diagnostic message (never a token);
+  # truncate defensively so a surprising body cannot dump a credential.
+  let detail = ($mint_resp.body | into string | str substring 0..300)
+  fail $"mint endpoint ($host)/api/oidc/mint_token rejected the OIDC token \(status ($mint_resp.status)\): ($detail) — check the repository-access config \(repo + workflow + audience ($audience)\) on the server"
+}
+let minted = $mint_resp.body
 if ($minted | describe) != "string" {
   fail "mint endpoint returned a non-string response (expected the raw token)"
 }
