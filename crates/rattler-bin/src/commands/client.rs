@@ -30,6 +30,10 @@ pub fn create_client_with_middleware() -> miette::Result<reqwest_middleware::Cli
     ));
     #[cfg(feature = "gcs")]
     let client = client.with(rattler_networking::GCSMiddleware::default());
+    #[cfg(feature = "azure")]
+    let client = client.with(rattler_networking::AzureMiddleware::new(
+        std::collections::HashMap::new(),
+    ));
 
     Ok(client.build())
 }
