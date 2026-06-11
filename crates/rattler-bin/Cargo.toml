@@ -33,7 +33,7 @@ rustls = [
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
-azure = ["rattler_networking/azure"]
+azure = ["rattler_networking/azure", "rattler_upload/azure"]
 oauth = ["rattler/oauth"]
 
 [dependencies]
