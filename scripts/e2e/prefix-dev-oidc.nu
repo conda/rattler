@@ -13,7 +13,15 @@ let host = ($env.PREFIX_DEV_E2E_HOST? | default "https://beta.prefix.dev" | str 
 let channel = ($env.PREFIX_DEV_E2E_CHANNEL? | default "rattler-e2e")
 let package_file = "test-data/packages/empty-0.1.0-h4616a5c_0.conda"
 let package_filename = "empty-0.1.0-h4616a5c_0.conda"
-let audience = ($host | url parse | get host)
+# prefix.dev deployments (prefix.dev and *.prefix.dev, e.g. beta) all validate
+# GitHub OIDC tokens against the shared audience "prefix.dev"; other hosts use
+# their own host name. Mirrors TrustedPublishingOptions::for_server.
+let host_name = ($host | url parse | get host)
+let audience = if ($host_name == "prefix.dev") or ($host_name | str ends-with ".prefix.dev") {
+  "prefix.dev"
+} else {
+  $host_name
+}
 
 def fail [msg: string] {
   print $"FAIL: ($msg)"

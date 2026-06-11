@@ -70,7 +70,7 @@ pub fn create_client_with_middleware_for_channels(
         {
             continue;
         }
-        let Some(options) = TrustedPublishingOptions::for_host(url) else {
+        let Some(options) = TrustedPublishingOptions::for_server(url) else {
             continue;
         };
         let mut server = url.clone();
