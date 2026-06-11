@@ -22,6 +22,9 @@ use url::Url;
 
 use crate::challenge_middleware::{AuthFlow, AuthFlowError, BearerToken, Challenge};
 
+/// Default path of the prefix.dev-convention mint endpoint.
+const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
+
 /// Knobs for the trusted-publishing flow. Use
 /// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults, or
 /// construct directly to point at a different server.
@@ -54,7 +57,7 @@ impl TrustedPublishingOptions {
     pub fn for_prefix_dev() -> Self {
         Self {
             audience: "prefix.dev".to_string(),
-            mint_path: "/api/oidc/mint_token".to_string(),
+            mint_path: DEFAULT_MINT_PATH.to_string(),
         }
     }
 
@@ -67,10 +70,17 @@ impl TrustedPublishingOptions {
     /// Deriving the audience from the host scopes each OIDC ID token to the
     /// server it is sent to: a token minted with `aud = <host>` is only
     /// redeemable at that host.
+    ///
+    /// This constructor does not validate the scheme or host. Callers
+    /// handling ambient CI credentials must ensure `server` uses `https`
+    /// and apply their own host allow-list before attaching this flow.
+    /// The audience is the URL-normalized host: lowercased, IDN hosts in
+    /// punycode, and without any port. See the struct-level docs for how
+    /// the audience determines the GitLab CI env-var name.
     pub fn for_host(server: &Url) -> Option<Self> {
         Some(Self {
             audience: server.host_str()?.to_string(),
-            mint_path: "/api/oidc/mint_token".to_string(),
+            mint_path: DEFAULT_MINT_PATH.to_string(),
         })
     }
 }
@@ -499,5 +509,14 @@ mod tests {
         // data: URLs have no host component
         let url = Url::parse("data:text/plain,hello").unwrap();
         assert!(TrustedPublishingOptions::for_host(&url).is_none());
+    }
+
+    #[test]
+    fn for_host_normalizes_case_and_drops_default_port() {
+        let options = TrustedPublishingOptions::for_host(
+            &Url::parse("https://Beta.PREFIX.dev:443/some-channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(options.audience, "beta.prefix.dev");
     }
 }
