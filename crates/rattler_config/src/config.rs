@@ -12,6 +12,7 @@ use crate::config::{
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
 
+pub mod azure;
 pub mod build;
 pub mod channel_config;
 pub mod concurrency;
