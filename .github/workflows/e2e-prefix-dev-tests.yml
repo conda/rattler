@@ -1,0 +1,51 @@
+on:
+  push:
+    branches: [main]
+    paths:
+      - crates/rattler-bin/**
+      - crates/rattler_networking/**
+      - crates/rattler_upload/**
+      - scripts/e2e/prefix-dev-oidc.nu
+      - pixi.toml
+      - pixi.lock
+      - .github/workflows/e2e-prefix-dev-tests.yml
+  workflow_dispatch:
+
+name: E2E prefix.dev OIDC Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_LOG: rattler_networking=debug,info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-prefix-dev-oidc:
+    name: E2E Upload/Challenged-Read [beta.prefix.dev]
+    runs-on: ubuntu-latest
+    # The OIDC identity is only authorized (via the server-side repository
+    # access config) for this repository; manual dispatch allows bring-up
+    # runs from a branch.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      # Enable sccache (picked up by pixi build).
+      SCCACHE_GHA_ENABLED: "true"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          submodules: recursive
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          environments: prefix-dev-e2e
+
+      - run: pixi run -vv e2e-prefix-dev
