@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18](https://github.com/conda/rattler/compare/rattler-bin-v0.1.17...rattler-bin-v0.1.18) - 2026-06-11
+
+### Added
+
+- Add JSON output support to search command ([#2500](https://github.com/conda/rattler/pull/2500))
+- support CONDA_OVERRIDE_* in rattler cli ([#2496](https://github.com/conda/rattler/pull/2496))
+
 ## [0.1.17](https://github.com/conda/rattler/compare/rattler-bin-v0.1.16...rattler-bin-v0.1.17) - 2026-06-09
 
 ### Other
