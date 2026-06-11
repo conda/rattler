@@ -26,6 +26,7 @@ jobs:
   e2e-prefix-dev-oidc:
     name: E2E Upload/Challenged-Read [beta.prefix.dev]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # The OIDC identity is only authorized (via the server-side repository
     # access config) for this repository; manual dispatch allows bring-up
     # runs from a branch.
