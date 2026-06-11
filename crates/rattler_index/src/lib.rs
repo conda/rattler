@@ -23,8 +23,10 @@ use fs_err::{self as fs};
 use futures::{StreamExt, stream::FuturesUnordered};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use opendal::layers::RetryLayer;
+#[cfg(feature = "azure")]
+use opendal::services::AzblobConfig;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
@@ -54,7 +56,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use url::Url;
 
 /// Channel metadata written into generated repodata.
@@ -1793,6 +1795,131 @@ pub async fn ensure_channel_initialized_s3_with_channel_metadata(
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
 
+/// Configuration for `index_azure`.
+#[cfg(feature = "azure")]
+pub struct IndexAzureConfig {
+    /// The channel to index, e.g. `az://my-container/my-channel`.
+    pub channel: Url,
+    /// The Azure Storage account name.
+    pub account: String,
+    /// Optional endpoint override (sovereign clouds / Azurite). Defaults to
+    /// `https://{account}.blob.core.windows.net`.
+    pub endpoint_url: Option<Url>,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Repodata revisions to advertise in generated repodata.
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// How packages are assigned to repodata revisions.
+    pub package_revision_assignment: PackageRevisionAssignment,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+    /// Configuration for precondition checks during file operations.
+    pub precondition_checks: PreconditionChecks,
+}
+
+/// Build an OpenDAL `AzblobConfig` for the given account/endpoint/channel.
+///
+/// Deliberately sets **no** `account_key` or `sas_token`: with only
+/// `account_name` + `endpoint`, OpenDAL's azblob backend authenticates through
+/// reqsign's `DefaultCredentialProvider` chain (env → Azure CLI → managed
+/// identity → ...), which is exactly what we want for Entra ID.
+#[cfg(feature = "azure")]
+fn azblob_config(
+    account: &str,
+    endpoint_url: Option<&Url>,
+    channel: &Url,
+) -> Result<AzblobConfig, anyhow::Error> {
+    let mut cfg = AzblobConfig::default();
+    cfg.root = Some(channel.path().to_string());
+    cfg.container = channel
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("No container in az URL"))?
+        .to_string();
+    cfg.account_name = Some(account.to_string());
+    cfg.endpoint = Some(match endpoint_url {
+        Some(url) => url.as_str().trim_end_matches('/').to_string(),
+        None => format!("https://{account}.blob.core.windows.net"),
+    });
+    Ok(cfg)
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// Azure Blob URL.
+#[cfg(feature = "azure")]
+pub async fn index_azure(config: IndexAzureConfig) -> anyhow::Result<()> {
+    index_azure_with_channel_metadata(config, ChannelMetadata::default()).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// Azure Blob URL and write channel metadata into the generated repodata.
+#[cfg(feature = "azure")]
+pub async fn index_azure_with_channel_metadata(
+    IndexAzureConfig {
+        channel,
+        account,
+        endpoint_url,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+        precondition_checks,
+    }: IndexAzureConfig,
+    channel_metadata: ChannelMetadata,
+) -> anyhow::Result<()> {
+    let cfg = azblob_config(&account, endpoint_url.as_ref(), &channel)?;
+    let op = Operator::new(cfg.into_builder())?
+        .layer(RetryLayer::new())
+        .finish();
+
+    index_with_channel_metadata(
+        target_platform,
+        op,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+        precondition_checks,
+        channel_metadata,
+    )
+    .await
+    .map(|_| ())
+}
+
+/// Ensures that an Azure Blob channel has a valid `noarch/repodata.json` file.
+///
+/// See [`ensure_channel_initialized`] for details.
+#[cfg(feature = "azure")]
+pub async fn ensure_channel_initialized_azure(
+    channel: &Url,
+    account: &str,
+    endpoint_url: Option<&Url>,
+) -> anyhow::Result<()> {
+    let cfg = azblob_config(account, endpoint_url, channel)?;
+    let op = Operator::new(cfg.into_builder())?
+        .layer(RetryLayer::new())
+        .finish();
+    ensure_channel_initialized_with_channel_metadata(&op, ChannelMetadata::default()).await
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -1859,5 +1986,33 @@ mod tests {
         assert!(packages.is_empty());
         assert!(conda_packages.is_empty());
         assert!(v3.whl.contains_key(&identifier));
+    }
+
+    #[cfg(feature = "azure")]
+    #[test]
+    fn azblob_config_uses_container_and_root_no_credentials() {
+        let channel = Url::parse("az://mychannel/my/sub/path").unwrap();
+        let cfg = azblob_config("myacct", None, &channel).unwrap();
+        assert_eq!(cfg.container, "mychannel");
+        assert_eq!(cfg.root.as_deref(), Some("/my/sub/path"));
+        assert_eq!(cfg.account_name.as_deref(), Some("myacct"));
+        assert_eq!(
+            cfg.endpoint.as_deref(),
+            Some("https://myacct.blob.core.windows.net")
+        );
+        assert!(cfg.account_key.is_none());
+        assert!(cfg.sas_token.is_none());
+    }
+
+    #[cfg(feature = "azure")]
+    #[test]
+    fn azblob_config_respects_endpoint_override() {
+        let channel = Url::parse("az://devstoreaccount1/ch").unwrap();
+        let endpoint = Url::parse("http://127.0.0.1:10000/devstoreaccount1").unwrap();
+        let cfg = azblob_config("devstoreaccount1", Some(&endpoint), &channel).unwrap();
+        assert_eq!(
+            cfg.endpoint.as_deref(),
+            Some("http://127.0.0.1:10000/devstoreaccount1")
+        );
     }
 }
