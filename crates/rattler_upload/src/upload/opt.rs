@@ -124,6 +124,8 @@ pub enum ServerType {
     Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
+    #[cfg(feature = "azure")]
+    Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
 }
@@ -401,6 +403,63 @@ pub struct S3Opts {
     pub force: bool,
 }
 
+#[cfg(feature = "azure")]
+fn parse_az_url(value: &str) -> Result<Url, String> {
+    let url: Url =
+        Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
+    if url.scheme() == "az" && url.host_str().is_some() {
+        Ok(url)
+    } else {
+        Err(format!(
+            "Only Azure URLs of format az://container/... can be used, not `{value}`"
+        ))
+    }
+}
+
+/// Options for uploading to Azure Blob Storage.
+#[cfg(feature = "azure")]
+#[derive(Clone, Debug, PartialEq, Parser)]
+pub struct AzureOpts {
+    /// The channel URL in the Azure container, e.g.
+    /// `az://my-container/my-channel`.
+    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = parse_az_url)]
+    pub channel: Url,
+
+    /// The Azure Storage account name.
+    #[arg(long, env = "AZURE_STORAGE_ACCOUNT")]
+    pub account: String,
+
+    /// Optional endpoint override (sovereign clouds / Azurite).
+    #[arg(long, env = "AZURE_ENDPOINT_URL")]
+    pub endpoint_url: Option<Url>,
+
+    /// Replace files if they already exist.
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[cfg(feature = "azure")]
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct AzureData {
+    pub channel: UrlWithTrailingSlash,
+    pub account: String,
+    pub endpoint_url: Option<Url>,
+    pub force: bool,
+}
+
+#[cfg(feature = "azure")]
+impl From<AzureOpts> for AzureData {
+    fn from(value: AzureOpts) -> Self {
+        Self {
+            channel: value.channel.into(),
+            account: value.account,
+            endpoint_url: value.endpoint_url,
+            force: value.force,
+        }
+    }
+}
+
 #[derive(Debug)]
 #[allow(missing_docs)]
 pub struct AnacondaData {
@@ -586,5 +645,37 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
+    }
+}
+
+#[cfg(all(test, feature = "azure"))]
+mod azure_opt_tests {
+    use super::*;
+
+    #[test]
+    fn parse_az_url_accepts_az_scheme() {
+        let url = parse_az_url("az://my-container/my-channel").unwrap();
+        assert_eq!(url.scheme(), "az");
+        assert_eq!(url.host_str(), Some("my-container"));
+    }
+
+    #[test]
+    fn parse_az_url_rejects_other_schemes() {
+        assert!(parse_az_url("s3://b/c").is_err());
+        assert!(parse_az_url("https://x/y").is_err());
+    }
+
+    #[test]
+    fn azure_data_from_opts_preserves_fields() {
+        let opts = AzureOpts {
+            channel: Url::parse("az://c/ch").unwrap(),
+            account: "acct".to_string(),
+            endpoint_url: None,
+            force: true,
+        };
+        let data = AzureData::from(opts);
+        assert_eq!(data.account, "acct");
+        assert!(data.force);
+        assert_eq!(data.channel.as_str(), "az://c/ch/");
     }
 }
