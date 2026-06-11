@@ -61,15 +61,15 @@ fn parse_header_value(value: &str) -> Vec<Challenge> {
                 scheme: first.to_string(),
                 params: HashMap::new(),
             });
-            if let (Some(rest), Some(challenge)) = (rest, challenges.last_mut()) {
-                if let Some((key, val)) = parse_param(rest) {
-                    challenge.params.insert(key, val);
-                }
-            }
-        } else if let Some(challenge) = challenges.last_mut() {
-            if let Some((key, val)) = parse_param(item) {
+            if let (Some(rest), Some(challenge)) = (rest, challenges.last_mut())
+                && let Some((key, val)) = parse_param(rest)
+            {
                 challenge.params.insert(key, val);
             }
+        } else if let Some(challenge) = challenges.last_mut()
+            && let Some((key, val)) = parse_param(item)
+        {
+            challenge.params.insert(key, val);
         }
     }
     challenges
