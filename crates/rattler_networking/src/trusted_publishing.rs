@@ -23,6 +23,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::challenge_middleware::{AuthFlow, AuthFlowError, Challenge};
+
 /// Refresh minted JWT tokens before they expire to avoid sending a token that
 /// becomes invalid while a request is in flight.
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
@@ -229,6 +231,61 @@ async fn get_publish_token(
     }
 }
 
+/// [`AuthFlow`] implementation backed by trusted publishing (CI OIDC).
+///
+/// Responds only to `Bearer` challenges. On a challenge it asks `ambient-id`
+/// for an OIDC ID token (returns `Ok(None)` outside supported CI providers)
+/// and exchanges it at the challenged host's mint endpoint
+/// ([`TrustedPublishingOptions::mint_path`]). Because the surrounding
+/// [`crate::AuthChallengeMiddleware`] is host-scoped, the challenged URL is
+/// always the right host to mint against.
+///
+/// `client` is used only for the mint exchange; it must not itself layer in
+/// [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
+#[derive(Debug, Clone)]
+pub struct TrustedPublishingFlow {
+    options: TrustedPublishingOptions,
+    client: ClientWithMiddleware,
+}
+
+impl TrustedPublishingFlow {
+    /// Create a flow with custom [`TrustedPublishingOptions`].
+    pub fn new(options: TrustedPublishingOptions, client: ClientWithMiddleware) -> Self {
+        Self { options, client }
+    }
+
+    /// Create a flow preconfigured for prefix.dev.
+    pub fn for_prefix_dev(client: ClientWithMiddleware) -> Self {
+        Self::new(TrustedPublishingOptions::for_prefix_dev(), client)
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+impl AuthFlow for TrustedPublishingFlow {
+    async fn acquire_token(
+        &self,
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Result<Option<crate::challenge_middleware::BearerToken>, AuthFlowError> {
+        if !challenges
+            .iter()
+            .any(|challenge| challenge.scheme.eq_ignore_ascii_case("bearer"))
+        {
+            return Ok(None);
+        }
+        // `get_token` still returns the old `TrustedPublishingToken` until
+        // Task 7 swaps it to `BearerToken`; convert explicitly for now.
+        match get_token(&self.client, url, &self.options).await {
+            Ok(Some(token)) => Ok(Some(crate::challenge_middleware::BearerToken::new(
+                token.secret().to_string(),
+            ))),
+            Ok(None) => Ok(None),
+            Err(err) => Err(AuthFlowError::new(err)),
+        }
+    }
+}
+
 /// `reqwest` middleware that injects a [`TrustedPublishingToken`] as a
 /// `Bearer` `Authorization` header for requests targeting a specific channel.
 ///
@@ -407,7 +464,85 @@ impl Middleware for TrustedPublishingMiddleware {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
+    use crate::challenge_middleware::{AuthFlow, Challenge};
+
+    fn bearer_challenge() -> Vec<Challenge> {
+        vec![Challenge {
+            scheme: "Bearer".to_string(),
+            params: HashMap::new(),
+        }]
+    }
+
+    fn plain_client() -> reqwest_middleware::ClientWithMiddleware {
+        reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build()
+    }
+
+    #[tokio::test]
+    async fn flow_ignores_non_bearer_challenges() {
+        let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+        let challenges = vec![Challenge {
+            scheme: "Basic".to_string(),
+            params: HashMap::new(),
+        }];
+        let result = flow
+            .acquire_token(
+                &Url::parse("https://prefix.dev/channel/repodata.json").unwrap(),
+                &challenges,
+            )
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn flow_mints_token_via_gitlab_env() {
+        use axum::{Json, routing::post};
+
+        // Mint endpoint: verifies it receives the CI-provided OIDC token and
+        // returns the minted bearer token as the raw response body.
+        let router = axum::Router::new().route(
+            "/api/oidc/mint_token",
+            post(|Json(body): Json<serde_json::Value>| async move {
+                assert_eq!(body["token"], "fake.oidc.token");
+                "pfx-jwt.minted"
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        // Force the GitLab detector: GITLAB_CI on, every other provider off.
+        // (rattler's own CI runs on GitHub Actions, so GITHUB_ACTIONS must be
+        // explicitly unset.)
+        let token = temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+                flow.acquire_token(
+                    &server_url.join("/channel/repodata.json").unwrap(),
+                    &bearer_challenge(),
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            token.expect("expected a minted token").secret(),
+            "pfx-jwt.minted"
+        );
+    }
 
     #[test]
     fn for_prefix_dev_matches_prefix_dev() {
