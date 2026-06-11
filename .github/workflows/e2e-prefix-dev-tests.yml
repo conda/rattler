@@ -13,8 +13,10 @@ on:
 
 name: E2E prefix.dev OIDC Tests
 
+# All runs share one beta.prefix.dev channel; serialize across refs so a
+# dispatch run cannot race a main run's delete/upload/read cycle.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 env:

@@ -9,7 +9,7 @@
 #   4. anonymous challenge check   -> server WWW-Authenticate behavior
 #   5. challenge-reactive read     -> AuthChallengeMiddleware / TrustedPublishingFlow
 
-let host = ($env.PREFIX_DEV_E2E_HOST? | default "https://beta.prefix.dev")
+let host = ($env.PREFIX_DEV_E2E_HOST? | default "https://beta.prefix.dev" | str trim --right --char "/")
 let channel = ($env.PREFIX_DEV_E2E_CHANNEL? | default "rattler-e2e")
 let package_file = "test-data/packages/empty-0.1.0-h4616a5c_0.conda"
 let package_filename = "empty-0.1.0-h4616a5c_0.conda"
@@ -28,6 +28,28 @@ def must [desc: string, indicts: string, cmd: closure] {
   if $code != 0 {
     fail $"($desc) failed \(exit=($code)\) — ($indicts)"
   }
+}
+
+def check_challenge [url: string] {
+  let resp = (
+    try {
+      http get --full --allow-errors --max-time 30sec $url
+    } catch {
+      fail $"Step 4: could not reach ($url) — connection/DNS failure"
+    }
+  )
+  if not ($resp.status in [401 403]) {
+    fail $"expected 401/403 for anonymous access to ($url), got ($resp.status) — is the channel private?"
+  }
+  let www = ($resp.headers.response | where name == "www-authenticate")
+  if ($www | is-empty) {
+    fail $"got ($resp.status) for ($url) but no WWW-Authenticate header — the server does not fire the challenge"
+  }
+  let www_value = ($www | first | get value)
+  if not ($www_value | str downcase | str contains "bearer") {
+    fail $"WWW-Authenticate present for ($url) but without a Bearer scheme: ($www_value)"
+  }
+  print $"   ($url) challenged with: ($www_value)"
 }
 
 # -- Step 0: preconditions ---------------------------------------------------
@@ -92,26 +114,10 @@ must $"Step 3: rattler upload prefix to ($host)/($channel)" "proactive OIDC uplo
 }
 
 # -- Step 4: the server must fire the challenge for anonymous access ----------
-print "== Step 4: anonymous request must be challenged with WWW-Authenticate"
-let resp = (
-  try {
-    http get --full --allow-errors --max-time 30sec $"($host)/($channel)/noarch/repodata.json"
-  } catch {
-    fail $"Step 4: could not reach ($host) — connection/DNS failure"
-  }
-)
-if not ($resp.status in [401 403]) {
-  fail $"expected 401/403 for anonymous access, got ($resp.status) — is the channel private?"
-}
-let www = ($resp.headers.response | where name == "www-authenticate")
-if ($www | is-empty) {
-  fail $"got ($resp.status) but no WWW-Authenticate header — the server does not fire the challenge"
-}
-let www_value = ($www | first | get value)
-if not ($www_value | str downcase | str contains "bearer") {
-  fail $"WWW-Authenticate present but without a Bearer scheme: ($www_value)"
-}
-print $"   challenged with: ($www_value)"
+print "== Step 4: anonymous requests must be challenged with WWW-Authenticate"
+check_challenge $"($host)/($channel)/noarch/repodata.json"
+# The CLI's first request goes to the sharded index; it must be challenged too.
+check_challenge $"($host)/($channel)/noarch/repodata_shards.msgpack.zst"
 
 # -- Step 5: the actual challenge-reactive read through the rattler CLI -------
 must $"Step 5: rattler create --dry-run from ($host)/($channel)" "challenge-reactive read path (AuthChallengeMiddleware / TrustedPublishingFlow)" {
