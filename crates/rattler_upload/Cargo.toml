@@ -29,6 +29,7 @@ native-tls = [
   "sigstore-sign?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
+azure = ["rattler_networking/azure", "dep:opendal", "opendal/services-azblob"]
 sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
 
 [package.metadata.docs.rs]
