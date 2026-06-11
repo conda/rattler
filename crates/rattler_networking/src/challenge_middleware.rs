@@ -324,6 +324,9 @@ enum CacheLookup {
 /// host, and effective port match `server`; the path is ignored. Requests
 /// that already carry an `Authorization` header are never touched, so
 /// credentials from [`crate::AuthenticationMiddleware`] always win.
+/// (Credentials embedded in the URL path or query — e.g. conda `/t/<token>`
+/// tokens — are not detected; a challenged request carrying such credentials
+/// will still be replayed with a bearer token.)
 ///
 /// The first acquired token is cached (with JWT-expiry-aware refresh); a flow
 /// that reports "not applicable" or fails disables the middleware for the

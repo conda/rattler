@@ -19,6 +19,9 @@ fn is_prefix_dev_host(host: &str) -> bool {
 }
 
 /// Creates an HTTP client with the middleware stack used by the CLI for remote fetches.
+///
+/// This stack performs no challenge/trusted-publishing auth; commands that
+/// read channels should prefer [`create_client_with_middleware_for_channels`].
 pub fn create_client_with_middleware() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
     create_client_with_middleware_for_channels(&[])
 }
@@ -62,13 +65,17 @@ pub fn create_client_with_middleware_for_channels(
         let Some(host) = url.host_str() else {
             continue;
         };
-        if !is_prefix_dev_host(host) || !seen_hosts.insert(host.to_string()) {
+        if !is_prefix_dev_host(host)
+            || !seen_hosts.insert((host.to_string(), url.port_or_known_default()))
+        {
             continue;
         }
         let Some(options) = TrustedPublishingOptions::for_host(url) else {
             continue;
         };
         let mut server = url.clone();
+        // Cosmetic: the middleware scopes on scheme+host+port and ignores
+        // path/query; normalizing just keeps Debug output tidy.
         server.set_path("/");
         server.set_query(None);
         client = client.with_arc(Arc::new(AuthChallengeMiddleware::new(
@@ -102,5 +109,8 @@ mod tests {
         assert!(!is_prefix_dev_host("evil-prefix.dev"));
         assert!(!is_prefix_dev_host("prefix.dev.evil.com"));
         assert!(!is_prefix_dev_host("conda.anaconda.org"));
+        // trailing-dot (DNS absolute) hosts are deliberately not matched:
+        // url::Url preserves the dot, so this fails closed.
+        assert!(!is_prefix_dev_host("beta.prefix.dev."));
     }
 }
