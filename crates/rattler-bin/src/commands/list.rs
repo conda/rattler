@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
 use rattler_conda_types::{HasArtifactIdentificationRefs, PackageName, PrefixData};
@@ -8,9 +8,14 @@ use rattler_conda_types::{HasArtifactIdentificationRefs, PackageName, PrefixData
 #[clap(after_help = r#"Examples:
   rattler list -p /path/to/environment"#)]
 pub struct Opt {
-    /// The prefix to list
-    #[clap(short, long)]
-    prefix: Option<PathBuf>,
+    /// Target prefix (environment path) to list
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        env = "CONDA_PREFIX"
+    )]
+    target_prefix: Option<PathBuf>,
 
     /// The name (or glob) of the packages to list
     name: Option<PackageName>, // maybe this could be a full MatchSpec?
@@ -21,13 +26,10 @@ pub struct Opt {
 }
 
 pub async fn list(opt: Opt) -> miette::Result<()> {
-    let prefix = if let Some(prefix) = opt.prefix {
-        prefix
-    } else if let Ok(prefix) = env::var("CONDA_PREFIX") {
-        PathBuf::from(prefix)
-    } else {
-        miette::bail!("No environment detected or passed. Tip: Use -p PATH.")
-    };
+    let prefix = opt
+        .target_prefix
+        .ok_or_else(|| miette::miette!("No environment detected or passed. Tip: Use -p PATH."))?;
+    let prefix = std::path::absolute(&prefix).into_diagnostic()?;
 
     let prefix_data = PrefixData::new(&prefix).into_diagnostic()?;
     let header = [[

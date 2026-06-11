@@ -18,7 +18,9 @@ use indexmap::IndexMap;
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::{DeserializeFromStr, SerializeDisplay, serde_as, skip_serializing_none};
+use serde_with::{
+    DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as, skip_serializing_none,
+};
 use thiserror::Error;
 use url::Url;
 
@@ -82,6 +84,7 @@ pub struct RepoData {
 }
 
 /// Information about subdirectory of channel in the Conda [`RepoData`]
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
@@ -93,9 +96,11 @@ pub struct ChannelInfo {
 
     /// Repodata revisions available in this repodata file.
     ///
-    /// See <https://github.com/conda/ceps/pull/146>.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// Serialized as a `vN`-keyed dictionary per the CEP draft
+    /// <https://github.com/conda/ceps/pull/146>.
+    #[serde_as(as = "IndexMap<DisplayFromStr, _>")]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub repodata_revisions: RepodataRevisions,
 
     /// Optional relationships to other channels as defined in
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
@@ -103,12 +108,32 @@ pub struct ChannelInfo {
     pub channel_relations: Option<ChannelRelations>,
 }
 
-/// Metadata for a repodata revision advertised in
-/// `info.repodata_revisions`.
-///
-/// Future repodata revisions are encoded in parallel top-level `vN` maps. This
-/// metadata lets older clients tell users that the channel contains newer
-/// records that may be invisible to the current client.
+/// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
+/// CEP draft <https://github.com/conda/ceps/pull/146>. Keying encodes
+/// uniqueness; insertion order is preserved.
+pub type RepodataRevisions = IndexMap<RepodataRevision, RepodataRevisionMetadata>;
+
+/// Metadata for a single [`RepodataRevisions`] entry; the revision itself is
+/// the map key.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct RepodataRevisionMetadata {
+    /// The number of packages available in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_packages: Option<u64>,
+
+    /// The Unix timestamp in milliseconds of the oldest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<TimestampMs>,
+
+    /// The Unix timestamp in milliseconds of the newest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newest: Option<TimestampMs>,
+}
+
+/// A revision paired with its metadata: the flattened form of a
+/// [`RepodataRevisions`] entry, used as indexer input and in reporter messages.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct RepodataRevisionInfo {
     /// The integer identifying the revision.
@@ -128,6 +153,27 @@ pub struct RepodataRevisionInfo {
     /// revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub newest: Option<TimestampMs>,
+}
+
+impl RepodataRevisionInfo {
+    /// Combines a revision identifier with its metadata.
+    pub fn from_metadata(revision: RepodataRevision, metadata: RepodataRevisionMetadata) -> Self {
+        Self {
+            revision,
+            n_packages: metadata.n_packages,
+            oldest: metadata.oldest,
+            newest: metadata.newest,
+        }
+    }
+
+    /// Returns the metadata portion (everything but the revision).
+    pub fn metadata(&self) -> RepodataRevisionMetadata {
+        RepodataRevisionMetadata {
+            n_packages: self.n_packages,
+            oldest: self.oldest,
+            newest: self.newest,
+        }
+    }
 }
 
 /// A repodata revision.
@@ -1121,7 +1167,7 @@ mod test {
             info: Some(ChannelInfo {
                 subdir: Some("linux-64".to_string()),
                 base_url: None,
-                repodata_revisions: Vec::new(),
+                repodata_revisions: IndexMap::default(),
                 channel_relations: Some(ChannelRelations {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
@@ -1146,7 +1192,7 @@ mod test {
                 info: Some(ChannelInfo {
                     subdir: Some("linux-64".to_string()),
                     base_url: None,
-                    repodata_revisions: Vec::new(),
+                    repodata_revisions: IndexMap::default(),
                     channel_relations,
                 }),
                 packages: IndexMap::default(),
@@ -1164,36 +1210,38 @@ mod test {
         let raw = r#"{
             "info": {
                 "subdir": "linux-64",
-                "repodata_revisions": [
-                    {
-                        "revision": 4,
+                "repodata_revisions": {
+                    "v4": {
                         "n_packages": 2,
                         "oldest": 1768249989851,
                         "newest": 1773851561010
                     }
-                ]
+                }
             },
             "packages": {},
             "packages.conda": {}
         }"#;
 
         let repodata: RepoData = serde_json::from_str(raw).unwrap();
-        let revision = &repodata.info.as_ref().unwrap().repodata_revisions[0];
-        assert_eq!(revision.revision, RepodataRevision::Unknown(4));
-        assert_eq!(revision.n_packages, Some(2));
+        let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
+        assert_eq!(revisions.len(), 1);
+        let metadata = &revisions[&RepodataRevision::Unknown(4)];
+        assert_eq!(metadata.n_packages, Some(2));
         assert_eq!(
-            revision.oldest.map(|ts| ts.timestamp_millis()),
+            metadata.oldest.map(|ts| ts.timestamp_millis()),
             Some(1768249989851)
         );
         assert_eq!(
-            revision.newest.map(|ts| ts.timestamp_millis()),
+            metadata.newest.map(|ts| ts.timestamp_millis()),
             Some(1773851561010)
         );
 
         let json = serde_json::to_string(&repodata).unwrap();
-        assert!(json.contains("\"repodata_revisions\""));
+        assert!(json.contains("\"repodata_revisions\":{\"v4\":{"));
         assert!(json.contains("\"oldest\":1768249989851"));
         assert!(json.contains("\"newest\":1773851561010"));
+        // The revision identifier is the map key, not a field of the value.
+        assert!(!json.contains("\"revision\""));
     }
 
     #[test]

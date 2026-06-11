@@ -79,12 +79,19 @@ fn ensure_entry_point_relative_path(
 }
 
 /// Get the bytes of the windows launcher executable.
+///
+/// These are the code-signed CLI launchers (proxies for `python.exe`) that
+/// back Python `console_scripts` entry points on Windows. They are vendored
+/// from the [`conda/conda-launchers`] signed release assets; see
+/// `scripts/update-launchers.py` for how to refresh them.
+///
+/// [`conda/conda-launchers`]: https://github.com/conda/conda-launchers/releases
 pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
     match platform {
-        Platform::Win32 => unimplemented!("32 bit windows is not supported for entry points"),
-        Platform::Win64 => include_bytes!("../../resources/launcher64.exe"),
-        Platform::WinArm64 => unimplemented!("arm64 windows is not supported for entry points"),
-        _ => panic!("unsupported platform"),
+        Platform::Win32 => include_bytes!("../../resources/cli-32.exe"),
+        Platform::Win64 => include_bytes!("../../resources/cli-64.exe"),
+        Platform::WinArm64 => include_bytes!("../../resources/cli-arm64.exe"),
+        _ => panic!("unsupported platform for a Windows entry point launcher: {platform}"),
     }
 }
 
@@ -98,8 +105,9 @@ pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
 /// extension. So if there is an entry point file called `foo.py` an executable is created called
 /// `foo.exe` that will automatically invoke `foo.py`.
 ///
-/// The special executable is embedded in the library. The source code for the launcher can be found
-/// here: <https://github.com/conda/conda-build/tree/master/conda_build/launcher_sources>.
+/// The special executable is embedded in the library. The launchers are the
+/// signed release binaries from <https://github.com/conda/conda-launchers> (a
+/// `CPython` 3.7 launcher patched for the conda ecosystem).
 ///
 /// See [`create_unix_python_entry_point`] for the unix variant of this function.
 pub fn create_windows_python_entry_point(
@@ -137,10 +145,12 @@ pub fn create_windows_python_entry_point(
         launcher_bytes,
     )?;
 
-    let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
-        "28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a",
-    )
-    .unwrap();
+    // The launcher is written verbatim, so its recorded digest is simply the
+    // hash of the embedded bytes. Computing it here (rather than hardcoding)
+    // keeps the record correct across platforms and whenever the launchers are
+    // updated to a new signed release.
+    let launcher_digest =
+        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(launcher_bytes);
 
     Ok([
         PathsEntry {
@@ -160,7 +170,7 @@ pub fn create_windows_python_entry_point(
             original_path: None,
             path_type: PathType::WindowsPythonEntryPointExe,
             no_link: false,
-            sha256: Some(fixed_launcher_digest),
+            sha256: Some(launcher_digest),
             sha256_in_prefix: None,
             size_in_bytes: Some(launcher_bytes.len() as u64),
             prefix_placeholder: None,

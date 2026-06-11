@@ -36,7 +36,9 @@ use rattler_conda_types::{
         RunExportsJson, WheelArchiveType,
     },
 };
-pub use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
+pub use rattler_conda_types::{
+    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
+};
 pub use rattler_config::config::index::{
     IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
 };
@@ -1097,12 +1099,13 @@ impl RevisionStats {
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionInfo],
     v3: &V3Packages,
-) -> Vec<RepodataRevisionInfo> {
+) -> RepodataRevisions {
+    // `BTreeMap` keeps the result ordered ascending regardless of input order.
     let mut revisions = configured
         .iter()
-        .filter(|revision| revision.revision != RepodataRevision::Legacy)
-        .map(|revision| (revision.revision, revision.clone()))
-        .collect::<BTreeMap<_, _>>();
+        .filter(|info| info.revision != RepodataRevision::Legacy)
+        .map(|info| (info.revision, info.metadata()))
+        .collect::<BTreeMap<_, RepodataRevisionMetadata>>();
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
     for (_, record) in v3.records() {
@@ -1110,35 +1113,28 @@ fn repodata_revisions_for_packages(
     }
 
     for (revision, revision_stats) in stats {
-        let info = revisions
-            .entry(revision)
-            .or_insert_with(|| RepodataRevisionInfo {
-                revision,
-                n_packages: None,
-                oldest: None,
-                newest: None,
-            });
-        if info.n_packages.is_none() {
-            info.n_packages = Some(revision_stats.n_packages);
+        let metadata = revisions.entry(revision).or_default();
+        if metadata.n_packages.is_none() {
+            metadata.n_packages = Some(revision_stats.n_packages);
         }
-        if info.oldest.is_none() {
-            info.oldest = revision_stats.oldest;
+        if metadata.oldest.is_none() {
+            metadata.oldest = revision_stats.oldest;
         }
-        if info.newest.is_none() {
-            info.newest = revision_stats.newest;
+        if metadata.newest.is_none() {
+            metadata.newest = revision_stats.newest;
         }
     }
 
     // Currently only v3 package maps are supported, but keep configured
     // revisions with zero packages so clients can still surface channel
     // capability information.
-    for revision in revisions.values_mut() {
-        if revision.n_packages.is_none() {
-            revision.n_packages = Some(0);
+    for metadata in revisions.values_mut() {
+        if metadata.n_packages.is_none() {
+            metadata.n_packages = Some(0);
         }
     }
 
-    revisions.into_values().collect()
+    revisions.into_iter().collect()
 }
 
 /// Write a `repodata.json` for all packages in the given configurator's root.
@@ -1715,7 +1711,7 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
         info: Some(ChannelInfo {
             subdir: Some(Platform::NoArch.to_string()),
             base_url: channel_metadata.base_url,
-            repodata_revisions: Vec::new(),
+            repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
         }),
         packages: IndexMap::default(),

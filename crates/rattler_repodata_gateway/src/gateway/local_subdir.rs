@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisions};
 
 use crate::{
     Reporter,
@@ -108,7 +108,7 @@ impl SubdirClient for LocalSubdirClient {
             .collect()
     }
 
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    fn repodata_revisions(&self) -> &RepodataRevisions {
         self.sparse.repodata_revisions()
     }
 }

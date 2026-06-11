@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_index-v0.30.3...rattler_index-v0.30.4) - 2026-06-09
+
+### Fixed
+
+- (de)serialize `info.repodata_revisions` as dictionary ([#2485](https://github.com/conda/rattler/pull/2485))
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_index-v0.30.2...rattler_index-v0.30.3) - 2026-06-03
 
 ### Added

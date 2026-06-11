@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.4](https://github.com/conda/rattler/compare/rattler-v0.44.3...rattler-v0.44.4) - 2026-06-09
+
+### Added
+
+- add signed entry-point launchers for win x86/x64/arm64 ([#2493](https://github.com/conda/rattler/pull/2493))
+
 ## [0.44.3](https://github.com/conda/rattler/compare/rattler-v0.44.2...rattler-v0.44.3) - 2026-06-04
 
 ### Other

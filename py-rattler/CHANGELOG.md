@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-06-09
+
+### Changed
+
+- **BREAKING:** Rework the `repodata_revisions` indexing API to a `vN`-keyed dictionary and (de)serialize `info.repodata_revisions` as a dictionary. `index_fs`/`index_s3` now take `RepodataRevisions` (e.g. `{"v3": {"n_packages": 1}}`) with `oldest`/`newest` as `datetime`; `RepodataRevisionInfo` is replaced by `RepodataRevisions` and `RepodataRevisionMetadata` in [#2485](https://github.com/conda/rattler/pull/2485)
+
+### Fixed
+
+- Handle missing components when parsing packages: `AboutJson`, `IndexJson`, `PathsJson`, and `RunExportsJson`'s `from_remote_url` now return `None` instead of raising when the component is absent in [#2488](https://github.com/conda/rattler/pull/2488)
+
 ## [0.24.0] - 2026-05-20
 
 ### Added
