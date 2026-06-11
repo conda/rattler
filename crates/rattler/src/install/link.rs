@@ -805,7 +805,7 @@ pub fn copy_and_replace_textual_placeholder(
 /// This function replaces binary c-style strings. If you want to simply find-and-replace text in a
 /// file instead use the [`copy_and_replace_textual_placeholder`] function.
 pub fn copy_and_replace_cstring_placeholder(
-    mut source_bytes: &[u8],
+    source_bytes: &[u8],
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
@@ -821,54 +821,22 @@ pub fn copy_and_replace_cstring_placeholder(
         ));
     }
 
-    let finder = memchr::memmem::Finder::new(old_prefix);
+    let mut padded_prefix = new_prefix.to_vec();
+    padded_prefix.resize(old_prefix.len(), b'/');
 
-    loop {
-        if let Some(index) = finder.find(source_bytes) {
-            // write all bytes up to the old prefix, followed by the new prefix.
-            destination.write_all(&source_bytes[..index])?;
+    let mut last_match = 0;
 
-            // Find the end of the c-style string. The null terminator basically.
-            let mut end = index + old_prefix.len();
-            while end < source_bytes.len() && source_bytes[end] != b'\0' {
-                end += 1;
-            }
-
-            let mut out = Vec::new();
-            let mut old_bytes = &source_bytes[index..end];
-            let old_len = old_bytes.len();
-
-            // replace all occurrences of the old prefix with the new prefix
-            while let Some(index) = finder.find(old_bytes) {
-                out.write_all(&old_bytes[..index])?;
-                out.write_all(new_prefix)?;
-                old_bytes = &old_bytes[index + old_prefix.len()..];
-            }
-            out.write_all(old_bytes)?;
-            // write everything up to the old length
-            if out.len() > old_len {
-                destination.write_all(&out[..old_len])?;
-            } else {
-                destination.write_all(&out)?;
-            }
-
-            // Compute the padding required when replacing the old prefix(es) with the new one. If the old
-            // prefix is longer than the new one we need to add padding to ensure that the entire part
-            // will hold the same number of bytes. We do this by adding '\0's (e.g. null terminators). This
-            // ensures that the text will remain a valid null-terminated string.
-            let padding = old_len.saturating_sub(out.len());
-            destination.write_all(&vec![0; padding])?;
-
-            // Continue with the rest of the bytes.
-            source_bytes = &source_bytes[end..];
-        } else {
-            // The old prefix was not found in the (remaining) source bytes.
-            // Write the rest of the bytes
-            destination.write_all(source_bytes)?;
-
-            return Ok(());
-        }
+    for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
+        destination.write_all(&source_bytes[last_match..index])?;
+        destination.write_all(&padded_prefix)?;
+        last_match = index + old_prefix.len();
     }
+
+    if last_match < source_bytes.len() {
+        destination.write_all(&source_bytes[last_match..])?;
+    }
+
+    Ok(())
 }
 
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
@@ -1154,7 +1122,7 @@ mod test {
         b"12345Hello, fabulous world!\x006789",
         "fabulous",
         "cruel",
-        b"12345Hello, cruel world!\x00\x00\x00\x006789"
+        b"12345Hello, cruel/// world!\x006789"
     )]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
@@ -1206,7 +1174,10 @@ mod test {
         super::copy_and_replace_cstring_placeholder(input, &mut output, "/placeholder", "/target")
             .unwrap();
         let out = &output.into_inner();
-        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
+        assert_eq!(
+            out,
+            b"beginrandomdataPATH=/target//////etc/share:/target//////bin/:\x00somemoretext"
+        );
         assert_eq!(out.len(), input.len());
     }
 
