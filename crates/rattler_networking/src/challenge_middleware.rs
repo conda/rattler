@@ -234,14 +234,22 @@ fn jwt_expiration(token: &str) -> Option<SystemTime> {
 
 #[derive(Debug)]
 struct CachedToken {
-    token: BearerToken,
+    /// Pre-validated `Bearer <secret>` header value, marked sensitive.
+    header: reqwest::header::HeaderValue,
     expires_at: Option<SystemTime>,
 }
 
 impl CachedToken {
-    fn new(token: BearerToken) -> Self {
-        let expires_at = jwt_expiration(token.secret());
-        Self { token, expires_at }
+    /// Fails when the token cannot be encoded as an HTTP header value —
+    /// callers must treat that like a failed acquisition, not cache it.
+    fn new(token: &BearerToken) -> Result<Self, reqwest::header::InvalidHeaderValue> {
+        let mut header =
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token.secret()))?;
+        header.set_sensitive(true);
+        Ok(Self {
+            header,
+            expires_at: jwt_expiration(token.secret()),
+        })
     }
 
     fn is_fresh(&self, now: SystemTime) -> bool {
@@ -266,7 +274,7 @@ enum TokenCache {
 enum CacheLookup {
     Empty,
     Disabled,
-    Fresh(BearerToken),
+    Fresh(reqwest::header::HeaderValue),
 }
 
 /// Host-scoped `reqwest` middleware that acquires a bearer token via an
@@ -314,7 +322,7 @@ impl AuthChallengeMiddleware {
         match &*cache {
             TokenCache::Disabled => CacheLookup::Disabled,
             TokenCache::Token(cached) if cached.is_fresh(SystemTime::now()) => {
-                CacheLookup::Fresh(cached.token.clone())
+                CacheLookup::Fresh(cached.header.clone())
             }
             TokenCache::Empty | TokenCache::Token(_) => CacheLookup::Empty,
         }
@@ -322,17 +330,32 @@ impl AuthChallengeMiddleware {
 
     /// Run the flow and record the outcome. `Ok(None)` and errors both
     /// disable the middleware; errors are additionally logged.
-    async fn acquire_and_cache(&self, url: &Url, challenges: &[Challenge]) -> Option<BearerToken> {
+    async fn acquire_and_cache(
+        &self,
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Option<reqwest::header::HeaderValue> {
         let result = self.flow.acquire_token(url, challenges).await;
         let mut cache = self
             .cache
             .lock()
             .expect("auth challenge token cache poisoned");
         match result {
-            Ok(Some(token)) => {
-                *cache = TokenCache::Token(CachedToken::new(token.clone()));
-                Some(token)
-            }
+            Ok(Some(token)) => match CachedToken::new(&token) {
+                Ok(cached) => {
+                    let header = cached.header.clone();
+                    *cache = TokenCache::Token(cached);
+                    Some(header)
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "AuthChallengeMiddleware: flow returned a token for {url} that is \
+                         not a valid header value ({err}), disabling"
+                    );
+                    *cache = TokenCache::Disabled;
+                    None
+                }
+            },
             Ok(None) => {
                 tracing::debug!(
                     "AuthChallengeMiddleware: flow not applicable for {url}, disabling"
@@ -349,17 +372,9 @@ impl AuthChallengeMiddleware {
     }
 }
 
-fn attach_bearer(
-    req: &mut reqwest::Request,
-    token: &BearerToken,
-) -> reqwest_middleware::Result<()> {
-    let bearer = format!("Bearer {}", token.secret());
-    let mut value = reqwest::header::HeaderValue::from_str(&bearer)
-        .map_err(reqwest_middleware::Error::middleware)?;
-    value.set_sensitive(true);
+fn attach_bearer(req: &mut reqwest::Request, header: reqwest::header::HeaderValue) {
     req.headers_mut()
-        .insert(reqwest::header::AUTHORIZATION, value);
-    Ok(())
+        .insert(reqwest::header::AUTHORIZATION, header);
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
@@ -382,8 +397,8 @@ impl Middleware for AuthChallengeMiddleware {
             return next.run(req, extensions).await;
         }
 
-        let used_cached_token = if let CacheLookup::Fresh(token) = &cached {
-            attach_bearer(&mut req, token)?;
+        let used_cached_token = if let CacheLookup::Fresh(header) = cached {
+            attach_bearer(&mut req, header);
             true
         } else {
             false
@@ -416,10 +431,10 @@ impl Middleware for AuthChallengeMiddleware {
                 .remove(reqwest::header::AUTHORIZATION);
         }
 
-        let Some(token) = self.acquire_and_cache(&url, &challenges).await else {
+        let Some(header) = self.acquire_and_cache(&url, &challenges).await else {
             return Ok(response);
         };
-        attach_bearer(&mut retry_req, &token)?;
+        attach_bearer(&mut retry_req, header);
         // Replay exactly once; the replayed response is returned as-is even
         // if it is another challenge.
         next.run(retry_req, extensions).await
@@ -670,10 +685,28 @@ mod tests {
     #[test]
     fn cached_jwt_is_stale_inside_refresh_margin() {
         let token = BearerToken::new(unsigned_jwt_with_exp(1_700_000_000));
-        let cached = CachedToken::new(token);
+        let cached = CachedToken::new(&token).unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 30);
         assert!(!cached.is_fresh(now));
         let earlier = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 3600);
         assert!(cached.is_fresh(earlier));
+    }
+
+    #[tokio::test]
+    async fn header_invalid_token_is_not_cached_and_does_not_error() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("bad\ntoken"));
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+        let url = server_url.join("/channel/repodata.json").unwrap();
+
+        // The caller sees the server's original 401, not a middleware error,
+        // and the middleware disables itself instead of caching the bad token.
+        assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
+        assert_eq!(client.get(url).send().await.unwrap().status(), 401);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
     }
 }
