@@ -29,6 +29,9 @@ Documentation = "https://conda.github.io/rattler/py-rattler/"
 Repository = "https://github.com/conda/rattler"
 Issues = "https://github.com/conda/rattler/labels/python-bindings"
 
+[project.optional-dependencies]
+rich = ["rich>=10.0.0"]
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 
@@ -45,6 +48,10 @@ disable_error_code = ["empty-body"]
 
 [[tool.mypy.overrides]]
 module = ["rattler.rattler"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["rich", "rich.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
