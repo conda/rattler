@@ -1,8 +1,8 @@
 //! Host-scoped middleware that reacts to `WWW-Authenticate` challenges by
-//! acquiring a bearer token from a pluggable `AuthFlow` and replaying the
+//! acquiring a bearer token from a pluggable [`AuthFlow`] and replaying the
 //! request once.
 //!
-//! The first `AuthFlow` implementation will be
+//! The first [`AuthFlow`] implementation will be
 //! `crate::trusted_publishing::TrustedPublishingFlow` (added in a later task).
 
 use std::{
@@ -16,6 +16,8 @@ use base64::{
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
 };
 use serde::Deserialize;
+use thiserror::Error;
+use url::Url;
 
 /// One parsed challenge from a `WWW-Authenticate` response header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,7 +134,7 @@ fn split_commas_respecting_quotes(s: &str) -> Vec<&str> {
 #[allow(dead_code)]
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// A short-lived bearer token acquired by an auth flow (trait added in a later task).
+/// A short-lived bearer token acquired by an [`AuthFlow`] implementation.
 ///
 /// `Deserialize`-transparent (a raw JSON string body deserializes directly
 /// into it) and `Clone` so it can be shared between the cache and requests.
@@ -156,6 +158,45 @@ impl fmt::Debug for BearerToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("BearerToken").field(&"<redacted>").finish()
     }
+}
+
+/// Error produced by an [`AuthFlow`] implementation.
+///
+/// Boxed so custom flows can surface arbitrary failures. The middleware only
+/// logs this error and disables further attempts — it never propagates it,
+/// so the caller always observes the server's original response.
+#[derive(Debug, Error)]
+#[error("authentication flow failed: {source}")]
+pub struct AuthFlowError {
+    #[source]
+    source: Box<dyn std::error::Error + Send + Sync + 'static>,
+}
+
+impl AuthFlowError {
+    /// Wrap any error produced by an [`AuthFlow`] implementation.
+    pub fn new(err: impl Into<Box<dyn std::error::Error + Send + Sync + 'static>>) -> Self {
+        Self { source: err.into() }
+    }
+}
+
+/// A pluggable strategy that turns a `WWW-Authenticate` challenge into a
+/// bearer token.
+///
+/// Implementations decide which challenges they support (e.g. only scheme
+/// `Bearer`) and how to acquire the token (OIDC exchange, device flow, ...).
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+pub trait AuthFlow: Send + Sync + fmt::Debug {
+    /// Respond to `challenges` received from `url`.
+    ///
+    /// Return `Ok(None)` when this flow does not apply (e.g. unsupported
+    /// scheme, or not running in a CI environment) — the middleware caches
+    /// that negatively and stops asking for the lifetime of the process.
+    async fn acquire_token(
+        &self,
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Result<Option<BearerToken>, AuthFlowError>;
 }
 
 #[allow(dead_code)]
