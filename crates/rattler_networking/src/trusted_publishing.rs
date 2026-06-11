@@ -57,6 +57,22 @@ impl TrustedPublishingOptions {
             mint_path: "/api/oidc/mint_token".to_string(),
         }
     }
+
+    /// Options for any trusted-publishing server following the prefix.dev
+    /// convention: the OIDC audience is the server's host name and tokens
+    /// are minted at `/api/oidc/mint_token`.
+    ///
+    /// Returns `None` when `server` has no host (e.g. `data:` URLs).
+    ///
+    /// Deriving the audience from the host scopes each OIDC ID token to the
+    /// server it is sent to: a token minted with `aud = <host>` is only
+    /// redeemable at that host.
+    pub fn for_host(server: &Url) -> Option<Self> {
+        Some(Self {
+            audience: server.host_str()?.to_string(),
+            mint_path: "/api/oidc/mint_token".to_string(),
+        })
+    }
 }
 
 /// Outcome of an optional trusted-publishing attempt.
@@ -455,5 +471,33 @@ mod tests {
         let opts = TrustedPublishingOptions::for_prefix_dev();
         assert_eq!(opts.audience, "prefix.dev");
         assert_eq!(opts.mint_path, "/api/oidc/mint_token");
+    }
+
+    #[test]
+    fn for_host_derives_audience_from_host() {
+        let options = TrustedPublishingOptions::for_host(
+            &Url::parse("https://beta.prefix.dev/some-channel/noarch/repodata.json").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(options.audience, "beta.prefix.dev");
+        assert_eq!(options.mint_path, "/api/oidc/mint_token");
+
+        let prod =
+            TrustedPublishingOptions::for_host(&Url::parse("https://prefix.dev").unwrap()).unwrap();
+        assert_eq!(
+            prod.audience,
+            TrustedPublishingOptions::for_prefix_dev().audience
+        );
+        assert_eq!(
+            prod.mint_path,
+            TrustedPublishingOptions::for_prefix_dev().mint_path
+        );
+    }
+
+    #[test]
+    fn for_host_returns_none_without_host() {
+        // data: URLs have no host component
+        let url = Url::parse("data:text/plain,hello").unwrap();
+        assert!(TrustedPublishingOptions::for_host(&url).is_none());
     }
 }
