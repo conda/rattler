@@ -8,6 +8,7 @@
 use std::{
     collections::HashMap,
     fmt,
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,6 +16,7 @@ use base64::{
     Engine as _,
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
 };
+use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
@@ -131,7 +133,6 @@ fn split_commas_respecting_quotes(s: &str) -> Vec<&str> {
 
 /// Refresh tokens this long before their `exp` so a token does not become
 /// invalid while a request is in flight.
-#[allow(dead_code)]
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
 /// A short-lived bearer token acquired by an [`AuthFlow`] implementation.
@@ -192,6 +193,12 @@ pub trait AuthFlow: Send + Sync + fmt::Debug {
     /// Return `Ok(None)` when this flow does not apply (e.g. unsupported
     /// scheme, or not running in a CI environment) — the middleware caches
     /// that negatively and stops asking for the lifetime of the process.
+    ///
+    /// `url` is the full URL of the request that was challenged (path and
+    /// query included), not just the server origin. The flow may be invoked
+    /// concurrently by parallel requests racing on the first challenge;
+    /// implementations should tolerate redundant invocations (every returned
+    /// token is cached last-write-wins).
     async fn acquire_token(
         &self,
         url: &Url,
@@ -199,7 +206,6 @@ pub trait AuthFlow: Send + Sync + fmt::Debug {
     ) -> Result<Option<BearerToken>, AuthFlowError>;
 }
 
-#[allow(dead_code)]
 #[derive(Deserialize)]
 struct JwtClaims {
     exp: Option<u64>,
@@ -207,7 +213,6 @@ struct JwtClaims {
 
 /// Best-effort extraction of the `exp` claim from a JWT-shaped token.
 /// Returns `None` for opaque tokens, which are then cached without expiry.
-#[allow(dead_code)]
 fn jwt_expiration(token: &str) -> Option<SystemTime> {
     let mut parts = token.split('.');
     let _header = parts.next()?;
@@ -229,20 +234,16 @@ fn jwt_expiration(token: &str) -> Option<SystemTime> {
 
 #[derive(Debug)]
 struct CachedToken {
-    #[allow(dead_code)]
     token: BearerToken,
-    #[allow(dead_code)]
     expires_at: Option<SystemTime>,
 }
 
 impl CachedToken {
-    #[allow(dead_code)]
     fn new(token: BearerToken) -> Self {
         let expires_at = jwt_expiration(token.secret());
         Self { token, expires_at }
     }
 
-    #[allow(dead_code)]
     fn is_fresh(&self, now: SystemTime) -> bool {
         self.expires_at
             .is_none_or(|expires_at| now + TOKEN_REFRESH_MARGIN < expires_at)
@@ -251,7 +252,6 @@ impl CachedToken {
 
 /// Cache state shared by all clones of one middleware instance.
 #[derive(Debug, Default)]
-#[allow(dead_code)]
 enum TokenCache {
     /// No acquisition attempted yet.
     #[default]
@@ -262,11 +262,308 @@ enum TokenCache {
     Token(CachedToken),
 }
 
+/// Outcome of a cache lookup, decoupled from the lock.
+enum CacheLookup {
+    Empty,
+    Disabled,
+    Fresh(BearerToken),
+}
+
+/// Host-scoped `reqwest` middleware that acquires a bearer token via an
+/// [`AuthFlow`] when (and only when) the server answers with a
+/// `WWW-Authenticate` challenge, then replays the request once.
+///
+/// Construct one instance per server. A request is in scope when its scheme,
+/// host, and effective port match `server`; the path is ignored. Requests
+/// that already carry an `Authorization` header are never touched, so
+/// credentials from [`crate::AuthenticationMiddleware`] always win.
+///
+/// The first acquired token is cached (with JWT-expiry-aware refresh); a flow
+/// that reports "not applicable" or fails disables the middleware for the
+/// process lifetime. Acquisition failures are logged, never propagated: the
+/// caller then observes the server's original 401/403 response.
+#[derive(Clone, Debug)]
+pub struct AuthChallengeMiddleware {
+    server: Url,
+    flow: Arc<dyn AuthFlow>,
+    cache: Arc<Mutex<TokenCache>>,
+}
+
+impl AuthChallengeMiddleware {
+    /// Create a middleware guarding the server identified by `server`'s
+    /// scheme, host, and port. `server`'s path is ignored.
+    pub fn new(server: Url, flow: Arc<dyn AuthFlow>) -> Self {
+        Self {
+            server,
+            flow,
+            cache: Arc::new(Mutex::new(TokenCache::Empty)),
+        }
+    }
+
+    fn matches_host(&self, url: &Url) -> bool {
+        url.scheme() == self.server.scheme()
+            && url.host_str() == self.server.host_str()
+            && url.port_or_known_default() == self.server.port_or_known_default()
+    }
+
+    fn lookup_cache(&self) -> CacheLookup {
+        let cache = self
+            .cache
+            .lock()
+            .expect("auth challenge token cache poisoned");
+        match &*cache {
+            TokenCache::Disabled => CacheLookup::Disabled,
+            TokenCache::Token(cached) if cached.is_fresh(SystemTime::now()) => {
+                CacheLookup::Fresh(cached.token.clone())
+            }
+            TokenCache::Empty | TokenCache::Token(_) => CacheLookup::Empty,
+        }
+    }
+
+    /// Run the flow and record the outcome. `Ok(None)` and errors both
+    /// disable the middleware; errors are additionally logged.
+    async fn acquire_and_cache(&self, url: &Url, challenges: &[Challenge]) -> Option<BearerToken> {
+        let result = self.flow.acquire_token(url, challenges).await;
+        let mut cache = self
+            .cache
+            .lock()
+            .expect("auth challenge token cache poisoned");
+        match result {
+            Ok(Some(token)) => {
+                *cache = TokenCache::Token(CachedToken::new(token.clone()));
+                Some(token)
+            }
+            Ok(None) => {
+                tracing::debug!(
+                    "AuthChallengeMiddleware: flow not applicable for {url}, disabling"
+                );
+                *cache = TokenCache::Disabled;
+                None
+            }
+            Err(err) => {
+                tracing::warn!("AuthChallengeMiddleware: failed to acquire token for {url}: {err}");
+                *cache = TokenCache::Disabled;
+                None
+            }
+        }
+    }
+}
+
+fn attach_bearer(
+    req: &mut reqwest::Request,
+    token: &BearerToken,
+) -> reqwest_middleware::Result<()> {
+    let bearer = format!("Bearer {}", token.secret());
+    let mut value = reqwest::header::HeaderValue::from_str(&bearer)
+        .map_err(reqwest_middleware::Error::middleware)?;
+    value.set_sensitive(true);
+    req.headers_mut()
+        .insert(reqwest::header::AUTHORIZATION, value);
+    Ok(())
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+impl Middleware for AuthChallengeMiddleware {
+    async fn handle(
+        &self,
+        mut req: reqwest::Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<reqwest::Response> {
+        if !self.matches_host(req.url())
+            || req.headers().contains_key(reqwest::header::AUTHORIZATION)
+        {
+            return next.run(req, extensions).await;
+        }
+
+        let cached = self.lookup_cache();
+        if matches!(cached, CacheLookup::Disabled) {
+            return next.run(req, extensions).await;
+        }
+
+        let used_cached_token = if let CacheLookup::Fresh(token) = &cached {
+            attach_bearer(&mut req, token)?;
+            true
+        } else {
+            false
+        };
+
+        // Clone before sending so we can replay on a challenge. Fails only
+        // for streaming bodies (absent on the GET-only read path) — then the
+        // response is passed through unmodified.
+        let retry_req = req.try_clone();
+        let url = req.url().clone();
+        let response = next.clone().run(req, extensions).await?;
+
+        let challenges = parse_challenges(response.headers());
+        if challenges.is_empty() {
+            return Ok(response);
+        }
+        let Some(mut retry_req) = retry_req else {
+            return Ok(response);
+        };
+
+        if used_cached_token {
+            // The server rejected a token we believed fresh (revoked early).
+            // Drop it — and its header on the clone — before re-acquiring.
+            *self
+                .cache
+                .lock()
+                .expect("auth challenge token cache poisoned") = TokenCache::Empty;
+            retry_req
+                .headers_mut()
+                .remove(reqwest::header::AUTHORIZATION);
+        }
+
+        let Some(token) = self.acquire_and_cache(&url, &challenges).await else {
+            return Ok(response);
+        };
+        attach_bearer(&mut retry_req, &token)?;
+        // Replay exactly once; the replayed response is returned as-is even
+        // if it is another challenge.
+        next.run(retry_req, extensions).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, UNIX_EPOCH};
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::{Duration, UNIX_EPOCH},
+    };
+
+    use reqwest_middleware::ClientBuilder;
 
     use super::*;
+
+    /// [`AuthFlow`] returning a fixed answer; counts invocations.
+    #[derive(Debug)]
+    struct StaticFlow {
+        token: Option<&'static str>,
+        calls: AtomicUsize,
+    }
+
+    impl StaticFlow {
+        fn new(token: Option<&'static str>) -> Arc<Self> {
+            Arc::new(Self {
+                token,
+                calls: AtomicUsize::new(0),
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for StaticFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(self.token.map(|t| BearerToken::new(t.to_string())))
+        }
+    }
+
+    /// Axum server: requires `Bearer <accept>` on /channel/repodata.json,
+    /// answers 401 + WWW-Authenticate otherwise. Counts every request.
+    async fn spawn_protected_server(accept: &'static str, hits: Arc<AtomicUsize>) -> Url {
+        use axum::{http::StatusCode, response::IntoResponse, routing::get};
+        let router = axum::Router::new().route(
+            "/channel/repodata.json",
+            get(move |headers: axum::http::HeaderMap| {
+                let hits = hits.clone();
+                async move {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    let expected = format!("Bearer {accept}");
+                    match headers.get("authorization").and_then(|v| v.to_str().ok()) {
+                        Some(auth) if auth == expected => (StatusCode::OK, "ok").into_response(),
+                        _ => (
+                            StatusCode::UNAUTHORIZED,
+                            [("www-authenticate", r#"Bearer realm="test""#)],
+                            "unauthorized",
+                        )
+                            .into_response(),
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        Url::parse(&format!("http://{addr}")).unwrap()
+    }
+
+    fn client_with(
+        middleware: AuthChallengeMiddleware,
+    ) -> reqwest_middleware::ClientWithMiddleware {
+        ClientBuilder::new(reqwest::Client::new())
+            .with_arc(Arc::new(middleware))
+            .build()
+    }
+
+    #[tokio::test]
+    async fn challenge_triggers_mint_and_replay() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+        // one challenged request + one replay
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn second_request_reuses_cached_token_without_challenge() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+
+        let url = server_url.join("/channel/repodata.json").unwrap();
+        assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 200);
+        assert_eq!(client.get(url).send().await.unwrap().status(), 200);
+
+        // flow consulted exactly once; second request went straight through
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(hits.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn inapplicable_flow_is_negative_cached() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(None);
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+
+        let url = server_url.join("/channel/repodata.json").unwrap();
+        assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
+        assert_eq!(client.get(url).send().await.unwrap().status(), 401);
+
+        // flow consulted once, then disabled
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
 
     fn header_map(values: &[&str]) -> http::HeaderMap {
         let mut headers = http::HeaderMap::new();
