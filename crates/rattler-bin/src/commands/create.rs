@@ -179,7 +179,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // `repodata.json` that should be available from the corresponding Url. The
     // code below also displays a nice CLI progress-bar to give users some more
     // information about what is going on.
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware_for_channels(&channels)?;
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
