@@ -99,6 +99,11 @@ fn parse_param(s: &str) -> Option<(String, String)> {
     if key.is_empty() || value.is_empty() || !is_valid_scheme(&key) {
         return None;
     }
+    // A value consisting only of `=` characters is padding from a token68
+    // blob (e.g. `dGVzdA==` splits into key `dGVzdA`, value `=`). Skip it.
+    if value.chars().all(|c| c == '=') {
+        return None;
+    }
     let value = value
         .strip_prefix('"')
         .and_then(|v| v.strip_suffix('"'))
@@ -445,7 +450,7 @@ impl Middleware for AuthChallengeMiddleware {
 mod tests {
     use std::{
         sync::{
-            Arc,
+            Arc, Mutex,
             atomic::{AtomicUsize, Ordering},
         },
         time::{Duration, UNIX_EPOCH},
@@ -708,5 +713,181 @@ mod tests {
         assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
         assert_eq!(client.get(url).send().await.unwrap().status(), 401);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// [`AuthFlow`] yielding a different token per call (for the stale-token test).
+    #[derive(Debug)]
+    struct SequenceFlow {
+        tokens: Mutex<Vec<&'static str>>,
+        calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for SequenceFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let token = self.tokens.lock().unwrap().remove(0);
+            Ok(Some(BearerToken::new(token.to_string())))
+        }
+    }
+
+    /// [`AuthFlow`] that always fails.
+    #[derive(Debug)]
+    struct FailingFlow {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for FailingFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err(AuthFlowError::new(std::io::Error::other("mint exploded")))
+        }
+    }
+
+    #[tokio::test]
+    async fn non_matching_host_is_untouched() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let other_host = Url::parse("https://example.invalid").unwrap();
+        let client = client_with(AuthChallengeMiddleware::new(other_host, flow.clone()));
+
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 401);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn scheme_mismatch_is_untouched() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        // same host and port, but https configured vs the http test server
+        let mut https_url = server_url.clone();
+        https_url.set_scheme("https").unwrap();
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(https_url, flow.clone()));
+
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 401);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn existing_authorization_header_is_respected() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .header(reqwest::header::AUTHORIZATION, "Bearer user-supplied")
+            .send()
+            .await
+            .unwrap();
+
+        // wrong credentials stay wrong: no override, no replay
+        assert_eq!(response.status(), 401);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn replays_at_most_once() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        // server accepts a token the flow never produces -> always 401
+        let server_url = spawn_protected_server("never-issued", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 401);
+        // initial request + exactly one replay, nothing more
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn stale_cached_token_is_cleared_and_reacquired() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("fresh", hits.clone()).await;
+        let flow = Arc::new(SequenceFlow {
+            tokens: Mutex::new(vec!["old", "fresh"]),
+            calls: AtomicUsize::new(0),
+        });
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+        let url = server_url.join("/channel/repodata.json").unwrap();
+
+        // Request 1: challenge -> flow mints "old" -> replay rejected (401).
+        // "old" is now cached even though the server already rejects it,
+        // simulating a token revoked after acquisition.
+        assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
+
+        // Request 2: cached "old" attached -> challenged -> cache cleared ->
+        // flow mints "fresh" -> replay succeeds.
+        assert_eq!(client.get(url).send().await.unwrap().status(), 200);
+
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(hits.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn flow_error_is_swallowed_and_negative_cached() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = Arc::new(FailingFlow {
+            calls: AtomicUsize::new(0),
+        });
+        let client = client_with(AuthChallengeMiddleware::new(
+            server_url.clone(),
+            flow.clone(),
+        ));
+        let url = server_url.join("/channel/repodata.json").unwrap();
+
+        // caller sees the server's 401, not the flow error
+        assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
+        assert_eq!(client.get(url).send().await.unwrap().status(), 401);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn token68_with_double_padding_is_skipped() {
+        let challenges = parse_challenges(&header_map(&["Negotiate dGVzdA=="]));
+        assert_eq!(challenges.len(), 1);
+        assert_eq!(challenges[0].scheme, "Negotiate");
+        assert!(challenges[0].params.is_empty());
     }
 }
