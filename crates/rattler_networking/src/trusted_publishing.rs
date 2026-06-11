@@ -2,7 +2,7 @@
 //!
 //! This module owns the OIDC exchange with the server's mint endpoint and
 //! provides [`TrustedPublishingFlow`], an [`AuthFlow`] implementation that
-//! plugs into [`crate::challenge_middleware`]. Challenge-reactive read
+//! plugs into [`crate::challenge_middleware`]. Challenge-reactive HTTP
 //! authentication (reacting to `WWW-Authenticate` responses) lives in
 //! [`crate::challenge_middleware`].
 //!
