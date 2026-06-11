@@ -448,7 +448,7 @@ pub struct PackageRecord {
 
     /// The time at which an indexing tool first added this artifact to the
     /// channel index. Set by indexing tools, never by build tools.
-    /// See <https://github.com/conda/ceps/pull/154>.
+    /// See the draft CEP: <https://github.com/conda/ceps/pull/154>.
     pub indexed_timestamp: Option<crate::utils::TimestampMs>,
 
     /// A deprecated md5 hash
@@ -1144,7 +1144,7 @@ mod test {
         insta::assert_snapshot!(json);
     }
 
-    // See https://github.com/conda/ceps/pull/154
+    // See the draft CEP: https://github.com/conda/ceps/pull/154
     #[test]
     fn test_indexed_timestamp_roundtrip() {
         // A record with `indexed_timestamp` round-trips through JSON.

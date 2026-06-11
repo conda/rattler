@@ -66,8 +66,20 @@ impl PackageRevisionAssignment {
 /// How `indexed_timestamp` is backfilled for records in existing repodata
 /// that lack the field. Newly indexed packages always get the current
 /// indexing time, regardless of this setting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Deserialize,
+    Serialize,
+    strum::Display,
+    strum::EnumString,
+)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum BackfillIndexedTimestamps {
     /// Seed missing values from the package's build `timestamp` (clamped to
     /// the indexing time), falling back to the indexing time when the package
@@ -78,40 +90,6 @@ pub enum BackfillIndexedTimestamps {
     Now,
     /// Leave records without an `indexed_timestamp` untouched.
     Off,
-}
-
-impl BackfillIndexedTimestamps {
-    const FROM_CONDA_PACKAGE_TIMESTAMP: &str = "from-conda-package-timestamp";
-    const NOW: &str = "now";
-    const OFF: &str = "off";
-}
-
-impl FromStr for BackfillIndexedTimestamps {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            Self::FROM_CONDA_PACKAGE_TIMESTAMP => Ok(Self::FromCondaPackageTimestamp),
-            Self::NOW => Ok(Self::Now),
-            Self::OFF => Ok(Self::Off),
-            _ => Err(format!(
-                "invalid value `{s}`, expected one of `{}`, `{}`, `{}`",
-                Self::FROM_CONDA_PACKAGE_TIMESTAMP,
-                Self::NOW,
-                Self::OFF
-            )),
-        }
-    }
-}
-
-impl std::fmt::Display for BackfillIndexedTimestamps {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::FromCondaPackageTimestamp => Self::FROM_CONDA_PACKAGE_TIMESTAMP,
-            Self::Now => Self::NOW,
-            Self::Off => Self::OFF,
-        })
-    }
 }
 
 /// Index options that apply to a single channel.

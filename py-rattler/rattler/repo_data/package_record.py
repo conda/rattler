@@ -817,7 +817,7 @@ class PackageRecord:
         The date this entry was first added to the channel index by an
         indexing tool. Unlike `timestamp` (which is set by the build tool),
         this field is assigned by the indexing tool and preserved across
-        re-indexing runs. See https://github.com/conda/ceps/pull/154.
+        re-indexing runs. See the draft CEP: https://github.com/conda/ceps/pull/154.
 
         Examples
         --------

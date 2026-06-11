@@ -29,7 +29,7 @@ of `indexed_timestamp`, no channel metadata).
 
 Newly indexed packages are stamped with an `indexed_timestamp` — the time at
 which the indexing run added them to the channel index (see the
-[`indexed_timestamp` CEP](https://github.com/conda/ceps/pull/154)). Once
+[draft CEP](https://github.com/conda/ceps/pull/154)). Once
 assigned, the value is preserved across re-indexing runs, including runs with
 `--force`. Packages whose build `timestamp` lies in the future of the indexing
 time are rejected and fail the indexing run.

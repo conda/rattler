@@ -26,6 +26,7 @@ indexmap = { workspace = true }
 rattler_conda_types = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
