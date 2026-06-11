@@ -5,7 +5,17 @@
 //! The first `AuthFlow` implementation will be
 //! `crate::trusted_publishing::TrustedPublishingFlow` (added in a later task).
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use base64::{
+    Engine as _,
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+};
+use serde::Deserialize;
 
 /// One parsed challenge from a `WWW-Authenticate` response header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,8 +127,104 @@ fn split_commas_respecting_quotes(s: &str) -> Vec<&str> {
     parts
 }
 
+/// Refresh tokens this long before their `exp` so a token does not become
+/// invalid while a request is in flight.
+#[allow(dead_code)]
+const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
+
+/// A short-lived bearer token acquired by an auth flow (trait added in a later task).
+///
+/// `Deserialize`-transparent (a raw JSON string body deserializes directly
+/// into it) and `Clone` so it can be shared between the cache and requests.
+#[derive(Clone, Deserialize)]
+#[serde(transparent)]
+pub struct BearerToken(String);
+
+impl BearerToken {
+    /// Wrap an existing token string.
+    pub fn new(token: String) -> Self {
+        Self(token)
+    }
+
+    /// The raw bearer token. Treat as sensitive; don't log it.
+    pub fn secret(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for BearerToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("BearerToken").field(&"<redacted>").finish()
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct JwtClaims {
+    exp: Option<u64>,
+}
+
+/// Best-effort extraction of the `exp` claim from a JWT-shaped token.
+/// Returns `None` for opaque tokens, which are then cached without expiry.
+#[allow(dead_code)]
+fn jwt_expiration(token: &str) -> Option<SystemTime> {
+    let mut parts = token.split('.');
+    let _header = parts.next()?;
+    let payload = parts.next()?;
+    let _signature = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+
+    let payload = URL_SAFE_NO_PAD
+        .decode(payload)
+        .or_else(|_| URL_SAFE.decode(payload))
+        .ok()?;
+    let claims: JwtClaims = serde_json::from_slice(&payload).ok()?;
+    claims
+        .exp
+        .and_then(|exp| UNIX_EPOCH.checked_add(Duration::from_secs(exp)))
+}
+
+#[derive(Debug)]
+struct CachedToken {
+    #[allow(dead_code)]
+    token: BearerToken,
+    #[allow(dead_code)]
+    expires_at: Option<SystemTime>,
+}
+
+impl CachedToken {
+    #[allow(dead_code)]
+    fn new(token: BearerToken) -> Self {
+        let expires_at = jwt_expiration(token.secret());
+        Self { token, expires_at }
+    }
+
+    #[allow(dead_code)]
+    fn is_fresh(&self, now: SystemTime) -> bool {
+        self.expires_at
+            .is_none_or(|expires_at| now + TOKEN_REFRESH_MARGIN < expires_at)
+    }
+}
+
+/// Cache state shared by all clones of one middleware instance.
+#[derive(Debug, Default)]
+#[allow(dead_code)]
+enum TokenCache {
+    /// No acquisition attempted yet.
+    #[default]
+    Empty,
+    /// The flow reported "not applicable" or failed — stop asking.
+    Disabled,
+    /// A previously acquired token.
+    Token(CachedToken),
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
     use super::*;
 
     fn header_map(values: &[&str]) -> http::HeaderMap {
@@ -192,5 +298,44 @@ mod tests {
         assert!(parse_challenges(&header_map(&[""])).is_empty());
         assert!(parse_challenges(&header_map(&["%%% ###"])).is_empty());
         assert!(parse_challenges(&http::HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn bearer_token_debug_is_redacted() {
+        let token = BearerToken::new("supersecret".to_string());
+        let formatted = format!("{token:?}");
+        assert!(!formatted.contains("supersecret"));
+        assert!(formatted.contains("redacted"));
+    }
+
+    fn unsigned_jwt_with_exp(exp: u64) -> String {
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(format!(r#"{{"exp":{exp}}}"#));
+        format!("{header}.{payload}.")
+    }
+
+    #[test]
+    fn jwt_expiration_reads_exp_claim() {
+        let token = unsigned_jwt_with_exp(1_700_000_000);
+        assert_eq!(
+            jwt_expiration(&token),
+            UNIX_EPOCH.checked_add(Duration::from_secs(1_700_000_000))
+        );
+    }
+
+    #[test]
+    fn opaque_token_has_no_expiration() {
+        assert_eq!(jwt_expiration("not-a-jwt"), None);
+    }
+
+    #[test]
+    fn cached_jwt_is_stale_inside_refresh_margin() {
+        let token = BearerToken::new(unsigned_jwt_with_exp(1_700_000_000));
+        let cached = CachedToken::new(token);
+        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 30);
+        assert!(!cached.is_fresh(now));
+        let earlier = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 3600);
+        assert!(cached.is_fresh(earlier));
     }
 }
