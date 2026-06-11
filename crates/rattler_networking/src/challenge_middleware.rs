@@ -730,7 +730,12 @@ mod tests {
             _challenges: &[Challenge],
         ) -> Result<Option<BearerToken>, AuthFlowError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            let token = self.tokens.lock().unwrap().remove(0);
+            let mut tokens = self.tokens.lock().unwrap();
+            assert!(
+                !tokens.is_empty(),
+                "SequenceFlow exhausted: middleware called acquire_token more times than expected"
+            );
+            let token = tokens.remove(0);
             Ok(Some(BearerToken::new(token.to_string())))
         }
     }
@@ -769,6 +774,7 @@ mod tests {
 
         assert_eq!(response.status(), 401);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -789,6 +795,7 @@ mod tests {
 
         assert_eq!(response.status(), 401);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -839,8 +846,40 @@ mod tests {
 
     #[tokio::test]
     async fn stale_cached_token_is_cleared_and_reacquired() {
-        let hits = Arc::new(AtomicUsize::new(0));
-        let server_url = spawn_protected_server("fresh", hits.clone()).await;
+        use axum::{http::StatusCode, response::IntoResponse, routing::get};
+
+        // Server accepting only "Bearer fresh", recording the Authorization
+        // header of every request it sees.
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_in_handler = seen.clone();
+        let router = axum::Router::new().route(
+            "/channel/repodata.json",
+            get(move |headers: axum::http::HeaderMap| {
+                let seen = seen_in_handler.clone();
+                async move {
+                    let auth = headers
+                        .get("authorization")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string);
+                    seen.lock().unwrap().push(auth.clone());
+                    if auth.as_deref() == Some("Bearer fresh") {
+                        (StatusCode::OK, "ok").into_response()
+                    } else {
+                        (
+                            StatusCode::UNAUTHORIZED,
+                            [("www-authenticate", r#"Bearer realm="test""#)],
+                            "unauthorized",
+                        )
+                            .into_response()
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
         let flow = Arc::new(SequenceFlow {
             tokens: Mutex::new(vec!["old", "fresh"]),
             calls: AtomicUsize::new(0),
@@ -851,9 +890,8 @@ mod tests {
         ));
         let url = server_url.join("/channel/repodata.json").unwrap();
 
-        // Request 1: challenge -> flow mints "old" -> replay rejected (401).
-        // "old" is now cached even though the server already rejects it,
-        // simulating a token revoked after acquisition.
+        // Request 1: challenge -> flow mints "old" (cached before the replay
+        // proves it stale) -> replay rejected (401).
         assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
 
         // Request 2: cached "old" attached -> challenged -> cache cleared ->
@@ -861,7 +899,18 @@ mod tests {
         assert_eq!(client.get(url).send().await.unwrap().status(), 200);
 
         assert_eq!(flow.calls.load(Ordering::SeqCst), 2);
-        assert_eq!(hits.load(Ordering::SeqCst), 4);
+        // The header sequence proves the cached path: request 2's first leg
+        // carried the cached "old" token (a non-caching implementation would
+        // send no header there).
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                None,
+                Some("Bearer old".to_string()),
+                Some("Bearer old".to_string()),
+                Some("Bearer fresh".to_string()),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -881,6 +930,10 @@ mod tests {
         assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
         assert_eq!(client.get(url).send().await.unwrap().status(), 401);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
+        // Disabled = pass-through (next.run is still called), so both requests
+        // reach the server: request 1 triggers the challenge (1 hit), request 2
+        // is passed through unmodified and also reaches the server (1 hit).
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
 
     #[test]
