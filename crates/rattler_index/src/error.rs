@@ -29,6 +29,19 @@ pub enum RepodataError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
+    /// A package has a build timestamp in the future.
+    #[error(
+        "package {filename} has a build timestamp ({timestamp}) in the future of the indexing time ({indexing_time}); refusing to index"
+    )]
+    InvalidTimestamp {
+        /// The filename of the offending package.
+        filename: String,
+        /// The build timestamp of the package.
+        timestamp: jiff::Timestamp,
+        /// The time at which the indexing run started.
+        indexing_time: jiff::Timestamp,
+    },
+
     /// A generic error.
     #[error(transparent)]
     Other(#[from] anyhow::Error),

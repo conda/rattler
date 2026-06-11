@@ -40,7 +40,7 @@ pub use rattler_conda_types::{
     RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
 };
 pub use rattler_config::config::index::{
-    IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
+    BackfillIndexedTimestamps, IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
 };
 use rattler_digest::Sha256Hash;
 use rattler_package_streaming::{
@@ -204,6 +204,9 @@ fn indexed_package_record_from_index_json<T: Read>(
         license: index.license,
         license_family: index.license_family,
         timestamp: index.timestamp,
+        // Assigned in `index_subdir_inner` based on the previous repodata; build
+        // tools never set this field.
+        indexed_timestamp: None,
         python_site_packages_path: index.python_site_packages_path,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,
@@ -617,6 +620,7 @@ async fn index_subdir(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    backfill_indexed_timestamps: BackfillIndexedTimestamps,
     channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
@@ -640,6 +644,7 @@ async fn index_subdir(
             write_shards,
             repodata_revisions.clone(),
             package_revision_assignment,
+            backfill_indexed_timestamps,
             channel_metadata.clone(),
             repodata_patch.clone(),
             progress.clone(),
@@ -715,6 +720,7 @@ async fn index_subdir_inner(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    backfill_indexed_timestamps: BackfillIndexedTimestamps,
     channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
@@ -722,6 +728,15 @@ async fn index_subdir_inner(
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
 ) -> Result<SubdirIndexStats, RepodataError> {
+    // The time at which the packages indexed by this run are considered to be
+    // added to the index. Captured once per attempt so all packages added in a
+    // single run share the same `indexed_timestamp`. Truncated to millisecond
+    // precision to match the wire format of the field.
+    let indexing_time = rattler_conda_types::utils::TimestampMs::from_timestamp_millis(
+        jiff::Timestamp::from_millisecond(jiff::Timestamp::now().as_millisecond())
+            .expect("current time is always a valid timestamp"),
+    );
+
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -735,37 +750,40 @@ async fn index_subdir_inner(
 
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
-    // can reuse.
+    // can reuse. Even with `force` (where all records are rebuilt from the
+    // package archives) the previous repodata is read so that previously
+    // assigned `indexed_timestamp` values can be carried over.
+    let previous_packages = load_previous_records(&op, subdir, &metadata, &repodata_patch).await?;
+
+    // Tracks which packages were already part of the channel index before this
+    // run, and their previously assigned `indexed_timestamp` (if any).
+    let prior_index_state: ahash::HashMap<
+        DistArchiveIdentifier,
+        Option<rattler_conda_types::utils::TimestampMs>,
+    > = previous_packages
+        .iter()
+        .map(|(identifier, package)| (identifier.clone(), package.record.indexed_timestamp))
+        .collect();
+
     let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord> =
         if force {
             HashMap::default()
         } else {
-            let (repodata_path, read_metadata) = if repodata_patch.is_some() {
-                (
-                    format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
-                    metadata.repodata_from_packages.as_ref().unwrap(),
-                )
-            } else {
-                (format!("{subdir}/{REPODATA}"), &metadata.repodata)
-            };
-
-            match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
-                Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
-                    Ok(repodata) => package_records_from_repodata(repodata),
-                    Err(err) => {
-                        tracing::warn!(
-                            "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
-                        );
-                        HashMap::default()
-                    }
-                },
-                Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
-                    tracing::info!("Could not find {repodata_path}. Creating new one.");
-                    HashMap::default()
-                }
-                Err(err) => return Err(err.into()),
-            }
+            previous_packages
         };
+
+    // Backfill `indexed_timestamp` for reused records that lack it. Records
+    // that already have a value are never touched.
+    for package in registered_packages.values_mut() {
+        if package.record.indexed_timestamp.is_none() {
+            package.record.indexed_timestamp = resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                package.record.timestamp,
+                backfill_indexed_timestamps,
+                indexing_time,
+            );
+        }
+    }
 
     // List all the packages in the subdirectory.
     let uploaded_packages: HashSet<DistArchiveIdentifier> = op
@@ -901,7 +919,24 @@ async fn index_subdir_inner(
         subdir
     );
 
-    for (filename, record) in results {
+    for (filename, mut record) in results {
+        let prior = PriorIndexState::from_prior(prior_index_state.get(&filename));
+        if prior == PriorIndexState::New
+            && let Some(timestamp) = record.record.timestamp
+            && timestamp > indexing_time
+        {
+            return Err(RepodataError::InvalidTimestamp {
+                filename: filename.to_file_name(),
+                timestamp: timestamp.jiff_timestamp(),
+                indexing_time: indexing_time.jiff_timestamp(),
+            });
+        }
+        record.record.indexed_timestamp = resolve_indexed_timestamp(
+            prior,
+            record.record.timestamp,
+            backfill_indexed_timestamps,
+            indexing_time,
+        );
         registered_packages.insert(filename, record);
     }
 
@@ -970,6 +1005,95 @@ fn latest_repodata_revision(revisions: &[RepodataRevisionInfo]) -> RepodataRevis
         .map(|revision| revision.revision)
         .max()
         .unwrap_or(RepodataRevision::Legacy)
+}
+
+/// Reads the records of the previous repodata for a subdir, with a metadata
+/// (`ETag`) check against the metadata collected at the start of the run.
+/// A missing or unparsable file degrades to an empty map; other read errors
+/// (including a concurrent-modification mismatch) are propagated.
+async fn load_previous_records(
+    op: &Operator,
+    subdir: Platform,
+    metadata: &RepodataMetadataCollection,
+    repodata_patch: &Option<PatchInstructions>,
+) -> Result<ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>, RepodataError> {
+    let (repodata_path, read_metadata) = if repodata_patch.is_some() {
+        (
+            format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
+            metadata.repodata_from_packages.as_ref().unwrap(),
+        )
+    } else {
+        (format!("{subdir}/{REPODATA}"), &metadata.repodata)
+    };
+
+    match crate::utils::read_with_metadata_check(op, &repodata_path, read_metadata).await {
+        Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
+            Ok(repodata) => Ok(package_records_from_repodata(repodata)),
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
+                );
+                Ok(HashMap::default())
+            }
+        },
+        Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
+            tracing::info!("Could not find {repodata_path}. Creating new one.");
+            Ok(HashMap::default())
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// The state of a record with respect to the previous repodata of a subdir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PriorIndexState {
+    /// The package was not part of the previous repodata.
+    New,
+    /// The package was pre-existing but has no `indexed_timestamp`.
+    MissingIndexedTimestamp,
+    /// The package was pre-existing with a previously assigned
+    /// `indexed_timestamp`.
+    IndexedAt(rattler_conda_types::utils::TimestampMs),
+}
+
+impl PriorIndexState {
+    fn from_prior(prior: Option<&Option<rattler_conda_types::utils::TimestampMs>>) -> Self {
+        match prior {
+            None => Self::New,
+            Some(None) => Self::MissingIndexedTimestamp,
+            Some(Some(timestamp)) => Self::IndexedAt(*timestamp),
+        }
+    }
+}
+
+/// Determines the `indexed_timestamp` for a record. A previously assigned
+/// value is immutable and always preserved.
+fn resolve_indexed_timestamp(
+    prior: PriorIndexState,
+    record_timestamp: Option<rattler_conda_types::utils::TimestampMs>,
+    backfill: BackfillIndexedTimestamps,
+    indexing_time: rattler_conda_types::utils::TimestampMs,
+) -> Option<rattler_conda_types::utils::TimestampMs> {
+    match prior {
+        // New packages are always stamped with the indexing time, regardless
+        // of the backfill mode.
+        PriorIndexState::New => Some(indexing_time),
+        PriorIndexState::IndexedAt(previous) => Some(previous),
+        PriorIndexState::MissingIndexedTimestamp => match backfill {
+            // The seeded value is clamped so it never exceeds the indexing
+            // time, and normalized to millisecond format as mandated by the
+            // CEP (the build timestamp may be in seconds format).
+            BackfillIndexedTimestamps::FromCondaPackageTimestamp => {
+                Some(record_timestamp.map_or(indexing_time, |timestamp| {
+                    rattler_conda_types::utils::TimestampMs::from_timestamp_millis(
+                        timestamp.min(indexing_time).jiff_timestamp(),
+                    )
+                }))
+            }
+            BackfillIndexedTimestamps::Now => Some(indexing_time),
+            BackfillIndexedTimestamps::Off => None,
+        },
+    }
 }
 
 fn package_records_from_repodata(
@@ -1353,6 +1477,9 @@ pub struct IndexFsConfig {
     pub repodata_revisions: Vec<RepodataRevisionInfo>,
     /// How packages are assigned to repodata revisions.
     pub package_revision_assignment: PackageRevisionAssignment,
+    /// How `indexed_timestamp` is backfilled for records in existing repodata
+    /// that lack the field.
+    pub backfill_indexed_timestamps: BackfillIndexedTimestamps,
     /// Whether to force the index to be written.
     pub force: bool,
     /// The maximum number of parallel tasks to run.
@@ -1378,6 +1505,7 @@ pub async fn index_fs_with_channel_metadata(
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         multi_progress,
@@ -1396,6 +1524,7 @@ pub async fn index_fs_with_channel_metadata(
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         multi_progress,
@@ -1425,6 +1554,9 @@ pub struct IndexS3Config {
     pub repodata_revisions: Vec<RepodataRevisionInfo>,
     /// How packages are assigned to repodata revisions.
     pub package_revision_assignment: PackageRevisionAssignment,
+    /// How `indexed_timestamp` is backfilled for records in existing repodata
+    /// that lack the field.
+    pub backfill_indexed_timestamps: BackfillIndexedTimestamps,
     /// Whether to force the index to be written.
     pub force: bool,
     /// The maximum number of parallel tasks to run.
@@ -1477,6 +1609,7 @@ pub async fn index_s3_with_channel_metadata(
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         multi_progress,
@@ -1497,6 +1630,7 @@ pub async fn index_s3_with_channel_metadata(
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         multi_progress,
@@ -1532,6 +1666,7 @@ pub async fn index(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    backfill_indexed_timestamps: BackfillIndexedTimestamps,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -1545,6 +1680,7 @@ pub async fn index(
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         multi_progress,
@@ -1565,6 +1701,7 @@ pub async fn index_with_channel_metadata(
     write_shards: bool,
     repodata_revisions: Vec<RepodataRevisionInfo>,
     package_revision_assignment: PackageRevisionAssignment,
+    backfill_indexed_timestamps: BackfillIndexedTimestamps,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -1647,6 +1784,7 @@ pub async fn index_with_channel_metadata(
             write_shards,
             repodata_revisions.clone(),
             package_revision_assignment,
+            backfill_indexed_timestamps,
             channel_metadata.clone(),
             repodata_patch
                 .as_ref()
@@ -1859,5 +1997,103 @@ mod tests {
         assert!(packages.is_empty());
         assert!(conda_packages.is_empty());
         assert!(v3.whl.contains_key(&identifier));
+    }
+
+    #[test]
+    fn resolve_indexed_timestamp_semantics() {
+        use rattler_conda_types::utils::TimestampMs;
+
+        let ms = |millis: i64| {
+            TimestampMs::from_timestamp_millis(jiff::Timestamp::from_millisecond(millis).unwrap())
+        };
+        let now = ms(1_700_000_000_000);
+        let past = ms(1_600_000_000_000);
+        let future = ms(1_800_000_000_000);
+        let previous = ms(1_650_000_000_000);
+
+        for backfill in [
+            BackfillIndexedTimestamps::FromCondaPackageTimestamp,
+            BackfillIndexedTimestamps::Now,
+            BackfillIndexedTimestamps::Off,
+        ] {
+            // New packages always get the indexing time, regardless of mode.
+            assert_eq!(
+                resolve_indexed_timestamp(PriorIndexState::New, Some(past), backfill, now),
+                Some(now)
+            );
+            assert_eq!(
+                resolve_indexed_timestamp(PriorIndexState::New, None, backfill, now),
+                Some(now)
+            );
+
+            // A previously assigned value is always preserved.
+            assert_eq!(
+                resolve_indexed_timestamp(
+                    PriorIndexState::IndexedAt(previous),
+                    Some(past),
+                    backfill,
+                    now
+                ),
+                Some(previous)
+            );
+        }
+
+        // Pre-existing records without a value are backfilled per mode.
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                Some(past),
+                BackfillIndexedTimestamps::FromCondaPackageTimestamp,
+                now
+            ),
+            Some(past)
+        );
+        // The seeded value is clamped to the indexing time.
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                Some(future),
+                BackfillIndexedTimestamps::FromCondaPackageTimestamp,
+                now
+            ),
+            Some(now)
+        );
+        // Without a build timestamp the indexing time is used.
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                None,
+                BackfillIndexedTimestamps::FromCondaPackageTimestamp,
+                now
+            ),
+            Some(now)
+        );
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                Some(past),
+                BackfillIndexedTimestamps::Now,
+                now
+            ),
+            Some(now)
+        );
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                Some(past),
+                BackfillIndexedTimestamps::Off,
+                now
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_indexed_timestamp(
+                PriorIndexState::MissingIndexedTimestamp,
+                None,
+                BackfillIndexedTimestamps::Off,
+                now
+            ),
+            None
+        );
     }
 }

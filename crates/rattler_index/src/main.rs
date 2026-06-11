@@ -8,7 +8,8 @@ use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
 use rattler_index::{
-    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
+    BackfillIndexedTimestamps, ChannelMetadata, IndexFsConfig, PackageRevisionAssignment,
+    index_fs_with_channel_metadata,
 };
 #[cfg(feature = "s3")]
 use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
@@ -61,6 +62,14 @@ struct Cli {
     /// that should be used for repodata patching. For more information, see `https://prefix.dev/blog/repodata_patching`.
     #[arg(long, global = true)]
     repodata_patch: Option<String>,
+
+    /// How to backfill `indexed_timestamp` for records in existing repodata
+    /// that lack the field: `from-conda-package-timestamp` (default) seeds it
+    /// from the package's build timestamp (clamped to the indexing time),
+    /// `now` seeds it with the indexing time, `off` leaves records untouched.
+    /// Overrides the value from the config file.
+    #[arg(long, global = true)]
+    backfill_indexed_timestamps: Option<BackfillIndexedTimestamps>,
 
     /// Disable precondition checks (`ETags`, timestamps) during file operations.
     /// Use this flag if your S3 backend doesn't fully support conditional requests,
@@ -142,8 +151,13 @@ async fn main() -> anyhow::Result<()> {
                 .to_string_lossy()
                 .into_owned();
             let resolved = resolve_index_channel_config(&config, &target);
-            let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
-                effective_index_options(&resolved);
+            let (
+                write_zst,
+                write_shards,
+                repodata_revisions,
+                package_revision_assignment,
+                backfill_indexed_timestamps,
+            ) = effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             index_fs_with_channel_metadata(
@@ -155,6 +169,9 @@ async fn main() -> anyhow::Result<()> {
                     write_shards,
                     repodata_revisions,
                     package_revision_assignment,
+                    backfill_indexed_timestamps: cli
+                        .backfill_indexed_timestamps
+                        .unwrap_or(backfill_indexed_timestamps),
                     force: cli.force,
                     max_parallel,
                     multi_progress: Some(multi_progress),
@@ -170,8 +187,13 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let target = channel.to_string();
             let resolved = resolve_index_channel_config(&config, &target);
-            let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
-                effective_index_options(&resolved);
+            let (
+                write_zst,
+                write_shards,
+                repodata_revisions,
+                package_revision_assignment,
+                backfill_indexed_timestamps,
+            ) = effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
             let bucket = channel.host().context("Invalid S3 url")?.to_string();
@@ -204,6 +226,9 @@ async fn main() -> anyhow::Result<()> {
                     write_shards,
                     repodata_revisions,
                     package_revision_assignment,
+                    backfill_indexed_timestamps: cli
+                        .backfill_indexed_timestamps
+                        .unwrap_or(backfill_indexed_timestamps),
                     force: cli.force,
                     max_parallel,
                     multi_progress: Some(multi_progress),
@@ -232,15 +257,18 @@ fn effective_index_options(
     bool,
     Vec<rattler_index::RepodataRevisionInfo>,
     PackageRevisionAssignment,
+    BackfillIndexedTimestamps,
 ) {
     let write_zst = cfg.write_zst.unwrap_or(true);
     let write_shards = cfg.write_shards.unwrap_or(true);
     let repodata_revisions = cfg.repodata_revisions.clone().unwrap_or_default();
     let package_revision_assignment = cfg.package_revision_assignment.unwrap_or_default();
+    let backfill_indexed_timestamps = cfg.backfill_indexed_timestamps.unwrap_or_default();
     (
         write_zst,
         write_shards,
         repodata_revisions,
         package_revision_assignment,
+        backfill_indexed_timestamps,
     )
 }

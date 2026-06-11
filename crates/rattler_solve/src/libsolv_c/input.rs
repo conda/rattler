@@ -129,11 +129,23 @@ pub fn add_repodata_records<'a>(
 
     // Track all extras we encounter so we can create synthetic solvables for them
     let mut extras: HashSet<(String, String)> = HashSet::new();
+
+    // Number of records that lack an `indexed_timestamp`, making
+    // exclude-newer fall back to the builder-provided build timestamp.
+    let mut records_without_indexed_timestamp: usize = 0;
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
+        if exclude_newer.is_some()
+            && repo_data.package_record.indexed_timestamp.is_none()
+            && repo_data.package_record.timestamp.is_some()
+        {
+            records_without_indexed_timestamp += 1;
+        }
+
         if let Some(config) = exclude_newer
             && config.is_excluded(
                 &repo_data.package_record.name,
                 repo_data.channel.as_deref(),
+                repo_data.package_record.indexed_timestamp.as_ref(),
                 repo_data.package_record.timestamp.as_ref(),
             )
         {
@@ -296,6 +308,14 @@ pub fn add_repodata_records<'a>(
         }
 
         solvable_ids.push(solvable_id);
+    }
+
+    if records_without_indexed_timestamp > 0 {
+        tracing::warn!(
+            "exclude-newer: {records_without_indexed_timestamp} package record(s) have no `indexed_timestamp`; \
+             falling back to the builder-provided `timestamp` for them. Consider re-indexing the channel \
+             with an indexing tool that supports `indexed_timestamp`."
+        );
     }
 
     // Custom ids for storing extra info on synthetic solvables

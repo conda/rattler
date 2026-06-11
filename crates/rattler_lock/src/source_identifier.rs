@@ -269,6 +269,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 arch: _,
                 platform: _,
                 features: _,
+                indexed_timestamp: _,
                 legacy_bz2_md5: _,
                 legacy_bz2_size: _,
                 license: _,

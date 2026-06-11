@@ -37,18 +37,21 @@ fn exclude_newer_reason(
     config: &ExcludeNewer,
     package: &PackageName,
     channel: Option<&str>,
+    indexed_timestamp: Option<&rattler_conda_types::utils::TimestampMs>,
     timestamp: Option<&rattler_conda_types::utils::TimestampMs>,
 ) -> Option<String> {
     let cutoff = config.cutoff_for_package(package, channel);
-    match timestamp {
-        Some(timestamp) if *timestamp > cutoff => {
+    match indexed_timestamp.or(timestamp) {
+        Some(effective_timestamp) if *effective_timestamp > cutoff => {
             // Display in user's local timezone for better readability
             let display_time = cutoff
                 .to_zoned(jiff::tz::TimeZone::system())
                 .strftime("%Y-%m-%d %H:%M:%S");
-            Some(format!(
-                "the package is uploaded after the cutoff date of {display_time}"
-            ))
+            Some(if indexed_timestamp.is_some() {
+                format!("the package was indexed after the cutoff date of {display_time}")
+            } else {
+                format!("the package is uploaded after the cutoff date of {display_time}")
+            })
         }
         None if !config.include_unknown_timestamp() => Some("the package has no timestamp".into()),
         _ => None,
@@ -351,6 +354,10 @@ impl<'a> CondaDependencyProvider<'a> {
         // Hashmap that maps the package name to the channel it was first found in.
         let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
+        // Number of records that lack an `indexed_timestamp`, making
+        // exclude-newer fall back to the builder-provided build timestamp.
+        let mut records_without_indexed_timestamp: usize = 0;
+
         // Add additional records
         for repo_data in repodata {
             // Iterate over all records and dedup records that refer to the same package
@@ -374,9 +381,17 @@ impl<'a> CondaDependencyProvider<'a> {
                     config.is_excluded(
                         &record.package_record.name,
                         record.channel.as_deref(),
+                        record.package_record.indexed_timestamp.as_ref(),
                         record.package_record.timestamp.as_ref(),
                     )
                 });
+
+                if exclude_newer.is_some()
+                    && record.package_record.indexed_timestamp.is_none()
+                    && record.package_record.timestamp.is_some()
+                {
+                    records_without_indexed_timestamp += 1;
+                }
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;
@@ -437,6 +452,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     && config.is_excluded(
                         &record.package_record.name,
                         record.channel.as_deref(),
+                        record.package_record.indexed_timestamp.as_ref(),
                         record.package_record.timestamp.as_ref(),
                     )
                 {
@@ -445,6 +461,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             config,
                             &record.package_record.name,
                             record.channel.as_deref(),
+                            record.package_record.indexed_timestamp.as_ref(),
                             record.package_record.timestamp.as_ref(),
                         )
                         .expect("excluded records must have an exclusion reason"),
@@ -528,6 +545,14 @@ impl<'a> CondaDependencyProvider<'a> {
                     );
                 }
             }
+        }
+
+        if records_without_indexed_timestamp > 0 {
+            tracing::warn!(
+                "exclude-newer: {records_without_indexed_timestamp} package record(s) have no `indexed_timestamp`; \
+                 falling back to the builder-provided `timestamp` for them. Consider re-indexing the channel \
+                 with an indexing tool that supports `indexed_timestamp`."
+            );
         }
 
         // Add favored packages to the records

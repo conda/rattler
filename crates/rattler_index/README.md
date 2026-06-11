@@ -24,7 +24,15 @@ configures S3 credentials, concurrency, and per-channel index options under the
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
-`from-index-json` revision assignment, no channel metadata).
+`from-index-json` revision assignment, `from-conda-package-timestamp` backfill
+of `indexed_timestamp`, no channel metadata).
+
+Newly indexed packages are stamped with an `indexed_timestamp` — the time at
+which the indexing run added them to the channel index (see the
+[`indexed_timestamp` CEP](https://github.com/conda/ceps/pull/154)). Once
+assigned, the value is preserved across re-indexing runs, including runs with
+`--force`. Packages whose build `timestamp` lies in the future of the indexing
+time are rejected and fail the indexing run.
 
 ## Per-channel index configuration
 
@@ -78,6 +86,7 @@ Matching rules:
 | `write-shards` | boolean | Writes `repodata_shards.msgpack.zst` and shard files. Defaults to `true`. |
 | `repodata-revisions` | array | Repodata revisions to enable. Each entry is a string (`"v3"`, `"legacy"`). The indexer fills revision package counts and timestamps while writing repodata. |
 | `package-revision-assignment` | string | Controls which `repodata-revisions` bucket a freshly indexed package lands in. `from-index-json` (default) reads the revision from each package's `info/index.json`, so legacy packages stay in the legacy maps and v3-tagged packages go to the v3 bucket. `latest` is an opt-in override that forces every package into the newest configured revision — useful for migrating a whole channel onto v3 in one shot. A future revision-assignment mode will pick based on a package's timestamp so repodata can be deterministically recreated. |
+| `backfill-indexed-timestamps` | string | Controls how `indexed_timestamp` is backfilled for records in existing repodata that lack the field. `from-conda-package-timestamp` (default) seeds it from the package's build `timestamp` (clamped so it never exceeds the indexing time), falling back to the indexing time when the package has no `timestamp`. `now` seeds it with the indexing time. `off` leaves records without the field untouched. Newly indexed packages always get the current indexing time, and previously assigned values are never recomputed. Can be overridden on the command line with `--backfill-indexed-timestamps`. |
 | `base-url` | string | Writes `info.base_url` in generated `repodata.json` and sharded repodata metadata. May be relative or absolute. |
 | `channel-relations.base` | string | A single channel reference with higher priority than this channel, written to `info.channel_relations.base`. |
 | `channel-relations.overrides` | string | A single channel reference with lower priority than this channel, written to `info.channel_relations.overrides`. |

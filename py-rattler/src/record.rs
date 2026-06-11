@@ -206,6 +206,7 @@ impl PyRecord {
                 extra_depends: BTreeMap::new(),
                 features: None,
                 flags: Vec::new(),
+                indexed_timestamp: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: None,
@@ -614,6 +615,30 @@ impl PyRecord {
             ));
         } else {
             self.as_package_record_mut().timestamp = None;
+        }
+
+        Ok(())
+    }
+
+    /// The date this entry was first added to the channel index by an
+    /// indexing tool.
+    #[getter]
+    pub fn indexed_timestamp(&self) -> Option<i64> {
+        self.as_package_record()
+            .indexed_timestamp
+            .map(|time| time.timestamp_millis())
+    }
+
+    #[setter]
+    pub fn set_indexed_timestamp(&mut self, indexed_timestamp: Option<i64>) -> PyResult<()> {
+        if let Some(ts) = indexed_timestamp {
+            self.as_package_record_mut().indexed_timestamp =
+                Some(TimestampMs::from_timestamp_millis(
+                    jiff::Timestamp::from_millisecond(ts)
+                        .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
+                ));
+        } else {
+            self.as_package_record_mut().indexed_timestamp = None;
         }
 
         Ok(())

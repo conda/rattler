@@ -311,13 +311,18 @@ impl ExcludeNewer {
     }
 
     /// Returns whether a package should be excluded.
+    ///
+    /// The cutoff is compared against `indexed_timestamp` (the time at which
+    /// the package was added to the channel index) when available, falling
+    /// back to the builder-provided build `timestamp` otherwise.
     pub fn is_excluded(
         &self,
         package: &PackageName,
         channel: Option<&str>,
+        indexed_timestamp: Option<&TimestampMs>,
         timestamp: Option<&TimestampMs>,
     ) -> bool {
-        match timestamp {
+        match indexed_timestamp.or(timestamp) {
             Some(timestamp) => *timestamp > self.cutoff_for_package(package, channel),
             None => !self.include_unknown_timestamp(),
         }

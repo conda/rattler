@@ -3,8 +3,8 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
-    IndexFsConfig, IndexS3Config, PackageRevisionAssignment, RepodataRevisionInfo, index_fs,
-    index_s3,
+    BackfillIndexedTimestamps, IndexFsConfig, IndexS3Config, PackageRevisionAssignment,
+    RepodataRevisionInfo, index_fs, index_s3,
 };
 use url::Url;
 
@@ -25,9 +25,17 @@ fn parse_package_revision_assignment(value: &str) -> PyResult<PackageRevisionAss
     }
 }
 
+fn parse_backfill_indexed_timestamps(value: &str) -> PyResult<BackfillIndexedTimestamps> {
+    value.parse().map_err(|_| {
+        PyValueError::new_err(format!(
+            "invalid backfill_indexed_timestamps '{value}', expected 'from-conda-package-timestamp', 'now' or 'off'"
+        ))
+    })
+}
+
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, repodata_revisions=None, package_revision_assignment=None, force=false, max_parallel=None))]
+#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, repodata_revisions=None, package_revision_assignment=None, backfill_indexed_timestamps=None, force=false, max_parallel=None))]
 pub fn py_index_fs<'py>(
     py: Python<'py>,
     channel_directory: PathBuf,
@@ -37,6 +45,7 @@ pub fn py_index_fs<'py>(
     write_shards: bool,
     repodata_revisions: Option<Bound<'py, PyAny>>,
     package_revision_assignment: Option<String>,
+    backfill_indexed_timestamps: Option<String>,
     force: bool,
     max_parallel: Option<usize>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -44,6 +53,11 @@ pub fn py_index_fs<'py>(
         package_revision_assignment
             .as_deref()
             .unwrap_or("from-index-json"),
+    )?;
+    let backfill_indexed_timestamps = parse_backfill_indexed_timestamps(
+        backfill_indexed_timestamps
+            .as_deref()
+            .unwrap_or("from-conda-package-timestamp"),
     )?;
     let repodata_revisions = match repodata_revisions {
         Some(value) => depythonize::<Vec<RepodataRevisionInfo>>(&value)?,
@@ -59,6 +73,7 @@ pub fn py_index_fs<'py>(
             write_shards,
             repodata_revisions,
             package_revision_assignment,
+            backfill_indexed_timestamps,
             force,
             max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
@@ -70,7 +85,7 @@ pub fn py_index_fs<'py>(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_url, credentials=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, repodata_revisions=None, package_revision_assignment=None, force=false, max_parallel=None, precondition_checks=true))]
+#[pyo3(signature = (channel_url, credentials=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, repodata_revisions=None, package_revision_assignment=None, backfill_indexed_timestamps=None, force=false, max_parallel=None, precondition_checks=true))]
 pub fn py_index_s3<'py>(
     py: Python<'py>,
     channel_url: String,
@@ -81,6 +96,7 @@ pub fn py_index_s3<'py>(
     write_shards: bool,
     repodata_revisions: Option<Bound<'py, PyAny>>,
     package_revision_assignment: Option<String>,
+    backfill_indexed_timestamps: Option<String>,
     force: bool,
     max_parallel: Option<usize>,
     precondition_checks: bool,
@@ -89,6 +105,11 @@ pub fn py_index_s3<'py>(
         package_revision_assignment
             .as_deref()
             .unwrap_or("from-index-json"),
+    )?;
+    let backfill_indexed_timestamps = parse_backfill_indexed_timestamps(
+        backfill_indexed_timestamps
+            .as_deref()
+            .unwrap_or("from-conda-package-timestamp"),
     )?;
     let repodata_revisions = match repodata_revisions {
         Some(value) => depythonize::<Vec<RepodataRevisionInfo>>(&value)?,
@@ -126,6 +147,7 @@ pub fn py_index_s3<'py>(
             write_shards,
             repodata_revisions,
             package_revision_assignment,
+            backfill_indexed_timestamps,
             force,
             max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
