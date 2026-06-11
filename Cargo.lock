@@ -4045,6 +4045,7 @@ checksum = "97b31d3d8e99a85d83b73ec26647f5607b80578ed9375810b6e44ffa3590a236"
 dependencies = [
  "opendal-core",
  "opendal-layer-retry",
+ "opendal-service-azblob",
  "opendal-service-fs",
  "opendal-service-s3",
 ]
@@ -4085,6 +4086,37 @@ checksum = "4eac134ffa4ddda6131a640a84a5315996424b9416c85052f8c64c1a33b70ad4"
 dependencies = [
  "backon",
  "log",
+ "opendal-core",
+]
+
+[[package]]
+name = "opendal-service-azblob"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7452bf3ec61cfd81ac9ad9ada17825931e9e371d44a045c6bfab9596c0a2ac3b"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "http 1.4.2",
+ "log",
+ "opendal-core",
+ "opendal-service-azure-common",
+ "quick-xml 0.38.4",
+ "reqsign-azure-storage",
+ "reqsign-core",
+ "reqsign-file-read-tokio",
+ "serde",
+ "sha2 0.10.9",
+ "uuid",
+]
+
+[[package]]
+name = "opendal-service-azure-common"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffb0e45d6c8dcf66ce2da20e241bcb80e6e540e109a4ff20f318f6c9b4c54e0c"
+dependencies = [
+ "http 1.4.2",
  "opendal-core",
 ]
 
@@ -5169,6 +5201,11 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_s3",
+ "reqsign-azure-storage",
+ "reqsign-command-execute-tokio",
+ "reqsign-core",
+ "reqsign-file-read-tokio",
+ "reqsign-http-send-reqwest",
  "reqwest 0.13.4",
  "retry-policies",
  "rmp-serde",
@@ -5731,6 +5768,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqsign-azure-storage"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62b96928e73ad984de1d99e382749d09e5dab7dd707b767974f7e40aa926b82f"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytes",
+ "form_urlencoded",
+ "http 1.4.2",
+ "log",
+ "pem",
+ "percent-encoding",
+ "reqsign-core",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+]
+
+[[package]]
+name = "reqsign-command-execute-tokio"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13460892332fd1ae7bc344ca063379beae3f0db50e7066af72467c938c3eea9f"
+dependencies = [
+ "reqsign-core",
+ "tokio",
+]
+
+[[package]]
 name = "reqsign-core"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5764,6 +5832,22 @@ dependencies = [
  "anyhow",
  "reqsign-core",
  "tokio",
+]
+
+[[package]]
+name = "reqsign-http-send-reqwest"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6089b23d9ba77aa6a8e5cf38d11550da23458d1c455645ae59e52294ffe7d26f"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-channel",
+ "http 1.4.2",
+ "http-body-util",
+ "reqsign-core",
+ "reqwest 0.13.4",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

@@ -28,6 +28,14 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
+azure = [
+  "opendal/services-azblob",
+  "dep:reqsign-core",
+  "dep:reqsign-azure-storage",
+  "dep:reqsign-command-execute-tokio",
+  "dep:reqsign-file-read-tokio",
+  "dep:reqsign-http-send-reqwest",
+]
 
 [[bin]]
 name = "rattler-index"
@@ -59,6 +67,11 @@ rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 hex = { workspace = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
+reqsign-core = { workspace = true, optional = true }
+reqsign-azure-storage = { workspace = true, optional = true }
+reqsign-command-execute-tokio = { workspace = true, optional = true }
+reqsign-file-read-tokio = { workspace = true, optional = true }
+reqsign-http-send-reqwest = { workspace = true, optional = true }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "system-proxy",
