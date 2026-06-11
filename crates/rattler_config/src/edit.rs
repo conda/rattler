@@ -140,6 +140,10 @@ where
                 self.s3_options.set(key, value)?;
                 Ok(())
             }
+            key if key.starts_with("azure-options") => {
+                self.azure_options.set(key, value)?;
+                Ok(())
+            }
             key if key.starts_with("concurrency.") => {
                 self.concurrency.set(key, value)?;
                 Ok(())

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use url::Url;
 
+use crate::config::azure::AzureOptionsMap;
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
     build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
@@ -127,6 +128,10 @@ pub struct ConfigBase<T> {
     #[serde(skip_serializing_if = "S3OptionsMap::is_default")]
     pub s3_options: S3OptionsMap,
 
+    #[serde(default)]
+    #[serde(skip_serializing_if = "AzureOptionsMap::is_default")]
+    pub azure_options: AzureOptionsMap,
+
     /// Per-channel configuration for `rattler-index`.
     #[serde(default, skip_serializing_if = "IndexConfig::is_empty")]
     pub index_config: IndexConfig,
@@ -171,6 +176,7 @@ where
             concurrency: ConcurrencyConfig::default(),
             proxy_config: ProxyConfig::default(),
             s3_options: S3OptionsMap::default(),
+            azure_options: AzureOptionsMap::default(),
             index_config: IndexConfig::default(),
             run_post_link_scripts: None,
             extensions: T::default(),
@@ -265,6 +271,7 @@ where
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             s3_options: self.s3_options.merge_config(&other.s3_options)?,
+            azure_options: self.azure_options.merge_config(&other.azure_options)?,
             // Use the other configuration's default channels if available
             default_channels: other
                 .default_channels
@@ -327,6 +334,7 @@ where
         keys.extend(get_keys(&self.proxy_config));
         keys.extend(get_keys(&self.extensions));
         keys.extend(get_keys(&self.s3_options));
+        keys.extend(get_keys(&self.azure_options));
         keys.extend(get_keys(&self.index_config));
 
         keys.push("default_channels".to_string());
@@ -348,4 +356,23 @@ pub fn load_config<T: for<'de> Deserialize<'de>>(
     let config_content = std::fs::read_to_string(config_file)?;
     let config: ConfigBase<T> = toml::from_str(&config_content)?;
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn azure_options_round_trips_through_config_base() {
+        let toml = r#"
+        [azure-options.mychannel]
+        account = "myacct"
+    "#;
+        let cfg: ConfigBase<()> = toml::from_str(toml).unwrap();
+        assert_eq!(
+            cfg.azure_options.0.get("mychannel").unwrap().account,
+            "myacct"
+        );
+        assert!(!cfg.azure_options.is_default());
+    }
 }
