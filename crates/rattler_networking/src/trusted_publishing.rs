@@ -83,6 +83,24 @@ impl TrustedPublishingOptions {
             mint_path: DEFAULT_MINT_PATH.to_string(),
         })
     }
+
+    /// Options for `server` following the deployed prefix.dev ecosystem
+    /// convention: every prefix.dev deployment (`prefix.dev` and
+    /// `*.prefix.dev`, e.g. `beta.prefix.dev`) validates GitHub OIDC tokens
+    /// against the shared audience `prefix.dev`, while tokens are minted at
+    /// the deployment's own host. Hosts outside that family fall back to
+    /// [`Self::for_host`] (host-derived audience).
+    ///
+    /// Returns `None` when `server` has no host. The caveats on
+    /// [`Self::for_host`] (scheme validation, allow-listing) apply here too.
+    pub fn for_server(server: &Url) -> Option<Self> {
+        let host = server.host_str()?;
+        if host == "prefix.dev" || host.ends_with(".prefix.dev") {
+            Some(Self::for_prefix_dev())
+        } else {
+            Self::for_host(server)
+        }
+    }
 }
 
 /// Outcome of an optional trusted-publishing attempt.
@@ -518,5 +536,33 @@ mod tests {
         )
         .unwrap();
         assert_eq!(options.audience, "beta.prefix.dev");
+    }
+
+    #[test]
+    fn for_server_uses_shared_audience_for_prefix_dev_family() {
+        // prefix.dev deployments share the audience "prefix.dev"
+        let beta = TrustedPublishingOptions::for_server(
+            &Url::parse("https://beta.prefix.dev/some-channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(beta.audience, "prefix.dev");
+
+        let prod = TrustedPublishingOptions::for_server(&Url::parse("https://prefix.dev").unwrap())
+            .unwrap();
+        assert_eq!(prod.audience, "prefix.dev");
+
+        // hosts outside the family keep the host-derived audience
+        let other = TrustedPublishingOptions::for_server(
+            &Url::parse("https://conda.example.com/channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(other.audience, "conda.example.com");
+
+        // ...and lookalike hosts are not part of the family
+        let evil = TrustedPublishingOptions::for_server(
+            &Url::parse("https://evil-prefix.dev/channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(evil.audience, "evil-prefix.dev");
     }
 }
