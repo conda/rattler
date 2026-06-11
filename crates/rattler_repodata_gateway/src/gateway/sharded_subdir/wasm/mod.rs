@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::OptionFuture;
-use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisions, ShardedRepodata};
 use rattler_networking::LazyClient;
 use url::Url;
 
@@ -168,7 +168,7 @@ impl SubdirClient for ShardedSubdir {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    fn repodata_revisions(&self) -> &RepodataRevisions {
         &self.sharded_repodata.info.repodata_revisions
     }
 }

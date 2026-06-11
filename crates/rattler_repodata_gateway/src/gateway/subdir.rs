@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
-use rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisionInfo};
+use rattler_conda_types::{PackageName, RepoDataRecord, RepodataRevisions};
 
 use super::GatewayError;
 use crate::Reporter;
+use crate::sparse::empty_repodata_revisions;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -96,10 +97,10 @@ impl Subdir {
     }
 
     /// Returns repodata revisions advertised by this subdirectory.
-    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    pub fn repodata_revisions(&self) -> &RepodataRevisions {
         match self {
             Subdir::Found(subdir) => subdir.repodata_revisions(),
-            Subdir::NotFound => &[],
+            Subdir::NotFound => empty_repodata_revisions(),
         }
     }
 }
@@ -150,7 +151,7 @@ impl SubdirData {
         self.client.package_names()
     }
 
-    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    pub fn repodata_revisions(&self) -> &RepodataRevisions {
         self.client.repodata_revisions()
     }
 }
@@ -171,8 +172,8 @@ pub trait SubdirClient: Send + Sync {
     fn package_names(&self) -> Vec<String>;
 
     /// Returns repodata revisions advertised by the subdirectory.
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
-        &[]
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        empty_repodata_revisions()
     }
 }
 

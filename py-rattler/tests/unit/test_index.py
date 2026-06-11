@@ -1,4 +1,5 @@
 # type: ignore
+import datetime
 import os
 import json
 import shutil
@@ -11,7 +12,7 @@ import boto3
 import pytest
 
 from rattler import Platform
-from rattler.index import RepodataRevisionInfo, index_fs, index_s3
+from rattler.index import index_fs, index_s3
 from rattler.index.index import S3Credentials
 
 
@@ -64,18 +65,22 @@ async def test_index_specific_subdir_noarch(package_directory):
 
 
 @pytest.mark.asyncio
-async def test_index_repodata_revision_info(package_directory):
+async def test_index_repodata_revisions(package_directory):
+    # Timestamps round-trip through Unix milliseconds, so exercise millisecond
+    # precision and assert against the exact millisecond values.
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    oldest_ms = 1710000000123
+    newest_ms = 1773851561010
     await index_fs(
         package_directory,
         Platform("noarch"),
-        repodata_revisions=[
-            RepodataRevisionInfo(
-                revision="v3",
-                n_packages=123,
-                oldest=1710000000000,
-                newest=1710000000001,
-            )
-        ],
+        repodata_revisions={
+            "v3": {
+                "n_packages": 123,
+                "oldest": epoch + datetime.timedelta(milliseconds=oldest_ms),
+                "newest": epoch + datetime.timedelta(milliseconds=newest_ms),
+            }
+        },
         package_revision_assignment="latest",
         force=True,
     )
@@ -84,14 +89,13 @@ async def test_index_repodata_revision_info(package_directory):
         repodata = json.load(f)
 
     assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
-    assert repodata["info"]["repodata_revisions"] == [
-        {
-            "revision": 3,
+    assert repodata["info"]["repodata_revisions"] == {
+        "v3": {
             "n_packages": 123,
-            "oldest": 1710000000000,
-            "newest": 1710000000001,
+            "oldest": oldest_ms,
+            "newest": newest_ms,
         }
-    ]
+    }
 
 
 # ---------------------------------------- S3 ---------------------------------------- #
