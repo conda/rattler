@@ -38,6 +38,10 @@ mod prefix;
 mod s3;
 #[cfg(feature = "s3")]
 pub use s3::upload_package_to_s3;
+#[cfg(feature = "azure")]
+mod azure;
+#[cfg(feature = "azure")]
+pub use azure::upload_package_to_azure;
 
 pub use anaconda::AnacondaError;
 pub use cloudsmith::CloudsmithError;
