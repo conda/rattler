@@ -56,9 +56,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    if !opt.json {
-        println!("Searching for '{}' on {}", opt.matchspec, opt.platform);
-    }
+    eprintln!("Searching for '{}' on {}", opt.matchspec, opt.platform);
 
     // Parse the pattern as a matchspec with glob/regex support
     let matchspec = MatchSpec::from_str(
@@ -79,12 +77,10 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    if !opt.json {
-        println!(
-            "Channels: {}",
-            channels.iter().map(Channel::canonical_name).join(", ")
-        );
-    }
+    eprintln!(
+        "Channels: {}",
+        channels.iter().map(Channel::canonical_name).join(", ")
+    );
 
     // Create HTTP client
     let download_client = super::client::create_client_with_middleware()?;
