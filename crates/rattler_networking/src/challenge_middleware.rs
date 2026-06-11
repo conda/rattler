@@ -104,11 +104,41 @@ fn parse_param(s: &str) -> Option<(String, String)> {
     if value.chars().all(|c| c == '=') {
         return None;
     }
-    let value = value
-        .strip_prefix('"')
-        .and_then(|v| v.strip_suffix('"'))
-        .unwrap_or(value);
-    Some((key, value.replace("\\\"", "\"")))
+    let value = if let Some(rest) = value.strip_prefix('"') {
+        // Quoted string: require a clean closing quote with nothing after it
+        // and no unescaped quotes inside; anything else (unterminated, or
+        // trailing garbage like a second space-separated param) is malformed
+        // and yields no param rather than a wrong value.
+        let inner = rest.strip_suffix('"')?;
+        if malformed_quoted_interior(inner) {
+            return None;
+        }
+        inner.replace("\\\"", "\"")
+    } else {
+        // Unquoted token: any stray quote means a mangled quoted string.
+        if value.contains('"') {
+            return None;
+        }
+        value.to_string()
+    };
+    Some((key, value))
+}
+
+/// Returns `true` when `s` (the interior of a quoted string, outer quotes
+/// already stripped) contains an unescaped `"` — e.g. two space-separated
+/// quoted params mashed into one value — or ends with a dangling escape,
+/// which means the stripped closing quote was actually escaped (i.e. the
+/// quoted string was never terminated).
+fn malformed_quoted_interior(s: &str) -> bool {
+    let mut escaped = false;
+    for c in s.chars() {
+        match c {
+            '\\' if !escaped => escaped = true,
+            '"' if !escaped => return true,
+            _ => escaped = false,
+        }
+    }
+    escaped
 }
 
 /// Split on commas that are not inside a double-quoted string.
@@ -650,6 +680,24 @@ mod tests {
         let challenges = parse_challenges(&header_map(&["Negotiate YII="]));
         assert_eq!(challenges.len(), 1);
         assert_eq!(challenges[0].scheme, "Negotiate");
+        assert!(challenges[0].params.is_empty());
+    }
+
+    #[test]
+    fn space_separated_params_yield_no_wrong_values() {
+        // Non-RFC space-separated params: scheme parsed, malformed param dropped
+        let challenges = parse_challenges(&header_map(&[
+            r#"Bearer realm="prefix.dev" error="invalid_token""#,
+        ]));
+        assert_eq!(challenges.len(), 1);
+        assert_eq!(challenges[0].scheme, "Bearer");
+        assert!(challenges[0].params.is_empty());
+    }
+
+    #[test]
+    fn unbalanced_quote_yields_no_param() {
+        let challenges = parse_challenges(&header_map(&[r#"Bearer realm="unterminated"#]));
+        assert_eq!(challenges.len(), 1);
         assert!(challenges[0].params.is_empty());
     }
 

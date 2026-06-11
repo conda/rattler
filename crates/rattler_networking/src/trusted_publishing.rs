@@ -41,9 +41,10 @@ pub struct TrustedPublishingOptions {
     /// Path on the server where the ID token is exchanged for a bearer token.
     ///
     /// This path is joined onto arbitrary URLs of the challenged server using
-    /// [`Url::join`]. It must start with `/` so that it replaces the full URL
-    /// path; a relative path would resolve against the challenged URL's path
-    /// and could target an unintended endpoint.
+    /// [`Url::join`]. It should start with `/` so that it replaces the full
+    /// URL path; a relative path would resolve against the challenged URL's
+    /// path and could target an unintended endpoint.
+    /// [`TrustedPublishingFlow::new`] normalizes a missing leading slash.
     pub mint_path: String,
 }
 
@@ -205,8 +206,12 @@ pub struct TrustedPublishingFlow {
 }
 
 impl TrustedPublishingFlow {
-    /// Create a flow with custom [`TrustedPublishingOptions`].
-    pub fn new(options: TrustedPublishingOptions, client: ClientWithMiddleware) -> Self {
+    /// Create a flow with custom [`TrustedPublishingOptions`]. A missing
+    /// leading `/` on [`TrustedPublishingOptions::mint_path`] is normalized.
+    pub fn new(mut options: TrustedPublishingOptions, client: ClientWithMiddleware) -> Self {
+        if !options.mint_path.starts_with('/') {
+            options.mint_path.insert(0, '/');
+        }
         Self { options, client }
     }
 
@@ -316,6 +321,133 @@ mod tests {
             token.expect("expected a minted token").secret(),
             "pfx-jwt.minted"
         );
+    }
+
+    #[tokio::test]
+    async fn mint_path_without_leading_slash_is_normalized() {
+        use axum::routing::post;
+
+        // Mint endpoint at the absolute path /api/x. Without normalization,
+        // a relative mint_path of "api/x" would resolve against the
+        // challenged URL's path (/channel/api/x) and miss this route.
+        let router = axum::Router::new().route("/api/x", post(|| async { "pfx-jwt.minted" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        let token = temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                let flow = TrustedPublishingFlow::new(
+                    TrustedPublishingOptions {
+                        audience: "prefix.dev".to_string(),
+                        mint_path: "api/x".to_string(),
+                    },
+                    plain_client(),
+                );
+                flow.acquire_token(
+                    &server_url.join("/channel/repodata.json").unwrap(),
+                    &bearer_challenge(),
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            token.expect("expected a minted token").secret(),
+            "pfx-jwt.minted"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_with_trusted_publishing_flow_end_to_end() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        use axum::{
+            Json,
+            http::StatusCode,
+            response::IntoResponse,
+            routing::{get, post},
+        };
+
+        use crate::AuthChallengeMiddleware;
+
+        // One server hosting both the protected resource and the mint
+        // endpoint, like a real prefix.dev instance.
+        let mints = Arc::new(AtomicUsize::new(0));
+        let mints_in_handler = mints.clone();
+        let router = axum::Router::new()
+            .route(
+                "/channel/repodata.json",
+                get(|headers: axum::http::HeaderMap| async move {
+                    match headers.get("authorization").and_then(|v| v.to_str().ok()) {
+                        Some("Bearer pfx-jwt.minted") => (StatusCode::OK, "ok").into_response(),
+                        _ => (
+                            StatusCode::UNAUTHORIZED,
+                            [("www-authenticate", r#"Bearer realm="test""#)],
+                            "unauthorized",
+                        )
+                            .into_response(),
+                    }
+                }),
+            )
+            .route(
+                "/api/oidc/mint_token",
+                post(move |Json(body): Json<serde_json::Value>| {
+                    let mints = mints_in_handler.clone();
+                    async move {
+                        assert_eq!(body["token"], "fake.oidc.token");
+                        mints.fetch_add(1, Ordering::SeqCst);
+                        "pfx-jwt.minted"
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                // The mint client must not itself carry the challenge
+                // middleware (it would recurse), so it stays plain.
+                let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+                let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                    .with_arc(std::sync::Arc::new(AuthChallengeMiddleware::new(
+                        server_url.clone(),
+                        std::sync::Arc::new(flow),
+                    )))
+                    .build();
+                let url = server_url.join("/channel/repodata.json").unwrap();
+
+                // First request: challenge -> OIDC detect -> mint -> replay.
+                assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 200);
+                // Second request: cached token, no second mint.
+                assert_eq!(client.get(url).send().await.unwrap().status(), 200);
+            },
+        )
+        .await;
+
+        assert_eq!(mints.load(Ordering::SeqCst), 1);
     }
 
     #[test]
