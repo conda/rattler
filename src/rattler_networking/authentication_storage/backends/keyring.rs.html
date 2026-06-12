@@ -245,15 +245,226 @@
 <a href=#243 id=243 data-nosnippet>243</a>        <span class="prelude-val">Ok</span>(results)
 <a href=#244 id=244 data-nosnippet>244</a>    }
 <a href=#245 id=245 data-nosnippet>245</a>
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">fn </span>delete(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), AuthenticationStorageError&gt; {
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>entry = <span class="self">self</span>.entry(host)<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>
-<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">match </span>entry.delete_credential() {
-<a href=#250 id=250 data-nosnippet>250</a>            <span class="prelude-val">Ok</span>(()) | <span class="prelude-val">Err</span>(keyring_core::Error::NoEntry) =&gt; {}
-<a href=#251 id=251 data-nosnippet>251</a>            <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(KeyringAuthenticationStorageError::from(err).into()),
-<a href=#252 id=252 data-nosnippet>252</a>        }
-<a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="prelude-val">Ok</span>(())
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>}
+<a href=#246 id=246 data-nosnippet>246</a>    <span class="doccomment">/// Enumerate stored hosts without reading their passwords. On macOS this
+<a href=#247 id=247 data-nosnippet>247</a>    /// avoids one keychain ACL prompt per entry — important for callers like
+<a href=#248 id=248 data-nosnippet>248</a>    /// the `auth logout` interactive picker that only need host metadata to
+<a href=#249 id=249 data-nosnippet>249</a>    /// build their UI.
+<a href=#250 id=250 data-nosnippet>250</a>    </span><span class="kw">fn </span>list_keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;String&gt;, AuthenticationStorageError&gt; {
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="kw">let </span>store = credential_store()<span class="question-mark">?</span>;
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span>spec = search_spec(<span class="kw-2">&amp;</span><span class="self">self</span>.store_key);
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">let </span>spec_refs: HashMap&lt;<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str&gt; =
+<a href=#254 id=254 data-nosnippet>254</a>            spec.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>entries = store
+<a href=#257 id=257 data-nosnippet>257</a>            .search(<span class="kw-2">&amp;</span>spec_refs)
+<a href=#258 id=258 data-nosnippet>258</a>            .map_err(KeyringAuthenticationStorageError::from)<span class="question-mark">?</span>;
+<a href=#259 id=259 data-nosnippet>259</a>
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span><span class="kw-2">mut </span>hosts = Vec::new();
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">for </span>entry <span class="kw">in </span>entries {
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((service, account)) = entry.get_specifiers() <span class="kw">else </span>{
+<a href=#263 id=263 data-nosnippet>263</a>                <span class="kw">continue</span>;
+<a href=#264 id=264 data-nosnippet>264</a>            };
+<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">if </span>service != <span class="self">self</span>.store_key {
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="kw">continue</span>;
+<a href=#267 id=267 data-nosnippet>267</a>            }
+<a href=#268 id=268 data-nosnippet>268</a>            hosts.push(account);
+<a href=#269 id=269 data-nosnippet>269</a>        }
+<a href=#270 id=270 data-nosnippet>270</a>        hosts.sort();
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="prelude-val">Ok</span>(hosts)
+<a href=#272 id=272 data-nosnippet>272</a>    }
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">fn </span>delete(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), AuthenticationStorageError&gt; {
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>entry = <span class="self">self</span>.entry(host)<span class="question-mark">?</span>;
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">match </span>entry.delete_credential() {
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="prelude-val">Ok</span>(()) | <span class="prelude-val">Err</span>(keyring_core::Error::NoEntry) =&gt; {}
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(KeyringAuthenticationStorageError::from(err).into()),
+<a href=#280 id=280 data-nosnippet>280</a>        }
+<a href=#281 id=281 data-nosnippet>281</a>
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="prelude-val">Ok</span>(())
+<a href=#283 id=283 data-nosnippet>283</a>    }
+<a href=#284 id=284 data-nosnippet>284</a>}
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a><span class="attr">#[cfg(test)]
+<a href=#287 id=287 data-nosnippet>287</a></span><span class="kw">mod </span>tests {
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">use </span>keyring_core::api::{CredentialApi, CredentialStoreApi};
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">use </span>std::sync::{
+<a href=#291 id=291 data-nosnippet>291</a>        Mutex,
+<a href=#292 id=292 data-nosnippet>292</a>        atomic::{AtomicUsize, Ordering},
+<a href=#293 id=293 data-nosnippet>293</a>    };
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="doccomment">/// Shared state of [`CountingStore`]: the stored secrets plus a counter
+<a href=#296 id=296 data-nosnippet>296</a>    /// of how often a secret was actually read.
+<a href=#297 id=297 data-nosnippet>297</a>    </span><span class="attr">#[derive(Debug, Default)]
+<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">struct </span>StoreState {
+<a href=#299 id=299 data-nosnippet>299</a>        secrets: Mutex&lt;HashMap&lt;(String, String), Vec&lt;u8&gt;&gt;&gt;,
+<a href=#300 id=300 data-nosnippet>300</a>        secret_reads: AtomicUsize,
+<a href=#301 id=301 data-nosnippet>301</a>    }
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="doccomment">/// In-memory keyring-core store that counts secret reads. Used to assert
+<a href=#304 id=304 data-nosnippet>304</a>    /// that key enumeration never touches stored secrets — on macOS every
+<a href=#305 id=305 data-nosnippet>305</a>    /// secret read of a foreign-owned item triggers a keychain ACL prompt,
+<a href=#306 id=306 data-nosnippet>306</a>    /// so a regression here means one prompt per stored credential.
+<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="attr">#[derive(Debug, Default)]
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">struct </span>CountingStore {
+<a href=#309 id=309 data-nosnippet>309</a>        state: Arc&lt;StoreState&gt;,
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="attr">#[derive(Debug)]
+<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">struct </span>CountingCred {
+<a href=#314 id=314 data-nosnippet>314</a>        state: Arc&lt;StoreState&gt;,
+<a href=#315 id=315 data-nosnippet>315</a>        service: String,
+<a href=#316 id=316 data-nosnippet>316</a>        account: String,
+<a href=#317 id=317 data-nosnippet>317</a>    }
+<a href=#318 id=318 data-nosnippet>318</a>
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">impl </span>CountingCred {
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">fn </span>key(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (String, String) {
+<a href=#321 id=321 data-nosnippet>321</a>            (<span class="self">self</span>.service.clone(), <span class="self">self</span>.account.clone())
+<a href=#322 id=322 data-nosnippet>322</a>        }
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">impl </span>CredentialApi <span class="kw">for </span>CountingCred {
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">fn </span>set_secret(<span class="kw-2">&amp;</span><span class="self">self</span>, secret: <span class="kw-2">&amp;</span>[u8]) -&gt; keyring_core::Result&lt;()&gt; {
+<a href=#327 id=327 data-nosnippet>327</a>            <span class="self">self</span>.state
+<a href=#328 id=328 data-nosnippet>328</a>                .secrets
+<a href=#329 id=329 data-nosnippet>329</a>                .lock()
+<a href=#330 id=330 data-nosnippet>330</a>                .unwrap()
+<a href=#331 id=331 data-nosnippet>331</a>                .insert(<span class="self">self</span>.key(), secret.to_vec());
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="prelude-val">Ok</span>(())
+<a href=#333 id=333 data-nosnippet>333</a>        }
+<a href=#334 id=334 data-nosnippet>334</a>
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">fn </span>get_secret(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; keyring_core::Result&lt;Vec&lt;u8&gt;&gt; {
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="self">self</span>.state.secret_reads.fetch_add(<span class="number">1</span>, Ordering::SeqCst);
+<a href=#337 id=337 data-nosnippet>337</a>            <span class="self">self</span>.state
+<a href=#338 id=338 data-nosnippet>338</a>                .secrets
+<a href=#339 id=339 data-nosnippet>339</a>                .lock()
+<a href=#340 id=340 data-nosnippet>340</a>                .unwrap()
+<a href=#341 id=341 data-nosnippet>341</a>                .get(<span class="kw-2">&amp;</span><span class="self">self</span>.key())
+<a href=#342 id=342 data-nosnippet>342</a>                .cloned()
+<a href=#343 id=343 data-nosnippet>343</a>                .ok_or(keyring_core::Error::NoEntry)
+<a href=#344 id=344 data-nosnippet>344</a>        }
+<a href=#345 id=345 data-nosnippet>345</a>
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">fn </span>delete_credential(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; keyring_core::Result&lt;()&gt; {
+<a href=#347 id=347 data-nosnippet>347</a>            <span class="self">self</span>.state
+<a href=#348 id=348 data-nosnippet>348</a>                .secrets
+<a href=#349 id=349 data-nosnippet>349</a>                .lock()
+<a href=#350 id=350 data-nosnippet>350</a>                .unwrap()
+<a href=#351 id=351 data-nosnippet>351</a>                .remove(<span class="kw-2">&amp;</span><span class="self">self</span>.key())
+<a href=#352 id=352 data-nosnippet>352</a>                .map(|<span class="kw">_</span>| ())
+<a href=#353 id=353 data-nosnippet>353</a>                .ok_or(keyring_core::Error::NoEntry)
+<a href=#354 id=354 data-nosnippet>354</a>        }
+<a href=#355 id=355 data-nosnippet>355</a>
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">fn </span>get_credential(
+<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#358 id=358 data-nosnippet>358</a>        ) -&gt; keyring_core::Result&lt;<span class="prelude-ty">Option</span>&lt;Arc&lt;keyring_core::api::Credential&gt;&gt;&gt; {
+<a href=#359 id=359 data-nosnippet>359</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+<a href=#360 id=360 data-nosnippet>360</a>        }
+<a href=#361 id=361 data-nosnippet>361</a>
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">fn </span>get_specifiers(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(String, String)&gt; {
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="prelude-val">Some</span>((<span class="self">self</span>.service.clone(), <span class="self">self</span>.account.clone()))
+<a href=#364 id=364 data-nosnippet>364</a>        }
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">fn </span>as_any(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">dyn </span>std::any::Any {
+<a href=#367 id=367 data-nosnippet>367</a>            <span class="self">self
+<a href=#368 id=368 data-nosnippet>368</a>        </span>}
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">impl </span>CountingStore {
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">fn </span>entry(<span class="kw-2">&amp;</span><span class="self">self</span>, service: <span class="kw-2">&amp;</span>str, account: <span class="kw-2">&amp;</span>str) -&gt; Entry {
+<a href=#373 id=373 data-nosnippet>373</a>            Entry::new_with_credential(Arc::new(CountingCred {
+<a href=#374 id=374 data-nosnippet>374</a>                state: <span class="self">self</span>.state.clone(),
+<a href=#375 id=375 data-nosnippet>375</a>                service: service.to_string(),
+<a href=#376 id=376 data-nosnippet>376</a>                account: account.to_string(),
+<a href=#377 id=377 data-nosnippet>377</a>            }))
+<a href=#378 id=378 data-nosnippet>378</a>        }
+<a href=#379 id=379 data-nosnippet>379</a>    }
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">impl </span>CredentialStoreApi <span class="kw">for </span>CountingStore {
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">fn </span>vendor(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; String {
+<a href=#383 id=383 data-nosnippet>383</a>            <span class="string">"rattler-test"</span>.to_string()
+<a href=#384 id=384 data-nosnippet>384</a>        }
+<a href=#385 id=385 data-nosnippet>385</a>
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">fn </span>id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; String {
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="string">"counting-store"</span>.to_string()
+<a href=#388 id=388 data-nosnippet>388</a>        }
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">fn </span>build(
+<a href=#391 id=391 data-nosnippet>391</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#392 id=392 data-nosnippet>392</a>            service: <span class="kw-2">&amp;</span>str,
+<a href=#393 id=393 data-nosnippet>393</a>            user: <span class="kw-2">&amp;</span>str,
+<a href=#394 id=394 data-nosnippet>394</a>            _modifiers: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>HashMap&lt;<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str&gt;&gt;,
+<a href=#395 id=395 data-nosnippet>395</a>        ) -&gt; keyring_core::Result&lt;Entry&gt; {
+<a href=#396 id=396 data-nosnippet>396</a>            <span class="prelude-val">Ok</span>(<span class="self">self</span>.entry(service, user))
+<a href=#397 id=397 data-nosnippet>397</a>        }
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">fn </span>search(<span class="kw-2">&amp;</span><span class="self">self</span>, spec: <span class="kw-2">&amp;</span>HashMap&lt;<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str&gt;) -&gt; keyring_core::Result&lt;Vec&lt;Entry&gt;&gt; {
+<a href=#400 id=400 data-nosnippet>400</a>            <span class="comment">// Honor the `service` filter (used on macOS/Linux); for any other
+<a href=#401 id=401 data-nosnippet>401</a>            // spec (e.g. Windows' `pattern`) return everything and rely on
+<a href=#402 id=402 data-nosnippet>402</a>            // the caller's defensive service check.
+<a href=#403 id=403 data-nosnippet>403</a>            </span><span class="kw">let </span>service_filter = spec.get(<span class="string">"service"</span>).map(ToString::to_string);
+<a href=#404 id=404 data-nosnippet>404</a>            <span class="kw">let </span>entries = <span class="self">self
+<a href=#405 id=405 data-nosnippet>405</a>                </span>.state
+<a href=#406 id=406 data-nosnippet>406</a>                .secrets
+<a href=#407 id=407 data-nosnippet>407</a>                .lock()
+<a href=#408 id=408 data-nosnippet>408</a>                .unwrap()
+<a href=#409 id=409 data-nosnippet>409</a>                .keys()
+<a href=#410 id=410 data-nosnippet>410</a>                .filter(|(service, <span class="kw">_</span>)| {
+<a href=#411 id=411 data-nosnippet>411</a>                    service_filter
+<a href=#412 id=412 data-nosnippet>412</a>                        .as_ref()
+<a href=#413 id=413 data-nosnippet>413</a>                        .is_none_or(|filter| service == filter)
+<a href=#414 id=414 data-nosnippet>414</a>                })
+<a href=#415 id=415 data-nosnippet>415</a>                .map(|(service, account)| <span class="self">self</span>.entry(service, account))
+<a href=#416 id=416 data-nosnippet>416</a>                .collect();
+<a href=#417 id=417 data-nosnippet>417</a>            <span class="prelude-val">Ok</span>(entries)
+<a href=#418 id=418 data-nosnippet>418</a>        }
+<a href=#419 id=419 data-nosnippet>419</a>
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">fn </span>as_any(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">dyn </span>std::any::Any {
+<a href=#421 id=421 data-nosnippet>421</a>            <span class="self">self
+<a href=#422 id=422 data-nosnippet>422</a>        </span>}
+<a href=#423 id=423 data-nosnippet>423</a>    }
+<a href=#424 id=424 data-nosnippet>424</a>
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="doccomment">/// The whole point of `list_keys` is to enumerate hosts without reading
+<a href=#426 id=426 data-nosnippet>426</a>    /// secrets (each read of a foreign-owned item prompts on macOS). Guard
+<a href=#427 id=427 data-nosnippet>427</a>    /// against a regression to the `list()` fallback, which reads every one.
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="attr">#[test]
+<a href=#429 id=429 data-nosnippet>429</a>    </span><span class="kw">fn </span>list_keys_does_not_read_secrets() {
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="comment">// The default store is process-global. This must stay the only test
+<a href=#431 id=431 data-nosnippet>431</a>        // in this binary that installs one: it keeps the real OS keyring out
+<a href=#432 id=432 data-nosnippet>432</a>        // of every test (configure_default_store never overrides an existing
+<a href=#433 id=433 data-nosnippet>433</a>        // store) and avoids races between concurrent installers.
+<a href=#434 id=434 data-nosnippet>434</a>        </span><span class="kw">let </span>store = Arc::new(CountingStore::default());
+<a href=#435 id=435 data-nosnippet>435</a>        keyring_core::set_default_store(store.clone());
+<a href=#436 id=436 data-nosnippet>436</a>
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span>backend = KeyringAuthenticationStorage::from_key(<span class="string">"rattler-test-list-keys"</span>);
+<a href=#438 id=438 data-nosnippet>438</a>        backend
+<a href=#439 id=439 data-nosnippet>439</a>            .store(
+<a href=#440 id=440 data-nosnippet>440</a>                <span class="string">"a.example.com"</span>,
+<a href=#441 id=441 data-nosnippet>441</a>                <span class="kw-2">&amp;</span>Authentication::BearerToken(<span class="string">"token-a"</span>.into()),
+<a href=#442 id=442 data-nosnippet>442</a>            )
+<a href=#443 id=443 data-nosnippet>443</a>            .unwrap();
+<a href=#444 id=444 data-nosnippet>444</a>        backend
+<a href=#445 id=445 data-nosnippet>445</a>            .store(
+<a href=#446 id=446 data-nosnippet>446</a>                <span class="string">"b.example.com"</span>,
+<a href=#447 id=447 data-nosnippet>447</a>                <span class="kw-2">&amp;</span>Authentication::BearerToken(<span class="string">"token-b"</span>.into()),
+<a href=#448 id=448 data-nosnippet>448</a>            )
+<a href=#449 id=449 data-nosnippet>449</a>            .unwrap();
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="kw">let </span>keys = backend.list_keys().unwrap();
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="macro">assert_eq!</span>(
+<a href=#453 id=453 data-nosnippet>453</a>            keys,
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="macro">vec!</span>[<span class="string">"a.example.com"</span>.to_string(), <span class="string">"b.example.com"</span>.to_string()]
+<a href=#455 id=455 data-nosnippet>455</a>        );
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="macro">assert_eq!</span>(
+<a href=#457 id=457 data-nosnippet>457</a>            store.state.secret_reads.load(Ordering::SeqCst),
+<a href=#458 id=458 data-nosnippet>458</a>            <span class="number">0</span>,
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="string">"listing keys must not read stored secrets"
+<a href=#460 id=460 data-nosnippet>460</a>        </span>);
+<a href=#461 id=461 data-nosnippet>461</a>
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="comment">// Sanity-check that the counter counts: a credential lookup reads once.
+<a href=#463 id=463 data-nosnippet>463</a>        </span><span class="kw">let </span>auth = backend.get(<span class="string">"a.example.com"</span>).unwrap();
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="macro">assert_eq!</span>(auth, <span class="prelude-val">Some</span>(Authentication::BearerToken(<span class="string">"token-a"</span>.into())));
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="macro">assert_eq!</span>(store.state.secret_reads.load(Ordering::SeqCst), <span class="number">1</span>);
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>}
 </code></pre></div></section></main></body></html>

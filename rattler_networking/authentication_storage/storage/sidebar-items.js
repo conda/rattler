@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AuthenticationStorage","ListedEntry"]};
+window.SIDEBAR_ITEMS = {"struct":["AuthenticationStorage","LazyListedEntry","ListedEntry"]};

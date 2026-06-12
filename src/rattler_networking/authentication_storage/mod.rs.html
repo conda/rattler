@@ -54,7 +54,20 @@
 <a href=#52 id=52 data-nosnippet>52</a>        <span class="prelude-val">Ok</span>(Vec::new())
 <a href=#53 id=53 data-nosnippet>53</a>    }
 <a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Delete the authentication information for the given host
-<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">fn </span>delete(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), AuthenticationStorageError&gt;;
-<a href=#57 id=57 data-nosnippet>57</a>}
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// List the host keys this backend holds, *without* decrypting or fetching
+<a href=#56 id=56 data-nosnippet>56</a>    /// stored secrets.
+<a href=#57 id=57 data-nosnippet>57</a>    ///
+<a href=#58 id=58 data-nosnippet>58</a>    /// The default implementation falls back to [`list`](Self::list), which is
+<a href=#59 id=59 data-nosnippet>59</a>    /// expensive on backends like the macOS keychain where reading each
+<a href=#60 id=60 data-nosnippet>60</a>    /// credential triggers a per-item ACL prompt. Backends that can enumerate
+<a href=#61 id=61 data-nosnippet>61</a>    /// metadata cheaply should override this — that lets callers (e.g. an
+<a href=#62 id=62 data-nosnippet>62</a>    /// interactive picker) show entries to the user without prompting for
+<a href=#63 id=63 data-nosnippet>63</a>    /// every stored password.
+<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">fn </span>list_keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;String&gt;, AuthenticationStorageError&gt; {
+<a href=#65 id=65 data-nosnippet>65</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.list()<span class="question-mark">?</span>.into_iter().map(|(host, <span class="kw">_</span>)| host).collect())
+<a href=#66 id=66 data-nosnippet>66</a>    }
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="doccomment">/// Delete the authentication information for the given host
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">fn </span>delete(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), AuthenticationStorageError&gt;;
+<a href=#70 id=70 data-nosnippet>70</a>}
 </code></pre></div></section></main></body></html>
