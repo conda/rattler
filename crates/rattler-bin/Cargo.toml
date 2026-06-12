@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.12"
+version = "0.1.18"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -44,11 +44,13 @@ clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
 futures-util = { workspace = true }
 hex = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [
   "system-integration",
   "netrc-rs",
@@ -70,7 +72,13 @@ rattler_upload = { workspace = true }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+dunce = { workspace = true }
+regex = { workspace = true }

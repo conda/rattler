@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v3.0.0...rattler_virtual_packages-v3.0.1) - 2026-06-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.4.1...rattler_virtual_packages-v3.0.0) - 2026-06-02
+
+### Added
+
+- add `__cuda_arch` virtual package ([#1863](https://github.com/conda/rattler/pull/1863))
+
 ## [2.4.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.4.0...rattler_virtual_packages-v2.4.1) - 2026-05-19
 
 ### Other

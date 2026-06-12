@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18](https://github.com/conda/rattler/compare/rattler-bin-v0.1.17...rattler-bin-v0.1.18) - 2026-06-11
+
+### Added
+
+- Add JSON output support to search command ([#2500](https://github.com/conda/rattler/pull/2500))
+- support CONDA_OVERRIDE_* in rattler cli ([#2496](https://github.com/conda/rattler/pull/2496))
+
+## [0.1.17](https://github.com/conda/rattler/compare/rattler-bin-v0.1.16...rattler-bin-v0.1.17) - 2026-06-09
+
+### Other
+
+- standardise target prefix across commands ([#2311](https://github.com/conda/rattler/pull/2311))
+
+## [0.1.16](https://github.com/conda/rattler/compare/rattler-bin-v0.1.15...rattler-bin-v0.1.16) - 2026-06-04
+
+### Added
+
+- rattler exec implementation ([#2463](https://github.com/conda/rattler/pull/2463))
+- Add --limit to `rattler inspect` ([#2482](https://github.com/conda/rattler/pull/2482))
+- add support for the brush shell ([#2480](https://github.com/conda/rattler/pull/2480))
+
+## [0.1.15](https://github.com/conda/rattler/compare/rattler-bin-v0.1.14...rattler-bin-v0.1.15) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
+## [0.1.14](https://github.com/conda/rattler/compare/rattler-bin-v0.1.13...rattler-bin-v0.1.14) - 2026-06-03
+
+### Other
+
+- updated the following local packages: rattler_shell, rattler_menuinst, rattler
+
+## [0.1.13](https://github.com/conda/rattler/compare/rattler-bin-v0.1.12...rattler-bin-v0.1.13) - 2026-06-02
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.1.12](https://github.com/conda/rattler/compare/rattler-bin-v0.1.11...rattler-bin-v0.1.12) - 2026-05-19
 
 ### Other

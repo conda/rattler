@@ -484,14 +484,13 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 4,
+                    "repodata_revisions": {
+                        "v4": {
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {
@@ -576,12 +575,11 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 3,
+                    "repodata_revisions": {
+                        "v3": {
                             "n_packages": 1
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {

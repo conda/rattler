@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.47.0...rattler_conda_types-v0.47.1) - 2026-06-09
+
+### Fixed
+
+- (de)serialize `info.repodata_revisions` as dictionary ([#2485](https://github.com/conda/rattler/pull/2485))
+
+## [0.47.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.4...rattler_conda_types-v0.47.0) - 2026-06-02
+
+### Added
+
+- only walk active extras when fetching repodata ([#2447](https://github.com/conda/rattler/pull/2447))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- Merge commit from fork
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.46.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.46.3...rattler_conda_types-v0.46.4) - 2026-05-19
 
 ### Fixed

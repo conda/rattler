@@ -9,6 +9,10 @@ pub struct Opt {
     /// URL of the conda package to inspect (must be a .conda archive)
     #[clap(required = true)]
     url: Url,
+
+    /// Number of files to print
+    #[clap(long, default_value_t = 10)]
+    limit: usize,
 }
 
 pub async fn inspect(opt: Opt) -> miette::Result<()> {
@@ -48,11 +52,11 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
 
     let total = paths_json.paths.len();
     println!("paths: ({total} total)");
-    for entry in paths_json.paths.iter().take(10) {
+    for entry in paths_json.paths.iter().take(opt.limit) {
         println!("  - {}", entry.relative_path.display());
     }
-    if total > 10 {
-        println!("  ... and {} more", total - 10);
+    if total > opt.limit {
+        println!("  ... and {} more", total - opt.limit);
     }
 
     Ok(())

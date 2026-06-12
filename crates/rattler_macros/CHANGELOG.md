@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/conda/rattler/compare/rattler_macros-v1.1.0...rattler_macros-v1.1.1) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
 ## [1.1.0](https://github.com/conda/rattler/compare/rattler_macros-v1.0.14...rattler_macros-v1.1.0) - 2026-05-19
 
 ### Added

@@ -64,6 +64,16 @@ pub struct DependencyOverride {
     pub override_spec: MatchSpec,
 }
 
+/// A [`DependencyOverride`] prepared for fast application: the replacement
+/// spec is pre-rendered to a string so applying the rule does not require
+/// re-serializing the spec for every matching dependency.
+struct PreparedDependencyOverride {
+    /// Matches packages whose dependencies should be overridden.
+    package_matcher: MatchSpec,
+    /// Replaces matching dependencies.
+    override_spec: String,
+}
+
 /// Represents the information required to load available packages into libsolv
 /// for a single channel and platform combination
 #[derive(Clone)]
@@ -305,7 +315,7 @@ pub struct CondaDependencyProvider<'a> {
 
     direct_dependencies: HashSet<NameId>,
 
-    dependency_overrides: HashMap<PackageName, Vec<DependencyOverride>>,
+    dependency_overrides: HashMap<PackageName, Vec<PreparedDependencyOverride>>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -553,11 +563,19 @@ impl<'a> CondaDependencyProvider<'a> {
         }
 
         // Build a lookup table for dependency overrides keyed by target package name.
-        let mut override_map: HashMap<PackageName, Vec<DependencyOverride>> = HashMap::new();
+        let mut override_map: HashMap<PackageName, Vec<PreparedDependencyOverride>> =
+            HashMap::new();
         for rule in dependency_overrides {
-            if let Some(name) = rule.override_spec.name.as_exact() {
-                override_map.entry(name.clone()).or_default().push(rule);
-            }
+            let Some(name) = rule.override_spec.name.as_exact().cloned() else {
+                continue;
+            };
+            override_map
+                .entry(name)
+                .or_default()
+                .push(PreparedDependencyOverride {
+                    override_spec: rule.override_spec.to_string(),
+                    package_matcher: rule.package_matcher,
+                });
         }
 
         Ok(Self {
@@ -592,16 +610,14 @@ impl<'a> CondaDependencyProvider<'a> {
         })
     }
 
-    fn apply_dependency_override(
-        &self,
-        record: &RepoDataRecord,
-        dep_spec: &MatchSpec,
-    ) -> Option<String> {
-        let dep_name = dep_spec.name.as_exact()?;
+    /// Returns the replacement spec for a dependency of `record`, if an
+    /// override rule applies. `dep_name` is the normalized name of the
+    /// dependency's package.
+    fn apply_dependency_override(&self, record: &RepoDataRecord, dep_name: &str) -> Option<&str> {
         let rules = self.dependency_overrides.get(dep_name)?;
         for rule in rules {
             if rule.package_matcher.matches(&record.package_record) {
-                return Some(rule.override_spec.to_string());
+                return Some(&rule.override_spec);
             }
         }
         None
@@ -635,15 +651,40 @@ impl Interner for CondaDependencyProvider<'_> {
     }
 
     fn display_merged_solvables(&self, solvables: &[SolvableId]) -> impl Display + '_ {
+        // When abbreviating, the number of versions shown at the start and end of
+        // the list around the ellipsis.
+        const HEAD: usize = 2;
+        const TAIL: usize = 1;
+
         if solvables.is_empty() {
             return String::new();
         }
 
+        // Collect the distinct versions in sorted order. The same version can
+        // appear multiple times when there are several builds of it.
         let versions = solvables
             .iter()
             .filter_map(|&id| self.pool.resolve_solvable(id).record.version())
             .sorted()
-            .format(" | ");
+            .dedup()
+            .collect::<Vec<_>>();
+
+        // Abbreviate long lists with an ellipsis so a package with many versions
+        // does not flood the error message, similar to micromamba.
+        let versions = if versions.len() > HEAD + TAIL + 1 {
+            versions[..HEAD]
+                .iter()
+                .map(ToString::to_string)
+                .chain(std::iter::once("...".to_string()))
+                .chain(
+                    versions[versions.len() - TAIL..]
+                        .iter()
+                        .map(ToString::to_string),
+                )
+                .join(" | ")
+        } else {
+            versions.iter().map(ToString::to_string).join(" | ")
+        };
 
         let name = self.display_solvable_name(solvables[0]);
         let result = format!("{name} {versions}");
@@ -741,17 +782,17 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
-            // Try to parse the dependency and check for overrides.
-            let dep_str = match MatchSpec::from_str(
-                depends,
-                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
-            ) {
-                Ok(dep_spec) => self
-                    .apply_dependency_override(record, &dep_spec)
-                    .unwrap_or_else(|| depends.clone()),
-                Err(_) => depends.clone(),
+            // Check for overrides. The override map is keyed by the exact
+            // package name, which can be extracted with a cheap scan instead
+            // of parsing the entire matchspec.
+            let dep_str = if self.dependency_overrides.is_empty() {
+                depends.as_str()
+            } else {
+                let dep_name = PackageName::normalized_name_from_matchspec_str(depends);
+                self.apply_dependency_override(record, &dep_name)
+                    .unwrap_or(depends.as_str())
             };
-            let specs = match parse_match_spec(&self.pool, &dep_str, &mut parse_match_spec_cache) {
+            let specs = match parse_match_spec(&self.pool, dep_str, &mut parse_match_spec_cache) {
                 Ok(version_set_id) => version_set_id,
                 Err(e) => {
                     tracing::debug!(

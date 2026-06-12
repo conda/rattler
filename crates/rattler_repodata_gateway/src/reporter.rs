@@ -3,7 +3,7 @@ use std::future::Future;
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
 #[cfg(feature = "gateway")]
-use rattler_conda_types::Channel;
+use rattler_conda_types::{Channel, RepodataRevisions};
 #[cfg(feature = "sparse")]
 use rattler_conda_types::{RepodataRevision, RepodataRevisionInfo};
 #[cfg(feature = "gateway")]
@@ -98,24 +98,24 @@ pub trait Reporter: Send + Sync {
 }
 
 #[cfg(feature = "gateway")]
-pub(crate) fn report_unsupported_repodata_revisions<'a>(
+pub(crate) fn report_unsupported_repodata_revisions(
     reporter: Option<&dyn Reporter>,
     channel: &Channel,
     subdir: &str,
-    revisions: impl IntoIterator<Item = &'a RepodataRevisionInfo>,
+    revisions: &RepodataRevisions,
 ) {
     let Some(reporter) = reporter else {
         return;
     };
 
     let channel = channel.base_url.url().clone().redact().to_string();
-    for revision in revisions {
-        if revision.revision > SUPPORTED_REPODATA_REVISION {
+    for (&revision, metadata) in revisions {
+        if revision > SUPPORTED_REPODATA_REVISION {
             reporter.on_unsupported_repodata_revision(&UnsupportedRepodataRevision {
                 channel: channel.clone(),
                 subdir: subdir.to_string(),
                 supported_revision: SUPPORTED_REPODATA_REVISION,
-                revision: revision.clone(),
+                revision: RepodataRevisionInfo::from_metadata(revision, metadata.clone()),
             });
         }
     }

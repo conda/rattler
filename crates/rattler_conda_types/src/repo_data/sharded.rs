@@ -2,11 +2,12 @@
 
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
-use crate::repo_data::{ChannelRelations, RepodataRevisionInfo, V3Packages};
+use crate::repo_data::{ChannelRelations, RepodataRevisions, V3Packages};
 use indexmap::IndexMap;
 use jiff::Timestamp;
 use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
 use serde::{Deserialize, Serialize};
+use serde_with::{DisplayFromStr, serde_as};
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under
@@ -24,6 +25,7 @@ pub struct ShardedRepodata {
 
 /// Information about a sharded subdirectory that is stored inside the index
 /// file.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShardedSubdirInfo {
     /// The name of the subdirectory
@@ -47,9 +49,11 @@ pub struct ShardedSubdirInfo {
 
     /// Repodata revisions available through this sharded index.
     ///
-    /// See <https://github.com/conda/ceps/pull/146>.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// Serialized as a `vN`-keyed dictionary per the CEP draft
+    /// <https://github.com/conda/ceps/pull/146>.
+    #[serde_as(as = "IndexMap<DisplayFromStr, _>")]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub repodata_revisions: RepodataRevisions,
 
     /// Optional relationships to other channels as defined in
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
@@ -86,7 +90,7 @@ mod tests {
                 base_url: "./".to_string(),
                 shards_base_url: "./shards/".to_string(),
                 created_at: None,
-                repodata_revisions: Vec::new(),
+                repodata_revisions: IndexMap::default(),
                 channel_relations,
             };
             let json = serde_json::to_string(&info).unwrap();

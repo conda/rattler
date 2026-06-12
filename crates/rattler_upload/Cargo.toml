@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.7.2"
+version = "0.7.4"
 edition.workspace = true
 authors = [
   "Wolf Vollprecht <w.vollprecht@gmail.com>",
