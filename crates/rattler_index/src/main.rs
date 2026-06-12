@@ -79,7 +79,7 @@ struct Cli {
     repodata_patch: Option<String>,
 
     /// Disable precondition checks (`ETags`, timestamps) during file operations.
-    /// Use this flag if your S3 backend doesn't fully support conditional requests,
+    /// Use this flag if your S3 or Azure Blob Storage backend doesn't fully support conditional requests,
     /// or if you're certain no concurrent indexing processes are running.
     /// Warning: Disabling this removes protection against concurrent modifications.
     #[cfg(any(feature = "s3", feature = "azure"))]

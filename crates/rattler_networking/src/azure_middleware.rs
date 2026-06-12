@@ -83,8 +83,10 @@ impl AzureMiddleware {
     /// Sign a reqwest `Request` in place using reqsign.
     async fn sign(&self, req: &mut Request) -> MiddlewareResult<()> {
         if !req.headers().contains_key("x-ms-version") {
-            req.headers_mut()
-                .insert("x-ms-version", X_MS_VERSION.parse().unwrap());
+            req.headers_mut().insert(
+                "x-ms-version",
+                http::HeaderValue::from_static(X_MS_VERSION),
+            );
         }
 
         let mut builder = http::Request::builder()
