@@ -595,7 +595,7 @@ fn interactive_pick(
 
 /// Candidate storage keys to look up for a user-supplied host.
 ///
-/// `login` historically writes under two different canonicalizations:
+/// `login` historically writes under two different canonical forms:
 /// - the OAuth path uses [`normalize_login_host`] (e.g. `prefix.dev`)
 /// - the token/basic/S3 path uses [`get_url`] (e.g. `*.prefix.dev`)
 ///
@@ -1372,7 +1372,7 @@ mod tests {
     }
 
     #[test]
-    fn logout_candidate_keys_covers_both_login_canonicalizations() {
+    fn logout_candidate_keys_covers_both_login_canonical_forms() {
         // For top-level-domain-style hosts, both forms must appear so we hit
         // legacy entries stored by either login path.
         let keys = logout_candidate_keys("prefix.dev").unwrap();
