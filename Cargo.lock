@@ -1576,10 +1576,8 @@ dependencies = [
  "itertools 0.14.0",
  "rattler_cache",
  "rattler_conda_types",
- "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
- "reqwest",
  "resolvo",
  "serde_json",
  "tokio",
@@ -5819,9 +5817,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.10.3"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2985c35f7dd19ed00659031b77ce05d1828a12eb9c6b37104da21b09d218fc24"
+checksum = "cbc9b6c092a52fadb381b74d0f859b321ea7b9f4f8365acd7e4947f3a26517aa"
 dependencies = [
  "ahash",
  "bitvec",
