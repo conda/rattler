@@ -944,7 +944,10 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{Sha256, compute_bytes_digest, parse_digest_from_hex};
+    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+    use rattler_digest::{
+        Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
+    };
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
@@ -1556,8 +1559,6 @@ mod test {
     // cache, otherwise the package escapes the cache root
     // (GHSA-h672-p7h7-97v9).
     async fn test_get_or_fetch_rejects_path_traversal_build_string() {
-        use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
-
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
@@ -1926,9 +1927,6 @@ mod test {
     // from the record is part of the cache key, so a stale entry is
     // re-extracted instead of being served for every later package.
     async fn test_get_or_fetch_from_path_record_replaces_stale_package() {
-        use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
-        use rattler_digest::compute_file_digest;
-
         let cpython_archive =
             get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
         let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
