@@ -10,6 +10,11 @@ on:
       - pixi.lock
       - .github/workflows/e2e-prefix-dev-tests.yml
   workflow_dispatch:
+    inputs:
+      skip_upload:
+        description: "Skip the upload steps (bring-up: package already in the channel / upload 403 under investigation)"
+        type: boolean
+        default: false
 
 name: E2E prefix.dev OIDC Tests
 
@@ -40,6 +45,8 @@ jobs:
     env:
       # Enable sccache (picked up by pixi build).
       SCCACHE_GHA_ENABLED: "true"
+      # 'true' only when dispatched with the skip_upload input; empty on push.
+      PREFIX_DEV_E2E_SKIP_UPLOAD: ${{ inputs.skip_upload }}
 
     steps:
       - name: Checkout source code
