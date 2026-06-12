@@ -12,6 +12,9 @@ use rattler_networking::LazyClient;
 use rattler_package_streaming::ExtractError;
 use url::Url;
 
+#[cfg(feature = "gha")]
+use super::gha;
+
 pub(crate) struct DirectUrlQuery {
     /// The url to query
     url: Url,
@@ -35,6 +38,9 @@ pub enum DirectUrlQueryError {
     ConvertSubdir(#[from] ConvertSubdirError),
     #[error("could not determine archive identifier from url filename '{0}'")]
     InvalidFilename(String),
+    #[cfg(feature = "gha")]
+    #[error("GitHub Actions artifact error: {0}")]
+    Gha(#[from] gha::GhaError),
 }
 
 impl DirectUrlQuery {
@@ -54,12 +60,87 @@ impl DirectUrlQuery {
         }
     }
 
+    /// Resolve a `gha://` URL to a local file path by fetching and extracting
+    /// the GitHub Actions artifact, then pre-warm the package cache so the
+    /// installer never needs to actually fetch from the `gha://` URL.
+    #[cfg(feature = "gha")]
+    async fn resolve_gha_url(
+        &self,
+        client: &reqwest_middleware::ClientWithMiddleware,
+    ) -> Result<(IndexJson, CondaArchiveType), DirectUrlQueryError> {
+        let gha_url = gha::GhaUrl::parse(&self.url)?;
+
+        let cache_dir = dirs::cache_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("rattler/cache");
+        let local_path = gha::fetch_gha_package(client, &gha_url, &cache_dir).await?;
+
+        let archive_type = CondaArchiveType::try_from(local_path.as_path()).ok_or_else(|| {
+            DirectUrlQueryError::InvalidFilename(local_path.display().to_string())
+        })?;
+
+        let index_json = match rattler_package_streaming::seek::read_package_file(&local_path) {
+            Ok(index_json) => index_json,
+            Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
+            Err(e) => {
+                return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
+                    e.to_string(),
+                )));
+            }
+        };
+
+        // Pre-populate the package cache by extracting the local .conda file.
+        // The installer uses PackageRecord fields (name/version/build) as the
+        // cache key, which matches what get_or_fetch_from_path derives from the
+        // filename. This means when the installer later calls
+        // get_or_fetch_from_url_with_retry(..., gha_url, ...) it gets a cache
+        // hit and never tries to fetch from the gha:// URL directly.
+        self.package_cache
+            .get_or_fetch_from_path(&local_path, None)
+            .await
+            .map_err(|e| DirectUrlQueryError::IndexJson(std::io::Error::other(e.to_string())))?;
+
+        Ok((index_json, archive_type))
+    }
+
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Vec<Arc<RepoDataRecord>>, DirectUrlQueryError> {
-        let (index_json, archive_type): (IndexJson, CondaArchiveType) = if let Ok(file_path) =
-            self.url.to_file_path()
-        {
+        // Handle gha:// URLs by resolving the artifact to a local file first.
+        // resolve_gha_url also pre-populates the package cache so the installer
+        // gets a cache hit and never attempts to fetch the gha:// URL directly.
+        #[cfg(feature = "gha")]
+        if gha::is_gha_url(&self.url) {
+            let client = self.client.client().clone();
+            let (index_json, archive_type) = self.resolve_gha_url(&client).await?;
+
+            let identifier = DistArchiveIdentifier {
+                identifier: ArchiveIdentifier {
+                    name: index_json.name.as_source().to_string(),
+                    version: index_json.version.to_string(),
+                    build_string: index_json.build.clone(),
+                },
+                archive_type: archive_type.into(),
+            };
+
+            let package_record =
+                PackageRecord::from_index_json(index_json, None, self.sha256, self.md5)?;
+
+            // Keep the original gha:// URL in the record so the MatchSpec URL
+            // filter and solver both see the URL they expect. The installer will
+            // get a PackageCache hit (pre-populated above) and never actually
+            // fetch from gha://.
+            return Ok(vec![Arc::new(RepoDataRecord {
+                package_record,
+                identifier,
+                url: self.url.clone(),
+                channel: None,
+            })]);
+        }
+
+        let (index_json, archive_type): (IndexJson, CondaArchiveType) =
+        // Handle file:// URLs
+        if let Ok(file_path) = self.url.to_file_path() {
             // Determine the type of the archive
             let Some(archive_type) = CondaArchiveType::try_from(&file_path) else {
                 return Err(DirectUrlQueryError::InvalidFilename(

@@ -57,6 +57,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+zip = { workspace = true, features = ["deflate"], optional = true }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
 rattler_cache = { workspace = true }
@@ -109,6 +110,7 @@ native-tls = ['reqwest/native-tls', 'rattler_networking/native-tls', 'rattler_ca
 rustls = ['reqwest/rustls', 'rattler_networking/rustls', 'rattler_cache/rustls', 'rattler_redaction/rustls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
+gha = ["gateway", "zip"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]
