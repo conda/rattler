@@ -4088,7 +4088,8 @@ package_name:
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">client</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">requested_specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">reporter</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">alternative_target_prefix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4332,6 +4333,26 @@ arbitrary code. It is therefor discouraged to enable executing link scripts.</p>
                 <p>An optional :class:<code>InstallerReporter</code> instance that receives progress
     callbacks during installation. When provided, <code>show_progress</code> is ignored.
     Subclass :class:<code>InstallerReporter</code> and override the methods you need.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>alternative_target_prefix</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="str">str</span> | <span title="os.PathLike">PathLike</span>[<span title="str">str</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>An alternative prefix to patch into the hardcoded paths of
+    installed files instead of <code>target_prefix</code>. The environment is still created in
+    <code>target_prefix</code>; only the prefix written into the linked files differs. This is
+    only needed in exceptional cases, for example when the environment will later be
+    relocated to or used from a different path.</p>
               </div>
             </td>
             <td>
