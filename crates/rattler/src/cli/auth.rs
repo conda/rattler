@@ -555,18 +555,20 @@ async fn validate_prefix_dev_token(
 /// Bails with `NotLoggedIn("any host")` on an empty storage and prints a
 /// helpful note when stdin/stdout isn't a TTY (since dialoguer would just
 /// hang or error obscurely in that case).
+/// Returns `Ok(None)` when the user aborts the picker (Ctrl-C / SIGINT); the
+/// caller treats that as a quiet cancel rather than an error.
 #[cfg(feature = "auth-interactive")]
 async fn interactive_pick(
     entries: Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
 ) -> Result<
-    Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
+    Option<Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>>,
     AuthenticationCLIError,
 > {
     use std::io::IsTerminal;
 
     if entries.is_empty() {
         // Caller's empty-match branch turns this into a friendly no-op.
-        return Ok(Vec::new());
+        return Ok(Some(Vec::new()));
     }
 
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
@@ -601,20 +603,32 @@ async fn interactive_pick(
         }
         let _guard = CursorGuard;
 
-        let selection = dialoguer::MultiSelect::new()
+        match dialoguer::MultiSelect::new()
             .with_prompt("Select credentials to log out from (space to toggle, enter to confirm)")
             .items(&items)
             .interact()
-            .map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?;
-
-        Ok::<_, AuthenticationCLIError>(selection.into_iter().map(|i| entries[i].clone()).collect())
+        {
+            Ok(selection) => Ok(Some(
+                selection.into_iter().map(|i| entries[i].clone()).collect(),
+            )),
+            // `console` reports Ctrl-C as an `Interrupted` IO error. Treat it as
+            // a cancel, not a failure, so we don't surface a scary message.
+            Err(e) => {
+                let io: std::io::Error = e.into();
+                if io.kind() == std::io::ErrorKind::Interrupted {
+                    Ok(None)
+                } else {
+                    Err(AuthenticationCLIError::Interactive(io.to_string()))
+                }
+            }
+        }
     });
 
     tokio::select! {
         res = handle => res.map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?,
         _ = tokio::signal::ctrl_c() => {
             let _ = console::Term::stdout().show_cursor();
-            Err(AuthenticationCLIError::Interactive("interrupted".to_string()))
+            Ok(None)
         }
     }
 }
@@ -663,7 +677,11 @@ async fn logout(
         (false, None) => {
             #[cfg(feature = "auth-interactive")]
             {
-                interactive_pick(lazy_entries).await?
+                match interactive_pick(lazy_entries).await? {
+                    Some(picked) => picked,
+                    // User aborted the picker (Ctrl-C) — exit quietly.
+                    None => return Ok(()),
+                }
             }
             #[cfg(not(feature = "auth-interactive"))]
             {
