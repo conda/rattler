@@ -48,7 +48,7 @@ indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
-rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
+rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [

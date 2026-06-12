@@ -642,6 +642,8 @@ pub async fn revoke_tokens(
 ) {
     let client = match reqwest::Client::builder()
         .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
         .build()
     {
         Ok(c) => c,

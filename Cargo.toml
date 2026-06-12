@@ -65,6 +65,7 @@ clap_complete_nushell = "4.5.5"
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }
+dialoguer = { version = "0.12.0", default-features = false }
 criterion = "0.8"
 dashmap = "6.1.0"
 difference = "2.0.0"
