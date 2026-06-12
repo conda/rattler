@@ -8,14 +8,12 @@ use reqwest::Client;
 
 pub const USER_AGENT: &str = concat!("rattler/", env!("CARGO_PKG_VERSION"));
 
-/// Creates an HTTP client with the middleware stack used by the CLI for remote fetches.
+/// Creates the HTTP client with the middleware stack used by the CLI.
 ///
-/// The stack includes [`AuthChallengeMiddleware`] with its default flows: on
-/// a `WWW-Authenticate` challenge from a prefix.dev host, a token is minted
-/// via CI OIDC trusted publishing and the request is replayed — the
-/// zero-configuration wiring for challenge-reactive private-channel reads
-/// (see prefix-dev/pixi#6318). Stored credentials from
-/// [`AuthenticationMiddleware`] always take precedence.
+/// Includes [`AuthChallengeMiddleware`] with its default flows: a
+/// `WWW-Authenticate` challenge from a prefix.dev host mints a token via
+/// CI OIDC and replays the request (prefix-dev/pixi#6318). Stored
+/// credentials from [`AuthenticationMiddleware`] take precedence.
 pub fn create_client_with_middleware() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
     let download_client = Client::builder()
         .no_gzip()

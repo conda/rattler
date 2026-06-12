@@ -3,8 +3,8 @@
 //! request once. Tokens are cached per origin (scheme, host, port).
 //!
 //! [`AuthChallengeMiddleware::default`] registers
-//! [`crate::trusted_publishing::PrefixAuthAmbientFlow`], making the zero
-//! configuration stack authenticate to prefix.dev servers from CI.
+//! [`crate::trusted_publishing::PrefixAuthAmbientFlow`] for zero-config
+//! prefix.dev auth from CI.
 
 use std::{
     collections::HashMap,
@@ -34,9 +34,8 @@ pub struct Challenge {
 
 /// Parse all challenges from every `WWW-Authenticate` header in `headers`.
 ///
-/// Tolerant by design: malformed input yields fewer (or no) challenges,
-/// never an error or panic. Handles multiple comma-separated challenges in
-/// one header value as well as the header appearing multiple times.
+/// Tolerant: malformed input yields fewer challenges, never an error or
+/// panic. Handles multiple challenges per header and repeated headers.
 pub fn parse_challenges(headers: &http::HeaderMap) -> Vec<Challenge> {
     headers
         .get_all(http::header::WWW_AUTHENTICATE)
@@ -46,9 +45,8 @@ pub fn parse_challenges(headers: &http::HeaderMap) -> Vec<Challenge> {
         .collect()
 }
 
-/// An auth scheme is a token of ASCII alphanumerics plus a few safe symbols.
-/// Stricter than RFC 7235's `token` on purpose: it rejects line noise that
-/// would otherwise be misread as a scheme.
+/// Schemes are ASCII alphanumerics plus `-`, `_`, `.`. Stricter than RFC
+/// 7235's `token` to avoid misreading line noise as a scheme.
 fn is_valid_scheme(s: &str) -> bool {
     !s.is_empty()
         && s.chars()
@@ -106,10 +104,9 @@ fn parse_param(s: &str) -> Option<(String, String)> {
         return None;
     }
     let value = if let Some(rest) = value.strip_prefix('"') {
-        // Quoted string: require a clean closing quote with nothing after it
-        // and no unescaped quotes inside; anything else (unterminated, or
-        // trailing garbage like a second space-separated param) is malformed
-        // and yields no param rather than a wrong value.
+        // Quoted string: require a clean closing quote and no unescaped
+        // quotes inside; anything else yields no param rather than a
+        // wrong value.
         let inner = rest.strip_suffix('"')?;
         if malformed_quoted_interior(inner) {
             return None;
@@ -125,11 +122,9 @@ fn parse_param(s: &str) -> Option<(String, String)> {
     Some((key, value))
 }
 
-/// Returns `true` when `s` (the interior of a quoted string, outer quotes
-/// already stripped) contains an unescaped `"` — e.g. two space-separated
-/// quoted params mashed into one value — or ends with a dangling escape,
-/// which means the stripped closing quote was actually escaped (i.e. the
-/// quoted string was never terminated).
+/// True when the quoted-string interior `s` (outer quotes stripped)
+/// contains an unescaped `"` or ends with a dangling escape, i.e. the
+/// stripped closing quote was escaped and the string never terminated.
 fn malformed_quoted_interior(s: &str) -> bool {
     let mut escaped = false;
     for c in s.chars() {
@@ -171,10 +166,9 @@ fn split_commas_respecting_quotes(s: &str) -> Vec<&str> {
 /// invalid while a request is in flight.
 const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// A short-lived bearer token acquired by an [`AuthFlow`] implementation.
+/// A short-lived bearer token acquired by an [`AuthFlow`].
 ///
-/// `Deserialize`-transparent (a raw JSON string body deserializes directly
-/// into it) and `Clone` so it can be shared between the cache and requests.
+/// `Deserialize`-transparent: a raw JSON string deserializes into it.
 #[derive(Clone, Deserialize)]
 #[serde(transparent)]
 pub struct BearerToken(String);
@@ -197,11 +191,11 @@ impl fmt::Debug for BearerToken {
     }
 }
 
-/// Error produced by an [`AuthFlow`] implementation.
+/// Error produced by an [`AuthFlow`].
 ///
-/// Boxed so custom flows can surface arbitrary failures. The middleware only
-/// logs this error and disables further attempts — it never propagates it,
-/// so the caller always observes the server's original response.
+/// Boxed so custom flows can surface arbitrary failures. The middleware
+/// logs it and never propagates it; the caller observes the server's
+/// original response.
 #[derive(Debug, Error)]
 #[error("authentication flow failed: {source}")]
 pub struct AuthFlowError {
@@ -226,22 +220,16 @@ impl AuthFlowError {
 pub trait AuthFlow: Send + Sync + fmt::Debug {
     /// Respond to `challenges` received from `url`.
     ///
-    /// Return `Ok(None)` when this flow does not apply (e.g. unsupported
-    /// scheme, or not running in a CI environment) — the middleware caches
-    /// that negatively and stops asking for the lifetime of the process.
+    /// Return `Ok(None)` when the flow does not apply (unsupported scheme,
+    /// not in CI, untrusted origin); the origin is then negative-cached.
+    /// `url` is the full challenged URL, not just the origin. Flows may be
+    /// invoked concurrently; redundant invocations must be tolerated
+    /// (tokens are cached last-write-wins).
     ///
-    /// `url` is the full URL of the request that was challenged (path and
-    /// query included), not just the server origin. The flow may be invoked
-    /// concurrently by parallel requests racing on the first challenge;
-    /// implementations should tolerate redundant invocations (every returned
-    /// token is cached last-write-wins).
-    ///
-    /// [`crate::AuthChallengeMiddleware`] invokes flows for *every*
-    /// challenged URL, so implementations that forward credentials (CI OIDC
-    /// tokens, ...) MUST validate `url`'s origin themselves before treating
-    /// it as a credential sink — see
-    /// [`crate::trusted_publishing::PrefixAuthAmbientFlow`] for the pattern.
-    /// Return `Ok(None)` for origins outside the flow's trust gate.
+    /// The middleware invokes flows for every challenged URL, so flows
+    /// that forward credentials MUST validate `url`'s origin themselves;
+    /// see [`crate::trusted_publishing::PrefixAuthAmbientFlow`] for the
+    /// pattern.
     async fn acquire_token(
         &self,
         url: &Url,
@@ -283,8 +271,8 @@ struct CachedToken {
 }
 
 impl CachedToken {
-    /// Fails when the token cannot be encoded as an HTTP header value —
-    /// callers must treat that like a failed acquisition, not cache it.
+    /// Fails when the token cannot be encoded as a header value; callers
+    /// must treat that as a failed acquisition, not cache it.
     fn new(token: &BearerToken) -> Result<Self, reqwest::header::InvalidHeaderValue> {
         let mut header =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token.secret()))?;
@@ -301,14 +289,13 @@ impl CachedToken {
     }
 }
 
-/// Cache state for one origin, shared by all clones of one middleware
-/// instance.
+/// Cache state for one origin.
 #[derive(Debug, Default)]
 enum TokenCache {
     /// No acquisition attempted yet.
     #[default]
     Empty,
-    /// Every flow reported "not applicable" or failed — stop asking.
+    /// Every flow declined or failed; stop asking.
     Disabled,
     /// A previously acquired token.
     Token(CachedToken),
@@ -321,9 +308,8 @@ enum CacheLookup {
     Fresh(reqwest::header::HeaderValue),
 }
 
-/// Cache key: one token per (scheme, host, effective port). `None` for URLs
-/// without a host or known port (`data:`, `file:`, ...), which the
-/// middleware passes through untouched.
+/// Cache key: (scheme, host, effective port). `None` for URLs without a
+/// host or known port (`data:`, `file:`), which pass through untouched.
 type OriginKey = (String, String, u16);
 
 fn origin_key(url: &Url) -> Option<OriginKey> {
@@ -334,31 +320,25 @@ fn origin_key(url: &Url) -> Option<OriginKey> {
     ))
 }
 
-/// `reqwest` middleware that acquires a bearer token via its registered
-/// [`AuthFlow`]s when (and only when) a server answers with a
-/// `WWW-Authenticate` challenge, then replays the request once.
+/// `reqwest` middleware that reacts to a `WWW-Authenticate` challenge by
+/// acquiring a bearer token from its registered [`AuthFlow`]s (consulted
+/// in order, first token wins) and replaying the request once.
 ///
-/// On a challenge, the flows are consulted in registration order; the first
-/// one yielding a token wins. Flows decide for themselves whether a URL is
-/// within their trust gate (see the [`AuthFlow`] contract), so one middleware
-/// instance serves every host on the client. Requests that already carry an
-/// `Authorization` header are never touched, so credentials from
-/// [`crate::AuthenticationMiddleware`] always win. (Credentials embedded in
-/// the URL path or query — e.g. conda `/t/<token>` tokens — are not
-/// detected; a challenged request carrying such credentials will still be
-/// replayed with a bearer token.)
+/// Flows gate their own origins (see [`AuthFlow`]), so one instance serves
+/// every host. Requests already carrying `Authorization` are never
+/// touched: credentials from [`crate::AuthenticationMiddleware`] win.
+/// Credentials in the URL path or query (conda `/t/<token>`) are not
+/// detected; such requests are still replayed with a bearer token.
 ///
-/// Acquired tokens are cached per origin — scheme, host, effective port —
-/// with JWT-expiry-aware refresh; a token minted for one origin is never
-/// replayed to another. When no flow yields a token for an origin, that
-/// origin is disabled for the process lifetime. Acquisition failures are
-/// logged, never propagated: the caller then observes the server's original
-/// 401/403 response.
+/// Tokens are cached per origin (scheme, host, effective port) with
+/// JWT-expiry-aware refresh; a token for one origin is never replayed to
+/// another. An origin every flow declines is disabled for the process
+/// lifetime. Flow failures are logged, never propagated: the caller
+/// observes the server's original 401/403 response.
 ///
-/// [`AuthChallengeMiddleware::default`] registers
-/// [`crate::trusted_publishing::PrefixAuthAmbientFlow`], which mints tokens
-/// via CI OIDC for prefix.dev servers — the zero-configuration wiring for
-/// challenge-reactive private-channel reads.
+/// [`Self::default`] registers
+/// [`crate::trusted_publishing::PrefixAuthAmbientFlow`] for zero-config
+/// prefix.dev auth from CI.
 #[derive(Clone, Debug)]
 pub struct AuthChallengeMiddleware {
     flows: Vec<Arc<dyn AuthFlow>>,
@@ -374,12 +354,8 @@ impl Default for AuthChallengeMiddleware {
 }
 
 impl AuthChallengeMiddleware {
-    /// Create a middleware consulting `flows` in order on every
-    /// `WWW-Authenticate` challenge.
-    ///
-    /// Flows are responsible for their own origin gating: a flow that
-    /// forwards credentials must only do so for origins it trusts (see
-    /// [`AuthFlow::acquire_token`]).
+    /// Create a middleware consulting `flows` in order on every challenge.
+    /// Flows gate their own origins (see [`AuthFlow::acquire_token`]).
     pub fn new(flows: Vec<Arc<dyn AuthFlow>>) -> Self {
         Self {
             flows,
@@ -408,8 +384,8 @@ impl AuthChallengeMiddleware {
             .insert(origin, state);
     }
 
-    /// Consult each flow in order and record the outcome for `origin`. The
-    /// origin is disabled when no flow yields a usable token; failures are
+    /// Consult flows in order and cache the outcome for `origin`. No
+    /// usable token from any flow disables the origin; failures are
     /// logged.
     async fn acquire_and_cache(
         &self,
@@ -490,8 +466,7 @@ impl Middleware for AuthChallengeMiddleware {
         };
 
         // Clone before sending so we can replay on a challenge. Fails only
-        // for streaming bodies (absent on the GET-only read path) — then the
-        // response is passed through unmodified.
+        // for streaming bodies; then the response passes through as-is.
         let retry_req = req.try_clone();
         let url = req.url().clone();
         let response = next.clone().run(req, extensions).await?;
@@ -505,8 +480,8 @@ impl Middleware for AuthChallengeMiddleware {
         };
 
         if used_cached_token {
-            // The server rejected a token we believed fresh (revoked early).
-            // Drop it — and its header on the clone — before re-acquiring.
+            // The server rejected a token we believed fresh (revoked
+            // early). Drop it and its header on the clone, then re-acquire.
             self.store_cache(origin.clone(), TokenCache::Empty);
             retry_req
                 .headers_mut()
@@ -725,7 +700,7 @@ mod tests {
 
     #[test]
     fn token68_payload_is_skipped_not_a_param() {
-        // e.g. `Negotiate YII=` — the trailing blob is not a key=value param
+        // `Negotiate YII=`: the trailing blob is not a key=value param
         let challenges = parse_challenges(&header_map(&["Negotiate YII="]));
         assert_eq!(challenges.len(), 1);
         assert_eq!(challenges[0].scheme, "Negotiate");
@@ -976,9 +951,7 @@ mod tests {
         assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 401);
         assert_eq!(client.get(url).send().await.unwrap().status(), 401);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
-        // Disabled = pass-through (next.run is still called), so both requests
-        // reach the server: request 1 triggers the challenge (1 hit), request 2
-        // is passed through unmodified and also reaches the server (1 hit).
+        // Disabled = pass-through: both requests still reach the server.
         assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
 

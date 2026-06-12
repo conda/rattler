@@ -1,18 +1,14 @@
 //! Trusted publishing (via OIDC).
 //!
-//! This module owns the OIDC exchange with the server's mint endpoint and
-//! provides [`TrustedPublishingFlow`], an [`AuthFlow`] implementation that
-//! plugs into [`crate::challenge_middleware`]. Challenge-reactive HTTP
-//! authentication (reacting to `WWW-Authenticate` responses) lives in
+//! Owns the OIDC exchange with the server's mint endpoint and provides
+//! [`TrustedPublishingFlow`] and [`PrefixAuthAmbientFlow`] for
 //! [`crate::challenge_middleware`].
 //!
 //! The flow:
 //! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
-//!    claim. It owns CI-provider detection and returns `None` when no
-//!    supported provider is present.
-//! 2. Exchange that ID token at the server's mint endpoint for a short-lived
-//!    bearer token usable against the server (read or write, depending on
-//!    server policy).
+//!    claim (`None` outside supported CI providers).
+//! 2. Exchange it at the server's mint endpoint for a short-lived bearer
+//!    token.
 
 use std::sync::Arc;
 
@@ -28,14 +24,12 @@ use crate::challenge_middleware::{AuthFlow, AuthFlowError, BearerToken, Challeng
 const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
 /// Knobs for the trusted-publishing flow. Use
-/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults, or
-/// construct directly to point at a different server.
+/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults.
 ///
-/// On GitLab CI, the OIDC ID token must be populated by the runner under an
-/// env var whose name is derived from [`audience`](Self::audience) by
-/// `ambient-id` (uppercasing the audience and replacing non-alphanumeric
-/// characters with `_`, then suffixing `_ID_TOKEN`). For audience
-/// `prefix.dev`, that resolves to `PREFIX_DEV_ID_TOKEN` — set this via the
+/// On GitLab CI the runner must populate the OIDC ID token under an env
+/// var that `ambient-id` derives from [`audience`](Self::audience)
+/// (uppercased, non-alphanumerics to `_`, suffixed `_ID_TOKEN`; audience
+/// `prefix.dev` resolves to `PREFIX_DEV_ID_TOKEN`). Set it via the
 /// `id_tokens` block in `.gitlab-ci.yml`.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingOptions {
@@ -45,10 +39,8 @@ pub struct TrustedPublishingOptions {
     pub audience: String,
     /// Path on the server where the ID token is exchanged for a bearer token.
     ///
-    /// This path is joined onto arbitrary URLs of the challenged server using
-    /// [`Url::join`]. It should start with `/` so that it replaces the full
-    /// URL path; a relative path would resolve against the challenged URL's
-    /// path and could target an unintended endpoint.
+    /// Joined onto challenged URLs with [`Url::join`]; it must start with
+    /// `/` or it would resolve relative to the challenged URL's path.
     /// [`TrustedPublishingFlow::new`] normalizes a missing leading slash.
     pub mint_path: String,
 }
@@ -63,22 +55,15 @@ impl TrustedPublishingOptions {
         }
     }
 
-    /// Options for any trusted-publishing server following the prefix.dev
-    /// convention: the OIDC audience is the server's host name and tokens
-    /// are minted at `/api/oidc/mint_token`.
+    /// Options for a server following the prefix.dev convention: the OIDC
+    /// audience is the server's host name (scoping each ID token to the
+    /// server it is sent to) and tokens are minted at
+    /// `/api/oidc/mint_token`.
     ///
-    /// Returns `None` when `server` has no host (e.g. `data:` URLs).
-    ///
-    /// Deriving the audience from the host scopes each OIDC ID token to the
-    /// server it is sent to: a token minted with `aud = <host>` is only
-    /// redeemable at that host.
-    ///
-    /// This constructor does not validate the scheme or host. Callers
-    /// handling ambient CI credentials must ensure `server` uses `https`
-    /// and apply their own host allow-list before attaching this flow.
-    /// The audience is the URL-normalized host: lowercased, IDN hosts in
-    /// punycode, and without any port. See the struct-level docs for how
-    /// the audience determines the GitLab CI env-var name.
+    /// Returns `None` when `server` has no host. Does not validate scheme
+    /// or host; callers handling ambient CI credentials must enforce
+    /// `https` and an allow-list themselves. The audience is the
+    /// URL-normalized host: lowercased, punycode, no port.
     pub fn for_host(server: &Url) -> Option<Self> {
         Some(Self {
             audience: server.host_str()?.to_string(),
@@ -86,15 +71,13 @@ impl TrustedPublishingOptions {
         })
     }
 
-    /// Options for `server` following the deployed prefix.dev ecosystem
-    /// convention: every prefix.dev deployment (`prefix.dev` and
-    /// `*.prefix.dev`, e.g. `beta.prefix.dev`) validates GitHub OIDC tokens
-    /// against the shared audience `prefix.dev`, while tokens are minted at
-    /// the deployment's own host. Hosts outside that family fall back to
-    /// [`Self::for_host`] (host-derived audience).
+    /// Like [`Self::for_host`], except prefix.dev deployments
+    /// (`prefix.dev` and `*.prefix.dev`) get the shared audience
+    /// `prefix.dev`, which is what they validate GitHub OIDC tokens
+    /// against; tokens are still minted at the deployment's own host.
     ///
-    /// Returns `None` when `server` has no host. The caveats on
-    /// [`Self::for_host`] (scheme validation, allow-listing) apply here too.
+    /// Returns `None` when `server` has no host. The [`Self::for_host`]
+    /// caveats apply.
     pub fn for_server(server: &Url) -> Option<Self> {
         let host = server.host_str()?;
         if host == "prefix.dev" || host.ends_with(".prefix.dev") {
@@ -225,25 +208,23 @@ async fn get_publish_token(
     }
 }
 
-/// [`AuthFlow`] implementation backed by trusted publishing (CI OIDC).
+/// [`AuthFlow`] backed by trusted publishing (CI OIDC).
 ///
-/// Responds only to `Bearer` challenges. On a challenge it asks `ambient-id`
-/// for an OIDC ID token (returns `Ok(None)` outside supported CI providers)
-/// and exchanges it at the challenged host's mint endpoint
-/// ([`TrustedPublishingOptions::mint_path`]).
+/// Responds only to `Bearer` challenges: asks `ambient-id` for an OIDC ID
+/// token (`Ok(None)` outside supported CI providers) and exchanges it at
+/// the challenged host's mint endpoint.
 ///
-/// `client` is used only for the mint exchange; it must not itself layer in
-/// [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
+/// `client` is used only for the mint exchange; it must not itself layer
+/// in [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
 ///
 /// # Security
 ///
-/// `acquire_token` sends the CI provider's OIDC ID token — a live
-/// credential — to `url`'s origin (joined with
-/// [`TrustedPublishingOptions::mint_path`]) **without any origin
-/// validation of its own**. [`crate::AuthChallengeMiddleware`] invokes
-/// flows for every challenged URL, so never register this flow there
-/// directly: wrap it in an origin gate such as [`PrefixAuthAmbientFlow`],
-/// or only drive it with URLs for a single host you trust.
+/// `acquire_token` sends the CI provider's OIDC ID token (a live
+/// credential) to `url`'s origin **without any origin validation of its
+/// own**. Never register this flow directly in the unscoped
+/// [`crate::AuthChallengeMiddleware`]; wrap it in an origin gate such as
+/// [`PrefixAuthAmbientFlow`], or only drive it with URLs of a single
+/// trusted host.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingFlow {
     options: TrustedPublishingOptions,
@@ -293,19 +274,15 @@ fn is_prefix_dev_host(host: &str) -> bool {
     host == "prefix.dev" || host.ends_with(".prefix.dev")
 }
 
-/// Origin-gated [`AuthFlow`] for the prefix.dev family, safe to register in
-/// an unscoped [`crate::AuthChallengeMiddleware`]: it forwards the ambient
-/// CI identity only to origins it trusts.
+/// Origin-gated [`AuthFlow`] for the prefix.dev family, safe to register
+/// in an unscoped [`crate::AuthChallengeMiddleware`]; the default flow
+/// behind [`crate::AuthChallengeMiddleware::default`].
 ///
-/// On a challenge it delegates to an inner flow (by default a
-/// [`TrustedPublishingFlow`] with [`TrustedPublishingOptions::for_prefix_dev`]
-/// options) if and only if the challenged URL is `https` and its host is
-/// `prefix.dev` or a true subdomain. The gate keys on the request URL alone —
-/// server-controlled challenge parameters such as `realm` cannot open it.
-/// Outside CI the inner flow finds no ambient OIDC identity and the flow
-/// reports "not applicable".
-///
-/// This is the default flow behind [`crate::AuthChallengeMiddleware::default`].
+/// Delegates to an inner flow (by default [`TrustedPublishingFlow`] with
+/// [`TrustedPublishingOptions::for_prefix_dev`]) only for `https` URLs on
+/// `prefix.dev` or a true subdomain. The gate keys on the request URL
+/// alone; server-controlled challenge params such as `realm` cannot open
+/// it. Outside CI the inner flow reports "not applicable".
 #[derive(Debug, Clone)]
 pub struct PrefixAuthAmbientFlow {
     inner: Arc<dyn AuthFlow>,
