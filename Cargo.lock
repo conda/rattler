@@ -5287,6 +5287,7 @@ dependencies = [
  "dbus-secret-service-keyring-store",
  "dirs",
  "fs-err",
+ "futures",
  "getrandom 0.4.2",
  "google-cloud-auth",
  "hex",

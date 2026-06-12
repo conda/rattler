@@ -222,9 +222,9 @@ pub trait AuthFlow: Send + Sync + fmt::Debug {
     ///
     /// Return `Ok(None)` when the flow does not apply (unsupported scheme,
     /// not in CI, untrusted origin); the origin is then negative-cached.
-    /// `url` is the full challenged URL, not just the origin. Flows may be
-    /// invoked concurrently; redundant invocations must be tolerated
-    /// (tokens are cached last-write-wins).
+    /// `url` is the full challenged URL, not just the origin. Acquisition
+    /// is single-flight per origin, but flows may still be invoked
+    /// concurrently for different origins.
     ///
     /// The middleware invokes flows for every challenged URL, so flows
     /// that forward credentials MUST validate `url`'s origin themselves;
@@ -301,6 +301,15 @@ enum TokenCache {
     Token(CachedToken),
 }
 
+/// Per-origin cache slot plus the gate serializing its acquisition.
+#[derive(Debug, Default)]
+struct OriginEntry {
+    state: TokenCache,
+    /// Single-flight gate: concurrent challenged requests queue here so
+    /// only one runs the flows; the rest reuse its token.
+    gate: Arc<futures::lock::Mutex<()>>,
+}
+
 /// Outcome of a cache lookup, decoupled from the lock.
 enum CacheLookup {
     Empty,
@@ -332,9 +341,11 @@ fn origin_key(url: &Url) -> Option<OriginKey> {
 ///
 /// Tokens are cached per origin (scheme, host, effective port) with
 /// JWT-expiry-aware refresh; a token for one origin is never replayed to
-/// another. An origin every flow declines is disabled for the process
-/// lifetime. Flow failures are logged, never propagated: the caller
-/// observes the server's original 401/403 response.
+/// another. Acquisition is single-flight per origin: concurrently
+/// challenged requests share one flow invocation. An origin every flow
+/// declines is disabled for the process lifetime. Flow failures are
+/// logged, never propagated: the caller observes the server's original
+/// 401/403 response.
 ///
 /// [`Self::default`] registers
 /// [`crate::trusted_publishing::PrefixAuthAmbientFlow`] for zero-config
@@ -342,7 +353,7 @@ fn origin_key(url: &Url) -> Option<OriginKey> {
 #[derive(Clone, Debug)]
 pub struct AuthChallengeMiddleware {
     flows: Vec<Arc<dyn AuthFlow>>,
-    caches: Arc<Mutex<HashMap<OriginKey, TokenCache>>>,
+    caches: Arc<Mutex<HashMap<OriginKey, OriginEntry>>>,
 }
 
 impl Default for AuthChallengeMiddleware {
@@ -368,7 +379,7 @@ impl AuthChallengeMiddleware {
             .caches
             .lock()
             .expect("auth challenge token cache poisoned");
-        match caches.get(origin) {
+        match caches.get(origin).map(|entry| &entry.state) {
             Some(TokenCache::Disabled) => CacheLookup::Disabled,
             Some(TokenCache::Token(cached)) if cached.is_fresh(SystemTime::now()) => {
                 CacheLookup::Fresh(cached.header.clone())
@@ -381,18 +392,62 @@ impl AuthChallengeMiddleware {
         self.caches
             .lock()
             .expect("auth challenge token cache poisoned")
-            .insert(origin, state);
+            .entry(origin)
+            .or_default()
+            .state = state;
     }
 
-    /// Consult flows in order and cache the outcome for `origin`. No
-    /// usable token from any flow disables the origin; failures are
-    /// logged.
-    async fn acquire_and_cache(
+    fn gate(&self, origin: &OriginKey) -> Arc<futures::lock::Mutex<()>> {
+        self.caches
+            .lock()
+            .expect("auth challenge token cache poisoned")
+            .entry(origin.clone())
+            .or_default()
+            .gate
+            .clone()
+    }
+
+    /// Single-flight token acquisition for `origin`: concurrent challenged
+    /// requests queue on the gate and reuse the winner's token instead of
+    /// minting again. `rejected` is the cached header the server just
+    /// rejected (if any), so only the request holding the stale token
+    /// clears it.
+    ///
+    /// Consults flows in order; no usable token from any flow disables the
+    /// origin. Failures are logged.
+    async fn acquire_serialized(
         &self,
         origin: OriginKey,
         url: &Url,
         challenges: &[Challenge],
+        rejected: Option<&reqwest::header::HeaderValue>,
     ) -> Option<reqwest::header::HeaderValue> {
+        let gate = self.gate(&origin);
+        let _guard = gate.lock().await;
+
+        // Re-check: another request may have settled this origin while we
+        // waited on the gate.
+        {
+            let mut caches = self
+                .caches
+                .lock()
+                .expect("auth challenge token cache poisoned");
+            let entry = caches.entry(origin.clone()).or_default();
+            match &entry.state {
+                TokenCache::Disabled => return None,
+                TokenCache::Token(cached) => {
+                    let ours = rejected.is_some_and(|header| *header == cached.header);
+                    if !ours && cached.is_fresh(SystemTime::now()) {
+                        return Some(cached.header.clone());
+                    }
+                    // The cached token is the one just rejected (or went
+                    // stale); drop it and re-acquire.
+                    entry.state = TokenCache::Empty;
+                }
+                TokenCache::Empty => {}
+            }
+        }
+
         for flow in &self.flows {
             match flow.acquire_token(url, challenges).await {
                 Ok(Some(token)) => match CachedToken::new(&token) {
@@ -458,11 +513,11 @@ impl Middleware for AuthChallengeMiddleware {
             return next.run(req, extensions).await;
         }
 
-        let used_cached_token = if let CacheLookup::Fresh(header) = cached {
-            attach_bearer(&mut req, header);
-            true
+        let used_header = if let CacheLookup::Fresh(header) = cached {
+            attach_bearer(&mut req, header.clone());
+            Some(header)
         } else {
-            false
+            None
         };
 
         // Clone before sending so we can replay on a challenge. Fails only
@@ -479,18 +534,13 @@ impl Middleware for AuthChallengeMiddleware {
             return Ok(response);
         };
 
-        if used_cached_token {
-            // The server rejected a token we believed fresh (revoked
-            // early). Drop it and its header on the clone, then re-acquire.
-            self.store_cache(origin.clone(), TokenCache::Empty);
-            retry_req
-                .headers_mut()
-                .remove(reqwest::header::AUTHORIZATION);
-        }
-
-        let Some(header) = self.acquire_and_cache(origin, &url, &challenges).await else {
+        let Some(header) = self
+            .acquire_serialized(origin, &url, &challenges, used_header.as_ref())
+            .await
+        else {
             return Ok(response);
         };
+        // Replaces a rejected cached header still on the clone, if any.
         attach_bearer(&mut retry_req, header);
         // Replay exactly once; the replayed response is returned as-is even
         // if it is another challenge.
@@ -1094,6 +1144,47 @@ mod tests {
         // Origin B is unaffected by A's negative entry.
         assert_eq!(client.get(b).send().await.unwrap().status(), 200);
         assert_eq!(flow.calls.load(Ordering::SeqCst), 2);
+    }
+
+    /// Flow slow enough that concurrent challenges overlap its acquisition.
+    #[derive(Debug)]
+    struct SlowFlow {
+        token: &'static str,
+        calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for SlowFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            Ok(Some(BearerToken::new(self.token.to_string())))
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrent_challenges_mint_once() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = Arc::new(SlowFlow {
+            token: "abc123",
+            calls: AtomicUsize::new(0),
+        });
+        let client = client_with(AuthChallengeMiddleware::new(vec![flow.clone()]));
+        let url = server_url.join("/channel/repodata.json").unwrap();
+
+        let responses =
+            futures::future::join_all((0..5).map(|_| client.get(url.clone()).send())).await;
+        for response in responses {
+            assert_eq!(response.unwrap().status(), 200);
+        }
+
+        // One acquisition serves every concurrently challenged request.
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

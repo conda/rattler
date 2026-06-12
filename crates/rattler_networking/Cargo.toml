@@ -36,6 +36,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true, optional = true }
 fs-err = { workspace = true }
+futures = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
@@ -85,7 +86,7 @@ windows-native-keyring-store = { workspace = true, optional = true }
 anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "time"] }
 axum = { workspace = true, features = ["json"] }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
