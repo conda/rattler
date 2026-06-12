@@ -20,7 +20,7 @@ cli-tools = ['dep:clap', 'oauth', 'dep:console']
 # Adds an interactive MultiSelect picker to `auth logout` when run without
 # arguments on a TTY. Pulls in `dialoguer`; opt-in so library/headless
 # consumers don't pay for it.
-auth-interactive = ['cli-tools', 'dep:dialoguer']
+auth-interactive = ['cli-tools', 'dep:dialoguer', 'tokio/signal']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]

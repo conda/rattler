@@ -556,7 +556,7 @@ async fn validate_prefix_dev_token(
 /// helpful note when stdin/stdout isn't a TTY (since dialoguer would just
 /// hang or error obscurely in that case).
 #[cfg(feature = "auth-interactive")]
-fn interactive_pick(
+async fn interactive_pick(
     entries: Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
 ) -> Result<
     Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
@@ -584,13 +584,39 @@ fn interactive_pick(
         })
         .collect();
 
-    let selection = dialoguer::MultiSelect::new()
-        .with_prompt("Select credentials to log out from (space to toggle, enter to confirm)")
-        .items(&items)
-        .interact()
-        .map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?;
+    // dialoguer hides the cursor for the duration of the picker but only
+    // restores it on its Enter/Esc/quit paths. The blocking picker runs on a
+    // dedicated thread so we can race it against Ctrl-C: tokio's SIGINT handler
+    // replaces the default (process-killing) one, giving us a chance to put the
+    // cursor back. The `CursorGuard` covers every return path of the picker
+    // itself (normal exit, error, or the SIGINT that `console` re-raises mid
+    // read); the explicit `show_cursor()` in the Ctrl-C branch covers the case
+    // where the signal future wins the race before the guard runs.
+    let handle = tokio::task::spawn_blocking(move || {
+        struct CursorGuard;
+        impl Drop for CursorGuard {
+            fn drop(&mut self) {
+                let _ = console::Term::stdout().show_cursor();
+            }
+        }
+        let _guard = CursorGuard;
 
-    Ok(selection.into_iter().map(|i| entries[i].clone()).collect())
+        let selection = dialoguer::MultiSelect::new()
+            .with_prompt("Select credentials to log out from (space to toggle, enter to confirm)")
+            .items(&items)
+            .interact()
+            .map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?;
+
+        Ok::<_, AuthenticationCLIError>(selection.into_iter().map(|i| entries[i].clone()).collect())
+    });
+
+    tokio::select! {
+        res = handle => res.map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?,
+        _ = tokio::signal::ctrl_c() => {
+            let _ = console::Term::stdout().show_cursor();
+            Err(AuthenticationCLIError::Interactive("interrupted".to_string()))
+        }
+    }
 }
 
 /// Candidate storage keys to look up for a user-supplied host.
@@ -637,7 +663,7 @@ async fn logout(
         (false, None) => {
             #[cfg(feature = "auth-interactive")]
             {
-                interactive_pick(lazy_entries)?
+                interactive_pick(lazy_entries).await?
             }
             #[cfg(not(feature = "auth-interactive"))]
             {
