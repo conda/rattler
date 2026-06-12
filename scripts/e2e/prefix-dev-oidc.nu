@@ -123,6 +123,21 @@ try {
   print "   nothing to delete (or delete refused) — continuing; upload uses --skip-existing"
 }
 
+# -- Step 2b: diagnostic — what can the minted token actually do? -------------
+# An authenticated read with the minted token discriminates failure modes:
+# 200 = token is scoped to the channel (a later write failure means scope),
+# 401/403 = token not authorized for this channel at all (wrong attachment),
+# 404 = channel/namespace mismatch.
+print "== Step 2b: authenticated read probe with the minted token"
+let probe = (
+  try {
+    http get --full --allow-errors --max-time 30sec --headers [Authorization $"Bearer ($minted)"] $"($host)/($channel)/noarch/repodata.json"
+  } catch {
+    fail $"Step 2b: could not reach ($host) — connection/DNS failure"
+  }
+)
+print $"   authenticated GET ($channel)/noarch/repodata.json -> status ($probe.status)"
+
 # -- Step 3: upload through the proactive trusted-publishing path -------------
 must $"Step 3: rattler upload prefix to ($host)/($channel)" "proactive OIDC upload path (rattler_upload audience or write scope)" {
   ^rattler upload prefix --url $host --channel $channel --skip-existing $package_file
