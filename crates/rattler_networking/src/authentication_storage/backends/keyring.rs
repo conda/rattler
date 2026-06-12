@@ -427,6 +427,10 @@ mod tests {
     /// against a regression to the `list()` fallback, which reads every one.
     #[test]
     fn list_keys_does_not_read_secrets() {
+        // The default store is process-global. This must stay the only test
+        // in this binary that installs one: it keeps the real OS keyring out
+        // of every test (configure_default_store never overrides an existing
+        // store) and avoids races between concurrent installers.
         let store = Arc::new(CountingStore::default());
         keyring_core::set_default_store(store.clone());
 
