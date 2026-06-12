@@ -147,6 +147,7 @@ impl JsGateway {
             .names(channels, platforms)
             .execute()
             .await?
+            .names
             .into_iter()
             .map(|name| name.as_source().to_string())
             .collect())

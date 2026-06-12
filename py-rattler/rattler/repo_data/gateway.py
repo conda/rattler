@@ -23,8 +23,8 @@ ChannelRelationsMode = Literal["disabled", "warn", "strict"]
 """How a gateway query should handle [CEP-42] `channel_relations`:
 
 * `'disabled'`: ignore declared relations; use only the user-supplied channels.
-* `'warn'` (default): follow relations recursively; log warnings for cycles
-  and failed fetches of transitively discovered channels.
+* `'warn'` (default): follow relations recursively; tolerate cycles, malformed
+  metadata, and failed fetches of transitively discovered channels.
 * `'strict'`: follow relations recursively; raise on a cycle in the declared
   graph.
 

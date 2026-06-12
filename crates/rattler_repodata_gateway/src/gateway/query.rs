@@ -13,15 +13,87 @@ use rattler_conda_types::{
 use url::Url;
 
 use super::{
-    BarrierCell, GatewayError, GatewayInner, RepoData,
-    channel_expander::{ChannelExpander, ChannelRelationsMode},
-    channel_relations::DEFAULT_MAX_DEPTH,
+    BarrierCell, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
+    channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData},
 };
 use crate::Reporter;
 
-/// Represents a query to execute with a [`Gateway`].
+/// Result of a successful [`RepoDataQuery::execute`]. Carries the
+/// per-source repodata buckets and any non-fatal warnings the caller
+/// may want to surface or log.
+#[derive(Debug, Default)]
+pub struct RepoDataQueryOutput {
+    /// One bucket per input source, in the priority order applied by
+    /// CEP-42 (or the caller's original order when CEP-42 made no
+    /// changes).
+    pub repodata: Vec<RepoData>,
+    /// Non-fatal warnings encountered during the query. Empty when no
+    /// issues were observed.
+    pub warnings: Vec<GatewayWarning>,
+}
+
+impl RepoDataQueryOutput {
+    /// Iterate the per-source [`RepoData`] buckets.
+    pub fn iter(&self) -> std::slice::Iter<'_, RepoData> {
+        self.repodata.iter()
+    }
+
+    /// Number of per-source [`RepoData`] buckets.
+    pub fn len(&self) -> usize {
+        self.repodata.len()
+    }
+
+    /// `true` if no buckets were produced.
+    pub fn is_empty(&self) -> bool {
+        self.repodata.is_empty()
+    }
+
+    /// First [`RepoData`] bucket, or `None` if there are none.
+    pub fn first(&self) -> Option<&RepoData> {
+        self.repodata.first()
+    }
+}
+
+impl IntoIterator for RepoDataQueryOutput {
+    type Item = RepoData;
+    type IntoIter = std::vec::IntoIter<RepoData>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.repodata.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a RepoDataQueryOutput {
+    type Item = &'a RepoData;
+    type IntoIter = std::slice::Iter<'a, RepoData>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.repodata.iter()
+    }
+}
+
+impl std::ops::Index<usize> for RepoDataQueryOutput {
+    type Output = RepoData;
+
+    fn index(&self, index: usize) -> &RepoData {
+        &self.repodata[index]
+    }
+}
+
+/// Result of a successful [`NamesQuery::execute`].
+#[derive(Debug, Default)]
+pub struct NamesQueryOutput {
+    /// Distinct package names contributed by all queried subdirs.
+    pub names: Vec<PackageName>,
+    /// Non-fatal warnings encountered during the query. Empty when no
+    /// issues were observed.
+    pub warnings: Vec<GatewayWarning>,
+}
+
+/// Represents a query to execute with a [`Gateway`](super::Gateway).
 ///
 /// When executed the query will asynchronously load the repodata from all
 /// subdirectories (combination of sources and platforms).
@@ -29,9 +101,9 @@ use crate::Reporter;
 /// Most processing will happen on the background so downloading and parsing
 /// can happen simultaneously.
 ///
-/// Repodata is cached by the [`Gateway`] so executing the same query twice
-/// with the same sources will not result in the repodata being fetched
-/// twice.
+/// Repodata is cached by the [`Gateway`](super::Gateway) so executing the
+/// same query twice with the same sources will not result in the repodata
+/// being fetched twice.
 #[derive(Clone)]
 pub struct RepoDataQuery {
     /// The gateway that manages all resources
@@ -144,7 +216,7 @@ impl RepoDataQuery {
             recursive: false,
             reporter: None,
             channel_relations_mode: ChannelRelationsMode::default(),
-            channel_relations_max_depth: DEFAULT_MAX_DEPTH,
+            channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
         }
     }
 
@@ -159,7 +231,7 @@ impl RepoDataQuery {
     }
 
     /// Maximum CEP-42 recursion depth. Defaults to
-    /// [`DEFAULT_MAX_DEPTH`](super::channel_relations::DEFAULT_MAX_DEPTH).
+    /// [`DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH`](super::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH).
     /// No effect when the mode is [`ChannelRelationsMode::Disabled`].
     #[must_use]
     pub fn channel_relations_max_depth(self, depth: usize) -> Self {
@@ -191,11 +263,12 @@ impl RepoDataQuery {
         }
     }
 
-    /// Execute the query and return the resulting repodata records.
-    pub async fn execute(self) -> Result<Vec<RepoData>, GatewayError> {
+    /// Execute the query and return the resulting repodata records
+    /// along with any non-fatal CEP-42 warnings.
+    pub async fn execute(self) -> Result<RepoDataQueryOutput, GatewayError> {
         // Short circuit if there are no specs
         if self.specs.is_empty() {
-            return Ok(Vec::default());
+            return Ok(RepoDataQueryOutput::default());
         }
 
         let executor = QueryExecutor::new(self)?;
@@ -363,6 +436,7 @@ impl QueryExecutor {
                         Ok(PendingSubdirOk {
                             subdir,
                             kind_url_and_platform: None,
+                            warning: None,
                         })
                     });
                     (SubdirKind::Custom, fut)
@@ -717,7 +791,7 @@ impl QueryExecutor {
     }
 
     /// Run the main event loop.
-    async fn run(mut self) -> Result<Vec<RepoData>, GatewayError> {
+    async fn run(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         self.spawn_direct_url_fetches()?;
 
         loop {
@@ -727,7 +801,10 @@ impl QueryExecutor {
                 // Handle any error that was emitted by the pending subdirs
                 subdir_result = self.pending_subdirs.select_next_some() => {
                     let ok = subdir_result?;
-                    let PendingSubdirOk { subdir, kind_url_and_platform } = ok;
+                    let PendingSubdirOk { subdir, kind_url_and_platform, warning } = ok;
+                    if let Some(w) = warning {
+                        self.expander.push_warning(w);
+                    }
                     self.expand_pattern_specs_for_subdir(subdir.as_ref());
                     if let Some((url, platform)) = kind_url_and_platform {
                         self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
@@ -800,7 +877,7 @@ impl QueryExecutor {
         let policy = if self.expander.strict() {
             FetchErrorPolicy::WrapAsChannelRelationsError
         } else {
-            FetchErrorPolicy::SwallowAndWarn
+            FetchErrorPolicy::SwallowAsWarning
         };
         let fut = build_channel_subdir_future(
             self.gateway.clone(),
@@ -822,12 +899,12 @@ impl QueryExecutor {
         self.spawn_package_fetches_for_new_handle(handle_idx);
     }
 
-    /// Build the final `Vec<RepoData>`. When CEP-42 is enabled AND at
-    /// least one subdir contributed relations, reorder channel entries
-    /// by the resolved priority; otherwise preserve the original
-    /// construction order so mixed channel/custom queries with no
-    /// declared relations are not silently re-tiered.
-    fn finalize_channel_relations(self) -> Result<Vec<RepoData>, GatewayError> {
+    /// Build the final [`RepoDataQueryOutput`]. When CEP-42 is enabled
+    /// AND at least one subdir contributed relations, reorder channel
+    /// entries by the resolved priority; otherwise preserve the
+    /// original construction order so mixed channel/custom queries
+    /// with no declared relations are not silently re-tiered.
+    fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
 
@@ -868,13 +945,21 @@ impl QueryExecutor {
             handles = tagged.into_iter().map(|(_, h)| h).collect();
         }
 
-        let mut final_result: Vec<RepoData> =
+        let mut repodata: Vec<RepoData> =
             Vec::with_capacity(handles.len() + usize::from(direct.is_some()));
         if let Some(d) = direct {
-            final_result.push(d);
+            repodata.push(d);
         }
-        final_result.extend(handles.into_iter().map(|h| h.data));
-        Ok(final_result)
+        repodata.extend(handles.into_iter().map(|h| h.data));
+        Ok(RepoDataQueryOutput {
+            repodata,
+            warnings: self
+                .expander
+                .take_warnings()
+                .into_iter()
+                .map(GatewayWarning::from)
+                .collect(),
+        })
     }
 }
 
@@ -884,8 +969,9 @@ impl QueryExecutor {
 enum FetchErrorPolicy {
     /// Surface the error to the caller (user-supplied channels).
     Propagate,
-    /// Log via `tracing::warn!` and treat the subdir as empty.
-    SwallowAndWarn,
+    /// Emit a [`ChannelRelationsWarning::DiscoveryFetchFailed`] and
+    /// treat the subdir as empty.
+    SwallowAsWarning,
     /// Wrap in [`GatewayError::ChannelRelationsError`] (Strict mode for
     /// transitively discovered channels).
     WrapAsChannelRelationsError,
@@ -905,19 +991,22 @@ fn build_channel_subdir_future(
     policy: FetchErrorPolicy,
 ) -> BoxFuture<PendingSubdirResult> {
     box_future(async move {
-        let subdir =
+        let (subdir, warning) =
             fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
         barrier.set(subdir.clone()).expect("subdir was set twice");
         Ok(PendingSubdirOk {
             subdir,
             kind_url_and_platform: Some((url, platform)),
+            warning,
         })
     })
 }
 
 /// Fetch a channel subdir and apply `policy` to any error. Shared core
 /// for the channel-fetch futures spawned by both `RepoDataQuery` and
-/// `NamesQuery`.
+/// `NamesQuery`. Returns the resolved subdir plus an optional
+/// [`ChannelRelationsWarning`] when the policy swallowed a fetch
+/// failure.
 async fn fetch_subdir_with_policy(
     gateway: &GatewayInner,
     channel: &Channel,
@@ -925,26 +1014,27 @@ async fn fetch_subdir_with_policy(
     url: &ChannelUrl,
     reporter: Option<Arc<dyn Reporter>>,
     policy: FetchErrorPolicy,
-) -> Result<Arc<Subdir>, GatewayError> {
+) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match gateway
         .get_or_create_subdir(channel, platform, reporter)
         .await
     {
-        Ok(subdir) => Ok(subdir),
+        Ok(subdir) => Ok((subdir, None)),
         Err(err) => apply_fetch_error_policy(err, url, platform, policy),
     }
 }
 
 /// Translate a subdir fetch error into the policy-prescribed outcome.
-/// Returns `Ok(Subdir::NotFound)` for `SwallowAndWarn` so callers can
-/// proceed as if the subdir were absent; returns `Err` for `Propagate`
-/// or `WrapAsChannelRelationsError`.
+/// Returns `Ok((Subdir::NotFound, Some(warning)))` for
+/// `SwallowAsWarning` so callers can proceed as if the subdir were
+/// absent; returns `Err` for `Propagate` or
+/// `WrapAsChannelRelationsError`.
 fn apply_fetch_error_policy(
     err: GatewayError,
     url: &ChannelUrl,
     platform: Platform,
     policy: FetchErrorPolicy,
-) -> Result<Arc<Subdir>, GatewayError> {
+) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
     match policy {
         FetchErrorPolicy::Propagate => Err(err),
         FetchErrorPolicy::WrapAsChannelRelationsError => {
@@ -953,23 +1043,26 @@ fn apply_fetch_error_policy(
                  `{url}` for platform `{platform}`: {err}"
             )))
         }
-        FetchErrorPolicy::SwallowAndWarn => {
-            tracing::warn!(
-                "failed to fetch transitively discovered channel \
-                 `{url}` for platform `{platform}`: {err}. \
-                 treating the subdir as empty."
-            );
-            Ok(Arc::new(Subdir::NotFound))
+        FetchErrorPolicy::SwallowAsWarning => {
+            let warning = ChannelRelationsWarning::DiscoveryFetchFailed {
+                url: url.clone(),
+                platform,
+                error: err.to_string(),
+            };
+            Ok((Arc::new(Subdir::NotFound), Some(warning)))
         }
     }
 }
 
-/// Outcome of a pending subdir fetch. The key is `Some` for channel
-/// sources (used to register CEP-42 relations) and `None` for custom
-/// sources.
+/// Outcome of a pending subdir fetch. `kind_url_and_platform` is
+/// `Some` for channel sources (used to register CEP-42 relations) and
+/// `None` for custom sources. `warning` carries a fetch-failure
+/// warning when the [`FetchErrorPolicy::SwallowAsWarning`] policy was
+/// applied.
 struct PendingSubdirOk {
     subdir: Arc<Subdir>,
     kind_url_and_platform: Option<(ChannelUrl, Platform)>,
+    warning: Option<ChannelRelationsWarning>,
 }
 
 /// Push a future onto `pending_records` that awaits the subdir's
@@ -1017,7 +1110,7 @@ type PendingRecordsResult =
     Result<(AccumulateTarget, PendingRequest, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
-    type Output = Result<Vec<RepoData>, GatewayError>;
+    type Output = Result<RepoDataQueryOutput, GatewayError>;
     type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
@@ -1025,7 +1118,7 @@ impl IntoFuture for RepoDataQuery {
     }
 }
 
-/// Represents a query for package names to execute with a [`Gateway`].
+/// Represents a query for package names to execute with a [`Gateway`](super::Gateway).
 ///
 /// When executed the query will asynchronously load the package names from all
 /// subdirectories (combination of channels and platforms).
@@ -1065,7 +1158,7 @@ impl NamesQuery {
 
             reporter: None,
             channel_relations_mode: ChannelRelationsMode::default(),
-            channel_relations_max_depth: DEFAULT_MAX_DEPTH,
+            channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
         }
     }
 
@@ -1091,7 +1184,7 @@ impl NamesQuery {
     }
 
     /// Maximum CEP-42 recursion depth. Defaults to
-    /// [`DEFAULT_MAX_DEPTH`](super::channel_relations::DEFAULT_MAX_DEPTH).
+    /// [`DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH`](super::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH).
     /// No effect when the mode is [`ChannelRelationsMode::Disabled`].
     #[must_use]
     pub fn channel_relations_max_depth(self, depth: usize) -> Self {
@@ -1101,8 +1194,9 @@ impl NamesQuery {
         }
     }
 
-    /// Execute the query and return the package names.
-    pub async fn execute(self) -> Result<Vec<PackageName>, GatewayError> {
+    /// Execute the query and return the package names along with any
+    /// non-fatal CEP-42 warnings.
+    pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
         let mut expander = ChannelExpander::new(
             self.channel_relations_mode,
             self.channel_relations_max_depth,
@@ -1129,11 +1223,14 @@ impl NamesQuery {
         let policy = if strict {
             FetchErrorPolicy::WrapAsChannelRelationsError
         } else {
-            FetchErrorPolicy::SwallowAndWarn
+            FetchErrorPolicy::SwallowAsWarning
         };
 
         while let Some(result) = pending.next().await {
-            let (url, platform, subdir) = result?;
+            let (url, platform, subdir, warning) = result?;
+            if let Some(w) = warning {
+                expander.push_warning(w);
+            }
             if let Some(subdir_names) = subdir.package_names() {
                 names.extend(subdir_names);
             }
@@ -1156,14 +1253,30 @@ impl NamesQuery {
             }
         }
 
-        Ok(names
+        let names = names
             .into_iter()
             .map(PackageName::try_from)
-            .collect::<Result<Vec<PackageName>, _>>()?)
+            .collect::<Result<Vec<PackageName>, _>>()?;
+        Ok(NamesQueryOutput {
+            names,
+            warnings: expander
+                .take_warnings()
+                .into_iter()
+                .map(GatewayWarning::from)
+                .collect(),
+        })
     }
 }
 
-type NamesFetchResult = Result<(ChannelUrl, Platform, Arc<Subdir>), GatewayError>;
+type NamesFetchResult = Result<
+    (
+        ChannelUrl,
+        Platform,
+        Arc<Subdir>,
+        Option<ChannelRelationsWarning>,
+    ),
+    GatewayError,
+>;
 
 /// Build a future that fetches a channel subdir for `NamesQuery` and
 /// applies `policy` to any fetch error.
@@ -1176,14 +1289,14 @@ fn spawn_names_fetch(
     policy: FetchErrorPolicy,
 ) -> BoxFuture<NamesFetchResult> {
     box_future(async move {
-        let subdir =
+        let (subdir, warning) =
             fetch_subdir_with_policy(&gateway, &channel, platform, &url, reporter, policy).await?;
-        Ok((url, platform, subdir))
+        Ok((url, platform, subdir, warning))
     })
 }
 
 impl IntoFuture for NamesQuery {
-    type Output = Result<Vec<PackageName>, GatewayError>;
+    type Output = Result<NamesQueryOutput, GatewayError>;
     type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {

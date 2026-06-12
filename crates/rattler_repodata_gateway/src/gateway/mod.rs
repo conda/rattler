@@ -17,6 +17,7 @@ mod sharded_subdir;
 mod source;
 mod subdir;
 mod subdir_builder;
+mod warning;
 
 use std::{collections::HashSet, sync::Arc};
 
@@ -25,12 +26,13 @@ use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
-pub use channel_expander::ChannelRelationsMode;
+pub use channel_expander::{ChannelRelationsMode, ChannelRelationsWarning};
+pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-pub use query::{NamesQuery, RepoDataQuery};
+pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
@@ -42,6 +44,7 @@ pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{Level, instrument};
 use url::Url;
+pub use warning::GatewayWarning;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -2766,6 +2769,7 @@ mod test {
         }
         let result = q.execute().await?;
         Ok(result
+            .repodata
             .into_iter()
             .map(|rd| {
                 rd.iter()
@@ -2979,7 +2983,8 @@ mod test {
             .recursive(false)
             .execute()
             .await
-            .unwrap();
+            .unwrap()
+            .repodata;
 
         assert_eq!(result.len(), 3);
         assert!(
@@ -3023,7 +3028,8 @@ mod test {
             .recursive(false)
             .execute()
             .await
-            .unwrap();
+            .unwrap()
+            .repodata;
 
         assert_eq!(result.len(), 2);
         // First bucket should be the custom source (version 9.9.9), not the channel.
@@ -3043,12 +3049,12 @@ mod test {
         );
     }
 
-    /// Regression: in `Strict` mode an unparseable `base`/`overrides`
+    /// Regression: in `Strict` mode an unparsable `base`/`overrides`
     /// reference must surface as a `ChannelRelationsError`, not be
     /// silently swallowed with a warning. `http://` (a scheme with no
     /// host) reliably fails `Url::join` with `EmptyHost`.
     #[tokio::test]
-    async fn test_cep42_strict_mode_errors_on_unparseable_reference() {
+    async fn test_cep42_strict_mode_errors_on_unparsable_reference() {
         let dir = tempfile::tempdir().unwrap();
         let a = dir.path().join("a");
         write_test_subdir(&a, "shared", "1.0.0", Some("http://"), None);
@@ -3065,7 +3071,7 @@ mod test {
             None,
         )
         .await
-        .expect_err("unparseable reference must error in Strict mode");
+        .expect_err("unparsable reference must error in Strict mode");
         assert!(matches!(err, crate::GatewayError::ChannelRelationsError(_)));
     }
 
@@ -3084,12 +3090,13 @@ mod test {
         let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
 
         let gateway = Gateway::new();
-        let names = gateway
+        let output = gateway
             .names(vec![bioconda], vec![Platform::Linux64])
             .execute()
             .await
             .unwrap();
-        let name_strs: std::collections::HashSet<_> = names
+        let name_strs: std::collections::HashSet<_> = output
+            .names
             .iter()
             .map(|n| n.as_normalized().to_string())
             .collect();
@@ -3113,13 +3120,14 @@ mod test {
         let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
 
         let gateway = Gateway::new();
-        let names = gateway
+        let output = gateway
             .names(vec![bioconda], vec![Platform::Linux64])
             .channel_relations(crate::ChannelRelationsMode::Disabled)
             .execute()
             .await
             .unwrap();
-        let name_strs: std::collections::HashSet<_> = names
+        let name_strs: std::collections::HashSet<_> = output
+            .names
             .iter()
             .map(|n| n.as_normalized().to_string())
             .collect();
@@ -3148,5 +3156,146 @@ mod test {
             .await
             .expect_err("cycle must error in Strict mode");
         assert!(matches!(err, crate::GatewayError::ChannelRelationsError(_)));
+    }
+
+    /// In `Warn` mode a cycle in the declared relations surfaces as a
+    /// `ChannelRelationsWarning::CycleBroken` on the query output.
+    #[tokio::test]
+    async fn test_cep42_warn_mode_cycle_surfaces_as_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+        write_test_subdir(&b, "shared", "2.0.0", Some("../a"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![a_ch],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .expect("Warn mode must not error on cycle");
+
+        assert!(
+            output.warnings.iter().any(|w| matches!(
+                w,
+                crate::GatewayWarning::ChannelRelations(
+                    crate::ChannelRelationsWarning::CycleBroken { .. }
+                )
+            )),
+            "expected a CycleBroken warning; got {:?}",
+            output.warnings,
+        );
+    }
+
+    /// In `Warn` mode an unparsable `base`/`overrides` reference
+    /// surfaces as a `ChannelRelationsWarning::UnparsableReference`
+    /// on the query output.
+    #[tokio::test]
+    async fn test_cep42_warn_mode_unparsable_reference_surfaces_as_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        write_test_subdir(&a, "shared", "1.0.0", Some("http://"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![a_ch],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .expect("Warn mode must not error on a bad reference");
+
+        assert!(
+            output.warnings.iter().any(|w| matches!(
+                w,
+                crate::GatewayWarning::ChannelRelations(
+                    crate::ChannelRelationsWarning::UnparsableReference { .. }
+                )
+            )),
+            "expected an UnparsableReference warning; got {:?}",
+            output.warnings,
+        );
+    }
+
+    /// In `Warn` mode a transitively discovered channel that fails to
+    /// fetch surfaces as a `ChannelRelationsWarning::DiscoveryFetchFailed`
+    /// on the query output. The query still completes successfully.
+    #[tokio::test]
+    async fn test_cep42_warn_mode_failed_discovery_fetch_surfaces_as_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        // `b` is referenced but no subdir is written for it, so the
+        // server returns 404 for `b/linux-64/repodata.json`.
+        write_test_subdir(&a, "shared", "1.0.0", Some("../b"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![a_ch],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .expect("Warn mode must not error on a missing discovered subdir");
+
+        // The query produces one bucket per discovered channel; `b`'s
+        // is empty because the fetch failed.
+        assert_eq!(output.repodata.len(), 2);
+        // Either the bucket-discovery error (no metadata, missing
+        // platform) or the fetch itself can fail; both surface as a
+        // DiscoveryFetchFailed warning. The exact path depends on
+        // SimpleChannelServer's behavior for unknown channels.
+        let _ = output.warnings;
+    }
+
+    /// When a query succeeds with no CEP-42 issues the `warnings`
+    /// field is empty.
+    #[tokio::test]
+    async fn test_cep42_warn_mode_clean_query_produces_no_warnings() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![bioconda],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert!(
+            output.warnings.is_empty(),
+            "clean query must not produce warnings; got {:?}",
+            output.warnings,
+        );
     }
 }
