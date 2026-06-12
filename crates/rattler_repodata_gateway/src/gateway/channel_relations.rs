@@ -5,7 +5,7 @@
 //! channel priority order.
 //!
 //! Steps:
-//! 1. BFS-discover transitively related channels up to [`DEFAULT_MAX_DEPTH`].
+//! 1. BFS-discover transitively related channels up to [`DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH`].
 //! 2. Build a priority DAG where `from -> to` means `from` has strictly
 //!    higher priority than `to`. Edges come from three sources:
 //!    consecutive user-listed channels (user wins), each channel's
@@ -14,9 +14,9 @@
 //! 3. Drop any relation edge that contradicts the user's explicit
 //!    ordering; user ordering always wins per CEP.
 //! 4. Topologically sort, breaking any cycle by dropping back-edges
-//!    (recorded in [`Resolution::broken_cycle_edges`], with a
-//!    `tracing::warn!`). Resolution always succeeds so bad channel
-//!    metadata can't block package resolution.
+//!    (recorded in [`Resolution::broken_cycle_edges`]). Resolution
+//!    always succeeds so bad channel metadata can't block package
+//!    resolution.
 //!
 //! [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
 
@@ -27,7 +27,7 @@ use std::{
 
 /// Default CEP-42 relation-traversal depth. Each hop through a `base`
 /// or `overrides` relation costs one.
-pub const DEFAULT_MAX_DEPTH: usize = 10;
+pub const DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH: usize = 10;
 
 /// Relations declared by a single channel. Mirrors the shape of
 /// [`rattler_conda_types::ChannelRelations`] but generic over the
@@ -75,8 +75,9 @@ pub struct Resolution<K> {
     /// Relation edges dropped because they contradicted the user's
     /// explicit ordering.
     pub ignored_edges: Vec<PriorityEdge<K>>,
-    /// Relation edges dropped to break a cycle. When non-empty a
-    /// `tracing::warn!` is also emitted.
+    /// Relation edges dropped to break a cycle. Callers translate this
+    /// into a [`ChannelRelationsWarning::CycleBroken`](super::channel_expander::ChannelRelationsWarning::CycleBroken)
+    /// when the field is non-empty.
     pub broken_cycle_edges: Vec<PriorityEdge<K>>,
     /// Channels discovered during BFS, in discovery order.
     pub channels: Vec<K>,
@@ -112,15 +113,6 @@ where
         broken_cycle_edges,
         edges: kept_edges,
     } = TopoResult::new(&channels, edges);
-
-    if !broken_cycle_edges.is_empty() {
-        tracing::warn!(
-            "dropped {} channel-relation edge(s) to break a cycle; \
-             this indicates malformed channel metadata. broken edges: {:?}",
-            broken_cycle_edges.len(),
-            broken_cycle_edges,
-        );
-    }
 
     Resolution {
         order,
@@ -492,7 +484,7 @@ mod tests {
     }
 
     fn resolve<'a>(user: &[&'a str], reg: &ChannelRegistry<&'a str>) -> Resolution<&'a str> {
-        resolve_channel_priority(user, reg, DEFAULT_MAX_DEPTH)
+        resolve_channel_priority(user, reg, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH)
     }
 
     #[test]
@@ -864,24 +856,23 @@ mod tests {
         }
     }
 
-    /// Asserts that `tracing::warn!` is emitted when a cycle is broken.
+    /// A broken cycle surfaces via `Resolution::broken_cycle_edges`,
+    /// which callers translate into a typed warning.
     #[test]
-    #[tracing_test::traced_test]
-    fn warning_is_logged_when_a_cycle_is_broken() {
+    fn broken_cycle_edges_are_reported_in_the_resolution() {
         let reg = registry([("a", Some("b"), None), ("b", Some("a"), None)]);
-        let _ = resolve(&["a"], &reg);
-        assert!(logs_contain("break a cycle"));
+        let r = resolve(&["a"], &reg);
+        assert!(!r.broken_cycle_edges.is_empty());
     }
 
-    /// No warning is emitted when the graph is cycle-free.
+    /// `broken_cycle_edges` is empty when the graph is cycle-free.
     #[test]
-    #[tracing_test::traced_test]
-    fn no_warning_on_a_cycle_free_graph() {
+    fn no_broken_edges_on_a_cycle_free_graph() {
         let reg = registry([
             ("bioconda", Some("conda-forge"), None),
             ("conda-forge", None, None),
         ]);
-        let _ = resolve(&["bioconda"], &reg);
-        assert!(!logs_contain("break a cycle"));
+        let r = resolve(&["bioconda"], &reg);
+        assert!(r.broken_cycle_edges.is_empty());
     }
 }
