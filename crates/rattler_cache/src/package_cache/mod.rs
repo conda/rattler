@@ -429,52 +429,25 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given path if the package could not be found in the
     /// cache.
+    ///
+    /// If a [`PackageRecord`] is provided, the cache key is derived from the
+    /// record, which includes its hashes. This ensures that packages that
+    /// share the same name, version and build string but have different
+    /// content do not collide in the cache. Otherwise, the cache key is
+    /// derived from the package filename only.
     pub async fn get_or_fetch_from_path(
         &self,
         path: &Path,
+        record: Option<&PackageRecord>,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = CondaArchiveIdentifier::try_from_path(&path_buf)
-            .unwrap()
-            .into();
-        if self.cache_origin {
-            cache_key = cache_key.with_path(path);
-        }
-
-        self.get_or_fetch(
-            cache_key,
-            move |destination| {
-                let path_buf = path_buf.clone();
-                async move {
-                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
-                        .await
-                        .map(|_| ())
-                }
-            },
-            reporter,
-        )
-        .await
-    }
-
-    /// Returns the directory that contains the specified package.
-    ///
-    /// This is a convenience wrapper around `get_or_fetch` which fetches the
-    /// package from the given path if the package could not be found in the
-    /// cache.
-    ///
-    /// Unlike [`PackageCache::get_or_fetch_from_path`], the cache key is
-    /// derived from the package record, which includes its hashes. This
-    /// ensures that packages that share the same name, version and build
-    /// string but have different content do not collide in the cache.
-    pub async fn get_or_fetch_from_path_with_record(
-        &self,
-        record: &PackageRecord,
-        path: &Path,
-        reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheMetadata, PackageCacheError> {
-        let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = record.into();
+        let mut cache_key: CacheKey = match record {
+            Some(record) => record.into(),
+            None => CondaArchiveIdentifier::try_from_path(&path_buf)
+                .unwrap()
+                .into(),
+        };
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -1513,7 +1486,7 @@ mod test {
 
         // Get the file to the cache
         let cache_a_lock = cache_a
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1521,7 +1494,7 @@ mod test {
 
         // Get the file to the cache
         let cache_b_lock = cache_b
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1537,7 +1510,7 @@ mod test {
 
         // Get the file to the cache
         let cache_c_lock = cache_c
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1558,7 +1531,7 @@ mod test {
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
 
         let cache_metadata_with_origin_hash = package_cache_with_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1566,7 +1539,7 @@ mod test {
         assert_eq!(file_name, "clobber-python-0.1.0-cpython");
 
         let cache_metadata_without_origin_hash = package_cache_without_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1952,7 +1925,7 @@ mod test {
     // but have different content must not collide in the cache: the sha256
     // from the record is part of the cache key, so a stale entry is
     // re-extracted instead of being served for every later package.
-    async fn test_get_or_fetch_from_path_with_record_replaces_stale_package() {
+    async fn test_get_or_fetch_from_path_record_replaces_stale_package() {
         use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
         use rattler_digest::compute_file_digest;
 
@@ -1976,11 +1949,7 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         let cache_metadata = cache
-            .get_or_fetch_from_path_with_record(
-                &record_for(&cpython_archive),
-                &cpython_archive,
-                None,
-            )
+            .get_or_fetch_from_path(&cpython_archive, Some(&record_for(&cpython_archive)), None)
             .await
             .unwrap();
         assert_eq!(cache_metadata.revision(), 1);
@@ -1994,7 +1963,7 @@ mod test {
         // re-extract instead of serving the stale cpython content.
         let pypy_record = record_for(&pypy_archive);
         let cache_metadata = cache
-            .get_or_fetch_from_path_with_record(&pypy_record, &pypy_archive, None)
+            .get_or_fetch_from_path(&pypy_archive, Some(&pypy_record), None)
             .await
             .unwrap();
         assert_eq!(
