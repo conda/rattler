@@ -422,12 +422,13 @@ impl AuthenticationStorage {
     /// host without touching shadowed copies in other backends. For deleting
     /// every backend's copy of a host, see [`delete`](Self::delete).
     pub fn delete_entry(&self, host: &str, source: &str) -> Result<()> {
-        // Invalidate the cache. The cache is keyed by host, not (host, source),
-        // so this also clears any stale read of a shadowed copy — `get()` will
-        // re-resolve on the next call.
+        // Drop the host from the cache entirely. Inserting `None` instead
+        // would be read back by `get()` as a definitive "no credentials"
+        // answer, hiding a shadowed copy in another backend; removing the
+        // key forces `get()` to re-resolve against the backends.
         {
             let mut cache = self.cache.lock().unwrap();
-            cache.insert(host.to_string(), None);
+            cache.remove(host);
         }
 
         let backend = self
