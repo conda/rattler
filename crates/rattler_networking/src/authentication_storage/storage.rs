@@ -563,4 +563,50 @@ mod tests {
             )]
         );
     }
+
+    /// After surgically deleting one backend's copy via `delete_entry`,
+    /// `get()` must re-resolve against the backends and return the shadowed
+    /// copy from the next backend, not a stale cached result.
+    #[test]
+    fn delete_entry_unshadows_other_backends_for_get() {
+        let mut storage = AuthenticationStorage::empty();
+        let backend_a = Arc::new(MemoryStorage::with_name("a"));
+        let backend_b = Arc::new(MemoryStorage::with_name("b"));
+        storage.add_backend(backend_a.clone());
+        storage.add_backend(backend_b.clone());
+
+        backend_a
+            .store("prefix.dev", &Authentication::BearerToken("tok-a".into()))
+            .unwrap();
+        backend_b
+            .store("prefix.dev", &Authentication::BearerToken("tok-b".into()))
+            .unwrap();
+
+        // Prime the cache with the active (backend A) copy.
+        assert_eq!(
+            storage.get("prefix.dev").unwrap(),
+            Some(Authentication::BearerToken("tok-a".into()))
+        );
+
+        storage
+            .delete_entry("prefix.dev", &backend_a.name())
+            .unwrap();
+
+        assert_eq!(
+            storage.get("prefix.dev").unwrap(),
+            Some(Authentication::BearerToken("tok-b".into())),
+            "shadowed copy must become visible after the active copy is deleted"
+        );
+    }
+
+    #[test]
+    fn entry_operations_reject_unknown_source() {
+        let storage = storage_with("example.com", Authentication::BearerToken("t".into()));
+        assert!(storage.get_entry("example.com", "no-such-backend").is_err());
+        assert!(
+            storage
+                .delete_entry("example.com", "no-such-backend")
+                .is_err()
+        );
+    }
 }

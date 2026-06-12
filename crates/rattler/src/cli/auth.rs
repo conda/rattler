@@ -1560,4 +1560,48 @@ mod tests {
             "both backends should be cleared, including the shadowed copy"
         );
     }
+
+    #[test]
+    fn logout_args_reject_host_combined_with_all() {
+        assert!(LogoutArgs::try_parse_from(["logout", "prefix.dev", "--all"]).is_err());
+    }
+
+    /// Without the interactive picker, a bare `auth logout` has nothing
+    /// sensible to do — clap must reject it instead of silently no-opping.
+    #[cfg(not(feature = "auth-interactive"))]
+    #[test]
+    fn logout_args_require_host_or_all_without_interactive() {
+        assert!(LogoutArgs::try_parse_from(["logout"]).is_err());
+    }
+
+    #[cfg(feature = "auth-interactive")]
+    #[test]
+    fn logout_args_allow_bare_invocation_with_interactive() {
+        assert!(LogoutArgs::try_parse_from(["logout"]).is_ok());
+    }
+
+    /// A bare interactive logout must fail fast off a TTY instead of
+    /// handing a picker to a terminal that isn't there.
+    #[cfg(feature = "auth-interactive")]
+    #[tokio::test]
+    async fn interactive_logout_without_tty_errors() {
+        use std::io::IsTerminal;
+
+        // Only meaningful where stdin/stdout aren't TTYs (CI, nextest). In an
+        // interactive `cargo test` run this would open a real picker, so skip.
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            return;
+        }
+
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("example.com", &Authentication::BearerToken("tok".into()))
+            .unwrap();
+
+        let result = logout(logout_args(None, false), storage).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotInteractive)
+        ));
+    }
 }

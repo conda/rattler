@@ -282,3 +282,182 @@ impl StorageBackend for KeyringAuthenticationStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use keyring_core::api::{CredentialApi, CredentialStoreApi};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    /// Shared state of [`CountingStore`]: the stored secrets plus a counter
+    /// of how often a secret was actually read.
+    #[derive(Debug, Default)]
+    struct StoreState {
+        secrets: Mutex<HashMap<(String, String), Vec<u8>>>,
+        secret_reads: AtomicUsize,
+    }
+
+    /// In-memory keyring-core store that counts secret reads. Used to assert
+    /// that key enumeration never touches stored secrets — on macOS every
+    /// secret read of a foreign-owned item triggers a keychain ACL prompt,
+    /// so a regression here means one prompt per stored credential.
+    #[derive(Debug, Default)]
+    struct CountingStore {
+        state: Arc<StoreState>,
+    }
+
+    #[derive(Debug)]
+    struct CountingCred {
+        state: Arc<StoreState>,
+        service: String,
+        account: String,
+    }
+
+    impl CountingCred {
+        fn key(&self) -> (String, String) {
+            (self.service.clone(), self.account.clone())
+        }
+    }
+
+    impl CredentialApi for CountingCred {
+        fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .insert(self.key(), secret.to_vec());
+            Ok(())
+        }
+
+        fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
+            self.state.secret_reads.fetch_add(1, Ordering::SeqCst);
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&self.key())
+                .cloned()
+                .ok_or(keyring_core::Error::NoEntry)
+        }
+
+        fn delete_credential(&self) -> keyring_core::Result<()> {
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&self.key())
+                .map(|_| ())
+                .ok_or(keyring_core::Error::NoEntry)
+        }
+
+        fn get_credential(
+            &self,
+        ) -> keyring_core::Result<Option<Arc<keyring_core::api::Credential>>> {
+            Ok(None)
+        }
+
+        fn get_specifiers(&self) -> Option<(String, String)> {
+            Some((self.service.clone(), self.account.clone()))
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    impl CountingStore {
+        fn entry(&self, service: &str, account: &str) -> Entry {
+            Entry::new_with_credential(Arc::new(CountingCred {
+                state: self.state.clone(),
+                service: service.to_string(),
+                account: account.to_string(),
+            }))
+        }
+    }
+
+    impl CredentialStoreApi for CountingStore {
+        fn vendor(&self) -> String {
+            "rattler-test".to_string()
+        }
+
+        fn id(&self) -> String {
+            "counting-store".to_string()
+        }
+
+        fn build(
+            &self,
+            service: &str,
+            user: &str,
+            _modifiers: Option<&HashMap<&str, &str>>,
+        ) -> keyring_core::Result<Entry> {
+            Ok(self.entry(service, user))
+        }
+
+        fn search(&self, spec: &HashMap<&str, &str>) -> keyring_core::Result<Vec<Entry>> {
+            // Honor the `service` filter (used on macOS/Linux); for any other
+            // spec (e.g. Windows' `pattern`) return everything and rely on
+            // the caller's defensive service check.
+            let service_filter = spec.get("service").map(ToString::to_string);
+            let entries = self
+                .state
+                .secrets
+                .lock()
+                .unwrap()
+                .keys()
+                .filter(|(service, _)| {
+                    service_filter
+                        .as_ref()
+                        .is_none_or(|filter| service == filter)
+                })
+                .map(|(service, account)| self.entry(service, account))
+                .collect();
+            Ok(entries)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    /// The whole point of `list_keys` is to enumerate hosts without reading
+    /// secrets (each read of a foreign-owned item prompts on macOS). Guard
+    /// against a regression to the `list()` fallback, which reads every one.
+    #[test]
+    fn list_keys_does_not_read_secrets() {
+        let store = Arc::new(CountingStore::default());
+        keyring_core::set_default_store(store.clone());
+
+        let backend = KeyringAuthenticationStorage::from_key("rattler-test-list-keys");
+        backend
+            .store(
+                "a.example.com",
+                &Authentication::BearerToken("token-a".into()),
+            )
+            .unwrap();
+        backend
+            .store(
+                "b.example.com",
+                &Authentication::BearerToken("token-b".into()),
+            )
+            .unwrap();
+
+        let keys = backend.list_keys().unwrap();
+        assert_eq!(
+            keys,
+            vec!["a.example.com".to_string(), "b.example.com".to_string()]
+        );
+        assert_eq!(
+            store.state.secret_reads.load(Ordering::SeqCst),
+            0,
+            "listing keys must not read stored secrets"
+        );
+
+        // Sanity-check that the counter counts: a credential lookup reads once.
+        let auth = backend.get("a.example.com").unwrap();
+        assert_eq!(auth, Some(Authentication::BearerToken("token-a".into())));
+        assert_eq!(store.state.secret_reads.load(Ordering::SeqCst), 1);
+    }
+}
