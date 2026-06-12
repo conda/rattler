@@ -19,7 +19,7 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::package::CondaArchiveIdentifier;
+use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     LazyClient,
@@ -429,15 +429,25 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given path if the package could not be found in the
     /// cache.
+    ///
+    /// If a [`PackageRecord`] is provided, the cache key is derived from the
+    /// record, which includes its hashes. This ensures that packages that
+    /// share the same name, version and build string but have different
+    /// content do not collide in the cache. Otherwise, the cache key is
+    /// derived from the package filename only.
     pub async fn get_or_fetch_from_path(
         &self,
         path: &Path,
+        record: Option<&PackageRecord>,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = CondaArchiveIdentifier::try_from_path(&path_buf)
-            .unwrap()
-            .into();
+        let mut cache_key: CacheKey = match record {
+            Some(record) => record.into(),
+            None => CondaArchiveIdentifier::try_from_path(&path_buf)
+                .unwrap()
+                .into(),
+        };
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -934,7 +944,10 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{Sha256, compute_bytes_digest, parse_digest_from_hex};
+    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+    use rattler_digest::{
+        Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
+    };
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
@@ -1476,7 +1489,7 @@ mod test {
 
         // Get the file to the cache
         let cache_a_lock = cache_a
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1484,7 +1497,7 @@ mod test {
 
         // Get the file to the cache
         let cache_b_lock = cache_b
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1500,7 +1513,7 @@ mod test {
 
         // Get the file to the cache
         let cache_c_lock = cache_c
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1521,7 +1534,7 @@ mod test {
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
 
         let cache_metadata_with_origin_hash = package_cache_with_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1529,7 +1542,7 @@ mod test {
         assert_eq!(file_name, "clobber-python-0.1.0-cpython");
 
         let cache_metadata_without_origin_hash = package_cache_without_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1546,8 +1559,6 @@ mod test {
     // cache, otherwise the package escapes the cache root
     // (GHSA-h672-p7h7-97v9).
     async fn test_get_or_fetch_rejects_path_traversal_build_string() {
-        use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
-
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
@@ -1908,5 +1919,71 @@ mod test {
             should_run.load(Ordering::Relaxed),
             "fetch function should run again"
         );
+    }
+
+    #[tokio::test]
+    // Two local packages that share the same name, version and build string
+    // but have different content must not collide in the cache: the sha256
+    // from the record is part of the cache key, so a stale entry is
+    // re-extracted instead of being served for every later package.
+    async fn test_get_or_fetch_from_path_record_replaces_stale_package() {
+        let cpython_archive =
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
+
+        // Both records claim the same name-version-build, so they map to the
+        // same cache directory, but each carries the sha256 of its archive.
+        let record_for = |archive: &Path| {
+            let mut record = PackageRecord::new(
+                PackageName::new_unchecked("clobber-python"),
+                "0.1.0".parse::<VersionWithSource>().unwrap(),
+                "cpython".to_string(),
+            );
+            record.sha256 = Some(compute_file_digest::<Sha256>(archive).unwrap());
+            record
+        };
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&cpython_archive, Some(&record_for(&cpython_archive)), None)
+            .await
+            .unwrap();
+        assert_eq!(cache_metadata.revision(), 1);
+        assert_eq!(
+            std::fs::read(cache_metadata.path().join("bin/python")).unwrap(),
+            b"cpython\n"
+        );
+        drop(cache_metadata);
+
+        // Fetching a different package with the same name-version-build must
+        // re-extract instead of serving the stale cpython content.
+        let pypy_record = record_for(&pypy_archive);
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&pypy_archive, Some(&pypy_record), None)
+            .await
+            .unwrap();
+        assert_eq!(
+            cache_metadata.revision(),
+            2,
+            "expected the stale cache entry to be re-extracted"
+        );
+        assert_eq!(cache_metadata.sha256, pypy_record.sha256);
+        assert!(
+            !cache_metadata.path().join("bin/python").exists(),
+            "stale content from the previously cached package was served"
+        );
+
+        // The cache metadata stores the 8-byte revision plus the 32-byte
+        // sha256; without the sha the stale-entry check can never fire.
+        let lock_contents = std::fs::read(
+            packages_dir
+                .path()
+                .join("clobber-python-0.1.0-cpython.lock"),
+        )
+        .unwrap();
+        assert_eq!(lock_contents.len(), 40);
+        assert_eq!(&lock_contents[8..], pypy_record.sha256.unwrap().as_slice());
     }
 }
