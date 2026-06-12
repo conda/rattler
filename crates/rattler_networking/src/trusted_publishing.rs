@@ -14,6 +14,8 @@
 //!    bearer token usable against the server (read or write, depending on
 //!    server policy).
 
+use std::sync::Arc;
+
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
@@ -228,9 +230,7 @@ async fn get_publish_token(
 /// Responds only to `Bearer` challenges. On a challenge it asks `ambient-id`
 /// for an OIDC ID token (returns `Ok(None)` outside supported CI providers)
 /// and exchanges it at the challenged host's mint endpoint
-/// ([`TrustedPublishingOptions::mint_path`]). Because the surrounding
-/// [`crate::AuthChallengeMiddleware`] is host-scoped, the challenged URL is
-/// always the right host to mint against.
+/// ([`TrustedPublishingOptions::mint_path`]).
 ///
 /// `client` is used only for the mint exchange; it must not itself layer in
 /// [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
@@ -239,10 +239,11 @@ async fn get_publish_token(
 ///
 /// `acquire_token` sends the CI provider's OIDC ID token — a live
 /// credential — to `url`'s origin (joined with
-/// [`TrustedPublishingOptions::mint_path`]). Only drive this flow from a
-/// dispatcher that is scoped to a single trusted host, such as
-/// [`crate::AuthChallengeMiddleware`]; never pass it URLs derived from
-/// untrusted input.
+/// [`TrustedPublishingOptions::mint_path`]) **without any origin
+/// validation of its own**. [`crate::AuthChallengeMiddleware`] invokes
+/// flows for every challenged URL, so never register this flow there
+/// directly: wrap it in an origin gate such as [`PrefixAuthAmbientFlow`],
+/// or only drive it with URLs for a single host you trust.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingFlow {
     options: TrustedPublishingOptions,
@@ -282,6 +283,69 @@ impl AuthFlow for TrustedPublishingFlow {
         get_token(&self.client, url, &self.options)
             .await
             .map_err(AuthFlowError::new)
+    }
+}
+
+/// Returns `true` for `prefix.dev` and any true subdomain (`*.prefix.dev`).
+/// Lookalikes (`evil-prefix.dev`, `prefix.dev.evil.com`) and trailing-dot
+/// hosts (`beta.prefix.dev.`, preserved as-is by [`Url`]) fail closed.
+fn is_prefix_dev_host(host: &str) -> bool {
+    host == "prefix.dev" || host.ends_with(".prefix.dev")
+}
+
+/// Origin-gated [`AuthFlow`] for the prefix.dev family, safe to register in
+/// an unscoped [`crate::AuthChallengeMiddleware`]: it forwards the ambient
+/// CI identity only to origins it trusts.
+///
+/// On a challenge it delegates to an inner flow (by default a
+/// [`TrustedPublishingFlow`] with [`TrustedPublishingOptions::for_prefix_dev`]
+/// options) if and only if the challenged URL is `https` and its host is
+/// `prefix.dev` or a true subdomain. The gate keys on the request URL alone —
+/// server-controlled challenge parameters such as `realm` cannot open it.
+/// Outside CI the inner flow finds no ambient OIDC identity and the flow
+/// reports "not applicable".
+///
+/// This is the default flow behind [`crate::AuthChallengeMiddleware::default`].
+#[derive(Debug, Clone)]
+pub struct PrefixAuthAmbientFlow {
+    inner: Arc<dyn AuthFlow>,
+}
+
+impl PrefixAuthAmbientFlow {
+    /// Create the flow with `client` used for the mint exchange. The client
+    /// must not itself layer in [`crate::AuthChallengeMiddleware`] or the
+    /// mint call will recurse.
+    pub fn new(client: ClientWithMiddleware) -> Self {
+        Self::wrapping(Arc::new(TrustedPublishingFlow::for_prefix_dev(client)))
+    }
+
+    /// Apply the prefix.dev origin gate to an arbitrary `inner` flow:
+    /// `inner` is only consulted for `https` URLs on the prefix.dev family.
+    pub fn wrapping(inner: Arc<dyn AuthFlow>) -> Self {
+        Self { inner }
+    }
+}
+
+impl Default for PrefixAuthAmbientFlow {
+    /// The flow with a plain (middleware-free) HTTP client for the mint
+    /// exchange.
+    fn default() -> Self {
+        Self::new(reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build())
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+impl AuthFlow for PrefixAuthAmbientFlow {
+    async fn acquire_token(
+        &self,
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Result<Option<BearerToken>, AuthFlowError> {
+        if url.scheme() != "https" || !url.host_str().is_some_and(is_prefix_dev_host) {
+            return Ok(None);
+        }
+        self.inner.acquire_token(url, challenges).await
     }
 }
 
@@ -476,10 +540,9 @@ mod tests {
                 // middleware (it would recurse), so it stays plain.
                 let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
                 let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-                    .with_arc(std::sync::Arc::new(AuthChallengeMiddleware::new(
-                        server_url.clone(),
+                    .with_arc(std::sync::Arc::new(AuthChallengeMiddleware::new(vec![
                         std::sync::Arc::new(flow),
-                    )))
+                    ])))
                     .build();
                 let url = server_url.join("/channel/repodata.json").unwrap();
 
@@ -564,5 +627,71 @@ mod tests {
         )
         .unwrap();
         assert_eq!(evil.audience, "evil-prefix.dev");
+    }
+
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use crate::challenge_middleware::{AuthFlowError, BearerToken};
+
+    /// Inner flow recording invocations; stands in for the trusted-publishing
+    /// delegate so the gate can be observed without any network traffic.
+    #[derive(Debug)]
+    struct SpyFlow {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for SpyFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Some(BearerToken::new("spy-token".to_string())))
+        }
+    }
+
+    #[tokio::test]
+    async fn ambient_flow_delegates_for_prefix_dev_family_hosts() {
+        let spy = Arc::new(SpyFlow {
+            calls: AtomicUsize::new(0),
+        });
+        let flow = PrefixAuthAmbientFlow::wrapping(spy.clone());
+        for host in ["prefix.dev", "beta.prefix.dev", "staging.beta.prefix.dev"] {
+            let url = Url::parse(&format!("https://{host}/channel/repodata.json")).unwrap();
+            let token = flow.acquire_token(&url, &bearer_challenge()).await.unwrap();
+            assert!(token.is_some(), "{host} should pass the trust gate");
+        }
+        assert_eq!(spy.calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn ambient_flow_never_delegates_for_untrusted_origins() {
+        let spy = Arc::new(SpyFlow {
+            calls: AtomicUsize::new(0),
+        });
+        let flow = PrefixAuthAmbientFlow::wrapping(spy.clone());
+        // The gate must key on the request URL alone: a server-controlled
+        // realm claiming "prefix.dev" must not open it.
+        let challenges = vec![Challenge {
+            scheme: "Bearer".to_string(),
+            params: HashMap::from([("realm".to_string(), "prefix.dev".to_string())]),
+        }];
+        for url in [
+            "https://evil-prefix.dev/channel/repodata.json",
+            "https://prefix.dev.evil.com/channel/repodata.json",
+            "https://conda.anaconda.org/conda-forge/noarch/repodata.json",
+            "http://prefix.dev/channel/repodata.json", // https only
+            "https://beta.prefix.dev./channel/repodata.json", // trailing dot fails closed
+        ] {
+            let url = Url::parse(url).unwrap();
+            let token = flow.acquire_token(&url, &challenges).await.unwrap();
+            assert!(token.is_none(), "{url} must be rejected by the trust gate");
+        }
+        assert_eq!(spy.calls.load(Ordering::SeqCst), 0);
     }
 }
