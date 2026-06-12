@@ -66,11 +66,17 @@ cache.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.get_or_fetch_from_path" class="method"><h4 class="code-header">pub async fn <a href="#method.get_or_fetch_from_path" class="fn">get_or_fetch_from_path</a>(
     &amp;self,
     path: &amp;<a class="struct" href="https://doc.rust-lang.org/1.95.0/std/path/struct.Path.html" title="struct std::path::Path">Path</a>,
+    record: <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="struct" href="../../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord">PackageRecord</a>&gt;,
     reporter: <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="trait.CacheReporter.html" title="trait rattler::package_cache::CacheReporter">CacheReporter</a>&gt;&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.CacheMetadata.html" title="struct rattler::package_cache::CacheMetadata">CacheMetadata</a>, <a class="enum" href="enum.PackageCacheError.html" title="enum rattler::package_cache::PackageCacheError">PackageCacheError</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the directory that contains the specified package.</p>
 <p>This is a convenience wrapper around <code>get_or_fetch</code> which fetches the
 package from the given path if the package could not be found in the
 cache.</p>
+<p>If a <a href="../../rattler_conda_types/repo_data/struct.PackageRecord.html" title="struct rattler_conda_types::repo_data::PackageRecord"><code>PackageRecord</code></a> is provided, the cache key is derived from the
+record, which includes its hashes. This ensures that packages that
+share the same name, version and build string but have different
+content do not collide in the cache. Otherwise, the cache key is
+derived from the package filename only.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.get_or_fetch_from_url_with_retry" class="method"><h4 class="code-header">pub async fn <a href="#method.get_or_fetch_from_url_with_retry" class="fn">get_or_fetch_from_url_with_retry</a>(
     &amp;self,
     pkg: impl <a class="trait" href="https://doc.rust-lang.org/1.95.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="struct.CacheKey.html" title="struct rattler::package_cache::CacheKey">CacheKey</a>&gt;,

@@ -880,7 +880,7 @@
 <a href=#878 id=878 data-nosnippet>878</a>        })<span class="question-mark">?</span>;
 <a href=#879 id=879 data-nosnippet>879</a>
 <a href=#880 id=880 data-nosnippet>880</a>        cache
-<a href=#881 id=881 data-nosnippet>881</a>            .get_or_fetch_from_path(<span class="kw-2">&amp;</span>path, reporter)
+<a href=#881 id=881 data-nosnippet>881</a>            .get_or_fetch_from_path(<span class="kw-2">&amp;</span>path, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>record.package_record), reporter)
 <a href=#882 id=882 data-nosnippet>882</a>            .<span class="kw">await
 <a href=#883 id=883 data-nosnippet>883</a>            </span>.map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
 <a href=#884 id=884 data-nosnippet>884</a>    } <span class="kw">else </span>{
