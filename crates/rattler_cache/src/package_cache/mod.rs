@@ -419,9 +419,17 @@ impl PackageCache {
         url: Url,
         client: LazyClient,
         reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
-        self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
-            .await
+        self.get_or_fetch_from_url_with_retry(
+            pkg,
+            url,
+            client,
+            DoNotRetryPolicy,
+            reporter,
+            concurrent_requests_semaphore,
+        )
+        .await
     }
 
     /// Returns the directory that contains the specified package.
@@ -478,6 +486,11 @@ impl PackageCache {
     /// uses the passed in `retry_policy` if, after the request has been sent
     /// and the response is successful, streaming of the package data fails
     /// and the whole request must be retried.
+    ///
+    /// The optional `concurrent_requests_semaphore` limits the number of
+    /// simultaneous downloads. A permit is acquired only when a download is
+    /// actually started (i.e. the package is not already cached), and is held
+    /// for the duration of the download and extraction.
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
@@ -486,6 +499,7 @@ impl PackageCache {
         client: LazyClient,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
@@ -503,7 +517,21 @@ impl PackageCache {
             let client = client.clone();
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
+            let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
             async move {
+                // Acquire a permit to limit the number of concurrent download
+                // and extraction operations. The permit is held until the
+                // closure returns and is released automatically when dropped.
+                let _permit = match concurrent_requests_semaphore {
+                    Some(semaphore) => Some(
+                        semaphore
+                            .acquire_owned()
+                            .await
+                            .expect("semaphore should not be closed"),
+                    ),
+                    None => None,
+                };
+
                 let mut current_try = 0;
                 // Retry until the retry policy says to stop
                 loop {
@@ -1434,6 +1462,7 @@ mod test {
                 client.clone().into(),
                 DoNotRetryPolicy,
                 None,
+                None,
             )
             .await;
 
@@ -1451,7 +1480,14 @@ mod test {
 
         // The second one should fail after the 2nd try
         let result = cache
-            .get_or_fetch_from_url_with_retry(identifier, url, client.into(), retry_policy, None)
+            .get_or_fetch_from_url_with_retry(
+                identifier,
+                url,
+                client.into(),
+                retry_policy,
+                None,
+                None,
+            )
             .await;
 
         assert!(result.is_ok());
@@ -1985,5 +2021,52 @@ mod test {
         .unwrap();
         assert_eq!(lock_contents.len(), 40);
         assert_eq!(&lock_contents[8..], pypy_record.sha256.unwrap().as_slice());
+    }
+
+    /// Verify that a fully-exhausted semaphore does not block a cache hit.
+    ///
+    /// The semaphore permit is only acquired inside the fetch closure, which is
+    /// never called when the package is already cached. So even with zero
+    /// available permits the call must return immediately.
+    #[tokio::test]
+    async fn test_semaphore_not_acquired_on_cache_hit() {
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        // Populate the cache from disk first.
+        cache
+            .get_or_fetch_from_path(&package_path, None, None)
+            .await
+            .unwrap();
+
+        // A semaphore with 0 permits — any attempt to acquire it would block
+        // forever.
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(0));
+
+        // A fake URL; it will never be contacted because the package is cached.
+        let url = Url::parse("https://example.com/clobber-python-0.1.0-cpython.conda").unwrap();
+        let identifier = CondaArchiveIdentifier::try_from_path(&package_path).unwrap();
+        let client = rattler_networking::LazyClient::default();
+
+        // This must complete without blocking even though the semaphore is empty.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            cache.get_or_fetch_from_url_with_retry(
+                identifier,
+                url,
+                client,
+                rattler_networking::retry_policies::DoNotRetryPolicy,
+                None,
+                Some(semaphore.clone()),
+            ),
+        )
+        .await
+        .expect("timed out — semaphore was incorrectly acquired on a cache hit");
+
+        assert!(result.is_ok(), "expected cache hit, got {result:?}");
+        // The semaphore should still have 0 permits — nothing was acquired.
+        assert_eq!(semaphore.available_permits(), 0);
     }
 }
