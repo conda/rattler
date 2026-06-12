@@ -2,7 +2,10 @@
 
 `rattler_index` creates or updates conda channel indexes by writing
 `repodata.json`, optional compressed repodata, and optional sharded repodata for
-packages stored on a local filesystem or in S3.
+packages stored on a local filesystem, in S3, or in Azure Blob Storage.
+
+S3 support requires the `s3` feature; Azure Blob Storage support requires the
+`azure` feature.
 
 ## CLI Usage
 
@@ -18,13 +21,49 @@ Index an S3 channel:
 rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 ```
 
+Index an Azure Blob Storage channel:
+
+```shell
+rattler-index --config ./rattler-config.toml azure \
+    --channel az://my-container/my-channel \
+    --account my-storage-account \
+    [--endpoint-url https://my-storage-account.blob.core.windows.net]
+```
+
+Azure channels need no secrets on the command line. For local development run
+`az login`; in CI, authentication is resolved through reqsign's
+`DefaultCredentialProvider` chain, which covers managed identity, workload
+identity, and service-principal environment variables. The `--endpoint-url`
+flag is only needed for sovereign clouds or a local Azurite emulator.
+
 The `--config` flag points at the same TOML configuration file used by pixi. It
-configures S3 credentials, concurrency, and per-channel index options under the
-`[index-config]` section.
+configures S3 and Azure credentials, concurrency, and per-channel index options
+under the `[index-config]` section.
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
 `from-index-json` revision assignment, no channel metadata).
+
+## Remote storage credentials
+
+S3 endpoint and region settings live under `[s3-options.<bucket>]`, keyed by
+bucket name. Azure Blob Storage uses the analogous `[azure-options.<container>]`
+block, keyed by container name. Each Azure entry records the storage account and
+an optional endpoint override (no secrets are stored — credentials are resolved
+at runtime through `az login` locally or the `DefaultCredentialProvider` chain
+in CI):
+
+```toml
+[s3-options.my-bucket]
+endpoint-url = "https://my-bucket.s3.amazonaws.com"
+region = "eu-central-1"
+force-path-style = false
+
+[azure-options.my-container]
+account = "my-storage-account"
+# Optional; defaults to https://{account}.blob.core.windows.net
+endpoint-url = "https://my-storage-account.blob.core.windows.net"
+```
 
 ## Per-channel index configuration
 
