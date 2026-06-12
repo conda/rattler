@@ -851,7 +851,7 @@ async fn populate_cache(
         })?;
 
         cache
-            .get_or_fetch_from_path(&path, reporter)
+            .get_or_fetch_from_path_with_record(&record.package_record, &path, reporter)
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     } else {
