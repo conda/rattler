@@ -17,7 +17,7 @@ name = "pixi-build-python"
 version = "*"
 [package.host-dependencies]
 maturin = "*"
-python = "3.10.*"
+python = "3.9.*"
 [package.build.config]
 abi3 = true
 compilers = ["c", "rust"]
