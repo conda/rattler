@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.66](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.65...rattler_menuinst-v0.2.66) - 2026-06-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.65](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.64...rattler_menuinst-v0.2.65) - 2026-06-04
+
+### Other
+
+- updated the following local packages: rattler_shell
+
+## [0.2.64](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.63...rattler_menuinst-v0.2.64) - 2026-06-03
+
+### Other
+
+- updated the following local packages: rattler_shell
+
+## [0.2.63](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.62...rattler_menuinst-v0.2.63) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.2.62](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.61...rattler_menuinst-v0.2.62) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.61](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.60...rattler_menuinst-v0.2.61) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.60](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.59...rattler_menuinst-v0.2.60) - 2026-05-13
+
+### Added
+
+- implement shell flavors and fix workspace-wide initialization ([#2259](https://github.com/conda/rattler/pull/2259))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.2.59](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.58...rattler_menuinst-v0.2.59) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.58](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.57...rattler_menuinst-v0.2.58) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.57](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.56...rattler_menuinst-v0.2.57) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.2.56](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.55...rattler_menuinst-v0.2.56) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.55](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.54...rattler_menuinst-v0.2.55) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.54](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.53...rattler_menuinst-v0.2.54) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.53](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.52...rattler_menuinst-v0.2.53) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.2.52](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.51...rattler_menuinst-v0.2.52) - 2026-03-20
 
 ### Other

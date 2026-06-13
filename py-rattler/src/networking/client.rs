@@ -2,15 +2,15 @@ use crate::{
     error::PyRattlerError,
     networking::middleware::{AddHeadersMiddleware, PyMiddleware},
 };
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, LazyClient, MirrorMiddleware,
     OciMiddleware, S3Middleware,
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
-use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
 use std::collections::HashMap;
 
 static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -25,10 +25,11 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None, headers=None, timeout=None))]
+    #[pyo3(signature = (middlewares=None, headers=None, user_agent=None, timeout=None))]
     pub fn new(
         middlewares: Option<Vec<PyMiddleware>>,
         headers: Option<HashMap<String, String>>,
+        user_agent: Option<String>,
         timeout: Option<u64>,
     ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
@@ -39,6 +40,8 @@ impl PyClientWithMiddleware {
             client_builder = client_builder.timeout(std::time::Duration::from_secs(timeout));
         }
 
+        let has_headers = headers.is_some();
+
         if let Some(headers) = headers {
             let mut header_map = HeaderMap::new();
             for (key, value) in headers {
@@ -48,7 +51,11 @@ impl PyClientWithMiddleware {
                 header_map.insert(header_name, header_value);
             }
             client_builder = client_builder.default_headers(header_map);
-        } else {
+        }
+
+        if let Some(user_agent) = user_agent {
+            client_builder = client_builder.user_agent(user_agent);
+        } else if !has_headers {
             client_builder = client_builder.user_agent(RATTLER_USER_AGENT);
         }
 

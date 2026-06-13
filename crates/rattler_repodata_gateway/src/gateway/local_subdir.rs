@@ -1,15 +1,15 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, PackageName};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisions};
 
 use crate::{
+    Reporter,
     gateway::{
-        error::SubdirNotFoundError,
-        subdir::{extract_unique_deps, PackageRecords, SubdirClient},
         GatewayError,
+        error::SubdirNotFoundError,
+        subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
     },
     sparse::{PackageFormatSelection, SparseRepoData},
-    Reporter,
 };
 
 /// A client that can be used to fetch repodata for a specific subdirectory from
@@ -81,10 +81,11 @@ impl SubdirClient for LocalSubdirClient {
             .load_records(&name, PackageFormatSelection::PreferConda)
         {
             Ok(records) => {
-                let unique_deps = extract_unique_deps(&records);
+                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
                 Ok(PackageRecords {
                     records: records.into_iter().map(Arc::new).collect(),
-                    unique_deps,
+                    unique_base_deps,
+                    unique_extra_deps,
                 })
             }
             Err(err) => Err(GatewayError::IoError(
@@ -105,5 +106,9 @@ impl SubdirClient for LocalSubdirClient {
             .package_names(PackageFormatSelection::PreferConda)
             .map(std::convert::Into::into)
             .collect()
+    }
+
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        self.sparse.repodata_revisions()
     }
 }

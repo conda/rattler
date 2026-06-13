@@ -29,9 +29,11 @@ mod installer;
 #[cfg(test)]
 mod test_utils;
 
+#[cfg(unix)]
+use std::sync::OnceLock;
 use std::{
     cmp::Ordering,
-    collections::{binary_heap::PeekMut, BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet, binary_heap::PeekMut},
     fs,
     future::ready,
     io::ErrorKind,
@@ -43,23 +45,23 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use clobber_registry::ClobberMode;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-pub use installer::{
-    result_record::InstallationResultRecord, Installer, InstallerError, LinkOptions, Reporter,
-};
+use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
+pub use installer::{
+    Installer, InstallerError, LinkOptions, Reporter, result_record::InstallationResultRecord,
+};
 use itertools::Itertools;
-pub use link::{link_file, LinkFileError, LinkMethod};
+pub use link::{LinkFileError, LinkMethod, link_file};
 pub use python::PythonInfo;
 use rattler_conda_types::{
+    Platform,
     package::{AboutJson, IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
     prefix_record::{self, LinkType},
-    Platform,
 };
 use rayon::{
     iter::Either,
@@ -73,7 +75,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
+    clobber_registry::{CLOBBERS_DIR_NAME, ClobberRegistry},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -351,13 +353,9 @@ pub async fn link_package(
             None => can_create_hardlinks(target_dir, package_dir).right_future(),
         },
     );
-    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
-        match reflink_copy::check_reflink_support(package_dir, target_dir) {
-            Ok(reflink_copy::ReflinkSupport::Supported) => true,
-            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
-            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
-        }
-    });
+    let allow_ref_links = options
+        .allow_ref_links
+        .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
@@ -466,7 +464,8 @@ pub async fn link_package(
             .await
             .map_err(JoinError::try_into_panic)
             {
-                Ok(Ok(linked_file)) => linked_file,
+                Ok(Ok(Some(linked_file))) => linked_file,
+                Ok(Ok(None)) => return Ok(vec![]),
                 Ok(Err(e)) => {
                     return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
@@ -705,13 +704,9 @@ pub fn link_package_sync(
     } else {
         LinkType::Copy
     };
-    let mut allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
-        match reflink_copy::check_reflink_support(package_dir, target_dir) {
-            Ok(reflink_copy::ReflinkSupport::Supported) => true,
-            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
-            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
-        }
-    });
+    let mut allow_ref_links = options
+        .allow_ref_links
+        .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
@@ -903,7 +898,8 @@ pub fn link_package_sync(
                 );
 
                 let result = match link_result {
-                    Ok(linked_file) => linked_file,
+                    Ok(Some(linked_file)) => linked_file,
+                    Ok(None) => continue,
                     Err(e) => {
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
@@ -1013,6 +1009,7 @@ pub fn link_package_sync(
         paths.append(&mut entry_point_paths);
     };
 
+    paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok((paths, link_type))
 }
 
@@ -1202,6 +1199,88 @@ fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 
+/// Returns true if it is possible to create reflinks (copy-on-write clones)
+/// from the package cache directory to the target directory.
+///
+/// [`reflink_copy::check_reflink_support`] only returns a definitive answer on
+/// Windows; on all other platforms it returns `Unknown`. Guessing wrong is
+/// expensive: every failed reflink attempt creates the destination file,
+/// issues the clone ioctl, and removes the destination again before falling
+/// back to a hard link or copy. To avoid paying that cost for every file we
+/// probe reflink support once per filesystem and cache the result for the
+/// lifetime of the process.
+fn can_create_reflinks_sync(target_dir: &Prefix, package_dir: &Path, fallback: bool) -> bool {
+    match reflink_copy::check_reflink_support(package_dir, target_dir.path()) {
+        Ok(reflink_copy::ReflinkSupport::Supported) => true,
+        Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
+        Ok(reflink_copy::ReflinkSupport::Unknown) => {
+            probe_reflink_support(target_dir.path(), package_dir, fallback)
+        }
+    }
+}
+
+/// Determines whether reflinks work between the two paths by performing a
+/// trial reflink in the target directory. The result is cached per device so
+/// the probe runs at most once per filesystem.
+#[cfg(unix)]
+fn probe_reflink_support(target_dir: &Path, package_dir: &Path, _fallback: bool) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    static REFLINK_SUPPORT_CACHE: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
+
+    let (Ok(target_meta), Ok(package_meta)) = (
+        std::fs::metadata(target_dir),
+        std::fs::metadata(package_dir),
+    ) else {
+        return false;
+    };
+
+    // Reflinks cannot cross filesystem boundaries.
+    if target_meta.dev() != package_meta.dev() {
+        return false;
+    }
+
+    let mut cache = REFLINK_SUPPORT_CACHE
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap();
+    if let Some(&supported) = cache.get(&target_meta.dev()) {
+        return supported;
+    }
+
+    // Probe by reflinking a small file inside a temporary directory in the
+    // target directory. Since the package directory resides on the same
+    // filesystem the result also holds for cache-to-prefix reflinks. The
+    // temporary directory is removed again when it goes out of scope, even if
+    // the probe fails halfway through.
+    let supported = tempfile::Builder::new()
+        .prefix(".refprobe-")
+        .tempdir_in(target_dir)
+        .is_ok_and(|probe_dir| {
+            let probe_src = probe_dir.path().join("src");
+            let probe_dst = probe_dir.path().join("dst");
+            std::fs::write(&probe_src, b"reflink probe").is_ok()
+                && reflink_copy::reflink(&probe_src, &probe_dst).is_ok()
+        });
+
+    if !supported {
+        tracing::debug!(
+            "filesystem of '{}' does not support reflinks, disabling reflink usage",
+            target_dir.display()
+        );
+    }
+
+    cache.insert(target_meta.dev(), supported);
+    supported
+}
+
+/// On platforms where we cannot cheaply identify the filesystem we keep the
+/// previous heuristic.
+#[cfg(not(unix))]
+fn probe_reflink_support(_target_dir: &Path, _package_dir: &Path, fallback: bool) -> bool {
+    fallback
+}
+
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
 async fn paths_have_same_filesystem(a: &Prefix, b: &Path) -> bool {
@@ -1244,16 +1323,16 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 
 #[cfg(test)]
 mod test {
-    use std::{env::temp_dir, process::Command, str::FromStr};
+    use std::{collections::HashSet, env::temp_dir, path::Path, process::Command, str::FromStr};
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
+        install::{InstallDriver, InstallOptions, Prefix, PythonInfo, link_package},
         package_cache::PackageCache,
     };
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use rattler_conda_types::{
-        package::CondaArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+        ExplicitEnvironmentSpec, Platform, Version, package::CondaArchiveIdentifier,
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
@@ -1295,7 +1374,8 @@ mod test {
             .default_environment()
             .expect("no default environment in lock file");
 
-        let Some(packages) = lock_env.packages(current_platform) else {
+        let packages_platform = lock.platform(current_platform.as_str()).unwrap();
+        let Some(packages) = lock_env.packages(packages_platform) else {
             panic!(
                 "the platform for which the explicit lock file was created does not match the current platform"
             )
@@ -1346,6 +1426,7 @@ mod test {
                             package_info,
                             package_url.clone(),
                             client.clone(),
+                            None,
                             None,
                         )
                         .await
@@ -1416,5 +1497,57 @@ mod test {
         .unwrap();
 
         insta::assert_yaml_snapshot!(paths);
+    }
+
+    /// `link_package_sync` runs the per-file linking in parallel via rayon,
+    /// so its result must be sorted by `relative_path` before returning to
+    /// produce reproducible `conda-meta/<package>.json` files.
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_link_package_sync_sorts_paths() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let package_dir = tempfile::TempDir::new().unwrap();
+
+        let package_path = tools::download_and_cache_file_async(
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
+        )
+        .await
+        .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+
+        let install_driver = InstallDriver::default();
+        let prefix = Prefix::create(environment_dir.path()).unwrap();
+
+        let (paths, _link_type) = crate::install::link_package_sync(
+            package_dir.path(),
+            &prefix,
+            install_driver.clobber_registry.clone(),
+            InstallOptions::default(),
+        )
+        .unwrap();
+
+        // The package must contain entries in more than one directory, otherwise
+        // the sort guarantee is trivial and we are not actually exercising the
+        // multi-directory ordering that the fix addresses.
+        let distinct_parents: HashSet<_> = paths
+            .iter()
+            .filter_map(|entry| entry.relative_path.parent().map(Path::to_path_buf))
+            .collect();
+        assert!(
+            distinct_parents.len() > 1,
+            "test package must span multiple directories to exercise sort ordering"
+        );
+
+        for window in paths.windows(2) {
+            assert!(
+                window[0].relative_path <= window[1].relative_path,
+                "link_package_sync must return entries sorted by relative_path: {:?} > {:?}",
+                window[0].relative_path,
+                window[1].relative_path,
+            );
+        }
     }
 }

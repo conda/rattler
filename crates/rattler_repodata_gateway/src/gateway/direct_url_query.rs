@@ -4,8 +4,8 @@ use futures::FutureExt;
 use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::package::{ArchiveIdentifier, CondaArchiveType};
 use rattler_conda_types::{
-    package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
+    package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
 use rattler_networking::LazyClient;
@@ -23,6 +23,8 @@ pub(crate) struct DirectUrlQuery {
     client: LazyClient,
     /// The cache to use for storing the package
     package_cache: PackageCache,
+    /// An optional semaphore to limit the number of concurrent downloads and extractions.
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -51,7 +53,17 @@ impl DirectUrlQuery {
             md5,
             client,
             package_cache,
+            concurrent_requests_semaphore: None,
         }
+    }
+
+    /// Sets a semaphore to limit the number of concurrent package downloads and extractions.
+    pub(crate) fn with_concurrent_requests_semaphore(
+        mut self,
+        semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    ) -> Self {
+        self.concurrent_requests_semaphore = semaphore;
+        self
     }
 
     /// Execute the Repodata query using the cache as a source for the
@@ -106,6 +118,7 @@ impl DirectUrlQuery {
                     self.client.clone(),
                     // Should we add a reporter?
                     None,
+                    self.concurrent_requests_semaphore,
                 )
                 .await?;
 

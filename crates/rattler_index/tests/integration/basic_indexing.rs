@@ -4,8 +4,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rattler_conda_types::Platform;
-use rattler_index::{index_fs, IndexFsConfig};
+use rattler_conda_types::{
+    ChannelRelations, Platform, ShardedRepodata, compression_level::CompressionLevel,
+};
+use rattler_index::{
+    ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
+    RepodataRevisionInfo, index_fs, index_fs_with_channel_metadata,
+};
+use rattler_package_streaming::write::write_tar_bz2_package;
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
@@ -70,6 +76,8 @@ async fn test_index() {
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
         force: true,
         max_parallel: 32,
         multi_progress: None,
@@ -96,11 +104,13 @@ async fn test_index() {
             .as_str(),
         Some("win-64")
     );
-    assert!(repodata_json
-        .get("packages")
-        .unwrap()
-        .get("conda-22.9.0-py38haa244fe_2.tar.bz2")
-        .is_some());
+    assert!(
+        repodata_json
+            .get("packages")
+            .unwrap()
+            .get("conda-22.9.0-py38haa244fe_2.tar.bz2")
+            .is_some()
+    );
     assert_eq!(
         repodata_json
             .get("packages.conda")
@@ -131,6 +141,8 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
         force: true,
         max_parallel: 100,
         multi_progress: None,
@@ -167,6 +179,8 @@ async fn test_reindex_removes_deleted_conda_package() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
         force: false,
         max_parallel: 1,
         multi_progress: None,
@@ -177,11 +191,13 @@ async fn test_reindex_removes_deleted_conda_package() {
     let repodata_path = subdir_path.join("repodata.json");
     let repodata_json: Value =
         serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .get("packages.conda")
-        .unwrap()
-        .get(package_name)
-        .is_some());
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .get(package_name)
+            .is_some()
+    );
 
     fs::remove_file(target_package).unwrap();
 
@@ -191,6 +207,8 @@ async fn test_reindex_removes_deleted_conda_package() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
         force: false,
         max_parallel: 1,
         multi_progress: None,
@@ -199,9 +217,245 @@ async fn test_reindex_removes_deleted_conda_package() {
     .unwrap();
 
     let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
-    assert!(repodata_json
-        .get("packages.conda")
-        .unwrap()
-        .get(package_name)
-        .is_none());
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .get(package_name)
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn test_index_latest_repodata_revision() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    let source_package = test_data_dir().join("packages").join(package_name);
+    let target_package = subdir_path.join(package_name);
+
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(source_package, &target_package).unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: true,
+        write_shards: true,
+        repodata_revisions: vec![RepodataRevisionInfo {
+            revision: RepodataRevision::V3,
+            n_packages: None,
+            oldest: None,
+            newest: None,
+        }],
+        package_revision_assignment: PackageRevisionAssignment::Latest,
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert!(
+        repodata_json
+            .get("packages.conda")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repodata_json
+            .pointer("/v3/conda/empty-0.1.0-h4616a5c_0")
+            .is_some()
+    );
+    let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
+    assert_eq!(revision["n_packages"], 1);
+
+    let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
+    let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
+    let shard_index: ShardedRepodata = rmp_serde::from_slice(&shard_index_bytes).unwrap();
+    assert_eq!(shard_index.info.repodata_revisions.len(), 1);
+    assert_eq!(
+        shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
+        Some(1)
+    );
+}
+
+#[tokio::test]
+async fn test_index_repodata_revision_from_index_json() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "revision-demo-1.0.0-h123_0.tar.bz2";
+    let package_build_dir = temp_dir.path().join("package-build");
+    let package_info_dir = package_build_dir.join("info");
+
+    fs::create_dir(&subdir_path).unwrap();
+    fs::create_dir(&package_build_dir).unwrap();
+    fs::create_dir(&package_info_dir).unwrap();
+    fs::write(
+        package_info_dir.join("index.json"),
+        r#"{
+            "build": "h123_0",
+            "build_number": 0,
+            "extra_depends": {
+                "docs": ["sphinx"]
+            },
+            "name": "revision-demo",
+            "noarch": "generic",
+            "subdir": "noarch",
+            "timestamp": 1710000000000,
+            "version": "1.0.0"
+        }"#,
+    )
+    .unwrap();
+
+    let target_package = subdir_path.join(package_name);
+    let writer = File::create(&target_package).unwrap();
+    write_tar_bz2_package(
+        writer,
+        &package_build_dir,
+        &[package_info_dir.join("index.json")],
+        CompressionLevel::Default,
+        None,
+        None,
+    )
+    .unwrap();
+
+    fs::copy(
+        test_data_dir()
+            .join("packages")
+            .join("empty-0.1.0-h4616a5c_0.conda"),
+        subdir_path.join("empty-0.1.0-h4616a5c_0.conda"),
+    )
+    .unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: vec![RepodataRevisionInfo {
+            revision: RepodataRevision::V3,
+            n_packages: None,
+            oldest: None,
+            newest: None,
+        }],
+        package_revision_assignment: PackageRevisionAssignment::FromIndexJson,
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert!(
+        repodata_json
+            .pointer("/packages.conda/empty-0.1.0-h4616a5c_0.conda")
+            .is_some()
+    );
+    assert!(
+        repodata_json
+            .pointer("/packages/revision-demo-1.0.0-h123_0.tar.bz2")
+            .is_none()
+    );
+    assert!(
+        repodata_json
+            .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
+            .is_some()
+    );
+    let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
+    assert_eq!(revision["n_packages"], 1);
+    assert_eq!(revision["oldest"], 1710000000000i64);
+    assert_eq!(revision["newest"], 1710000000000i64);
+}
+
+#[tokio::test]
+async fn test_index_writes_channel_metadata() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let channel_metadata = ChannelMetadata {
+        base_url: Some("../packages/".to_string()),
+        channel_relations: Some(ChannelRelations {
+            base: Some("../conda-forge".to_string()),
+            overrides: Some("../fallback".to_string()),
+        }),
+    };
+
+    index_fs_with_channel_metadata(
+        IndexFsConfig {
+            channel: temp_dir.path().into(),
+            target_platform: Some(Platform::NoArch),
+            repodata_patch: None,
+            write_zst: true,
+            write_shards: true,
+            repodata_revisions: vec![RepodataRevisionInfo {
+                revision: RepodataRevision::V3,
+                n_packages: None,
+                oldest: None,
+                newest: None,
+            }],
+            package_revision_assignment: PackageRevisionAssignment::Latest,
+            force: true,
+            max_parallel: 1,
+            multi_progress: None,
+        },
+        channel_metadata,
+    )
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let repodata_json: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert_eq!(repodata_json["info"]["base_url"], "../packages/");
+    assert_eq!(
+        repodata_json["info"]["channel_relations"]["base"],
+        "../conda-forge"
+    );
+    assert_eq!(
+        repodata_json["info"]["channel_relations"]["overrides"],
+        "../fallback"
+    );
+    assert_eq!(
+        repodata_json["info"]["repodata_revisions"]["v3"]["n_packages"],
+        0
+    );
+
+    let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
+    let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
+    let shard_index: ShardedRepodata = rmp_serde::from_slice(&shard_index_bytes).unwrap();
+    assert_eq!(shard_index.info.base_url, "../packages/");
+    assert_eq!(
+        shard_index
+            .info
+            .channel_relations
+            .as_ref()
+            .unwrap()
+            .base
+            .as_deref(),
+        Some("../conda-forge")
+    );
+    assert_eq!(
+        shard_index
+            .info
+            .channel_relations
+            .as_ref()
+            .unwrap()
+            .overrides
+            .as_deref(),
+        Some("../fallback")
+    );
+    assert_eq!(
+        shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
+        Some(0)
+    );
 }

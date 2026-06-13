@@ -21,8 +21,8 @@ use crate::utils::serde::DeserializeFromStrUnchecked;
 /// to make the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
-    normalized: Option<String>,
-    source: String,
+    normalized: Option<Box<str>>,
+    source: Box<str>,
 }
 
 impl PackageName {
@@ -32,7 +32,7 @@ impl PackageName {
     pub fn new_unchecked<S: Into<String>>(normalized: S) -> Self {
         Self {
             normalized: None,
-            source: normalized.into(),
+            source: normalized.into().into_boxed_str(),
         }
     }
 
@@ -45,7 +45,7 @@ impl PackageName {
     /// Returns the normalized version of the package name. The normalized string is guaranteed to
     /// be a valid conda package name.
     pub fn as_normalized(&self) -> &str {
-        self.normalized.as_ref().unwrap_or(&self.source)
+        self.normalized.as_deref().unwrap_or(&self.source)
     }
 
     /// Parses the package name part from a matchspec string without parsing
@@ -96,13 +96,13 @@ impl PackageName {
     pub fn from_matchspec_str_unchecked(spec: &str) -> Self {
         let (name, has_upper) = scan_matchspec_name(spec);
         let normalized = if has_upper {
-            Some(name.to_ascii_lowercase())
+            Some(name.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
         Self {
             normalized,
-            source: name.to_string(),
+            source: name.to_string().into_boxed_str(),
         }
     }
 
@@ -135,6 +135,52 @@ impl PackageName {
             Cow::Owned(name.to_ascii_lowercase())
         } else {
             Cow::Borrowed(name)
+        }
+    }
+
+    /// Extracts the normalized package name and the optional features (extras)
+    /// from a matchspec string.
+    ///
+    /// When the spec contains no `[` bracket section, this is the fast path:
+    /// equivalent to [`Self::normalized_name_from_matchspec_str`] with no
+    /// allocation for the extras `Vec`.
+    ///
+    /// When brackets are present, the full matchspec is parsed (with
+    /// experimental extras enabled) to correctly distinguish extras from other
+    /// bracket keys like `build`, `version` or `when`. If parsing fails, the
+    /// name is still extracted with the cheap scan and the extras list is
+    /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    ///
+    /// let (name, extras) = PackageName::name_and_extras_from_matchspec_str("numpy >=1.0");
+    /// assert_eq!(name, "numpy");
+    /// assert!(extras.is_empty());
+    ///
+    /// let (name, extras) =
+    ///     PackageName::name_and_extras_from_matchspec_str("numpy[extras=[gpu, mkl]]");
+    /// assert_eq!(name, "numpy");
+    /// assert_eq!(extras, vec!["gpu".to_string(), "mkl".to_string()]);
+    /// ```
+    pub fn name_and_extras_from_matchspec_str(spec: &str) -> (Cow<'_, str>, Vec<String>) {
+        if !spec.contains('[') {
+            return (Self::normalized_name_from_matchspec_str(spec), Vec::new());
+        }
+
+        let name = Self::normalized_name_from_matchspec_str(spec);
+
+        let options = crate::ParseMatchSpecOptions::default().with_extras(true);
+        match crate::MatchSpec::from_str(spec, options) {
+            Ok(parsed) => (name, parsed.extras.unwrap_or_default()),
+            Err(err) => {
+                // Failure mode is silent under-fetching of an extra's deps;
+                // log so it shows up under RUST_LOG=debug when investigating.
+                tracing::debug!("failed to parse matchspec '{spec}' for extras extraction: {err}",);
+                (name, Vec::new())
+            }
         }
     }
 }
@@ -182,7 +228,7 @@ impl TryFrom<&String> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
-        value.clone().try_into()
+        value.as_str().try_into()
     }
 }
 
@@ -209,12 +255,15 @@ impl TryFrom<String> for PackageName {
         // Convert all characters to lowercase but only if it actually contains uppercase. This way
         // we dont allocate the memory of the string if it is already lowercase.
         let normalized = if source.bytes().any(|b| b.is_ascii_uppercase()) {
-            Some(source.to_ascii_lowercase())
+            Some(source.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
 
-        Ok(Self { normalized, source })
+        Ok(Self {
+            normalized,
+            source: source.into_boxed_str(),
+        })
     }
 }
 
@@ -283,11 +332,129 @@ impl Borrow<str> for PackageName {
     }
 }
 
+/// A package name in its original source form (not normalized).
+///
+/// This is a newtype around [`Box<str>`] that preserves the exact casing and
+/// formatting as written by the user (e.g. `MyPackage` instead of `mypackage`).
+///
+/// Use this type when you only care about the source name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourcePackageName(Box<str>);
+
+impl SourcePackageName {
+    /// Returns the source package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SourcePackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for SourcePackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.source)
+    }
+}
+
+impl From<SourcePackageName> for PackageName {
+    fn from(name: SourcePackageName) -> Self {
+        PackageName::try_from(name.0.into_string())
+            .expect("SourcePackageName is always a valid PackageName")
+    }
+}
+
+impl AsRef<str> for SourcePackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A normalized package name (always lowercase).
+///
+/// This is a newtype around [`Box<str>`] that guarantees the package name is in
+/// its normalized (lowercase) form.
+///
+/// Use this type when you only care about the normalized name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NormalizedPackageName(Box<str>);
+
+impl NormalizedPackageName {
+    /// Returns the normalized package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for NormalizedPackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for NormalizedPackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.as_normalized().to_string().into_boxed_str())
+    }
+}
+
+impl From<NormalizedPackageName> for PackageName {
+    fn from(name: NormalizedPackageName) -> Self {
+        PackageName {
+            normalized: None,
+            source: name.0,
+        }
+    }
+}
+
+impl AsRef<str> for NormalizedPackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;
 
     use super::*;
+
+    #[test]
+    fn test_normalized_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let normalized = NormalizedPackageName::from(name);
+        assert_eq!(normalized.as_str(), "cudnn");
+        assert_eq!(normalized.to_string(), "cudnn");
+
+        // Convert back to PackageName
+        let back = PackageName::from(normalized);
+        assert_eq!(back.as_source(), "cudnn");
+        assert_eq!(back.as_normalized(), "cudnn");
+
+        // Round-trip: two different source names produce the same normalized name
+        let a = NormalizedPackageName::from(PackageName::try_from("cuDNN").unwrap());
+        let b = NormalizedPackageName::from(PackageName::try_from("cudnn").unwrap());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_source_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let source = SourcePackageName::from(name);
+        assert_eq!(source.as_str(), "cuDNN");
+        assert_eq!(source.to_string(), "cuDNN");
+
+        // Equality is exact (not normalized)
+        let name_lower = PackageName::try_from("cudnn").unwrap();
+        assert_ne!(source, SourcePackageName::from(name_lower));
+    }
 
     #[test]
     fn test_package_name_basics() {
@@ -368,5 +535,56 @@ mod test {
         let name = PackageName::normalized_name_from_matchspec_str(spec);
         assert_eq!(&*name, expected);
         assert_eq!(matches!(name, Cow::Borrowed(_)), is_borrowed);
+    }
+
+    #[rstest]
+    // No brackets: fast path, no extras.
+    #[case("numpy", "numpy", &[])]
+    #[case("numpy>=1.0", "numpy", &[])]
+    #[case("numpy >=1.0,<2.0", "numpy", &[])]
+    #[case("NumPy>=1.0", "numpy", &[])]
+    // Brackets but no extras key.
+    #[case(r#"numpy[build="py37*"]"#, "numpy", &[])]
+    #[case(r#"numpy[when="python >=3.6"]"#, "numpy", &[])]
+    #[case(r#"foo[version=">=1.0", build="py*"]"#, "foo", &[])]
+    // Extras present.
+    #[case("numpy[extras=[gpu]]", "numpy", &["gpu"])]
+    #[case("numpy[extras=[gpu, mkl]]", "numpy", &["gpu", "mkl"])]
+    #[case("Numpy[extras=[GPU]]", "numpy", &["GPU"])]
+    // Extras combined with other bracket keys.
+    #[case(
+        r#"aiohttp[extras=[speedups], build="py*"]"#,
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Extras combined with a version constraint outside the bracket.
+    #[case(
+        "aiohttp >=3.7.4 [extras=[speedups]]",
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Malformed bracket section falls back to empty extras but still extracts name.
+    #[case("numpy[", "numpy", &[])]
+    #[case("foo[extras=[", "foo", &[])]
+    // Empty extras list is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[]]", "foo", &[])]
+    // Trailing comma is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[a,]]", "foo", &[])]
+    // Multiple bracket sections are rejected by the parser; extras silently
+    // dropped. Documented limitation, captured here so future changes notice.
+    #[case(
+        r#"aiohttp[extras=[a]] [build="py*"]"#,
+        "aiohttp",
+        &[],
+    )]
+    fn test_name_and_extras_from_matchspec_str(
+        #[case] spec: &str,
+        #[case] expected_name: &str,
+        #[case] expected_extras: &[&str],
+    ) {
+        let (name, extras) = PackageName::name_and_extras_from_matchspec_str(spec);
+        assert_eq!(&*name, expected_name);
+        let expected: Vec<String> = expected_extras.iter().map(|s| (*s).to_string()).collect();
+        assert_eq!(extras, expected);
     }
 }

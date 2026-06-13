@@ -1,5 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,17 +8,17 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, Bound, FromPyObject,
-    PyAny, PyErr, PyResult, Python,
+    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass,
+    pymethods, types::PyBytes,
 };
 use rattler_conda_types::{
+    Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
+    WhlPackageRecord,
     package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
-    WhlPackageRecord,
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use url::Url;
 
 use crate::{
@@ -203,8 +203,9 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
+                flags: Vec::new(),
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: None,
@@ -416,6 +417,25 @@ impl PyRecord {
         self.as_package_record_mut().depends = depends;
     }
 
+    /// Conditional or optional dependencies. Maps a condition name to the list
+    /// of dependency specifications required when that condition is active.
+    #[getter]
+    pub fn extra_depends(&self) -> std::collections::HashMap<String, Vec<String>> {
+        self.as_package_record()
+            .extra_depends
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_extra_depends(
+        &mut self,
+        extra_depends: std::collections::HashMap<String, Vec<String>>,
+    ) {
+        self.as_package_record_mut().extra_depends = extra_depends.into_iter().collect();
+    }
+
     /// Features are a deprecated way to specify different
     /// feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead,
@@ -429,6 +449,21 @@ impl PyRecord {
     #[setter]
     pub fn set_features(&mut self, features: Option<String>) {
         self.as_package_record_mut().features = features;
+    }
+
+    /// Plain string flags used to select package variants.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.as_package_record()
+            .flags
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.as_package_record_mut().flags = flags.into_iter().map(Flag::new_unchecked).collect();
     }
 
     /// A deprecated md5 hash.
@@ -573,9 +608,9 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
+                jiff::Timestamp::from_millisecond(ts)
+                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;
@@ -837,6 +872,30 @@ impl TryFrom<PyRecord> for RepoDataRecord {
         match value.inner {
             RecordInner::Prefix(r) => Ok(Arc::unwrap_or_clone(r).repodata_record),
             RecordInner::RepoData(r) => Ok(Arc::unwrap_or_clone(r)),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+}
+
+/// Extracts the existing `Arc<RepoDataRecord>` out of a `PyRecord` without
+/// deep-cloning the underlying record. Use this on hot paths that just need
+/// to share the record across the Python/Rust boundary; falling through to
+/// `TryFrom<PyRecord> for RepoDataRecord` would `Arc::unwrap_or_clone` and
+/// then re-allocate a fresh Arc, which is exactly what the Arc wrapping is
+/// meant to avoid.
+impl TryFrom<PyRecord> for Arc<RepoDataRecord> {
+    type Error = PyErr;
+    fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
+        match value.inner {
+            RecordInner::RepoData(r) => Ok(r),
+            // PrefixRecord embeds RepoDataRecord by value, so we can't share
+            // its Arc — clone the embedded record into a new one.
+            RecordInner::Prefix(r) => Ok(Arc::new(r.repodata_record.clone())),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),

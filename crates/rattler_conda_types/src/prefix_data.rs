@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+use crate::PrefixRecord;
 use crate::package::ArchiveIdentifier;
 use crate::package_name::PackageName;
-use crate::PrefixRecord;
 
 /// An error that can occur when loading a prefix record
 #[derive(Debug, Clone, thiserror::Error)]
@@ -40,18 +40,31 @@ impl PrefixData {
         &self.prefix_path
     }
 
+    /// Iterates over all record names
+    pub fn package_names(&self) -> impl Iterator<Item = &PackageName> {
+        self.records.keys()
+    }
+
     /// Discovers all packages in the `conda-meta` directory but does not parse the JSON yet.
-    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
+    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, PrefixDataError> {
         let prefix_path = prefix_path.into();
         let meta_dir = prefix_path.join("conda-meta");
         let mut records = HashMap::new();
 
-        if !meta_dir.exists() {
-            return Ok(Self {
-                prefix_path,
-                records,
-            });
-        }
+        if !prefix_path.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Prefix {} does not exist", prefix_path.display()),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
+        if !meta_dir.is_dir() {
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{prefix_path:#?} exists but it's not a valid conda environment"),
+            );
+            return Err(PrefixDataError(Arc::new(io_err)));
+        };
 
         for entry in fs::read_dir(meta_dir)? {
             let entry = entry?;
@@ -61,20 +74,18 @@ impl PrefixData {
                 continue;
             }
 
-            if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                if let Some(base_name) = filename.strip_suffix(".json") {
-                    if let Ok(archive_id) = base_name.parse::<ArchiveIdentifier>() {
-                        if let Ok(package_name) = PackageName::try_from(archive_id.name) {
-                            records.insert(
-                                package_name,
-                                LazyRecordEntry {
-                                    path,
-                                    record: OnceLock::new(),
-                                },
-                            );
-                        }
-                    }
-                }
+            if let Some(filename) = path.file_name().and_then(|s| s.to_str())
+                && let Some(base_name) = filename.strip_suffix(".json")
+                && let Ok(archive_id) = base_name.parse::<ArchiveIdentifier>()
+                && let Ok(package_name) = PackageName::try_from(archive_id.name)
+            {
+                records.insert(
+                    package_name,
+                    LazyRecordEntry {
+                        path,
+                        record: OnceLock::new(),
+                    },
+                );
             }
         }
         Ok(Self {
@@ -98,6 +109,13 @@ impl PrefixData {
 
         // 3. .as_ref() elegantly converts &Result<T, E> into Result<&T, &E>
         Some(record_result.as_ref())
+    }
+
+    /// Iterates over all records, loading them on the spot
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = Option<Result<&PrefixRecord, &PrefixDataError>>> + '_ {
+        self.package_names().map(|name| self.get(name))
     }
 }
 

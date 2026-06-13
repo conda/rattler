@@ -1,5 +1,5 @@
 use rattler_conda_types::{compression_level::CompressionLevel, package::CondaArchiveType};
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Error};
 use std::str::FromStr;
 
 use crate::config::{Config, MergeError, ValidationError};
@@ -20,6 +20,14 @@ pub struct BuildConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package_format: Option<PackageFormatAndCompression>,
+}
+
+impl BuildConfig {
+    /// Returns `true` when no build-time configuration is set. Useful
+    /// for `#[serde(skip_serializing_if = ...)]` in downstream configs.
+    pub fn is_default(&self) -> bool {
+        self.package_format.is_none()
+    }
 }
 
 // deserializer for the package format and compression level

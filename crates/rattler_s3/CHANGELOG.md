@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_s3-v0.2.3...rattler_s3-v0.2.4) - 2026-06-09
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_s3-v0.2.2...rattler_s3-v0.2.3) - 2026-06-02
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_s3-v0.2.1...rattler_s3-v0.2.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_s3-v0.2.0...rattler_s3-v0.2.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_s3-v0.1.35...rattler_s3-v0.2.0) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.1.35](https://github.com/conda/rattler/compare/rattler_s3-v0.1.34...rattler_s3-v0.1.35) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.34](https://github.com/conda/rattler/compare/rattler_s3-v0.1.33...rattler_s3-v0.1.34) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.33](https://github.com/conda/rattler/compare/rattler_s3-v0.1.32...rattler_s3-v0.1.33) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.1.32](https://github.com/conda/rattler/compare/rattler_s3-v0.1.31...rattler_s3-v0.1.32) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.31](https://github.com/conda/rattler/compare/rattler_s3-v0.1.30...rattler_s3-v0.1.31) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.30](https://github.com/conda/rattler/compare/rattler_s3-v0.1.29...rattler_s3-v0.1.30) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.29](https://github.com/conda/rattler/compare/rattler_s3-v0.1.28...rattler_s3-v0.1.29) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_networking
+
 ## [0.1.28](https://github.com/conda/rattler/compare/rattler_s3-v0.1.27...rattler_s3-v0.1.28) - 2026-03-20
 
 ### Other

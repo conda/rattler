@@ -3,12 +3,11 @@ use std::str::FromStr;
 
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
+    Channel, ChannelConfig, Flag, MatchSpec, NoArchType, PackageName, PackageRecord,
+    ParseChannelError, ParseMatchSpecOptions, RepoDataRecord, RepodataRevision, Version,
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
-    ParseStrictness::Lenient,
-    RepoDataRecord, Version,
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use reqwest::Client;
@@ -38,6 +37,7 @@ pub struct SolvedPackage {
     pub version: String,
     pub depends: Option<Vec<String>>,
     pub subdir: Option<String>,
+    pub flags: Option<Vec<String>>,
 }
 
 /// Solve a set of specs with the given channels and platforms.
@@ -58,7 +58,12 @@ pub async fn simple_solve(
     // Convert types
     let specs = specs
         .into_iter()
-        .map(|s| MatchSpec::from_str(&s, Lenient))
+        .map(|s| {
+            MatchSpec::from_str(
+                &s,
+                ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let channels = channels
         .into_iter()
@@ -99,10 +104,16 @@ pub async fn simple_solve(
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
                 subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 constrains: vec![],
                 track_features: vec![],
                 features: None,
+                flags: pkg
+                    .flags
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Flag::new_unchecked)
+                    .collect(),
                 noarch: NoArchType::none(),
                 license: None,
                 license_family: None,
@@ -174,16 +185,16 @@ pub async fn simple_solve(
             &records.package_record.build,
         );
 
-        if records.package_record.depends.is_empty() {
-            if let Some(deps) = repodata_keys.get(&key) {
-                records.package_record.depends = (*deps).clone();
-            }
+        if records.package_record.depends.is_empty()
+            && let Some(deps) = repodata_keys.get(&key)
+        {
+            records.package_record.depends = (*deps).clone();
         }
     }
 
     let task = SolverTask {
         specs,
-        locked_packages: installed_packages,
+        locked_packages: installed_packages.iter().collect(),
         ..repodata.iter().collect::<SolverTask<_>>()
     };
 
@@ -200,19 +211,18 @@ pub async fn simple_solve(
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),
             version: r.package_record.version.to_string(),
-            md5: r
-                .package_record
-                .md5
-                .as_ref()
-                .map(|hash| format!("{hash:x}")),
-            sha256: r
-                .package_record
-                .sha256
-                .as_ref()
-                .map(|hash| format!("{hash:x}")),
+            md5: r.package_record.md5.as_ref().map(hex::encode),
+            sha256: r.package_record.sha256.as_ref().map(hex::encode),
             size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
+            flags: Some(
+                r.package_record
+                    .flags
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            ),
         })
         .collect())
 }

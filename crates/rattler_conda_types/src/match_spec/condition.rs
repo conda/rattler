@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, multispace0},
     sequence::{delimited, preceded},
-    IResult, Parser,
 };
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ pub enum MatchSpecCondition {
 impl Display for MatchSpecCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MatchSpecCondition::MatchSpec(ms) => write!(f, "{ms}"),
+            MatchSpecCondition::MatchSpec(ms) => ms.fmt_in_condition(f),
             MatchSpecCondition::And(lhs, rhs) => write!(f, "({lhs} and {rhs})"),
             MatchSpecCondition::Or(lhs, rhs) => write!(f, "({lhs} or {rhs})"),
         }
@@ -90,10 +90,13 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
             b'(' | b')' if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
                 break;
             }
-            _ if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
-                if check_word_delimiter(input, i, "and") || check_word_delimiter(input, i, "or") {
-                    break;
-                }
+            _ if !in_double_quote
+                && !in_single_quote
+                && bracket_depth == 0
+                && (check_word_delimiter(input, i, "and")
+                    || check_word_delimiter(input, i, "or")) =>
+            {
+                break;
             }
             _ => {}
         }

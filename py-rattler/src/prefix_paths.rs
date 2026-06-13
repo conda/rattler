@@ -1,5 +1,5 @@
 use crate::{paths_json::PyFileMode, utils::sha256_from_pybytes};
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, exceptions::PyValueError, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::prefix_record::{PathType, PathsEntry, PrefixPaths};
 use std::path::PathBuf;
 

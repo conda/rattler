@@ -2,9 +2,9 @@ use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use miette::IntoDiagnostic;
 use once_cell::sync::Lazy;
-use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, filter::LevelFilter, util::SubscriberInitExt};
 
-use crate::writer::IndicatifWriter;
+use crate::{commands::exec, writer::IndicatifWriter};
 
 mod commands;
 mod exclude_newer;
@@ -41,17 +41,25 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    Auth(commands::auth::Opt),
+    Auth(Box<commands::auth::Opt>),
+    Completion(commands::completion::Opt),
     Create(commands::create::Opt),
+    Download(commands::download::Opt),
     FetchFile(commands::fetch_file::Opt),
     Inspect(commands::inspect::Opt),
     Search(commands::search::Opt),
+    ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
-    RemoveMenu(commands::menu::InstallOpt),
+    RemoveMenu(commands::menu::RemoveOpt),
+    Run(commands::run::Opt),
     Extract(commands::extract::Opt),
     Link(commands::link::Opt),
+    InjectIntoPrefix(commands::prefix::InjectOpt),
+    RemoveFromPrefix(commands::prefix::RemoveFromPrefixOpt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
+    List(commands::list::Opt),
+    Exec(commands::exec::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -99,16 +107,24 @@ async fn async_main() -> miette::Result<()> {
 
     // Dispatch the selected comment
     match opt.command {
-        Command::Auth(opts) => commands::auth::auth(opts).await,
+        Command::Auth(opts) => commands::auth::auth(*opts).await,
+        Command::Completion(opts) => commands::completion::completion(opts),
         Command::Create(opts) => commands::create::create(opts).await,
+        Command::Download(opts) => commands::download::download(opts).await,
         Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts).await,
         Command::Inspect(opts) => commands::inspect::inspect(opts).await,
         Command::Search(opts) => commands::search::search(opts).await,
+        Command::List(opts) => commands::list::list(opts).await,
+        Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
+        Command::Run(opts) => commands::run::run(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts).await,
         Command::Link(opts) => commands::link::link(opts).await,
+        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
+        Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
+        Command::Exec(opts) => exec::exec(opts).await,
     }
 }

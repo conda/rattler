@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides};
 
 use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage};
@@ -108,6 +108,14 @@ impl PyVirtualPackageOverrides {
     #[setter]
     pub fn set_cuda(&mut self, value: Option<PyOverride>) {
         self.inner.cuda = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_cuda_arch(&self) -> Option<PyOverride> {
+        self.inner.cuda_arch.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_cuda_arch(&mut self, value: Option<PyOverride>) {
+        self.inner.cuda_arch = value.map(Into::into);
     }
     #[getter]
     pub fn get_libc(&self) -> Option<PyOverride> {

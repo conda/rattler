@@ -6,8 +6,8 @@ use std::{
 
 use rattler_conda_types::{PackageName, Platform, PrefixRecord};
 
-use super::{installer::result_record::ContentComparable, InstallationResultRecord};
-use crate::install::{python::PythonInfoError, PythonInfo};
+use super::{InstallationResultRecord, installer::result_record::ContentComparable};
+use crate::install::{PythonInfo, python::PythonInfoError};
 
 /// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
@@ -442,10 +442,10 @@ mod tests {
     use std::collections::HashSet;
 
     use assert_matches::assert_matches;
-    use rattler_conda_types::{prefix::Prefix, Platform};
+    use rattler_conda_types::{Platform, prefix::Prefix};
 
     use crate::install::{
-        test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,
+        Transaction, TransactionOperation, test_utils::download_and_get_prefix_record,
     };
 
     #[tokio::test]

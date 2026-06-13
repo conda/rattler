@@ -9,32 +9,35 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     hash::{Hash, Hasher},
+    num::ParseIntError,
     path::Path,
     str::FromStr,
 };
 
 use indexmap::IndexMap;
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use rattler_macros::sorted;
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DeserializeFromStr, SerializeDisplay};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{
+    DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as, skip_serializing_none,
+};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
+    Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
+    ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
     build_spec::BuildNumber,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, IndexJson, RunExportsJson,
         WheelArchiveType,
     },
     utils::{
+        TimestampMs, UrlWithTrailingSlash,
         serde::{
-            sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
+            DeserializeFromStrUnchecked, sort_index_map_alphabetically, sort_map_alphabetically,
         },
-        UrlWithTrailingSlash,
     },
-    Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
-    ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -63,12 +66,8 @@ pub struct RepoData {
     /// Packages stored under the `v3` top-level key.
     /// Uses extension-less `ArchiveIdentifier` keys with sub-maps for each
     /// archive type.
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3Packages::is_empty"
-    )]
-    pub experimental_v3: ExperimentalV3Packages,
+    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
+    pub v3: V3Packages,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -85,6 +84,7 @@ pub struct RepoData {
 }
 
 /// Information about subdirectory of channel in the Conda [`RepoData`]
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
@@ -93,6 +93,209 @@ pub struct ChannelInfo {
     /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+
+    /// Repodata revisions available in this repodata file.
+    ///
+    /// Serialized as a `vN`-keyed dictionary per the CEP draft
+    /// <https://github.com/conda/ceps/pull/146>.
+    #[serde_as(as = "IndexMap<DisplayFromStr, _>")]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub repodata_revisions: RepodataRevisions,
+
+    /// Optional relationships to other channels as defined in
+    /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
+    #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
+    pub channel_relations: Option<ChannelRelations>,
+}
+
+/// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
+/// CEP draft <https://github.com/conda/ceps/pull/146>. Keying encodes
+/// uniqueness; insertion order is preserved.
+pub type RepodataRevisions = IndexMap<RepodataRevision, RepodataRevisionMetadata>;
+
+/// Metadata for a single [`RepodataRevisions`] entry; the revision itself is
+/// the map key.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct RepodataRevisionMetadata {
+    /// The number of packages available in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_packages: Option<u64>,
+
+    /// The Unix timestamp in milliseconds of the oldest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<TimestampMs>,
+
+    /// The Unix timestamp in milliseconds of the newest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newest: Option<TimestampMs>,
+}
+
+/// A revision paired with its metadata: the flattened form of a
+/// [`RepodataRevisions`] entry, used as indexer input and in reporter messages.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct RepodataRevisionInfo {
+    /// The integer identifying the revision.
+    #[serde(default)]
+    pub revision: RepodataRevision,
+
+    /// The number of packages available in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_packages: Option<u64>,
+
+    /// The Unix timestamp in milliseconds of the oldest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<TimestampMs>,
+
+    /// The Unix timestamp in milliseconds of the newest record in this
+    /// revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newest: Option<TimestampMs>,
+}
+
+impl RepodataRevisionInfo {
+    /// Combines a revision identifier with its metadata.
+    pub fn from_metadata(revision: RepodataRevision, metadata: RepodataRevisionMetadata) -> Self {
+        Self {
+            revision,
+            n_packages: metadata.n_packages,
+            oldest: metadata.oldest,
+            newest: metadata.newest,
+        }
+    }
+
+    /// Returns the metadata portion (everything but the revision).
+    pub fn metadata(&self) -> RepodataRevisionMetadata {
+        RepodataRevisionMetadata {
+            n_packages: self.n_packages,
+            oldest: self.oldest,
+            newest: self.newest,
+        }
+    }
+}
+
+/// A repodata revision.
+///
+/// The serialized CEP wire format is an integer. Known variants are exposed as
+/// enum variants so writer APIs can be explicit, while [`RepodataRevision::Unknown`]
+/// keeps readers forward-compatible with future channel metadata.
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
+pub enum RepodataRevision {
+    /// Legacy repodata maps: `packages` and `packages.conda`.
+    #[default]
+    Legacy,
+    /// Repodata records stored under the top-level `v3` map.
+    V3,
+    /// A future or unsupported repodata revision.
+    Unknown(u64),
+}
+
+impl RepodataRevision {
+    /// Returns the integer representation used in repodata JSON.
+    pub fn as_u64(self) -> u64 {
+        match self {
+            Self::Legacy => 0,
+            Self::V3 => 3,
+            Self::Unknown(revision) => revision,
+        }
+    }
+}
+
+impl From<u64> for RepodataRevision {
+    fn from(value: u64) -> Self {
+        match value {
+            0..=2 => Self::Legacy,
+            3 => Self::V3,
+            revision => Self::Unknown(revision),
+        }
+    }
+}
+
+impl From<RepodataRevision> for u64 {
+    fn from(value: RepodataRevision) -> Self {
+        value.as_u64()
+    }
+}
+
+impl FromStr for RepodataRevision {
+    type Err = ParseIntError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value.eq_ignore_ascii_case("legacy") {
+            return Ok(Self::Legacy);
+        }
+
+        value
+            .strip_prefix('v')
+            .or_else(|| value.strip_prefix('V'))
+            .unwrap_or(value)
+            .parse::<u64>()
+            .map(Self::from)
+    }
+}
+
+impl Display for RepodataRevision {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Legacy => f.write_str("legacy"),
+            Self::V3 | Self::Unknown(_) => write!(f, "v{}", self.as_u64()),
+        }
+    }
+}
+
+impl Serialize for RepodataRevision {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.as_u64())
+    }
+}
+
+impl<'de> Deserialize<'de> for RepodataRevision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        u64::deserialize(deserializer).map(Self::from)
+    }
+}
+
+/// Relationships between a channel and other channels as declared in the
+/// channel's `repodata.json` (or sharded repodata index) under
+/// `info.channel_relations`.
+///
+/// See [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md) for
+/// details. Both fields are relative-path channel references (e.g.
+/// `../conda-forge`) resolved against the declaring channel's base URL
+/// without its subdir component.
+///
+/// A channel MUST NOT declare both `base` and `overrides` referencing the
+/// same channel.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct ChannelRelations {
+    /// A reference to a channel with higher priority than the declaring
+    /// channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+
+    /// A reference to a channel with lower priority than the declaring
+    /// channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<String>,
+}
+
+impl ChannelRelations {
+    /// Returns true if neither `base` nor `overrides` is set.
+    pub fn is_empty(&self) -> bool {
+        self.base.is_none() && self.overrides.is_none()
+    }
+
+    pub(crate) fn is_none_or_empty(value: &Option<ChannelRelations>) -> bool {
+        value.as_ref().is_none_or(ChannelRelations::is_empty)
+    }
 }
 
 /// Packages stored under the `v3` top-level key.
@@ -100,7 +303,7 @@ pub struct ChannelInfo {
 /// Records in this set of packages can have conditional dependencies, extras
 /// and can be whls.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
-pub struct ExperimentalV3Packages {
+pub struct V3Packages {
     /// The tar.bz2 package records
     #[serde(
         default,
@@ -127,10 +330,64 @@ pub struct ExperimentalV3Packages {
     pub whl: ahash::HashMap<ArchiveIdentifier, WhlPackageRecord>,
 }
 
-impl ExperimentalV3Packages {
+impl V3Packages {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+    }
+
+    /// Iterates over all package records with their archive identifiers.
+    pub fn records(&self) -> impl Iterator<Item = (DistArchiveIdentifier, &PackageRecord)> + '_ {
+        self.tar_bz2
+            .iter()
+            .map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), CondaArchiveType::TarBz2),
+                    record,
+                )
+            })
+            .chain(self.conda.iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), CondaArchiveType::Conda),
+                    record,
+                )
+            }))
+            .chain(self.whl.iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id.clone(), WheelArchiveType::Whl),
+                    &record.package_record,
+                )
+            }))
+    }
+
+    /// Consumes this value and iterates over all package records with their
+    /// archive identifiers and optional wheel URL.
+    pub fn into_records_with_url(
+        self,
+    ) -> impl Iterator<Item = (DistArchiveIdentifier, PackageRecord, Option<UrlOrPath>)> {
+        self.tar_bz2
+            .into_iter()
+            .map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
+                    record,
+                    None,
+                )
+            })
+            .chain(self.conda.into_iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, CondaArchiveType::Conda),
+                    record,
+                    None,
+                )
+            }))
+            .chain(self.whl.into_iter().map(|(id, record)| {
+                (
+                    DistArchiveIdentifier::new(id, WheelArchiveType::Whl),
+                    record.package_record,
+                    Some(record.url),
+                )
+            }))
     }
 }
 
@@ -177,14 +434,17 @@ pub struct PackageRecord {
     /// are only required if certain features are enabled or if certain
     /// conditions are met.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
     /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     pub features: Option<String>,
+
+    /// Plain string flags used to select package variants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<Flag>,
 
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
@@ -417,14 +677,14 @@ impl RepoData {
         };
 
         // Conda packages: packages, packages.conda, v3.tar.bz2, v3.conda
-        let v3_tar_bz2 = self.experimental_v3.tar_bz2.into_iter().map(|(id, rec)| {
+        let v3_tar_bz2 = self.v3.tar_bz2.into_iter().map(|(id, rec)| {
             (
                 DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
                 rec,
             )
         });
         let v3_conda = self
-            .experimental_v3
+            .v3
             .conda
             .into_iter()
             .map(|(id, rec)| (DistArchiveIdentifier::new(id, CondaArchiveType::Conda), rec));
@@ -455,7 +715,7 @@ impl RepoData {
                 url,
                 package_record,
             },
-        ) in self.experimental_v3.whl
+        ) in self.v3.whl
         {
             let dist_id = DistArchiveIdentifier::new(id, WheelArchiveType::Whl);
             let url = match url {
@@ -529,6 +789,7 @@ impl PackageRecord {
             constrains: vec![],
             depends: vec![],
             features: None,
+            flags: vec![],
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: None,
@@ -538,7 +799,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            experimental_extra_depends: BTreeMap::new(),
+            extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -635,17 +896,13 @@ pub struct SubdirRunExportsJson {
     conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRunExports>,
 
     /// Run exports for v3 packages.
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3RunExports::is_empty"
-    )]
-    experimental_v3: ExperimentalV3RunExports,
+    #[serde(default, skip_serializing_if = "V3RunExports::is_empty")]
+    v3: V3RunExports,
 }
 
 /// Run exports for packages stored under the `v3` top-level key.
 #[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
-struct ExperimentalV3RunExports {
+struct V3RunExports {
     /// Run exports for v3 tar.bz2 packages
     #[serde(
         default,
@@ -664,7 +921,7 @@ struct ExperimentalV3RunExports {
     conda: ahash::HashMap<ArchiveIdentifier, PackageRunExports>,
 }
 
-impl ExperimentalV3RunExports {
+impl V3RunExports {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty()
@@ -679,10 +936,10 @@ impl SubdirRunExportsJson {
             .get(file_name)
             .or_else(|| self.conda_packages.get(file_name))
             .or_else(|| {
-                self.experimental_v3
+                self.v3
                     .tar_bz2
                     .get(&file_name.identifier)
-                    .or_else(|| self.experimental_v3.conda.get(&file_name.identifier))
+                    .or_else(|| self.v3.conda.get(&file_name.identifier))
             })
             .map(|pre| &pre.run_exports)
     }
@@ -706,7 +963,8 @@ pub enum ValidatePackageRecordsError {
         dependency: String,
     },
     /// A package constraint is not met in the environment.
-    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
+    #[error(
+        "package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
     )]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
@@ -792,6 +1050,7 @@ impl PackageRecord {
             constrains: index.constrains,
             depends: index.depends,
             features: index.features,
+            flags: index.flags,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: index.license,
@@ -801,7 +1060,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            experimental_extra_depends: index.experimental_extra_depends,
+            extra_depends: index.extra_depends,
             sha256,
             size,
             subdir,
@@ -826,9 +1085,10 @@ mod test {
     use indexmap::IndexMap;
 
     use crate::{
+        Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
+        RepodataRevision, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
-        Channel, ChannelConfig, ExperimentalV3Packages, PackageRecord, RepoData,
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -850,7 +1110,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: [
                 "xyz-1-py.conda",
                 "foo-1-py.conda",
@@ -875,6 +1135,113 @@ mod test {
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    // See https://github.com/conda/ceps/blob/main/cep-0042.md
+    #[test]
+    fn test_channel_relations() {
+        // Deserialize a repodata.json with channel_relations set.
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "channel_relations": {
+                    "base": "../conda-forge",
+                    "overrides": "../fallback-channel"
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let relations = repodata
+            .info
+            .as_ref()
+            .and_then(|i| i.channel_relations.as_ref())
+            .unwrap();
+        assert_eq!(relations.base.as_deref(), Some("../conda-forge"));
+        assert_eq!(relations.overrides.as_deref(), Some("../fallback-channel"));
+
+        // Round trip with a single field set and the other omitted.
+        let partial = RepoData {
+            version: Some(2),
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: Some(ChannelRelations {
+                    base: Some("../conda-forge".to_string()),
+                    overrides: None,
+                }),
+            }),
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: ahash::HashSet::default(),
+        };
+        let json = serde_json::to_string(&partial).unwrap();
+        assert!(json.contains("\"channel_relations\""));
+        assert!(json.contains("\"base\":\"../conda-forge\""));
+        assert!(!json.contains("\"overrides\""));
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), partial);
+
+        // `channel_relations` must be omitted when it is `None` as well as
+        // when both of its fields are unset.
+        for channel_relations in [None, Some(ChannelRelations::default())] {
+            let repodata = RepoData {
+                version: Some(2),
+                info: Some(ChannelInfo {
+                    subdir: Some("linux-64".to_string()),
+                    base_url: None,
+                    repodata_revisions: IndexMap::default(),
+                    channel_relations,
+                }),
+                packages: IndexMap::default(),
+                conda_packages: IndexMap::default(),
+                v3: V3Packages::default(),
+                removed: ahash::HashSet::default(),
+            };
+            let json = serde_json::to_string(&repodata).unwrap();
+            assert!(!json.contains("channel_relations"));
+        }
+    }
+
+    #[test]
+    fn test_repodata_revisions() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "repodata_revisions": {
+                    "v4": {
+                        "n_packages": 2,
+                        "oldest": 1768249989851,
+                        "newest": 1773851561010
+                    }
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
+        assert_eq!(revisions.len(), 1);
+        let metadata = &revisions[&RepodataRevision::Unknown(4)];
+        assert_eq!(metadata.n_packages, Some(2));
+        assert_eq!(
+            metadata.oldest.map(|ts| ts.timestamp_millis()),
+            Some(1768249989851)
+        );
+        assert_eq!(
+            metadata.newest.map(|ts| ts.timestamp_millis()),
+            Some(1773851561010)
+        );
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert!(json.contains("\"repodata_revisions\":{\"v4\":{"));
+        assert!(json.contains("\"oldest\":1768249989851"));
+        assert!(json.contains("\"newest\":1773851561010"));
+        // The revision identifier is the map key, not a field of the value.
+        assert!(!json.contains("\"revision\""));
     }
 
     #[test]
@@ -1107,7 +1474,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            experimental_v3: ExperimentalV3Packages::default(),
+            v3: V3Packages::default(),
             removed: ahash::HashSet::default(),
         };
 
@@ -1159,8 +1526,8 @@ mod test {
             r.build_number = build_number;
             r.subdir = subdir.to_string();
             r.timestamp = timestamp.map(|secs| {
-                crate::utils::TimestampMs::from_datetime_seconds(
-                    chrono::DateTime::from_timestamp(secs, 0).unwrap(),
+                crate::utils::TimestampMs::from_timestamp_seconds(
+                    jiff::Timestamp::from_second(secs).unwrap(),
                 )
             });
             r

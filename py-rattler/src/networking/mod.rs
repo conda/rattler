@@ -1,9 +1,9 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyResult, Python, pyfunction, types::PyTuple};
 use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
-    fetch_repo_data, CachedRepoData, FetchRepoDataError, FetchRepoDataOptions,
+    CachedRepoData, FetchRepoDataError, FetchRepoDataOptions, fetch_repo_data,
 };
 use url::Url;
 
@@ -34,7 +34,7 @@ pub fn py_fetch_repo_data<'a>(
     fetch_options: Option<PyFetchRepoDataOptions>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
-    let client = client.unwrap_or(PyClientWithMiddleware::new(None, None, None)?);
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None, None, None, None)?);
     let fetch_options = fetch_options.unwrap_or(PyFetchRepoDataOptions {
         inner: FetchRepoDataOptions::default(),
     });

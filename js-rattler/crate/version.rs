@@ -1,7 +1,7 @@
 use rattler_conda_types::{Version, VersionBumpType};
 use std::{cmp::Ordering, str::FromStr};
-use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::JsResult;
 

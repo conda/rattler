@@ -7,7 +7,7 @@ use std::{
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
-use rattler_conda_types::{package::RunExportsJson, RepoDataRecord, SubdirRunExportsJson};
+use rattler_conda_types::{RepoDataRecord, SubdirRunExportsJson, package::RunExportsJson};
 use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
@@ -158,7 +158,14 @@ impl RunExportExtractor {
     /// Returns the path to the package file if the URL is a file URL.
     fn path_to_package(_record: &RepoDataRecord) -> Option<PathBuf> {
         #[cfg(not(target_arch = "wasm32"))]
-        return _record.url.to_file_path().ok();
+        {
+            // `Url::to_file_path` is documented to *not* check the URL's
+            // scheme so we must do it ourselves
+            if _record.url.scheme() != "file" {
+                return None;
+            }
+            _record.url.to_file_path().ok()
+        }
         #[cfg(target_arch = "wasm32")]
         None
     }
@@ -200,7 +207,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             err,
-                        ))
+                        ));
                     }
                 };
                 let run_exports = match serde_json::from_slice(&decoded) {
@@ -209,7 +216,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             e.into(),
-                        ))
+                        ));
                     }
                 };
 
@@ -258,7 +265,7 @@ impl RunExportExtractor {
                         return Err(RunExportExtractorError::DecodeRunExports(
                             url.to_string(),
                             e.into(),
-                        ))
+                        ));
                     }
                 };
                 Ok(run_exports)
@@ -334,9 +341,6 @@ impl RunExportExtractor {
             .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
-        // Wait for a permit from the semaphore to limit concurrent requests.
-        let _permit = self.acquire_request_permit().await;
-
         match package_cache
             .get_or_fetch_from_url_with_retry(
                 cache_key,
@@ -344,6 +348,7 @@ impl RunExportExtractor {
                 client.clone(),
                 rattler_networking::retry_policies::default_retry_policy(),
                 reporter,
+                self.max_concurrent_requests.clone(),
             )
             .await
         {

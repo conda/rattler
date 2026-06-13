@@ -3,7 +3,7 @@ mod version_spec;
 
 use crate::PyRattlerError;
 use component::PyComponent;
-use pyo3::{basic::CompareOp, pyclass, pymethods, PyResult};
+use pyo3::{PyResult, basic::CompareOp, pyclass, pymethods};
 use rattler_conda_types::{Version, VersionBumpType};
 use std::{
     collections::hash_map::DefaultHasher,

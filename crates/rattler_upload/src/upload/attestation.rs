@@ -7,7 +7,8 @@ use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sigstore_sign::{oidc::IdentityToken, Attestation, SigningContext};
+use sigstore_sign::{Attestation, SigningConfig, SigningContext, oidc::IdentityToken};
+use sigstore_trust_root::SigningConfig as TufSigningConfig;
 use std::path::Path;
 
 /// Conda V1 predicate
@@ -55,7 +56,7 @@ pub async fn create_attestation(
     // Step 2: Compute package digest
     let digest = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(package_path)
         .into_diagnostic()?;
-    let digest_hex = format!("{digest:x}");
+    let digest_hex = hex::encode(digest);
 
     // Step 3: Get package filename
     let filename = package_path
@@ -77,9 +78,15 @@ pub async fn create_attestation(
     )
     .add_subject(filename, sha256_hash);
 
-    // Step 5: Sign with Sigstore
+    // Step 5: Sign with Sigstore — fetch fresh trust roots via TUF
+    tracing::info!("Fetching Sigstore signing config via TUF...");
+    let tuf_config = TufSigningConfig::production()
+        .await
+        .map_err(|e| miette::miette!("Failed to fetch Sigstore TUF signing config: {}", e))?;
+    let signing_config = SigningConfig::from_tuf_config(&tuf_config);
+
     tracing::info!("Signing attestation with Sigstore...");
-    let context = SigningContext::production();
+    let context = SigningContext::with_config(signing_config);
     let signer = context.signer(identity_token);
 
     let bundle = signer
@@ -143,8 +150,12 @@ async fn store_attestation_to_github(
         let body = response.text().await.into_diagnostic()?;
         let error_detail = match status.as_u16() {
             401 => "Authentication failed. Check your GitHub token.",
-            403 => "Permission denied. Ensure token has 'attestations:write' and repository allows attestations.",
-            404 => "Repository not found or attestations API unavailable. Ensure you're on a supported GitHub plan.",
+            403 => {
+                "Permission denied. Ensure token has 'attestations:write' and repository allows attestations."
+            }
+            404 => {
+                "Repository not found or attestations API unavailable. Ensure you're on a supported GitHub plan."
+            }
             422 => "Invalid attestation bundle format.",
             _ => "Unknown error storing attestation.",
         };

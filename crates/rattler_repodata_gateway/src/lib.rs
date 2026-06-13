@@ -67,6 +67,8 @@ mod reporter;
 pub mod sparse;
 mod utils;
 pub use reporter::{DownloadReporter, Reporter};
+#[cfg(feature = "sparse")]
+pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
 
 #[cfg(feature = "gateway")]
 mod gateway;

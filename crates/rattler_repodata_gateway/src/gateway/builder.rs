@@ -7,7 +7,7 @@ use rattler_networking::LazyClient;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
+use crate::{ChannelConfig, Gateway, gateway::GatewayInner};
 
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 

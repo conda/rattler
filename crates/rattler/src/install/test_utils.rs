@@ -2,17 +2,17 @@ use std::{path::PathBuf, str::FromStr};
 
 use crate::{
     get_repodata_record,
-    install::{transaction, unlink_package, InstallDriver, InstallOptions},
+    install::{InstallDriver, InstallOptions, transaction, unlink_package},
     package_cache::PackageCache,
 };
 use futures::TryFutureExt;
-use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
-use rattler_networking::retry_policies::default_retry_policy;
+use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version, prefix::Prefix};
 use rattler_networking::LazyClient;
+use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
 use url::Url;
 
-use super::{driver::PostProcessResult, link_package, PythonInfo};
+use super::{PythonInfo, driver::PostProcessResult, link_package};
 
 /// Install a package into the environment and write a `conda-meta` file that
 /// contains information about how the file was linked.
@@ -92,6 +92,7 @@ pub async fn execute_operation(
                 install_record.url.clone(),
                 download_client.clone(),
                 default_retry_policy(),
+                None,
                 None,
             )
             .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))

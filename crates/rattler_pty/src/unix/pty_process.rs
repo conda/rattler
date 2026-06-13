@@ -1,14 +1,14 @@
 pub use nix::sys::{signal, wait};
 use nix::{
     self,
-    fcntl::{open, OFlag},
+    fcntl::{OFlag, open},
     libc::STDERR_FILENO,
-    pty::{grantpt, posix_openpt, unlockpt, PtyMaster, Winsize},
+    pty::{PtyMaster, Winsize, grantpt, posix_openpt, unlockpt},
     sys::{
         stat,
         termios::{self, InputFlags, Termios},
     },
-    unistd::{close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid, ForkResult, Pid},
+    unistd::{ForkResult, Pid, close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid},
 };
 use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::{
@@ -21,11 +21,27 @@ use std::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::{sleep, Duration, Instant},
+    time::{Duration, Instant, sleep},
 };
 
 #[cfg(target_os = "linux")]
 use nix::pty::ptsname_r;
+
+#[cfg(target_os = "netbsd")]
+/// NetBSD has `ptsname_r` in libc but apparently the `nix` crate does not expose it for NetBSD.
+/// Call `libc::ptsname_r` directly.
+fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
+    use std::ffi::CStr;
+
+    let mut buf: [libc::c_char; 128] = [0; 128];
+
+    unsafe {
+        match libc::ptsname_r(fd.as_raw_fd(), buf.as_mut_ptr(), buf.len()) {
+            0 => Ok(CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()),
+            _ => Err(nix::Error::last()),
+        }
+    }
+}
 
 /// Start a process in a forked tty so you can interact with it the same as you would
 /// within a terminal
@@ -42,7 +58,7 @@ pub struct PtyProcess {
 /// instead of using a static mutex this calls `ioctl` with `TIOCPTYGNAME` directly
 /// <https://blog.tarq.io/ptsname-on-osx-with-rust>/
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
-    use nix::libc::{ioctl, TIOCPTYGNAME};
+    use nix::libc::{TIOCPTYGNAME, ioctl};
     use std::ffi::CStr;
 
     // the buffer size on OSX is 128, defined by sys/ttycom.h
@@ -111,7 +127,6 @@ impl PtyProcess {
         grantpt(&master_fd)?;
         unlockpt(&master_fd)?;
 
-        // on Linux this is the libc function, on OSX this is our implementation of ptsname_r
         let slave_name = ptsname_r(&master_fd)?;
 
         // Get the current window size if it was not specified
@@ -206,10 +221,10 @@ impl PtyProcess {
                 Some(_) | None => thread::sleep(time::Duration::from_millis(100)),
             }
             // kill -9 if timeout is reached
-            if let Some(timeout) = self.kill_timeout {
-                if start.elapsed() > timeout {
-                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
-                }
+            if let Some(timeout) = self.kill_timeout
+                && start.elapsed() > timeout
+            {
+                signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
             }
         }
     }
@@ -307,10 +322,10 @@ impl PtyProcess {
             }
 
             // kill -9 if timeout is reached
-            if let Some(timeout) = self.kill_timeout {
-                if start.elapsed() > timeout {
-                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
-                }
+            if let Some(timeout) = self.kill_timeout
+                && start.elapsed() > timeout
+            {
+                signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
             }
         }
     }

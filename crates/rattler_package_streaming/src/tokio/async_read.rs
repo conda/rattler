@@ -6,13 +6,16 @@ use std::path::Path;
 use async_compression::tokio::bufread::BzDecoder;
 use async_spooled_tempfile::SpooledTempFile;
 use async_zip::base::read::stream::ZipFileReader;
+#[cfg(feature = "reqwest")]
 use futures_util::StreamExt;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+#[cfg(feature = "reqwest")]
+use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncRead, AsyncSeekExt};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
-use crate::{read::SizeCountingReader, ExtractError, ExtractResult};
+use crate::{ExtractError, ExtractResult, read::SizeCountingReader};
 
-use super::shared::{extract_tar_zst_entry, unpack_tar_archive, DEFAULT_BUF_SIZE};
+use super::shared::{DEFAULT_BUF_SIZE, extract_tar_zst_entry, unpack_tar_archive};
 
 /// Extracts the contents a `.tar.bz2` package archive using fully async implementation.
 pub async fn extract_tar_bz2(
@@ -40,11 +43,11 @@ pub async fn extract_tar_bz2(
     let decoder = BzDecoder::new(buf_reader);
 
     // Build archive with optimized settings for faster extraction:
-    // - Skip mtime preservation to avoid extra syscalls
+    // - Skip automatic mtime preservation (we set mtimes manually with safe clamping)
     // - Skip automatic permission handling (we'll set executable bits manually)
     // - Skip extended attributes for better performance
     let archive = tokio_tar::ArchiveBuilder::new(decoder)
-        .set_preserve_mtime(true)
+        .set_preserve_mtime(false)
         .set_preserve_permissions(false)
         .set_unpack_xattrs(false)
         // We need this setting otherwise some packages in conda-forge will

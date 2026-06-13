@@ -1,15 +1,15 @@
 use std::path::Path;
 
+use PropertiesSystem::IPropertyStore;
 use windows::{
-    core::{Interface, Result, GUID, HSTRING},
     Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
     Win32::System::Com::StructuredStorage::{InitPropVariantFromStringAsVector, PropVariantClear},
     Win32::System::Com::{
-        CoCreateInstance, CoInitialize, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+        CLSCTX_INPROC_SERVER, CoCreateInstance, CoInitialize, CoUninitialize, IPersistFile,
     },
     Win32::UI::Shell::{IShellLinkW, PropertiesSystem, ShellLink},
+    core::{GUID, HSTRING, Interface, Result},
 };
-use PropertiesSystem::IPropertyStore;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Shortcut<'a> {

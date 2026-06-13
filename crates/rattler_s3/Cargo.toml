@@ -1,6 +1,6 @@
 [package]
 name = "rattler_s3"
-version = "0.1.28"
+version = "0.2.4"
 description = "A crate to streamline interaction with S3 storage for rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -10,12 +10,12 @@ edition.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 # Note: aws-smithy-http-client does not support native-tls, only rustls variants.
 # This feature is provided for API compatibility with other rattler crates but
 # will use rustls under the hood.
-native-tls = ["rustls-tls"]
-rustls-tls = ["aws-smithy-http-client/rustls-ring"]
+native-tls = ["rustls"]
+rustls = ["aws-smithy-http-client/rustls-aws-lc"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
@@ -28,8 +28,9 @@ aws-config = { workspace = true, features = [
   "credentials-process",
   "rt-tokio",
   "credentials-login",
+  "default-https-client",
 ] }
-aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
+aws-sdk-s3 = { workspace = true, features = ["rt-tokio", "default-https-client"] }
 aws-smithy-http-client = { workspace = true }
 aws-credential-types = { workspace = true }
 

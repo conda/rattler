@@ -41,10 +41,10 @@ use exceptions::{
     ConversionError, ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError,
     FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
     InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
-    InvalidVersionSpecError, IoError, LinkError, PackageNameMatcherParseError, ParseArchError,
-    ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError,
-    ShellError, SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    InvalidVersionSpecError, IoError, LinkError, LockFileError, PackageNameMatcherParseError,
+    ParseArchError, ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError,
+    RequirementError, ShellError, SolverError, TransactionError, ValidatePackageRecordsError,
+    VersionBumpError, VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -52,8 +52,8 @@ use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
 use installer::py_install;
 use lock::{
-    PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
-    PyPypiPackageEnvironmentData,
+    PyEnvironment, PyLockChannel, PyLockFile, PyLockPlatform, PyLockedPackage, PyPackageHashes,
+    PyPypiPackageData,
 };
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
@@ -72,14 +72,14 @@ use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
 use repo_data::{
+    PyChannelInfo, PyChannelRelations, PyRepoData,
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
-    PyRepoData,
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::{py_solve, py_solve_with_sparse_repodata, PyMinimumAgeConfig};
+use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
@@ -142,6 +142,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PySparseRepoData>()?;
     m.add_class::<PyPackageFormatSelection>()?;
     m.add_class::<PyRepoData>()?;
+    m.add_class::<PyChannelInfo>()?;
+    m.add_class::<PyChannelRelations>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PySourceConfig>()?;
@@ -164,9 +166,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyLockFile>()?;
     m.add_class::<PyEnvironment>()?;
     m.add_class::<PyLockChannel>()?;
+    m.add_class::<PyLockPlatform>()?;
     m.add_class::<PyLockedPackage>()?;
     m.add_class::<PyPypiPackageData>()?;
-    m.add_class::<PyPypiPackageEnvironmentData>()?;
     m.add_class::<PyPackageHashes>()?;
 
     m.add_class::<PyAboutJson>()?;
@@ -179,7 +181,6 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
 
-    m.add_class::<PyMinimumAgeConfig>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
@@ -248,6 +249,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "EnvironmentCreationError",
         py.get_type::<EnvironmentCreationError>(),
     )?;
+    m.add("LockFileError", py.get_type::<LockFileError>())?;
     m.add(
         "ExtractError",
         py.get_type::<crate::exceptions::ExtractError>(),

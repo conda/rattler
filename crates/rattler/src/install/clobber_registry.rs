@@ -8,8 +8,8 @@ use std::{
 
 use path_resolver::{FromClobbers, PathResolver};
 use rattler_conda_types::{
-    package::{IndexJson, PathsEntry},
     PackageName, PackageRecord, PrefixRecord,
+    package::{IndexJson, PathsEntry},
 };
 
 pub const CLOBBERS_DIR_NAME: &str = "__clobbers__";
@@ -313,13 +313,13 @@ mod tests {
     use fs_err as fs;
     use insta::assert_yaml_snapshot;
     use itertools::Itertools;
-    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version, prefix::Prefix};
     use rattler_networking::LazyClient;
     use transaction::TransactionOperation;
 
     use crate::{
         get_repodata_record, get_test_data_dir,
-        install::{test_utils::*, transaction, InstallDriver, InstallOptions, PythonInfo},
+        install::{InstallDriver, InstallOptions, PythonInfo, test_utils::*, transaction},
         package_cache::PackageCache,
     };
 

@@ -54,7 +54,7 @@ async fn get_reader(
         if let Some(sha256) = expected_sha256 {
             // This is used by the OCI registry middleware to verify the sha256 of the
             // response
-            request = request.header("X-Expected-Sha256", format!("{sha256:x}"));
+            request = request.header("X-Expected-Sha256", hex::encode(sha256));
         }
 
         let response = request
@@ -171,7 +171,10 @@ pub async fn extract_conda(
         Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
             if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
-            tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
+            tracing::warn!(
+                "Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression",
+                url
+            );
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
             }

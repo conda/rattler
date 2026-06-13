@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
+    Flag, NoArchType, PackageRecord, RepoDataRecord, Version,
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
-    NoArchType, PackageRecord, RepoDataRecord, Version,
 };
 use url::Url;
 
@@ -41,12 +41,13 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
                     track_features: Vec::new(),
                     features: None,
+                    flags: Vec::new(),
                     noarch: NoArchType::default(),
                     license: None,
                     license_family: None,
@@ -118,19 +119,24 @@ impl PackageBuilder {
         extra: &str,
         deps: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        self.record
-            .package_record
-            .experimental_extra_depends
-            .insert(
-                extra.to_string(),
-                deps.into_iter().map(Into::into).collect(),
-            );
+        self.record.package_record.extra_depends.insert(
+            extra.to_string(),
+            deps.into_iter().map(Into::into).collect(),
+        );
+        self
+    }
+
+    pub fn flags(mut self, flags: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.record.package_record.flags = flags
+            .into_iter()
+            .map(|flag| Flag::new_unchecked(flag.into()))
+            .collect();
         self
     }
 
     pub fn timestamp(mut self, timestamp: &str) -> Self {
-        let dt: DateTime<Utc> = timestamp.parse().expect("invalid timestamp format");
-        self.record.package_record.timestamp = Some(dt.into());
+        let ts: Timestamp = timestamp.parse().expect("invalid timestamp format");
+        self.record.package_record.timestamp = Some(ts.into());
         self
     }
 

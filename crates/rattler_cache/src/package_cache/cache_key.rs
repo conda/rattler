@@ -1,10 +1,8 @@
-use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
-use rattler_digest::{compute_bytes_digest, compute_url_digest, Md5Hash, Sha256, Sha256Hash};
-use std::{
-    fmt::{Display, Formatter},
-    path::Path,
-};
+use rattler_conda_types::package::CondaArchiveIdentifier;
+use rattler_conda_types::utils::{InvalidPathComponentError, ensure_safe_path_component};
+use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
+use std::path::Path;
 
 /// Provides a unique identifier for packages in the cache.
 /// TODO: This could not be unique over multiple subdir. How to handle?
@@ -46,19 +44,36 @@ impl CacheKey {
     /// Adds a hash of the Url to the cache key
     pub fn with_url(mut self, url: url::Url) -> Self {
         let url_hash = compute_url_digest::<Sha256>(url);
-        self.origin_hash = Some(format!("{url_hash:x}"));
+        self.origin_hash = Some(hex::encode(url_hash));
         self
     }
 
     /// Adds a hash of the Path to the cache key
     pub fn with_path(mut self, path: &Path) -> Self {
         let path_hash = compute_bytes_digest::<Sha256>(path.as_os_str().as_encoded_bytes());
-        self.origin_hash = Some(format!("{path_hash:x}"));
+        self.origin_hash = Some(hex::encode(path_hash));
         self
     }
 }
 
 impl CacheKey {
+    /// Renders the cache key as a directory name, rejecting metadata-derived
+    /// components that could escape the cache root (GHSA-h672-p7h7-97v9).
+    ///
+    /// This is intentionally the only way to turn a key into a path: there is no
+    /// `Display`/`to_string` that could bypass the check.
+    pub(crate) fn to_path_segment(&self) -> Result<String, InvalidPathComponentError> {
+        let segment = match &self.origin_hash {
+            Some(url_hash) => format!(
+                "{}-{}-{}-{}",
+                &self.name, &self.version, &self.build_string, url_hash
+            ),
+            None => format!("{}-{}-{}", &self.name, &self.version, &self.build_string),
+        };
+        ensure_safe_path_component(&segment)?;
+        Ok(segment)
+    }
+
     /// Return the sha256 hash of the package if it is known.
     pub fn sha256(&self) -> Option<Sha256Hash> {
         self.sha256
@@ -92,19 +107,6 @@ impl From<&PackageRecord> for CacheKey {
             sha256: record.sha256,
             md5: record.md5,
             origin_hash: None,
-        }
-    }
-}
-
-impl Display for CacheKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.origin_hash {
-            Some(url_hash) => write!(
-                f,
-                "{}-{}-{}-{}",
-                &self.name, &self.version, &self.build_string, url_hash
-            ),
-            None => write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string),
         }
     }
 }

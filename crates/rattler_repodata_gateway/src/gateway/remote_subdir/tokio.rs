@@ -4,11 +4,11 @@ use std::{
 };
 
 use crate::{
-    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions, Variant},
-    gateway::{
-        error::SubdirNotFoundError, local_subdir::LocalSubdirClient, GatewayError, SourceConfig,
-    },
     Reporter,
+    fetch::{FetchRepoDataError, FetchRepoDataOptions, Variant, fetch_repo_data},
+    gateway::{
+        GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
+    },
 };
 use rattler_conda_types::{Channel, Platform};
 use rattler_networking::LazyClient;

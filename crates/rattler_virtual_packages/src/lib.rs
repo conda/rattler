@@ -57,6 +57,25 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::osx::ParseOsxVersionError;
 
+/// An error that occurred during parsing of a virtual package override value.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ParseVirtualPackageOverrideError {
+    /// The version string could not be parsed
+    #[error(transparent)]
+    ParseVersion(#[from] ParseVersionError),
+
+    /// The override value failed custom validation with a specific message
+    #[error("{0}")]
+    ValidationError(String),
+}
+
+impl ParseVirtualPackageOverrideError {
+    /// Create a validation error with a custom message
+    pub fn validation_error(message: impl Into<String>) -> Self {
+        Self::ValidationError(message.into())
+    }
+}
+
 /// Configure the overrides used in in this crate.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum Override {
@@ -73,7 +92,7 @@ pub enum Override {
 /// Use as `Cuda::detect(override)`
 pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
-    fn parse_version(value: &str) -> Result<Self, ParseVersionError>;
+    fn parse_version(value: &str) -> Result<Self, ParseVirtualPackageOverrideError>;
 
     /// Helper to convert the output of `parse_version` and handling empty
     /// strings.
@@ -162,6 +181,9 @@ pub enum VirtualPackage {
     /// Available `Cuda` version
     Cuda(Cuda),
 
+    /// Available CUDA compute capability
+    CudaArch(CudaArch),
+
     /// The CPU architecture
     Archspec(Archspec),
 }
@@ -187,6 +209,9 @@ pub struct VirtualPackages {
     /// Available `Cuda` version
     pub cuda: Option<Cuda>,
 
+    /// Available CUDA compute capability
+    pub cuda_arch: Option<CudaArch>,
+
     /// The CPU architecture
     pub archspec: Option<Archspec>,
 }
@@ -201,6 +226,7 @@ impl VirtualPackages {
             osx,
             libc,
             cuda,
+            cuda_arch,
             archspec,
         } = self;
 
@@ -211,6 +237,7 @@ impl VirtualPackages {
             osx.map(VirtualPackage::Osx),
             libc.map(VirtualPackage::LibC),
             cuda.map(VirtualPackage::Cuda),
+            cuda_arch.map(VirtualPackage::CudaArch),
             archspec.map(VirtualPackage::Archspec),
         ]
         .into_iter()
@@ -225,13 +252,22 @@ impl VirtualPackages {
     /// Detect the virtual packages of the current system with the given
     /// overrides.
     pub fn detect(overrides: &VirtualPackageOverrides) -> Result<Self, DetectVirtualPackageError> {
+        let cuda = Cuda::detect(overrides.cuda.as_ref())?;
+        let mut cuda_arch = CudaArch::detect(overrides.cuda_arch.as_ref())?;
+
+        // Enforce CEP requirement: __cuda_arch must be absent when __cuda is absent
+        if cuda.is_none() {
+            cuda_arch = None;
+        }
+
         Ok(Self {
             win: Windows::detect(overrides.win.as_ref())?,
             unix: Platform::current().is_unix(),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
             libc: LibC::detect(overrides.libc.as_ref())?,
-            cuda: Cuda::detect(overrides.cuda.as_ref())?,
+            cuda,
+            cuda_arch,
             archspec: Archspec::detect(overrides.archspec.as_ref())?,
         })
     }
@@ -322,6 +358,7 @@ impl VirtualPackages {
                 osx,
                 libc,
                 cuda: virtual_packages.cuda,
+                cuda_arch: virtual_packages.cuda_arch,
                 archspec,
             })
         }
@@ -341,6 +378,7 @@ impl From<VirtualPackage> for GenericVirtualPackage {
             VirtualPackage::Osx(osx) => osx.into(),
             VirtualPackage::LibC(libc) => libc.into(),
             VirtualPackage::Cuda(cuda) => cuda.into(),
+            VirtualPackage::CudaArch(cuda_arch) => cuda_arch.into(),
             VirtualPackage::Archspec(spec) => spec.into(),
         }
     }
@@ -386,6 +424,9 @@ pub enum DetectVirtualPackageError {
 
     #[error(transparent)]
     VersionParseError(#[from] ParseVersionError),
+
+    #[error(transparent)]
+    ParseOverride(#[from] ParseVirtualPackageOverrideError),
 }
 /// Configure the overrides used in this crate.
 ///
@@ -406,6 +447,8 @@ pub struct VirtualPackageOverrides {
     pub libc: Option<Override>,
     /// The override for the cuda virtual package
     pub cuda: Option<Override>,
+    /// The override for the `cuda_arch` virtual package
+    pub cuda_arch: Option<Override>,
     /// The override for the archspec virtual package
     pub archspec: Option<Override>,
 }
@@ -420,6 +463,7 @@ impl VirtualPackageOverrides {
             linux: Some(ov.clone()),
             libc: Some(ov.clone()),
             cuda: Some(ov.clone()),
+            cuda_arch: Some(ov.clone()),
             archspec: Some(ov),
         }
     }
@@ -474,8 +518,8 @@ impl From<Version> for Linux {
 impl EnvOverride for Linux {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_LINUX";
 
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(Self::from)
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self::from(Version::from_str(env_var_value)?))
     }
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -532,10 +576,10 @@ impl From<LibC> for VirtualPackage {
 impl EnvOverride for LibC {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_GLIBC";
 
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
             family: "glibc".into(),
-            version,
+            version: Version::from_str(env_var_value)?,
         })
     }
 
@@ -571,8 +615,10 @@ impl From<Version> for Cuda {
 }
 
 impl EnvOverride for Cuda {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self { version })
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
         Ok(Self::current())
@@ -593,6 +639,83 @@ impl From<Cuda> for GenericVirtualPackage {
 impl From<Cuda> for VirtualPackage {
     fn from(cuda: Cuda) -> Self {
         VirtualPackage::Cuda(cuda)
+    }
+}
+
+/// CUDA compute capability virtual package description.
+///
+/// Represents the minimum CUDA compute capability (SM version) across all detected
+/// devices. The compute capability determines which instruction sets and features
+/// are available on a GPU.
+///
+/// ## Format
+///
+/// * Version: `{major}.{minor}` (e.g., 8.6, 9.0), representing minimum across all devices
+/// * Build string: always `"0"` per CEP specification
+/// * Subarchitecture letters excluded (e.g., 'a', 'f')
+///
+/// Packages compiled for a specific compute capability require that capability or
+/// higher to run. Using the minimum ensures compatibility with all GPUs in multi-GPU
+/// systems.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct CudaArch {
+    /// The compute capability version (e.g., 8.6).
+    ///
+    /// Formatted as `{major}.{minor}`, represents the minimum compute capability
+    /// across all detected CUDA devices.
+    pub version: Version,
+}
+
+impl CudaArch {
+    /// Returns the minimum CUDA compute capability available on the current platform.
+    ///
+    /// Returns `None` if:
+    /// * No CUDA drivers are installed
+    /// * No CUDA devices are detected
+    /// * Device enumeration fails
+    /// * The system is using musl libc (dynamic library loading not supported)
+    pub fn current() -> Option<Self> {
+        cuda::cuda_arch().map(|arch_info| Self {
+            version: Version::from_str(&format!("{}.{}", arch_info.major, arch_info.minor))
+                .unwrap_or_else(|_| Version::major(u64::from(arch_info.major))),
+        })
+    }
+}
+
+impl EnvOverride for CudaArch {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        // CEP requires exactly "major.minor" format where both are digits
+        if !cuda::is_valid_cuda_version_format(env_var_value) {
+            return Err(ParseVirtualPackageOverrideError::validation_error(format!(
+                "invalid CUDA compute capability format '{env_var_value}': expected 'major.minor' where both are digits (e.g., '8.6')"
+            )));
+        }
+
+        let version = Version::from_str(env_var_value)?;
+        Ok(Self { version })
+    }
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA_ARCH";
+}
+
+impl From<CudaArch> for GenericVirtualPackage {
+    fn from(cuda_arch: CudaArch) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__cuda_arch"),
+            version: cuda_arch.version,
+            // Build string is always "0" per CEP specification
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<CudaArch> for VirtualPackage {
+    fn from(cuda_arch: CudaArch) -> Self {
+        VirtualPackage::CudaArch(cuda_arch)
     }
 }
 
@@ -737,7 +860,7 @@ impl From<Archspec> for VirtualPackage {
 }
 
 impl EnvOverride for Archspec {
-    fn parse_version(value: &str) -> Result<Self, ParseVersionError> {
+    fn parse_version(value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
         if value == "0" {
             Ok(Archspec::Unknown)
         } else {
@@ -792,8 +915,10 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self { version })
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
         Ok(Self::current()?)
@@ -848,9 +973,9 @@ impl From<Version> for Windows {
 }
 
 impl EnvOverride for Windows {
-    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self {
-            version: Some(version),
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Some(Version::from_str(env_var_value)?),
         })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -881,19 +1006,25 @@ mod test {
             family: "glibc".into(),
         };
         let env_var_name = format!("{}_{}", LibC::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             LibC::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
                 .unwrap(),
             res
         );
-        env::set_var(env_var_name.clone(), "");
+        unsafe {
+            env::set_var(env_var_name.clone(), "");
+        }
         assert_eq!(
             LibC::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap(),
             None
         );
-        env::remove_var(env_var_name.clone());
+        unsafe {
+            env::remove_var(env_var_name.clone());
+        }
         assert_eq!(
             LibC::detect_with_fallback(&Override::DefaultEnvVar, || Ok(Some(res.clone())))
                 .unwrap()
@@ -925,7 +1056,9 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         let env_var_name = format!("{}_{}", Cuda::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             Cuda::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
@@ -936,7 +1069,9 @@ mod test {
             Cuda::detect(None).map_err(|_x| 1),
             <Cuda as EnvOverride>::detect_from_host().map_err(|_x| 1)
         );
-        env::remove_var(env_var_name.clone());
+        unsafe {
+            env::remove_var(env_var_name.clone());
+        }
         assert_eq!(
             Cuda::detect(Some(&Override::String(v.to_string())))
                 .unwrap()
@@ -952,7 +1087,9 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         let env_var_name = format!("{}_{}", Osx::DEFAULT_ENV_NAME, "12345511231");
-        env::set_var(env_var_name.clone(), v);
+        unsafe {
+            env::set_var(env_var_name.clone(), v);
+        }
         assert_eq!(
             Osx::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
@@ -999,5 +1136,129 @@ mod test {
         assert!(win_names.contains(&"__win".to_string()));
         assert!(!win_names.contains(&"__unix".to_string()));
         assert!(win_names.contains(&"__archspec".to_string()));
+    }
+
+    #[test]
+    fn test_is_valid_cuda_version_format() {
+        // Valid formats
+        assert!(cuda::is_valid_cuda_version_format("8.6"));
+        assert!(cuda::is_valid_cuda_version_format("7.5"));
+        assert!(cuda::is_valid_cuda_version_format("10.2"));
+        assert!(cuda::is_valid_cuda_version_format("0.0"));
+        assert!(cuda::is_valid_cuda_version_format("12.0"));
+
+        // Invalid formats - not major.minor
+        assert!(!cuda::is_valid_cuda_version_format("8"));
+        assert!(!cuda::is_valid_cuda_version_format("8.6.1"));
+        assert!(!cuda::is_valid_cuda_version_format("8.6.1.0"));
+        assert!(!cuda::is_valid_cuda_version_format(""));
+        assert!(!cuda::is_valid_cuda_version_format(".6"));
+        assert!(!cuda::is_valid_cuda_version_format("8."));
+        assert!(!cuda::is_valid_cuda_version_format("."));
+
+        // Invalid formats - non-digit characters
+        assert!(!cuda::is_valid_cuda_version_format("8.6a"));
+        assert!(!cuda::is_valid_cuda_version_format("a.6"));
+        assert!(!cuda::is_valid_cuda_version_format("8.b"));
+        assert!(!cuda::is_valid_cuda_version_format("eight.six"));
+        assert!(!cuda::is_valid_cuda_version_format("8-6"));
+        assert!(!cuda::is_valid_cuda_version_format("8_6"));
+    }
+
+    #[test]
+    fn test_parse_cuda_arch() {
+        // Test parsing valid version format
+        let cuda_arch = CudaArch::parse_version("8.6").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+
+        let cuda_arch = CudaArch::parse_version("7.5").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
+
+        let cuda_arch = CudaArch::parse_version("9.0").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("9.0").unwrap());
+
+        // Test invalid version format (should return error)
+        assert!(CudaArch::parse_version("invalid").is_err());
+        assert!(CudaArch::parse_version("8").is_err());
+        assert!(CudaArch::parse_version("8.6.1").is_err());
+
+        // Test override via environment variable
+        let env_var_name = format!("{}_{}", CudaArch::DEFAULT_ENV_NAME, "test123");
+        temp_env::with_var(&env_var_name, Some("7.5"), || {
+            let result = CudaArch::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap();
+            assert!(result.is_some());
+            let cuda_arch = result.unwrap();
+            assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
+        });
+    }
+
+    #[test]
+    fn test_cuda_arch_coupling() {
+        // Test that cuda_arch is absent when cuda is absent (CEP requirement)
+        // Even with cuda_arch override, it should be None if cuda is None
+
+        // Case 1: Both not present - cuda_arch should be None
+        let overrides = VirtualPackageOverrides::default();
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        // If cuda is None, cuda_arch must also be None
+        if packages.cuda.is_none() {
+            assert!(
+                packages.cuda_arch.is_none(),
+                "cuda_arch should be None when cuda is None"
+            );
+        }
+
+        // Case 2: cuda_arch override with no cuda - cuda_arch should be None
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: None, // No cuda
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        if packages.cuda.is_none() {
+            assert!(
+                packages.cuda_arch.is_none(),
+                "cuda_arch should be None when cuda is None, even with override"
+            );
+        }
+
+        // Case 3: Both have overrides - cuda_arch should be present
+        let cuda_override = Override::String("12.0".to_string());
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: Some(cuda_override),
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        assert!(
+            packages.cuda.is_some(),
+            "cuda should be present with override"
+        );
+        assert!(
+            packages.cuda_arch.is_some(),
+            "cuda_arch should be present when cuda is present"
+        );
+        let cuda_arch = packages.cuda_arch.unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+
+        // Case 4: Empty string cuda override (disables cuda) - cuda_arch should be None
+        let cuda_override = Override::String("".to_string());
+        let cuda_arch_override = Override::String("8.6".to_string());
+        let overrides = VirtualPackageOverrides {
+            cuda: Some(cuda_override),
+            cuda_arch: Some(cuda_arch_override),
+            ..Default::default()
+        };
+        let packages = VirtualPackages::detect(&overrides).unwrap();
+        assert!(
+            packages.cuda.is_none(),
+            "cuda should be None with empty string override"
+        );
+        assert!(
+            packages.cuda_arch.is_none(),
+            "cuda_arch should be None when cuda is disabled via empty string"
+        );
     }
 }

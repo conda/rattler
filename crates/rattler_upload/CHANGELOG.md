@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4](https://github.com/conda/rattler/compare/rattler_upload-v0.7.3...rattler_upload-v0.7.4) - 2026-06-09
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.7.3](https://github.com/conda/rattler/compare/rattler_upload-v0.7.2...rattler_upload-v0.7.3) - 2026-06-02
+
+### Other
+
+- update sigstore-rust ([#2431](https://github.com/conda/rattler/pull/2431))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.7.2](https://github.com/conda/rattler/compare/rattler_upload-v0.7.1...rattler_upload-v0.7.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.7.1](https://github.com/conda/rattler/compare/rattler_upload-v0.7.0...rattler_upload-v0.7.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+- add trusted publisher middleware in rattler_networking ([#2426](https://github.com/conda/rattler/pull/2426))
+
+## [0.7.0](https://github.com/conda/rattler/compare/rattler_upload-v0.6.1...rattler_upload-v0.7.0) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+- Use resolved credentials, like in rattler_index ([#2422](https://github.com/conda/rattler/pull/2422))
+
+## [0.6.1](https://github.com/conda/rattler/compare/rattler_upload-v0.6.0...rattler_upload-v0.6.1) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_upload-v0.5.8...rattler_upload-v0.6.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.5.8](https://github.com/conda/rattler/compare/rattler_upload-v0.5.7...rattler_upload-v0.5.8) - 2026-04-30
+
+### Fixed
+
+- skip existing upload to prefix ([#2378](https://github.com/conda/rattler/pull/2378))
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.5.7](https://github.com/conda/rattler/compare/rattler_upload-v0.5.6...rattler_upload-v0.5.7) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_config, rattler_solve, rattler_s3
+
+## [0.5.6](https://github.com/conda/rattler/compare/rattler_upload-v0.5.5...rattler_upload-v0.5.6) - 2026-04-08
+
+### Fixed
+
+- fail when uploading with --generate-attestation and api key ([#2313](https://github.com/conda/rattler/pull/2313))
+
+## [0.5.5](https://github.com/conda/rattler/compare/rattler_upload-v0.5.4...rattler_upload-v0.5.5) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.5.4](https://github.com/conda/rattler/compare/rattler_upload-v0.5.3...rattler_upload-v0.5.4) - 2026-03-27
+
+### Other
+
+- updated the following local packages: rattler_solve
+
+## [0.5.3](https://github.com/conda/rattler/compare/rattler_upload-v0.5.2...rattler_upload-v0.5.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
 ## [0.5.2](https://github.com/conda/rattler/compare/rattler_upload-v0.5.1...rattler_upload-v0.5.2) - 2026-03-20
 
 ### Added

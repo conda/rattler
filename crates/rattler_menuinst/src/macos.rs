@@ -8,23 +8,23 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::{Dictionary, Value};
-use rattler_conda_types::{menuinst::MacOsTracker, Platform};
+use rattler_conda_types::{Platform, menuinst::MacOsTracker};
 use rattler_shell::{
     activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use sha2::{Digest as _, Sha256};
 
-use crate::{render::replace_placeholders, utils::slugify};
 use crate::{
+    MenuInstError, MenuMode,
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString},
     schema::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
     utils::{log_output, run_pre_create_command},
-    MenuInstError, MenuMode,
 };
+use crate::{render::replace_placeholders, utils::slugify};
 use std::collections::HashMap;
 
 pub fn quote_args<I, S>(args: I) -> Vec<String>
@@ -467,7 +467,7 @@ impl MacOSMenu {
         let name = self.name.clone();
         let slugname = slugify(&name);
         let shortname = if slugname.len() > 16 {
-            let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
+            let hashed = hex::encode(Sha256::digest(slugname.as_bytes()));
             format!("{}{}", &slugname[..10], &hashed[..6])
         } else {
             slugname.clone()
@@ -712,7 +712,8 @@ impl MacOSMenu {
         // Run a cached activation
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
-            let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
+            let activator =
+                Activator::from_path(&self.prefix, shell::Bash::default(), Platform::current())?;
             let activation_variables = ActivationVariables {
                 path_modification_behavior: PathModificationBehavior::Prepend,
                 ..Default::default()
@@ -899,7 +900,7 @@ fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
+    use crate::{MenuMode, schema::MenuInstSchema, test::test_data};
     use rattler_conda_types::menuinst::MacOsTracker;
     use std::{
         collections::HashMap,

@@ -1,28 +1,27 @@
-use std::collections::HashSet;
+use std::sync::Arc;
 
-use chrono::DateTime;
+use jiff::Timestamp;
 use pyo3::{
-    exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pyfunction, pymethods,
-    types::PyAnyMethods, Bound, FromPyObject, PyAny, PyErr, PyResult, Python,
+    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
+    pybacked::PyBackedStr, pyfunction, types::PyAnyMethods,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::PackageName;
+use rattler_conda_types::RepoDataRecord;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
-    resolvo::Solver, MinimumAgeConfig, RepoDataIter, SolveStrategy, SolverImpl, SolverTask,
+    ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
 };
 use tokio::task::JoinError;
 
 use crate::{
+    PyPackageFormatSelection, PySparseRepoData, Wrap,
     channel::PyChannelPriority,
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
-    package_name::PyPackageName,
     platform::PyPlatform,
     record::PyRecord,
-    repo_data::gateway::{py_object_to_source, PyGateway},
-    PyPackageFormatSelection, PySparseRepoData, Wrap,
+    repo_data::gateway::{PyGateway, py_object_to_source},
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -35,78 +34,35 @@ impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'highest', 'lowest', 'lowest-direct'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
     }
 }
 
-/// Configuration for minimum package age filtering.
-///
-/// This helps reduce the risk of installing compromised packages by delaying
-/// the installation of newly published versions. In most cases, malicious
-/// releases are discovered and removed from channels within an hour.
-#[pyclass]
-#[derive(Clone)]
-pub struct PyMinimumAgeConfig {
-    pub(crate) inner: MinimumAgeConfig,
-}
-
-#[pymethods]
-impl PyMinimumAgeConfig {
-    /// Create a new minimum age configuration.
-    ///
-    /// Args:
-    ///     seconds: The minimum age in seconds that a package must have been
-    ///         published before it can be installed.
-    ///     `exempt_packages`: Optional list of package names that are exempt
-    ///         from the minimum age requirement.
-    ///     `include_unknown_timestamp`: Whether to include packages without a
-    ///         timestamp. Defaults to False (exclude them).
-    #[new]
-    #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false))]
-    pub fn new(
-        seconds: u64,
-        exempt_packages: Option<Vec<PyPackageName>>,
-        include_unknown_timestamp: bool,
-    ) -> Self {
-        let mut config = MinimumAgeConfig::new(std::time::Duration::from_secs(seconds));
-        if let Some(exempt) = exempt_packages {
-            let exempt_set: HashSet<PackageName> = exempt.into_iter().map(Into::into).collect();
-            config = config.with_exempt_packages(exempt_set);
-        }
-        config = config.with_include_unknown_timestamp(include_unknown_timestamp);
-        Self { inner: config }
-    }
-
-    /// The minimum age in seconds.
-    #[getter]
-    pub fn seconds(&self) -> u64 {
-        self.inner.min_age.as_secs()
-    }
-
-    /// The list of exempt package names.
-    #[getter]
-    pub fn exempt_packages(&self) -> Vec<PyPackageName> {
-        self.inner
-            .exempt_packages
-            .iter()
-            .cloned()
-            .map(Into::into)
-            .collect()
-    }
-
-    /// Whether packages without a timestamp are included.
-    #[getter]
-    pub fn include_unknown_timestamp(&self) -> bool {
-        self.inner.include_unknown_timestamp
+fn parse_exclude_newer(
+    exclude_newer_timestamp_ms: Option<i64>,
+    exclude_newer_duration_seconds: Option<u64>,
+) -> PyResult<Option<ExcludeNewer>> {
+    match (
+        exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok()),
+        exclude_newer_duration_seconds,
+    ) {
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "exclude_newer timestamp and duration are mutually exclusive",
+        )),
+        (Some(timestamp), None) => Ok(Some(timestamp.into())),
+        (None, Some(seconds)) => Ok(Some(ExcludeNewer::from_duration(
+            std::time::Duration::from_secs(seconds),
+        ))),
+        (None, None) => Ok(None),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None, min_age=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -121,8 +77,8 @@ pub fn py_solve<'a>(
     channel_priority: PyChannelPriority,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
+    exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
-    min_age: Option<PyMinimumAgeConfig>,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -136,39 +92,42 @@ pub fn py_solve<'a>(
             .query(
                 rust_sources,
                 platforms.into_iter().map(Into::into),
-                specs.clone().into_iter(),
+                specs.clone(),
             )
             .recursive(true)
             .execute()
             .await
             .map_err(PyRattlerError::from)?;
 
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
-        let min_age = min_age.map(|config| config.inner);
+        let exclude_newer =
+            parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
 
         let solve_result = tokio::task::spawn_blocking(move || {
+            // Keep the Arcs alive as locals; SolverTask only borrows.
+            let locked_arcs: Vec<Arc<RepoDataRecord>> = locked_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
+            let pinned_arcs: Vec<Arc<RepoDataRecord>> = pinned_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
                     .map(RepoDataIter)
                     .collect::<Vec<_>>(),
-                locked_packages: locked_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
-                pinned_packages: pinned_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
+                locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
+                pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),
                 timeout: timeout.map(std::time::Duration::from_micros),
                 channel_priority: channel_priority.into(),
                 exclude_newer,
-                min_age,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             };
 
             Ok::<_, PyErr>(
@@ -198,7 +157,7 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, strategy=None, min_age=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
@@ -212,8 +171,8 @@ pub fn py_solve_with_sparse_repodata<'py>(
     package_format_selection: PyPackageFormatSelection,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
+    exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
-    min_age: Option<PyMinimumAgeConfig>,
 ) -> PyResult<Bound<'py, PyAny>> {
     // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
     // object in another thread.
@@ -223,8 +182,8 @@ pub fn py_solve_with_sparse_repodata<'py>(
         .collect::<Vec<_>>();
 
     future_into_py(py, async move {
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
-        let min_age = min_age.map(|config| config.inner);
+        let exclude_newer =
+            parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
 
         let solve_result = tokio::task::spawn_blocking(move || {
             // Ensure that all the SparseRepoData instances are still valid, e.g. not closed.
@@ -250,28 +209,31 @@ pub fn py_solve_with_sparse_repodata<'py>(
             // Force drop the locks to avoid holding them longer than necessary.
             drop(repo_data_locks);
 
+            // Keep the Arcs alive as locals; SolverTask only borrows.
+            let locked_arcs: Vec<Arc<RepoDataRecord>> = locked_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
+            let pinned_arcs: Vec<Arc<RepoDataRecord>> = pinned_packages
+                .into_iter()
+                .map(<Arc<RepoDataRecord>>::try_from)
+                .collect::<PyResult<_>>()?;
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
                     .map(RepoDataIter)
                     .collect::<Vec<_>>(),
-                locked_packages: locked_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
-                pinned_packages: pinned_packages
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<PyResult<Vec<_>>>()?,
+                locked_packages: locked_arcs.iter().map(AsRef::as_ref).collect(),
+                pinned_packages: pinned_arcs.iter().map(AsRef::as_ref).collect(),
                 virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
                 specs: specs.into_iter().map(Into::into).collect(),
                 constraints: constraints.into_iter().map(Into::into).collect(),
                 timeout: timeout.map(std::time::Duration::from_micros),
                 channel_priority: channel_priority.into(),
                 exclude_newer,
-                min_age,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             };
 
             Ok::<_, PyErr>(

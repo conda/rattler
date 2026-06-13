@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin >=1.9.0,<2"]
+requires = ["maturin>=1.13.3,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -9,17 +9,17 @@ requires-python = ">=3.9"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
 authors = [
-    { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" },
-    { name = "Tarun Pratap Singh", email = "pratapsinghtarun9@gmail.com" },
+  { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" },
+  { name = "Tarun Pratap Singh", email = "pratapsinghtarun9@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
-    "Typing :: Typed",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
 

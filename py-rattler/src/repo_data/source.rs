@@ -21,9 +21,13 @@ use crate::record::PyRecord;
 /// caching mechanisms only apply to channel data. If caching is needed for a custom
 /// source, it must be implemented within the source itself.
 ///
-/// **Performance:** Custom sources are slower than channels because data must be
-/// marshaled between Python and Rust for each request. For performance-critical
-/// applications, channels should be preferred when possible.
+/// **Performance:** Records are shared with Python by `Arc`, so calls cost roughly
+/// one Arc bump per record plus the unavoidable Python coroutine round-trip — not
+/// a deep copy. The remaining gap versus the all-Rust path is dominated by
+/// `package_names` being synchronous and by Python coroutine scheduling, not by
+/// per-record marshalling. If a Python source needs to do meaningful work to
+/// answer `package_names`, consider caching the result in the source itself so
+/// the gateway can reuse it across queries.
 pub struct PyRepoDataSource {
     inner: Py<PyAny>,
 }
@@ -74,29 +78,32 @@ impl RepoDataSource for PyRepoDataSource {
             .await
             .map_err(|e| GatewayError::Generic(e.to_string()))?;
 
-        // Extract the records from the Python list
+        // Extract the records from the Python iterable.
+        //
+        // We pull the existing `Arc<RepoDataRecord>` straight out of each `PyRecord`
+        // instead of deep-cloning the record into a fresh Arc — that's the whole point
+        // of wrapping records in Arc on both sides. See `TryFrom<PyRecord> for
+        // Arc<RepoDataRecord>`.
+        //
+        // Iterating via `try_iter` avoids materializing an intermediate
+        // `Vec<Bound<PyAny>>` first; we hit each Python item once.
         Python::with_gil(|py| {
-            // Get the result as a Python list
-            let py_list: Vec<Bound<'_, PyAny>> = result
-                .extract(py)
+            let bound = result.bind(py);
+            let mut rust_records: Vec<Arc<RepoDataRecord>> =
+                Vec::with_capacity(bound.len().unwrap_or(0));
+            let iter = bound
+                .try_iter()
                 .map_err(|e| GatewayError::Generic(e.to_string()))?;
-
-            // Extract each element, handling both direct PyRecord and wrapped RepoDataRecord
-            let mut rust_records = Vec::new();
-            for item in py_list {
-                // Try to extract PyRecord using the TryFrom implementation
-                // which handles the _record attribute lookup
+            for item in iter {
+                let item = item.map_err(|e| GatewayError::Generic(e.to_string()))?;
                 let py_record: PyRecord = item
                     .try_into()
                     .map_err(|e: PyErr| GatewayError::Generic(e.to_string()))?;
-
-                let record: RepoDataRecord = py_record
+                let arc: Arc<RepoDataRecord> = py_record
                     .try_into()
                     .map_err(|e: PyErr| GatewayError::Generic(e.to_string()))?;
-
-                rust_records.push(Arc::new(record));
+                rust_records.push(arc);
             }
-
             Ok(rust_records)
         })
     }

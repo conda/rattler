@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.0...rattler_redaction-v0.2.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.15...rattler_redaction-v0.2.0) - 2026-05-13
+
+### Other
+
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.1.15](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.14...rattler_redaction-v0.1.15) - 2026-05-07
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.14](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.13...rattler_redaction-v0.1.14) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
 ## [0.1.13](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.12...rattler_redaction-v0.1.13) - 2025-12-18
 
 ### Other

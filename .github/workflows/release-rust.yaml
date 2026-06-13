@@ -1,8 +1,7 @@
 name: Rust Release
 
 permissions:
-  pull-requests: write
-  contents: write
+  contents: read
 
 on:
   push:
@@ -10,20 +9,26 @@ on:
       - main
 
 jobs:
-
   # Release unpublished packages.
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      id-token: write
     steps:
+      - name: Obtain GitHub app token
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: write
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          token: ${{ steps.octo-sts.outputs.token }}
           lfs: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install Rust toolchain
@@ -43,11 +48,11 @@ jobs:
           # Verify configs are gone
           git config --global --list
       - name: Run release-plz
-        uses: release-plz/action@487eb7b5c085a664d5c5ca05f4159bd9b591182a # v0.5
+        uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5.129
         with:
           command: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # Create a PR with the new versions and changelog, preparing the next release.
@@ -55,18 +60,24 @@ jobs:
     name: Release-plz PR
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      id-token: write
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
     steps:
+      - name: Obtain GitHub app token
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: write
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          token: ${{ steps.octo-sts.outputs.token }}
           lfs: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install Rust toolchain
@@ -87,30 +98,10 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: release-plz/action@487eb7b5c085a664d5c5ca05f4159bd9b591182a # v0.5
+        uses: release-plz/action@064f4d1e36c843611ddf013be726beaa4ad804db # v0.5.129
         id: release-plz
         with:
           command: release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Set up pixi
-        if: steps.release-plz.outputs.prs_created == 'true'
-        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
-
-      - name: Update pixi lockfile on release branch
-        if: steps.release-plz.outputs.prs_created == 'true'
-        env:
-          RELEASE_BRANCH: ${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}
-        run: |
-          git fetch origin "$RELEASE_BRANCH"
-          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-          pixi install
-          if git diff --quiet pixi.lock; then
-            echo "pixi.lock is already up-to-date"
-          else
-            git add pixi.lock
-            git commit -m "chore: update pixi.lock"
-            git push origin "$RELEASE_BRANCH"
-          fi

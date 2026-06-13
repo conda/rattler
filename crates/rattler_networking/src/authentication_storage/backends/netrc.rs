@@ -1,16 +1,35 @@
 //! Read authentication credentials from `.netrc` files.
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
+
+/// Returns the default path for the netrc file — `~/_netrc` on Windows and
+/// `~/.netrc` elsewhere. Falls back to `.netrc` in the current directory if
+/// the home directory cannot be determined.
+fn default_netrc_path() -> PathBuf {
+    let Some(mut path) = dirs::home_dir() else {
+        return PathBuf::from(".netrc");
+    };
+    #[cfg(windows)]
+    path.push("_netrc");
+    #[cfg(not(windows))]
+    path.push(".netrc");
+    path
+}
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
 #[derive(Debug, Clone, Default)]
 pub struct NetRcStorage {
+    /// The path to the netrc file that was loaded, if any. Surfaced via
+    /// [`StorageBackend::name`] so that `auth status` can show users which
+    /// file the credentials came from.
+    path: Option<PathBuf>,
+
     /// The netrc file contents
     machines: HashMap<String, Machine>,
 }
@@ -41,25 +60,29 @@ impl NetRcStorage {
     ///
     /// When an error is returned the path to the file that the was read from is returned as well.
     pub fn from_env() -> Result<Self, (PathBuf, NetRcStorageError)> {
-        // Get the path to the netrc file
-        let path = match env::var("NETRC") {
-            Ok(val) => PathBuf::from(val),
-            Err(_) => match dirs::home_dir() {
-                Some(mut path) => {
-                    #[cfg(windows)]
-                    path.push("_netrc");
-                    #[cfg(not(windows))]
-                    path.push(".netrc");
-                    path
-                }
-                None => PathBuf::from(".netrc"),
-            },
+        // Get the path to the netrc file. If the user explicitly set `NETRC`
+        // we remember that so that a missing file surfaces as an error — they
+        // asked for a specific file, so silently ignoring it would be
+        // surprising.
+        let (path, explicit) = if let Ok(val) = env::var("NETRC") {
+            tracing::debug!(
+                "\"NETRC\" environment variable set, using netrc file at {}",
+                val
+            );
+            (PathBuf::from(val), true)
+        } else {
+            (default_netrc_path(), false)
         };
 
         match Self::from_path(&path) {
             Ok(storage) => Ok(storage),
-            Err(NetRcStorageError::IOError(err)) if err.kind() == ErrorKind::NotFound => {
-                Ok(Self::default())
+            Err(NetRcStorageError::IOError(err))
+                if err.kind() == ErrorKind::NotFound && !explicit =>
+            {
+                Ok(Self {
+                    path: Some(path),
+                    machines: HashMap::new(),
+                })
             }
             Err(err) => Err((path, err)),
         }
@@ -76,7 +99,10 @@ impl NetRcStorage {
             .map(|m| (m.name.clone(), m))
             .filter_map(|(name, value)| name.map(|n| (n, value)))
             .collect();
-        Ok(Self { machines })
+        Ok(Self {
+            path: Some(path.to_path_buf()),
+            machines,
+        })
     }
 
     /// Retrieve the authentication information for the given host
@@ -92,6 +118,13 @@ impl NetRcStorage {
 }
 
 impl StorageBackend for NetRcStorage {
+    fn name(&self) -> String {
+        match &self.path {
+            Some(path) => format!("netrc ({})", path.display()),
+            None => "netrc".to_string(),
+        }
+    }
+
     fn store(
         &self,
         _host: &str,
@@ -115,11 +148,24 @@ impl StorageBackend for NetRcStorage {
             Err(err) => Err(err.into()),
         }
     }
+
+    fn list(&self) -> Result<Vec<(String, Authentication)>, AuthenticationStorageError> {
+        self.machines
+            .keys()
+            .map(|host| {
+                self.get_password(host)
+                    .map(|auth| auth.map(|auth| (host.clone(), auth)))
+                    .map_err(AuthenticationStorageError::from)
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AuthenticationStorage;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -158,7 +204,9 @@ mod tests {
         netrc.flush().unwrap();
 
         let old_netrc = env::var("NETRC");
-        env::set_var("NETRC", path.as_os_str());
+        unsafe {
+            env::set_var("NETRC", path.as_os_str());
+        }
 
         let storage = NetRcStorage::from_env().unwrap();
 
@@ -172,10 +220,102 @@ mod tests {
 
         assert_eq!(storage.get("test_unknown").unwrap(), None);
 
-        if let Ok(netrc) = old_netrc {
-            env::set_var("NETRC", netrc);
-        } else {
-            env::remove_var("NETRC");
+        unsafe {
+            if let Ok(netrc) = old_netrc {
+                env::set_var("NETRC", netrc);
+            } else {
+                env::remove_var("NETRC");
+            }
         }
+    }
+
+    /// When `NETRC` points to a malformed file we expect `from_env` to return
+    /// `Err` so that the caller (`AuthenticationStorage::from_env_and_defaults`)
+    /// can emit a `tracing::warn!`. This is the sanity-check case.
+    #[test]
+    fn test_from_env_malformed_netrc_returns_err() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".netrc-malformed");
+        std::fs::write(&path, b"this is not a valid netrc file !!!!").unwrap();
+
+        temp_env::with_var("NETRC", Some(path.as_os_str()), || {
+            let result = NetRcStorage::from_env();
+            assert!(
+                result.is_err(),
+                "expected malformed netrc file to surface an error so the \
+                 caller can log a warning",
+            );
+        });
+    }
+
+    /// If `NETRC` is explicitly set, a missing file must surface as `Err` so
+    /// the caller can log a warning. The leniency for missing files only
+    /// applies to the default `~/.netrc` fallback path.
+    #[test]
+    fn test_from_env_missing_explicit_netrc_returns_err() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.netrc");
+        assert!(!missing.exists());
+
+        temp_env::with_var("NETRC", Some(missing.as_os_str()), || {
+            let result = NetRcStorage::from_env();
+            assert!(
+                result.is_err(),
+                "explicit NETRC pointing at a missing file must return Err",
+            );
+        });
+    }
+
+    /// Full-stack check using `tracing_test`: set `NETRC` to a malformed file
+    /// and verify that `AuthenticationStorage::from_env_and_defaults` actually
+    /// emits the warning. This locks the wiring between the two modules.
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_from_env_and_defaults_warns_on_malformed_netrc() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".netrc-malformed");
+        std::fs::write(&path, b"this is not a valid netrc file !!!!").unwrap();
+
+        temp_env::with_vars(
+            [
+                ("NETRC", Some(path.as_os_str())),
+                ("RATTLER_AUTH_FILE", None),
+            ],
+            || {
+                let _ = AuthenticationStorage::from_env_and_defaults();
+            },
+        );
+
+        assert!(
+            logs_contain("error reading netrc file"),
+            "expected a tracing::warn! about the malformed netrc file",
+        );
+    }
+
+    /// Counterpart to the test above: if the warning is missing when `NETRC`
+    /// points at a non-existent file, this test will fail — pinning down the
+    /// exact scenario the user reported.
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_from_env_and_defaults_warns_on_missing_explicit_netrc() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.netrc");
+
+        temp_env::with_vars(
+            [
+                ("NETRC", Some(missing.as_os_str())),
+                ("RATTLER_AUTH_FILE", None),
+            ],
+            || {
+                let _ = AuthenticationStorage::from_env_and_defaults();
+            },
+        );
+
+        assert!(
+            logs_contain("error reading netrc file"),
+            "no tracing::warn! was emitted for an explicitly-set NETRC that \
+             points to a missing file — this is the bug: `from_env` swallows \
+             ErrorKind::NotFound even when the path comes from the env var",
+        );
     }
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
-use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
+use pyo3::{Bound, FromPyObject, PyAny, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
@@ -121,7 +121,7 @@ impl PyGateway {
         } else {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
-            gateway.set_client(PyClientWithMiddleware::new(None, None, None)?);
+            gateway.set_client(PyClientWithMiddleware::new(None, None, None, None)?);
         }
 
         Ok(Self {

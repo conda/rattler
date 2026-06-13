@@ -1,6 +1,7 @@
 [package]
+exclude = ["**/snapshots/**"]
 name = "rattler"
-version = "0.40.2"
+version = "0.44.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -11,11 +12,15 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ['rustls-tls']
+default = ['rustls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
-oauth = ["dep:openidconnect", "dep:open"]
-cli-tools = ['dep:clap', 'reqwest/blocking', 'oauth']
+rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
+oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
+cli-tools = ['dep:clap', 'oauth', 'dep:console']
+# Adds an interactive MultiSelect picker to `auth logout` when run without
+# arguments on a TTY. Pulls in `dialoguer`; opt-in so library/headless
+# consumers don't pay for it.
+auth-interactive = ['cli-tools', 'dep:dialoguer', 'tokio/signal']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]
@@ -23,8 +28,11 @@ features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
+jiff = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
+hex = { workspace = true }
 dirs = { workspace = true }
 filetime = { workspace = true }
 fs-err = { workspace = true }
@@ -48,7 +56,7 @@ path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
+reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
@@ -59,8 +67,10 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
+dialoguer = { workspace = true, optional = true }
 open = { workspace = true, optional = true }
 openidconnect = { workspace = true, optional = true }
+oauth2-reqwest = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 

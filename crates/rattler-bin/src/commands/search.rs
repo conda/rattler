@@ -1,14 +1,13 @@
-use std::{collections::HashMap, env, sync::Arc, time::Instant};
+use std::{collections::HashMap, env, time::Instant};
 
+use indexmap::IndexMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform};
-use rattler_networking::AuthenticationMiddleware;
-#[cfg(feature = "s3")]
-use rattler_networking::AuthenticationStorage;
+use rattler_conda_types::{
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform, RepoDataRecord,
+};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
-use reqwest::Client;
 
 /// Search for packages in conda channels using glob or regex patterns.
 #[derive(Debug, clap::Parser)]
@@ -47,20 +46,25 @@ pub struct Opt {
     /// Enable sharded repodata
     #[clap(long, default_value = "true", action = clap::ArgAction::Set)]
     sharded: bool,
+
+    /// Output in JSON format
+    #[clap(long, conflicts_with_all = ["limit", "limit_packages", "all"])]
+    json: bool,
 }
 
 pub async fn search(opt: Opt) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    println!("Searching for '{}' on {}", opt.matchspec, opt.platform);
+    eprintln!("Searching for '{}' on {}", opt.matchspec, opt.platform);
 
     // Parse the pattern as a matchspec with glob/regex support
     let matchspec = MatchSpec::from_str(
         &opt.matchspec,
         ParseMatchSpecOptions::strict()
             .with_exact_names_only(false)
-            .with_experimental_extras(true),
+            .with_extras(true)
+            .with_flags(true),
     )
     .into_diagnostic()
     .context("failed to parse pattern as matchspec")?;
@@ -73,30 +77,13 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    println!(
+    eprintln!(
         "Channels: {}",
         channels.iter().map(Channel::canonical_name).join(", ")
     );
 
     // Create HTTP client
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .expect("failed to create client");
-
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client.clone())
-        .with_arc(Arc::new(
-            AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
-        ))
-        .with(rattler_networking::OciMiddleware::new(download_client));
-    #[cfg(feature = "s3")]
-    let download_client = download_client.with(rattler_networking::S3Middleware::new(
-        HashMap::new(),
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
-    ));
-    #[cfg(feature = "gcs")]
-    let download_client = download_client.with(rattler_networking::GCSMiddleware::default());
-    let download_client = download_client.build();
+    let download_client = super::client::create_client_with_middleware()?;
 
     // Create gateway
     let gateway = Gateway::builder()
@@ -129,6 +116,23 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .context("failed to query repodata")?;
 
     pb.finish_and_clear();
+
+    if opt.json {
+        // Group records by platform (subdir), same format as `pixi search --json`
+        let mut grouped: IndexMap<&str, Vec<&RepoDataRecord>> = IndexMap::new();
+        for record in repo_data.iter().flat_map(RepoData::iter) {
+            grouped
+                .entry(record.package_record.subdir.as_str())
+                .or_default()
+                .push(record);
+        }
+        for records in grouped.values_mut() {
+            records.sort_unstable_by(|a, b| b.cmp(a));
+        }
+        let json_str = serde_json::to_string_pretty(&grouped).into_diagnostic()?;
+        println!("{json_str}");
+        return Ok(());
+    }
 
     // Collect all records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();

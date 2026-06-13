@@ -1,4 +1,4 @@
-use rattler_conda_types::{PackageName, PackageRecord};
+use rattler_conda_types::{Flag, PackageName, PackageRecord};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
@@ -164,6 +164,22 @@ macro_rules! impl_package_record {
                 AsMut::<PackageRecord>::as_mut(self).features = features;
             }
 
+            /// Plain string flags used to select package variants.
+            #[wasm_bindgen::prelude::wasm_bindgen(getter)]
+            pub fn flags(&self) -> Vec<String> {
+                AsRef::<PackageRecord>::as_ref(self)
+                    .flags
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            }
+
+            #[wasm_bindgen::prelude::wasm_bindgen(setter)]
+            pub fn set_flags(&mut self, flags: Vec<String>) {
+                AsMut::<PackageRecord>::as_mut(self).flags =
+                    flags.into_iter().map(Flag::new_unchecked).collect();
+            }
+
             /// The specific license of the package
             #[wasm_bindgen::prelude::wasm_bindgen(
                 getter,
@@ -227,7 +243,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -257,7 +273,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .legacy_bz2_md5
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -308,7 +324,7 @@ macro_rules! impl_package_record {
                 AsRef::<PackageRecord>::as_ref(self)
                     .sha256
                     .as_ref()
-                    .map(|hash| format!("{hash:x}"))
+                    .map(hex::encode)
                     .into()
             }
 
@@ -431,9 +447,11 @@ macro_rules! impl_package_record {
                 unchecked_return_type = "Date | undefined"
             )]
             pub fn timestamp(&self) -> Option<js_sys::Date> {
-                AsRef::<PackageRecord>::as_ref(self)
-                    .timestamp
-                    .map(|ts| ts.into_datetime().into())
+                AsRef::<PackageRecord>::as_ref(self).timestamp.map(|ts| {
+                    js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(
+                        ts.jiff_timestamp().as_millisecond() as f64,
+                    ))
+                })
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
@@ -442,9 +460,10 @@ macro_rules! impl_package_record {
                 #[wasm_bindgen::prelude::wasm_bindgen(unchecked_param_type = "Date | undefined")]
                 timestamp: Option<js_sys::Date>,
             ) {
-                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.map(|date| {
-                    let datetime: chrono::DateTime<chrono::Utc> = date.into();
-                    datetime.into()
+                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.and_then(|date| {
+                    jiff::Timestamp::from_millisecond(date.get_time() as i64)
+                        .ok()
+                        .map(|ts| ts.into())
                 });
             }
 

@@ -35,11 +35,7 @@ impl SolvableId {
 /// Gets a number associated to this solvable
 pub fn lookup_num(solvable: *mut ffi::Solvable, key: StringId) -> Option<u64> {
     let value = unsafe { ffi::solvable_lookup_num(solvable.cast(), key.0, u64::MAX) };
-    if value == u64::MAX {
-        None
-    } else {
-        Some(value)
-    }
+    if value == u64::MAX { None } else { Some(value) }
 }
 
 /// Gets an Id associated to this solvable

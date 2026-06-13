@@ -1,34 +1,22 @@
-use std::sync::Arc;
-
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::package::{IndexJson, PathsJson};
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
-use reqwest::Client;
 use url::Url;
 
+/// Inspect package metadata from a remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// URL of the conda package to inspect (must be a .conda archive)
     #[clap(required = true)]
     url: Url,
+
+    /// Number of files to print
+    #[clap(long, default_value_t = 10)]
+    limit: usize,
 }
 
 pub async fn inspect(opt: Opt) -> miette::Result<()> {
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .into_diagnostic()
-        .context("failed to create HTTP client")?;
-
-    let authentication_storage =
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-
-    let client = reqwest_middleware::ClientBuilder::new(download_client.clone())
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            authentication_storage,
-        )))
-        .build();
+    let client = super::client::create_client_with_middleware()?;
 
     let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
         .await
@@ -64,11 +52,11 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
 
     let total = paths_json.paths.len();
     println!("paths: ({total} total)");
-    for entry in paths_json.paths.iter().take(10) {
+    for entry in paths_json.paths.iter().take(opt.limit) {
         println!("  - {}", entry.relative_path.display());
     }
-    if total > 10 {
-        println!("  ... and {} more", total - 10);
+    if total > opt.limit {
+        println!("  ... and {} more", total - opt.limit);
     }
 
     Ok(())

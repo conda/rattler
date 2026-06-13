@@ -8,6 +8,7 @@ mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
+mod flags;
 pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
@@ -42,30 +43,34 @@ pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
+pub use flags::{Flag, InvalidFlagError};
 pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
+    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
-    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
 pub use minimal_prefix_record::{
-    collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
+    MinimalPrefixCollection, MinimalPrefixRecord, collect_minimal_prefix_records,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
-pub use package_name::{InvalidPackageNameError, PackageName};
+pub use package_name::{
+    InvalidPackageNameError, NormalizedPackageName, PackageName, SourcePackageName,
+};
 pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
+    ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
+    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
+    SubdirRunExportsJson, UrlOrPath, V3Packages, ValidatePackageRecordsError, WhlPackageRecord,
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ConvertSubdirError, ExperimentalV3Packages, PackageRecord, RecordFromPath,
-    RepoData, SubdirRunExportsJson, UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;

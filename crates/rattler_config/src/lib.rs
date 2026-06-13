@@ -5,6 +5,7 @@ pub mod edit;
 #[cfg(test)]
 mod tests {
     use crate::config::build::PackageFormatAndCompression;
+    use crate::config::tls::TlsRootCerts;
     use crate::config::{Config, ConfigBase, MergeError, ValidationError};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
@@ -51,13 +52,13 @@ mod tests {
         }
 
         fn validate(&self) -> Result<(), ValidationError> {
-            if let Some(numeric) = self.numeric_field {
-                if numeric > 100 {
-                    return Err(ValidationError::InvalidValue(
-                        "numeric_field".to_string(),
-                        "must be <= 100".to_string(),
-                    ));
-                }
+            if let Some(numeric) = self.numeric_field
+                && numeric > 100
+            {
+                return Err(ValidationError::InvalidValue(
+                    "numeric_field".to_string(),
+                    "must be <= 100".to_string(),
+                ));
             }
             Ok(())
         }
@@ -81,6 +82,7 @@ mod tests {
         assert_eq!(config.default_channels, None);
         assert_eq!(config.authentication_override_file, None);
         assert_eq!(config.tls_no_verify, Some(false));
+        assert_eq!(config.tls_root_certs, None);
         assert!(config.mirrors.is_empty());
         assert!(config.s3_options.0.is_empty());
         assert_eq!(config.extensions, TestExtension::default());
@@ -119,6 +121,12 @@ mod tests {
             .set("tls-no-verify", Some("true".to_string()))
             .unwrap();
         assert_eq!(config.tls_no_verify, Some(true));
+
+        // Test editing TLS root certificates
+        config
+            .set("tls-root-certs", Some("system".to_string()))
+            .unwrap();
+        assert_eq!(config.tls_root_certs, Some(TlsRootCerts::System));
 
         // Test editing mirrors
         config
@@ -272,6 +280,7 @@ mod tests {
         let config1 = TestConfig {
             default_channels: Some(vec!["conda-forge".parse().unwrap()]),
             tls_no_verify: Some(false),
+            tls_root_certs: Some(TlsRootCerts::Webpki),
             extensions: TestExtension {
                 custom_field: Some("original".to_string()),
                 numeric_field: Some(42),
@@ -283,6 +292,7 @@ mod tests {
         let config2 = TestConfig {
             default_channels: Some(vec!["bioconda".parse().unwrap()]),
             authentication_override_file: Some(PathBuf::from("/new/auth")),
+            tls_root_certs: Some(TlsRootCerts::System),
             extensions: TestExtension {
                 custom_field: Some("updated".to_string()),
                 bool_field: Some(true),
@@ -308,6 +318,7 @@ mod tests {
             Some(PathBuf::from("/new/auth"))
         );
         assert_eq!(merged.tls_no_verify, Some(false)); // from config1
+        assert_eq!(merged.tls_root_certs, Some(TlsRootCerts::System));
 
         // Extension fields should be merged properly
         assert_eq!(merged.extensions.custom_field, Some("updated".to_string())); // from config2
@@ -682,6 +693,14 @@ mod tests {
             crate::edit::ConfigEditError::BoolParseError { .. }
         ));
 
+        // Test invalid TLS root certificate selection
+        let result = config.set("tls-root-certs", Some("not-a-store".to_string()));
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::edit::ConfigEditError::InvalidValue { .. }
+        ));
+
         // Test invalid number
         let result = config.set("concurrency.solves", Some("not-a-number".to_string()));
         assert!(result.is_err());
@@ -715,6 +734,7 @@ mod tests {
         assert!(keys.contains(&"default_channels".to_string()));
         assert!(keys.contains(&"authentication_override_file".to_string()));
         assert!(keys.contains(&"tls_no_verify".to_string()));
+        assert!(keys.contains(&"tls_root_certs".to_string()));
         assert!(keys.contains(&"mirrors".to_string()));
     }
 

@@ -1,10 +1,10 @@
 use std::{hint::black_box, path::Path};
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
-use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority};
+use rattler_solve::{ChannelPriority, resolvo::CondaDependencyProvider};
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
@@ -34,8 +34,8 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     &[],
                     std::slice::from_ref(&match_spec),
                     None,
-                    ChannelPriority::default(),
                     None,
+                    ChannelPriority::default(),
                     None,
                     rattler_solve::SolveStrategy::Highest,
                     Vec::new(),
