@@ -633,9 +633,10 @@ class PrefixPlaceholder:
         """
         Returns a representation of the PrefixPlaceholder.
         """
-        return (
-            f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}", c_string={self.c_string})'
-        )
+        if self.c_string is not None:
+            return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}", c_string={self.c_string})'
+        else:
+            return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}")'
 
 
 class FileMode:
