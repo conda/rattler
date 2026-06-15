@@ -77,5 +77,8 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 
 [dev-dependencies]
+rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
+  "sparse",
+] }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }

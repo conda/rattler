@@ -1385,7 +1385,15 @@ pub async fn index_fs_with_channel_metadata(
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let root = channel.canonicalize()?;
+    config.root = Some(root.to_string_lossy().to_string());
+    // Atomic writes: write to a temp dir on the same volume, then rename over
+    // the target. Avoids truncating files in place — required on Windows where a
+    // memory-mapped repodata.json cannot be resized (ERROR_USER_MAPPED_FILE 1224).
+    // The temp dir lives inside the channel root so it is on the same volume /
+    // network share, keeping the rename atomic; it is ignored when enumerating
+    // subdirs because `.tmp` does not parse as a `Platform`.
+    config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
     index_with_channel_metadata(
@@ -1756,7 +1764,11 @@ pub async fn ensure_channel_initialized_fs_with_channel_metadata(
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let root = channel.canonicalize()?;
+    config.root = Some(root.to_string_lossy().to_string());
+    // Atomic writes: see the note in `index_fs_with_channel_metadata`. The temp
+    // dir lives inside the channel root so the rename stays on the same volume.
+    config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let op = Operator::new(config.into_builder())?.finish();
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
