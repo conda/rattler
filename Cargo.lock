@@ -5179,6 +5179,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_repodata_gateway",
  "rattler_s3",
  "reqwest 0.13.4",
  "retry-policies",
