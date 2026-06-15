@@ -2,19 +2,9 @@ use rattler_conda_types::{Channel, ChannelConfig, Platform};
 use rattler_index::{IndexFsConfig, PackageRevisionAssignment, index_fs};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 
-/// Regression test for indexing a channel whose `repodata.json` is currently
-/// memory-mapped, as the repodata gateway does via
-/// [`SparseRepoData::from_file`].
-///
-/// On Windows, re-writing a memory-mapped file in place fails with
-/// `ERROR_USER_MAPPED_FILE` (os error 1224). `index_fs` now writes through an
-/// atomic temp dir on the same volume and renames over the target, so the
-/// mapped file is replaced rather than truncated. Combined with the gateway
-/// opening the file with `FILE_SHARE_DELETE`, the rename succeeds while the
-/// mapping is still live.
-///
-/// On other platforms the rename is harmless and the test simply asserts that
-/// indexing over a mapped file keeps working.
+/// Indexing must succeed while `repodata.json` is memory-mapped (as the gateway
+/// maps it). Atomic writes rename over the file instead of truncating it, which
+/// on Windows would fail with `ERROR_USER_MAPPED_FILE`.
 #[tokio::test]
 async fn test_index_fs_over_memory_mapped_repodata() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -33,7 +23,7 @@ async fn test_index_fs_over_memory_mapped_repodata() {
         multi_progress: None,
     };
 
-    // First pass: generate `noarch/repodata.json`.
+    // Generate the initial repodata.
     index_fs(make_config())
         .await
         .expect("initial indexing should succeed");
@@ -44,26 +34,21 @@ async fn test_index_fs_over_memory_mapped_repodata() {
         "expected {repodata_path:?} to exist"
     );
 
-    // Map the freshly generated repodata.json exactly like the gateway does and
-    // keep the mapping alive across the second indexing pass.
+    // Map it like the gateway does and keep the mapping alive across re-indexing.
     let channel_config = ChannelConfig::default_with_root_dir(channel_path.clone());
     let channel = Channel::from_str("dummy", &channel_config).unwrap();
     let sparse = SparseRepoData::from_file(channel, "noarch", &repodata_path, None)
         .expect("mapping repodata.json should succeed");
 
-    // Second pass: must succeed even though the file is still memory-mapped.
+    // Must succeed while the file is still mapped.
     index_fs(make_config())
         .await
         .expect("re-indexing over a mapped repodata.json should succeed");
 
-    // The atomic write dir lives inside the channel root but must not be treated
-    // as a subdir.
     assert!(
         channel_path.join(".tmp").exists(),
-        "atomic write dir should have been created inside the channel root"
+        "atomic write dir expected"
     );
 
-    // Keep the mapping alive until after the second write so the regression is
-    // actually exercised.
     drop(sparse);
 }
