@@ -416,19 +416,31 @@ impl Middleware for AuthChallengeMiddleware {
             None
         };
 
-        // Clone before sending so we can replay on a challenge. Fails only
-        // for streaming bodies; then the response passes through as-is.
-        let retry_req = req.try_clone();
         let url = req.url().clone();
+
+        // We can only react to a challenge if the request can be cloned for
+        // replay. Cloning fails only for streaming bodies; such a request is
+        // sent once (with any cached token already attached) and its response
+        // returned as-is, warning if it turns out to be a challenge we could
+        // otherwise have satisfied.
+        let Some(mut retry_req) = req.try_clone() else {
+            let response = next.run(req, extensions).await?;
+            if !parse_challenges(response.headers()).is_empty() {
+                tracing::warn!(
+                    "AuthChallengeMiddleware: {url} responded with a challenge but the \
+                     request body could not be cloned for replay; returning the \
+                     challenge response unmodified"
+                );
+            }
+            return Ok(response);
+        };
+
         let response = next.clone().run(req, extensions).await?;
 
         let challenges = parse_challenges(response.headers());
         if challenges.is_empty() {
             return Ok(response);
         }
-        let Some(mut retry_req) = retry_req else {
-            return Ok(response);
-        };
 
         let Some(header) = self
             .acquire_serialized(origin, &url, &challenges, used_header.as_ref())
@@ -881,6 +893,34 @@ mod tests {
         assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
         // Disabled = pass-through: both requests still reach the server.
         assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn unclonable_challenged_request_is_returned_unreplayed_with_warning() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server_url = spawn_protected_server("abc123", hits.clone()).await;
+        let flow = StaticFlow::new(Some("abc123"));
+        let client = client_with(AuthChallengeMiddleware::new(vec![flow.clone()]));
+
+        // A streaming body cannot be cloned, so a challenge cannot be replayed.
+        let body = reqwest::Body::wrap_stream(futures::stream::once(async {
+            Ok::<_, std::io::Error>(b"x".to_vec())
+        }));
+        let response = client
+            .get(server_url.join("/channel/repodata.json").unwrap())
+            .body(body)
+            .send()
+            .await
+            .unwrap();
+
+        // The original challenge is returned: one request, no replay, the
+        // flow never consulted.
+        assert_eq!(response.status(), 401);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(flow.calls.load(Ordering::SeqCst), 0);
+        // The dropped replay is surfaced, not silent.
+        assert!(logs_contain("could not be cloned for replay"));
     }
 
     /// Flow minting a token tied to the challenged URL's port; pairs with
