@@ -414,6 +414,22 @@ impl CondaSourceData<SourceMetadata> {
         }
     }
 
+    /// Returns the build environment packages for this source package.
+    ///
+    /// These are the packages (compilers, build tools, etc.) that were present
+    /// in the build environment when this source package was built.
+    pub fn build_packages(&self) -> &crate::EnvironmentPackages {
+        &self.source_data.build_packages
+    }
+
+    /// Returns the host environment packages for this source package.
+    ///
+    /// These are the packages (libraries to link against, etc.) that were
+    /// present in the host environment when this source package was built.
+    pub fn host_packages(&self) -> &crate::EnvironmentPackages {
+        &self.source_data.host_packages
+    }
+
     /// Attempts to convert into a `CondaSourceData<PackageRecord>`.
     /// Returns `None` if the metadata is partial.
     pub fn into_full(self) -> Option<CondaSourceData<PackageRecord>> {
@@ -440,13 +456,41 @@ impl CondaSourceData<SourceMetadata> {
         package_record: PackageRecord,
         sources: BTreeMap<String, SourceLocation>,
     ) -> Self {
+        Self::full_with_source_data(
+            location,
+            package_build_source,
+            variants,
+            identifier_hash,
+            package_record,
+            sources,
+            SourceData::default(),
+        )
+    }
+
+    /// Convenience constructor for a full source data with explicit build and
+    /// host environment packages.
+    ///
+    /// Use this when you already have the resolved build and host environments
+    /// (e.g. when reconstructing from a lockfile). For building new source
+    /// packages, prefer [`crate::builder::LockFileBuilder::register_conda_source_package`]
+    /// which validates the package handles.
+    #[allow(clippy::too_many_arguments)]
+    pub fn full_with_source_data(
+        location: UrlOrPath,
+        package_build_source: Option<PackageBuildSource>,
+        variants: BTreeMap<String, VariantValue>,
+        identifier_hash: Option<String>,
+        package_record: PackageRecord,
+        sources: BTreeMap<String, SourceLocation>,
+        source_data: SourceData,
+    ) -> Self {
         Self {
             location,
             package_build_source,
             variants,
             identifier_hash,
             sources,
-            source_data: SourceData::default(),
+            source_data,
             metadata: SourceMetadata::Full(Box::new(package_record)),
         }
     }

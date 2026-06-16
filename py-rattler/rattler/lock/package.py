@@ -261,7 +261,65 @@ class PypiLockedPackage(LockedPackage):
 class CondaLockedSourcePackage(CondaLockedPackage):
     """
     A locked conda source package in a lock file.
+
+    Source packages contain references to the build and host environment
+    packages that were used when building the package. These can be
+    accessed via the `build_packages` and `host_packages` properties.
     """
+
+    @property
+    def build_packages(self) -> List[LockedPackage]:
+        """
+        Returns the packages from the build environment of this source package.
+
+        These are the packages (compilers, build tools, etc.) that were present
+        in the build environment when this source package was built.
+
+        Returns an empty list if no build packages were recorded.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("pixi.lock")
+        >>> env = lock_file.default_environment()
+        >>> for platform in env.platforms():
+        ...     for pkg in env.packages(platform):
+        ...         if isinstance(pkg, CondaLockedSourcePackage):
+        ...             for bp in pkg.build_packages:
+        ...                 print(f"  build dep: {bp.name}")
+        ...
+        >>>
+        ```
+        """
+        return [LockedPackage._from_py_locked_package(p) for p in self._package.build_packages]
+
+    @property
+    def host_packages(self) -> List[LockedPackage]:
+        """
+        Returns the packages from the host environment of this source package.
+
+        These are the packages (libraries to link against, etc.) that were
+        present in the host environment when this source package was built.
+
+        Returns an empty list if no host packages were recorded.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("pixi.lock")
+        >>> env = lock_file.default_environment()
+        >>> for platform in env.platforms():
+        ...     for pkg in env.packages(platform):
+        ...         if isinstance(pkg, CondaLockedSourcePackage):
+        ...             for hp in pkg.host_packages:
+        ...                 print(f"  host dep: {hp.name}")
+        ...
+        >>>
+        ```
+        """
+        return [LockedPackage._from_py_locked_package(p) for p in self._package.host_packages]
 
 
 class CondaLockedBinaryPackage(CondaLockedPackage):

@@ -517,9 +517,13 @@ impl PyEnvironment {
 
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(&self, platform: PyLockPlatform) -> Option<Vec<PyLockedPackage>> {
-        self.as_ref()
-            .packages(platform.platform())
-            .map(|packages| packages.cloned().map(Into::into).collect())
+        let lock_file = self.environment.lock_file();
+        self.as_ref().packages(platform.platform()).map(|packages| {
+            packages
+                .cloned()
+                .map(|pkg| PyLockedPackage::with_lock_file(pkg, lock_file.clone()))
+                .collect()
+        })
     }
 
     /// Returns a list of all packages and platforms defined for this
@@ -531,7 +535,9 @@ impl PyEnvironment {
             .map(|(platform, pkgs)| {
                 (
                     platform.to_owned(&lock_file).into(),
-                    pkgs.cloned().map(Into::into).collect(),
+                    pkgs.cloned()
+                        .map(|pkg| PyLockedPackage::with_lock_file(pkg, lock_file.clone()))
+                        .collect(),
                 )
             })
             .collect()
@@ -539,11 +545,17 @@ impl PyEnvironment {
 
     /// Returns all pypi packages for all platforms
     pub fn pypi_packages(&self) -> HashMap<String, Vec<PyLockedPackage>> {
+        let lock_file = self.environment.lock_file();
         self.as_ref()
             .pypi_packages_by_platform()
             .map(|(platform, data_vec)| {
                 let data = data_vec
-                    .map(|pkg_data| PyLockedPackage::from(LockedPackage::Pypi(pkg_data.clone())))
+                    .map(|pkg_data| {
+                        PyLockedPackage::with_lock_file(
+                            LockedPackage::Pypi(pkg_data.clone()),
+                            lock_file.clone(),
+                        )
+                    })
                     .collect::<Vec<_>>();
                 (platform.name().to_string(), data)
             })
@@ -591,11 +603,17 @@ impl PyEnvironment {
         &self,
         platform: PyLockPlatform,
     ) -> Option<Vec<PyLockedPackage>> {
+        let lock_file = self.environment.lock_file();
         self.as_ref()
             .pypi_packages(platform.platform())
             .map(|data| {
-                data.map(|pkg| PyLockedPackage::from(LockedPackage::Pypi(pkg.clone())))
-                    .collect()
+                data.map(|pkg| {
+                    PyLockedPackage::with_lock_file(
+                        LockedPackage::Pypi(pkg.clone()),
+                        lock_file.clone(),
+                    )
+                })
+                .collect()
             })
     }
 }
@@ -642,15 +660,31 @@ impl PyLockChannel {
 }
 
 #[pyclass]
-#[repr(transparent)]
 #[derive(Clone)]
 pub struct PyLockedPackage {
     pub(crate) inner: LockedPackage,
+    /// Optional reference to the parent lock file, needed to resolve
+    /// build/host package handles in source packages.
+    lock_file: Option<LockFile>,
+}
+
+impl PyLockedPackage {
+    /// Creates a `PyLockedPackage` that carries a reference to the lock file
+    /// it originated from, enabling resolution of build/host packages.
+    fn with_lock_file(inner: LockedPackage, lock_file: LockFile) -> Self {
+        Self {
+            inner,
+            lock_file: Some(lock_file),
+        }
+    }
 }
 
 impl From<LockedPackage> for PyLockedPackage {
     fn from(value: LockedPackage) -> Self {
-        Self { inner: value }
+        Self {
+            inner: value,
+            lock_file: None,
+        }
     }
 }
 
@@ -785,6 +819,70 @@ impl PyLockedPackage {
     #[getter]
     pub fn is_pypi(&self) -> bool {
         matches!(&self.inner, LockedPackage::Pypi(..))
+    }
+
+    /// Returns the packages from the build environment of this source package.
+    ///
+    /// These are the packages (compilers, build tools, etc.) that were present
+    /// in the build environment when this source package was built.
+    ///
+    /// Returns an empty list for binary or pypi packages.
+    /// Raises an error if the package was not loaded from a lock file.
+    #[getter]
+    pub fn build_packages(&self) -> PyResult<Vec<PyLockedPackage>> {
+        let source = match &self.inner {
+            LockedPackage::Conda(CondaPackageData::Source(data)) => data,
+            _ => return Ok(vec![]),
+        };
+        if source.build_packages().is_empty() {
+            return Ok(vec![]);
+        }
+        let lock_file = self.lock_file.as_ref().ok_or_else(|| {
+            PyRattlerError::LockFileError(
+                "Cannot resolve build packages: package was not loaded from a lock file".into(),
+            )
+        })?;
+        source
+            .build_packages()
+            .iter(lock_file)
+            .map(|result| {
+                result
+                    .map(|pkg| PyLockedPackage::with_lock_file(pkg.clone(), lock_file.clone()))
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()).into())
+            })
+            .collect()
+    }
+
+    /// Returns the packages from the host environment of this source package.
+    ///
+    /// These are the packages (libraries to link against, etc.) that were
+    /// present in the host environment when this source package was built.
+    ///
+    /// Returns an empty list for binary or pypi packages.
+    /// Raises an error if the package was not loaded from a lock file.
+    #[getter]
+    pub fn host_packages(&self) -> PyResult<Vec<PyLockedPackage>> {
+        let source = match &self.inner {
+            LockedPackage::Conda(CondaPackageData::Source(data)) => data,
+            _ => return Ok(vec![]),
+        };
+        if source.host_packages().is_empty() {
+            return Ok(vec![]);
+        }
+        let lock_file = self.lock_file.as_ref().ok_or_else(|| {
+            PyRattlerError::LockFileError(
+                "Cannot resolve host packages: package was not loaded from a lock file".into(),
+            )
+        })?;
+        source
+            .host_packages()
+            .iter(lock_file)
+            .map(|result| {
+                result
+                    .map(|pkg| PyLockedPackage::with_lock_file(pkg.clone(), lock_file.clone()))
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()).into())
+            })
+            .collect()
     }
 }
 
