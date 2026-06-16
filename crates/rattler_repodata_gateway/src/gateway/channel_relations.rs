@@ -1,49 +1,43 @@
 //! [CEP-42] channel-relations resolution.
 //!
-//! Given user-specified channels and a registry mapping each channel to
-//! its declared `base`/`overrides` relations, produces the final
-//! channel priority order.
+//! Given a set of user-specified channels, the channels reachable from
+//! them via declared `base`/`overrides` relations, and the relation
+//! edges themselves, produces the final channel priority order.
 //!
-//! Steps:
-//! 1. BFS-discover transitively related channels up to [`DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH`].
-//! 2. Build a priority DAG where `from -> to` means `from` has strictly
-//!    higher priority than `to`. Edges come from three sources:
-//!    consecutive user-listed channels (user wins), each channel's
-//!    `base` (base wins over declaring), and each channel's `overrides`
-//!    (declaring wins over overridden).
-//! 3. Drop any relation edge that contradicts the user's explicit
-//!    ordering; user ordering always wins per CEP.
-//! 4. Topologically sort, breaking any cycle by dropping back-edges
-//!    (recorded in [`Resolution::broken_cycle_edges`]). Resolution
-//!    always succeeds so bad channel metadata can't block package
-//!    resolution.
+//! The function is intentionally edge-oriented rather than
+//! channel-oriented: CEP-42 lets a single channel declare DIFFERENT
+//! relations per subdir, so collapsing them into one `base` and one
+//! `overrides` per channel is wrong (the discarded edge silently
+//! disappears from the priority graph). The caller (the
+//! [`ChannelExpander`](super::channel_expander::ChannelExpander))
+//! observes per-`(channel, platform)` relations, resolves them to
+//! edges, deduplicates exact duplicates, and passes the deduplicated
+//! edge list in.
+//!
+//! Steps performed here:
+//! 1. Build user edges from consecutive user-listed channels (user
+//!    wins; left-to-right means strictly higher to lower priority).
+//! 2. Drop any relation edge that directly contradicts the user's
+//!    explicit ordering. (Edges between two user channels where the
+//!    user listed `to` at or before `from` lose to the user. Self-loop
+//!    relation edges DO fall through to cycle detection — they are
+//!    malformed, not user conflicts.)
+//! 3. Topologically sort. User edges are inserted first, so a cycle
+//!    that mixes user and relation edges always breaks by dropping a
+//!    relation edge. Broken edges land in
+//!    [`Resolution::broken_cycle_edges`].
 //!
 //! [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     hash::Hash,
 };
 
 /// Default CEP-42 relation-traversal depth. Each hop through a `base`
-/// or `overrides` relation costs one.
+/// or `overrides` relation costs one. Setting this to `0` disables
+/// relation following entirely.
 pub const DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH: usize = 10;
-
-/// Relations declared by a single channel. Mirrors the shape of
-/// [`rattler_conda_types::ChannelRelations`] but generic over the
-/// identifier type so the algorithm operates on resolved URLs instead
-/// of raw relative-path strings.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ChannelRelations<K> {
-    /// Channel with strictly higher priority than the declaring channel.
-    pub base: Option<K>,
-    /// Channel with strictly lower priority than the declaring channel.
-    pub overrides: Option<K>,
-}
-
-/// Channel identifier to its declared relations. Missing entries mean
-/// no relations.
-pub type ChannelRegistry<K> = HashMap<K, ChannelRelations<K>>;
 
 /// Where a [`PriorityEdge`] originated from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,15 +51,16 @@ pub enum EdgeSource {
 }
 
 /// Directed priority edge: `from` outranks `to`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PriorityEdge<K> {
     pub from: K,
     pub to: K,
     pub source: EdgeSource,
 }
 
-/// Outcome of a channel priority resolution. Always succeeds; bad
-/// metadata surfaces via `ignored_edges` and `broken_cycle_edges`.
+/// Outcome of a channel priority resolution. Always succeeds; the
+/// caller surfaces `ignored_edges` / `broken_cycle_edges` as warnings
+/// or errors per its mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolution<K> {
     /// Final priority order, highest first.
@@ -75,19 +70,21 @@ pub struct Resolution<K> {
     /// Relation edges dropped because they contradicted the user's
     /// explicit ordering.
     pub ignored_edges: Vec<PriorityEdge<K>>,
-    /// Relation edges dropped to break a cycle. Callers translate this
-    /// into a [`ChannelRelationsWarning::CycleBroken`](super::channel_expander::ChannelRelationsWarning::CycleBroken)
-    /// when the field is non-empty.
+    /// Relation edges dropped to break a cycle.
     pub broken_cycle_edges: Vec<PriorityEdge<K>>,
-    /// Channels discovered during BFS, in discovery order.
-    pub channels: Vec<K>,
 }
 
-/// Resolve channel priority. See the module docs for the algorithm.
+/// Resolve channel priority from an explicit list of relation edges.
+///
+/// `user_channels` is the caller-supplied channel order;
+/// `discovered_channels` lists every node that should appear in the
+/// resolution (user + transitively discovered), in BFS discovery
+/// order; `relation_edges` carries the per-(channel, platform)
+/// `Base` / `Override` edges already deduplicated by the caller.
 pub fn resolve_channel_priority<K>(
     user_channels: &[K],
-    registry: &ChannelRegistry<K>,
-    max_depth: usize,
+    discovered_channels: &[K],
+    relation_edges: Vec<PriorityEdge<K>>,
 ) -> Resolution<K>
 where
     K: Hash + Eq + Clone + std::fmt::Debug,
@@ -98,86 +95,38 @@ where
             edges: Vec::new(),
             ignored_edges: Vec::new(),
             broken_cycle_edges: Vec::new(),
-            channels: Vec::new(),
         };
     }
 
     let Graph {
         edges,
         ignored_edges,
-        channels,
-    } = Graph::build(user_channels, registry, max_depth);
+    } = Graph::build(user_channels, relation_edges);
 
     let TopoResult {
         order,
         broken_cycle_edges,
         edges: kept_edges,
-    } = TopoResult::new(&channels, edges);
+    } = TopoResult::new(discovered_channels, edges);
 
     Resolution {
         order,
         edges: kept_edges,
         ignored_edges,
         broken_cycle_edges,
-        channels,
     }
-}
-
-/// BFS-discover channels reachable from `user_channels` via relations,
-/// stopping at `max_depth` hops.
-fn discover_channels<K>(
-    user_channels: &[K],
-    registry: &ChannelRegistry<K>,
-    max_depth: usize,
-) -> Vec<K>
-where
-    K: Hash + Eq + Clone,
-{
-    let mut discovered_set: HashSet<K> = HashSet::new();
-    let mut discovered_order: Vec<K> = Vec::new();
-    let mut queue: VecDeque<(K, usize)> = VecDeque::new();
-
-    for ch in user_channels {
-        if discovered_set.insert(ch.clone()) {
-            discovered_order.push(ch.clone());
-            queue.push_back((ch.clone(), 0));
-        }
-    }
-
-    while let Some((channel, depth)) = queue.pop_front() {
-        if depth >= max_depth {
-            continue;
-        }
-
-        let Some(relations) = registry.get(&channel) else {
-            continue;
-        };
-
-        for related in [&relations.base, &relations.overrides]
-            .into_iter()
-            .flatten()
-        {
-            if discovered_set.insert(related.clone()) {
-                discovered_order.push(related.clone());
-                queue.push_back((related.clone(), depth + 1));
-            }
-        }
-    }
-
-    discovered_order
 }
 
 struct Graph<K> {
     edges: Vec<PriorityEdge<K>>,
     ignored_edges: Vec<PriorityEdge<K>>,
-    channels: Vec<K>,
 }
 
 impl<K> Graph<K>
 where
     K: Hash + Eq + Clone,
 {
-    fn build(user_channels: &[K], registry: &ChannelRegistry<K>, max_depth: usize) -> Self {
+    fn build(user_channels: &[K], relation_edges: Vec<PriorityEdge<K>>) -> Self {
         // User edges form a linear chain `u0 -> u1 -> ... -> un`, so
         // `user_pos(from) >= user_pos(to)` is equivalent to a reachability
         // check and runs in O(1).
@@ -187,80 +136,33 @@ where
             .map(|(i, c)| (c, i))
             .collect();
 
-        let mut user_edges: Vec<PriorityEdge<K>> =
-            Vec::with_capacity(user_channels.len().saturating_sub(1));
+        let mut edges: Vec<PriorityEdge<K>> =
+            Vec::with_capacity(user_channels.len().saturating_sub(1) + relation_edges.len());
         for pair in user_channels.windows(2) {
-            user_edges.push(PriorityEdge {
+            edges.push(PriorityEdge {
                 from: pair[0].clone(),
                 to: pair[1].clone(),
                 source: EdgeSource::User,
             });
         }
 
-        let channels = discover_channels(user_channels, registry, max_depth);
-        let discovered_set: HashSet<&K> = channels.iter().collect();
-
-        let mut relation_edges: Vec<PriorityEdge<K>> = Vec::new();
         let mut ignored_edges: Vec<PriorityEdge<K>> = Vec::new();
-
-        for channel in &channels {
-            let Some(relations) = registry.get(channel) else {
-                continue;
-            };
-
-            // Drop relations pointing past `max_depth`: we didn't fetch the
-            // target so we can't trust its contribution.
-            if let Some(base) = relations
-                .base
-                .as_ref()
-                .filter(|b| discovered_set.contains(*b))
-            {
-                let edge = PriorityEdge {
-                    from: base.clone(),
-                    to: channel.clone(),
-                    source: EdgeSource::Base,
-                };
-                dispatch_edge(
-                    edge,
-                    &user_positions,
-                    &mut relation_edges,
-                    &mut ignored_edges,
-                );
-            }
-
-            if let Some(overridden) = relations
-                .overrides
-                .as_ref()
-                .filter(|o| discovered_set.contains(*o))
-            {
-                let edge = PriorityEdge {
-                    from: channel.clone(),
-                    to: overridden.clone(),
-                    source: EdgeSource::Override,
-                };
-                dispatch_edge(
-                    edge,
-                    &user_positions,
-                    &mut relation_edges,
-                    &mut ignored_edges,
-                );
-            }
+        for edge in relation_edges {
+            dispatch_edge(edge, &user_positions, &mut edges, &mut ignored_edges);
         }
-
-        let mut edges = user_edges;
-        edges.extend(relation_edges);
 
         Self {
             edges,
             ignored_edges,
-            channels,
         }
     }
 }
 
-/// Route `edge` to `accepted` or `ignored`. Conflicts when both
-/// endpoints are user channels and the user placed `to` at or before
-/// `from`.
+/// Route `edge` to `accepted` or `ignored`. A relation edge is ignored
+/// when BOTH endpoints are user-listed AND the user placed `to` strictly
+/// before `from` (i.e. the user wants `to` to outrank `from`). Self-loop
+/// relation edges fall through to cycle detection — they are malformed
+/// metadata, not user conflicts.
 fn dispatch_edge<K>(
     edge: PriorityEdge<K>,
     user_positions: &HashMap<&K, usize>,
@@ -269,12 +171,16 @@ fn dispatch_edge<K>(
 ) where
     K: Hash + Eq,
 {
+    if edge.from == edge.to {
+        accepted.push(edge);
+        return;
+    }
     let conflict = matches!(
         (
             user_positions.get(&edge.from),
             user_positions.get(&edge.to),
         ),
-        (Some(from_pos), Some(to_pos)) if to_pos <= from_pos,
+        (Some(from_pos), Some(to_pos)) if to_pos < from_pos,
     );
 
     if conflict {
@@ -469,11 +375,25 @@ fn dfs_post_order(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, VecDeque};
+
     use super::*;
+
+    /// Test-only registry of declared relations, used by `resolve`
+    /// below to set up algorithm inputs concisely. NOT the runtime
+    /// representation: production code passes the deduplicated
+    /// per-`(channel, platform)` edge list directly.
+    type ChannelRegistry<'a> = HashMap<&'a str, ChannelRelations<'a>>;
+
+    #[derive(Debug, Clone, Copy, Default)]
+    struct ChannelRelations<'a> {
+        base: Option<&'a str>,
+        overrides: Option<&'a str>,
+    }
 
     /// Build a [`ChannelRegistry`] from an iterator of (name, base,
     /// overrides) triples for concise test setup.
-    fn registry<'a, I>(entries: I) -> ChannelRegistry<&'a str>
+    fn registry<'a, I>(entries: I) -> ChannelRegistry<'a>
     where
         I: IntoIterator<Item = (&'a str, Option<&'a str>, Option<&'a str>)>,
     {
@@ -483,19 +403,93 @@ mod tests {
             .collect()
     }
 
-    fn resolve<'a>(user: &[&'a str], reg: &ChannelRegistry<&'a str>) -> Resolution<&'a str> {
-        resolve_channel_priority(user, reg, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH)
+    /// Walk `registry` from `user_channels`, gather the BFS discovery
+    /// order, and build the deduplicated edge list. Mirrors what
+    /// [`ChannelExpander`](super::super::channel_expander::ChannelExpander)
+    /// does at runtime — kept private here so the tests can exercise
+    /// the algorithm with concise inputs.
+    fn build_inputs<'a>(
+        user: &[&'a str],
+        registry: &ChannelRegistry<'a>,
+        max_depth: usize,
+    ) -> (Vec<&'a str>, Vec<PriorityEdge<&'a str>>) {
+        let mut discovered_set: std::collections::HashSet<&'a str> =
+            std::collections::HashSet::new();
+        let mut discovered: Vec<&'a str> = Vec::new();
+        let mut queue: VecDeque<(&'a str, usize)> = VecDeque::new();
+        for ch in user {
+            if discovered_set.insert(ch) {
+                discovered.push(ch);
+                queue.push_back((ch, 0));
+            }
+        }
+        while let Some((ch, depth)) = queue.pop_front() {
+            if depth >= max_depth {
+                continue;
+            }
+            if let Some(rels) = registry.get(ch) {
+                for related in [rels.base, rels.overrides].into_iter().flatten() {
+                    if discovered_set.insert(related) {
+                        discovered.push(related);
+                        queue.push_back((related, depth + 1));
+                    }
+                }
+            }
+        }
+
+        let mut seen_edges: std::collections::HashSet<(EdgeSource, &'a str, &'a str)> =
+            std::collections::HashSet::new();
+        let mut edges: Vec<PriorityEdge<&'a str>> = Vec::new();
+        for ch in &discovered {
+            let Some(rels) = registry.get(ch) else {
+                continue;
+            };
+            if let Some(base) = rels.base
+                && discovered_set.contains(base)
+                && seen_edges.insert((EdgeSource::Base, base, ch))
+            {
+                edges.push(PriorityEdge {
+                    from: base,
+                    to: ch,
+                    source: EdgeSource::Base,
+                });
+            }
+            if let Some(overridden) = rels.overrides
+                && discovered_set.contains(overridden)
+                && seen_edges.insert((EdgeSource::Override, ch, overridden))
+            {
+                edges.push(PriorityEdge {
+                    from: ch,
+                    to: overridden,
+                    source: EdgeSource::Override,
+                });
+            }
+        }
+        (discovered, edges)
+    }
+
+    fn resolve<'a>(user: &[&'a str], reg: &ChannelRegistry<'a>) -> Resolution<&'a str> {
+        let (discovered, edges) = build_inputs(user, reg, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH);
+        resolve_channel_priority(user, &discovered, edges)
+    }
+
+    fn resolve_with_depth<'a>(
+        user: &[&'a str],
+        reg: &ChannelRegistry<'a>,
+        max_depth: usize,
+    ) -> Resolution<&'a str> {
+        let (discovered, edges) = build_inputs(user, reg, max_depth);
+        resolve_channel_priority(user, &discovered, edges)
     }
 
     #[test]
     fn empty_user_channels_returns_empty_resolution() {
-        let reg: ChannelRegistry<&str> = ChannelRegistry::new();
+        let reg: ChannelRegistry<'_> = ChannelRegistry::new();
         let r = resolve(&[], &reg);
         assert!(r.order.is_empty());
         assert!(r.edges.is_empty());
         assert!(r.ignored_edges.is_empty());
         assert!(r.broken_cycle_edges.is_empty());
-        assert!(r.channels.is_empty());
     }
 
     #[test]
@@ -510,7 +504,7 @@ mod tests {
 
     #[test]
     fn channel_not_in_registry_is_treated_as_having_no_relations() {
-        let reg: ChannelRegistry<&str> = ChannelRegistry::new();
+        let reg: ChannelRegistry<'_> = ChannelRegistry::new();
         let r = resolve(&["a", "b"], &reg);
         assert_eq!(r.order, vec!["a", "b"]);
     }
@@ -613,21 +607,15 @@ mod tests {
 
     #[test]
     fn simple_cycle_is_broken_rather_than_failing() {
-        // a declares b as base, b declares a as base - a 2-node cycle.
         let reg = registry([("a", Some("b"), None), ("b", Some("a"), None)]);
         let r = resolve(&["a"], &reg);
-        // Resolution still produces a total order over both channels.
         assert_eq!(r.order.len(), 2);
         assert!(r.order.contains(&"a"));
         assert!(r.order.contains(&"b"));
-        // One back-edge was dropped to break the cycle.
         assert_eq!(r.broken_cycle_edges.len(), 1);
-        // The dropped edge is one of the two base relations in the cycle.
         let dropped = &r.broken_cycle_edges[0];
         assert_eq!(dropped.source, EdgeSource::Base);
-        // The dropped edge does not appear in the kept edges.
         assert!(!r.edges.contains(dropped));
-        // All remaining edges are respected by the order.
         for edge in &r.edges {
             let from_pos = r.order.iter().position(|c| c == &edge.from).unwrap();
             let to_pos = r.order.iter().position(|c| c == &edge.to).unwrap();
@@ -644,9 +632,7 @@ mod tests {
         ]);
         let r = resolve(&["a"], &reg);
         assert_eq!(r.order.len(), 3);
-        // Exactly one back-edge is dropped.
         assert_eq!(r.broken_cycle_edges.len(), 1);
-        // All kept edges are respected.
         for edge in &r.edges {
             let from_pos = r.order.iter().position(|c| c == &edge.from).unwrap();
             let to_pos = r.order.iter().position(|c| c == &edge.to).unwrap();
@@ -656,9 +642,6 @@ mod tests {
 
     #[test]
     fn self_loop_is_broken() {
-        // `b` declares itself as base. The user only lists `a`, so `b` is
-        // only transitively discovered and the self-loop is not filtered
-        // out as a user-ordering conflict.
         let reg = registry([("a", Some("b"), None), ("b", Some("b"), None)]);
         let r = resolve(&["a"], &reg);
         assert_eq!(r.order, vec!["b", "a"]);
@@ -668,59 +651,44 @@ mod tests {
         assert_eq!(dropped.to, "b");
     }
 
+    /// A self-loop on a user-listed channel is no longer routed to
+    /// `ignored_edges` via the user-conflict check — self-relations
+    /// are malformed metadata. The algorithm reports them via
+    /// `broken_cycle_edges`; the caller (the expander) translates
+    /// that into a warning/error per its mode.
     #[test]
-    fn self_loop_on_a_user_channel_is_treated_as_a_conflict_and_ignored() {
-        // A self-loop on a user-listed channel is filtered by the user-
-        // conflict check (reachability from `a` to `a` is trivially true),
-        // so it lands in `ignored_edges` rather than `broken_cycle_edges`.
+    fn self_loop_on_a_user_channel_is_treated_as_a_cycle() {
         let reg = registry([("a", Some("a"), None)]);
         let r = resolve(&["a"], &reg);
         assert_eq!(r.order, vec!["a"]);
-        assert_eq!(r.ignored_edges.len(), 1);
-        assert!(r.broken_cycle_edges.is_empty());
+        assert!(r.ignored_edges.is_empty());
+        assert_eq!(r.broken_cycle_edges.len(), 1);
+        let dropped = &r.broken_cycle_edges[0];
+        assert_eq!(dropped.from, "a");
+        assert_eq!(dropped.to, "a");
     }
 
     #[test]
     fn cycle_mixing_user_and_relation_edges_drops_the_relation_edge() {
-        // User list: [a, b] -- gives a user edge a -> b (a > b).
-        // Registry:  a's base is c, c's base is b.
-        // Relation edges not in direct conflict with user ordering:
-        //   c -> a   (c is base of a, so c > a)
-        //   b -> c   (c is base of b, so c > b -- wait, b's base is c means
-        //             c has higher priority, so edge c -> b)
-        // Hmm, let me re-pick: use OVERRIDES to form a cleaner cycle:
-        //   b overrides c  => b > c   (edge b -> c)
-        //   c overrides a  => c > a   (edge c -> a)
-        // Combined with the user edge a -> b, we have a cycle
-        //     a -> b -> c -> a
-        // consisting of one user edge and two relation edges. The
-        // algorithm MUST drop one of the relation edges, never the user
-        // edge.
         let reg = registry([
             ("a", None, None),
             ("b", None, Some("c")),
             ("c", None, Some("a")),
         ]);
         let r = resolve(&["a", "b"], &reg);
-
         assert_eq!(r.broken_cycle_edges.len(), 1);
-        // The dropped edge must NOT be a user edge.
         assert_ne!(r.broken_cycle_edges[0].source, EdgeSource::User);
-        // The user-edge a -> b must still be present in the kept set.
         assert!(
             r.edges
                 .iter()
                 .any(|e| e.source == EdgeSource::User && e.from == "a" && e.to == "b")
         );
-        // Consequently `a` must come before `b` in the final order.
         let pos = |ch: &str| r.order.iter().position(|c| *c == ch).unwrap();
         assert!(pos("a") < pos("b"));
     }
 
     #[test]
     fn only_one_edge_is_dropped_per_cycle() {
-        // A long chain with a single back-edge closing the cycle. The
-        // cycle-breaker must drop exactly one edge, not an entire chain.
         let reg = registry([
             ("a", Some("b"), None),
             ("b", Some("c"), None),
@@ -752,26 +720,23 @@ mod tests {
             ("c", Some("d"), None),
             ("d", None, None),
         ]);
-        // With max_depth = 1 we traverse from a (depth 0) to b (depth 1)
-        // but stop before reaching c and d.
-        let r = resolve_channel_priority(&["a"], &reg, 1);
-        assert!(r.channels.contains(&"a"));
-        assert!(r.channels.contains(&"b"));
-        assert!(!r.channels.contains(&"c"));
-        assert!(!r.channels.contains(&"d"));
+        let r = resolve_with_depth(&["a"], &reg, 1);
+        let nodes: HashSet<&str> = r.order.iter().copied().collect();
+        assert!(nodes.contains("a"));
+        assert!(nodes.contains("b"));
+        assert!(!nodes.contains("c"));
+        assert!(!nodes.contains("d"));
     }
 
     #[test]
     fn max_depth_zero_only_keeps_user_channels() {
         let reg = registry([("a", Some("b"), None), ("b", None, None)]);
-        let r = resolve_channel_priority(&["a"], &reg, 0);
-        assert_eq!(r.channels, vec!["a"]);
+        let r = resolve_with_depth(&["a"], &reg, 0);
         assert_eq!(r.order, vec!["a"]);
     }
 
     #[test]
     fn diamond_without_cycle_is_resolved() {
-        // Two base chains that share a common ancestor `top`.
         let reg = registry([
             ("bottom", Some("left"), None),
             ("left", Some("top"), None),
@@ -779,8 +744,6 @@ mod tests {
             ("top", None, None),
         ]);
         let r = resolve(&["bottom", "right"], &reg);
-        // `top` must come before both `left` and `right`, which must both
-        // come before `bottom`. The user also requires `bottom > right`.
         let pos = |ch: &str| r.order.iter().position(|c| *c == ch).unwrap();
         assert!(pos("top") < pos("left"));
         assert!(pos("top") < pos("right"));
@@ -805,24 +768,8 @@ mod tests {
     }
 
     #[test]
-    fn discovered_channels_preserve_bfs_order() {
-        // a -> b (base), a -> c (overrides), b -> d (base)
-        let reg = registry([
-            ("a", Some("b"), Some("c")),
-            ("b", Some("d"), None),
-            ("c", None, None),
-            ("d", None, None),
-        ]);
-        let r = resolve(&["a"], &reg);
-        assert_eq!(r.channels, vec!["a", "b", "c", "d"]);
-    }
-
-    /// User input `[a, a]` produces a self-edge `a -> a`. No
-    /// topological order respects it, so it must not appear in
-    /// `kept` (`Resolution::edges`). It belongs in `broken_cycle_edges`.
-    #[test]
     fn user_self_edge_is_not_kept() {
-        let reg: ChannelRegistry<&str> = ChannelRegistry::new();
+        let reg: ChannelRegistry<'_> = ChannelRegistry::new();
         let r = resolve(&["a", "a"], &reg);
         for edge in &r.edges {
             assert_ne!(
@@ -834,8 +781,6 @@ mod tests {
 
     #[test]
     fn order_is_consistent_with_every_accepted_edge() {
-        // Property-style check on a non-trivial graph: the final order
-        // must respect every kept edge (from appears before to).
         let reg = registry([
             ("alpha", Some("conda-forge"), Some("alpha-archive")),
             ("beta", Some("alpha"), None),
@@ -856,8 +801,6 @@ mod tests {
         }
     }
 
-    /// A broken cycle surfaces via `Resolution::broken_cycle_edges`,
-    /// which callers translate into a typed warning.
     #[test]
     fn broken_cycle_edges_are_reported_in_the_resolution() {
         let reg = registry([("a", Some("b"), None), ("b", Some("a"), None)]);
@@ -865,7 +808,6 @@ mod tests {
         assert!(!r.broken_cycle_edges.is_empty());
     }
 
-    /// `broken_cycle_edges` is empty when the graph is cycle-free.
     #[test]
     fn no_broken_edges_on_a_cycle_free_graph() {
         let reg = registry([
@@ -873,6 +815,58 @@ mod tests {
             ("conda-forge", None, None),
         ]);
         let r = resolve(&["bioconda"], &reg);
+        assert!(r.broken_cycle_edges.is_empty());
+    }
+
+    /// Two platforms of the same channel declaring DIFFERENT bases is
+    /// valid per CEP-42. Both edges must be respected in the final
+    /// order, with neither silently dropped.
+    #[test]
+    fn divergent_per_platform_relations_are_both_respected() {
+        // Channel `app` has base `cf-linux` (one platform) and base
+        // `cf-osx` (another platform). Both should appear above `app`
+        // in the final order.
+        let user = ["app"];
+        let discovered = vec!["app", "cf-linux", "cf-osx"];
+        let edges = vec![
+            PriorityEdge {
+                from: "cf-linux",
+                to: "app",
+                source: EdgeSource::Base,
+            },
+            PriorityEdge {
+                from: "cf-osx",
+                to: "app",
+                source: EdgeSource::Base,
+            },
+        ];
+        let r = resolve_channel_priority(&user, &discovered, edges);
+        let pos = |ch: &str| r.order.iter().position(|c| *c == ch).unwrap();
+        assert!(pos("cf-linux") < pos("app"));
+        assert!(pos("cf-osx") < pos("app"));
+        assert!(r.broken_cycle_edges.is_empty());
+    }
+
+    /// Exact duplicate relation edges (same from/to/source) must not
+    /// produce a cycle on their own — they're redundant, not
+    /// contradictory.
+    #[test]
+    fn exact_duplicate_relation_edges_are_not_cycles() {
+        let user = ["app"];
+        let discovered = vec!["app", "cf"];
+        let edges = vec![
+            PriorityEdge {
+                from: "cf",
+                to: "app",
+                source: EdgeSource::Base,
+            },
+            PriorityEdge {
+                from: "cf",
+                to: "app",
+                source: EdgeSource::Base,
+            },
+        ];
+        let r = resolve_channel_priority(&user, &discovered, edges);
         assert!(r.broken_cycle_edges.is_empty());
     }
 }

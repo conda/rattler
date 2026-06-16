@@ -5,7 +5,6 @@ use std::{
 };
 
 use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
-use itertools::Itertools;
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -24,36 +23,28 @@ use crate::Reporter;
 /// Result of a successful [`RepoDataQuery::execute`]. Carries the
 /// per-source repodata buckets and any non-fatal warnings the caller
 /// may want to surface or log.
+///
+/// Implements [`Deref<Target = [RepoData]>`](std::ops::Deref) and
+/// [`IntoIterator`] so call sites that only care about the records
+/// can use it like a `Vec<RepoData>` (`.iter()`, `.len()`,
+/// `output[0]`, `for r in output { ... }`).
 #[derive(Debug, Default)]
 pub struct RepoDataQueryOutput {
-    /// One bucket per input source, in the priority order applied by
-    /// CEP-42 (or the caller's original order when CEP-42 made no
-    /// changes).
+    /// One bucket per input source. CEP-42-discovered transitive
+    /// channels are inserted next to the user channel that introduced
+    /// them; caller-supplied custom sources keep their
+    /// caller-specified positions.
     pub repodata: Vec<RepoData>,
     /// Non-fatal warnings encountered during the query. Empty when no
     /// issues were observed.
     pub warnings: Vec<GatewayWarning>,
 }
 
-impl RepoDataQueryOutput {
-    /// Iterate the per-source [`RepoData`] buckets.
-    pub fn iter(&self) -> std::slice::Iter<'_, RepoData> {
-        self.repodata.iter()
-    }
+impl std::ops::Deref for RepoDataQueryOutput {
+    type Target = [RepoData];
 
-    /// Number of per-source [`RepoData`] buckets.
-    pub fn len(&self) -> usize {
-        self.repodata.len()
-    }
-
-    /// `true` if no buckets were produced.
-    pub fn is_empty(&self) -> bool {
-        self.repodata.is_empty()
-    }
-
-    /// First [`RepoData`] bucket, or `None` if there are none.
-    pub fn first(&self) -> Option<&RepoData> {
-        self.repodata.first()
+    fn deref(&self) -> &[RepoData] {
+        &self.repodata
     }
 }
 
@@ -75,15 +66,11 @@ impl<'a> IntoIterator for &'a RepoDataQueryOutput {
     }
 }
 
-impl std::ops::Index<usize> for RepoDataQueryOutput {
-    type Output = RepoData;
-
-    fn index(&self, index: usize) -> &RepoData {
-        &self.repodata[index]
-    }
-}
-
 /// Result of a successful [`NamesQuery::execute`].
+///
+/// Implements [`Deref<Target = [PackageName]>`](std::ops::Deref) and
+/// [`IntoIterator`] so call sites that only care about the names can
+/// use it like a `Vec<PackageName>`.
 #[derive(Debug, Default)]
 pub struct NamesQueryOutput {
     /// Distinct package names contributed by all queried subdirs.
@@ -91,6 +78,32 @@ pub struct NamesQueryOutput {
     /// Non-fatal warnings encountered during the query. Empty when no
     /// issues were observed.
     pub warnings: Vec<GatewayWarning>,
+}
+
+impl std::ops::Deref for NamesQueryOutput {
+    type Target = [PackageName];
+
+    fn deref(&self) -> &[PackageName] {
+        &self.names
+    }
+}
+
+impl IntoIterator for NamesQueryOutput {
+    type Item = PackageName;
+    type IntoIter = std::vec::IntoIter<PackageName>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.names.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a NamesQueryOutput {
+    type Item = &'a PackageName;
+    type IntoIter = std::slice::Iter<'a, PackageName>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.names.iter()
+    }
 }
 
 /// Represents a query to execute with a [`Gateway`](super::Gateway).
@@ -177,6 +190,12 @@ struct SubdirHandle {
     barrier: Arc<BarrierCell<Arc<Subdir>>>,
     kind: SubdirKind,
     data: RepoData,
+    /// Index in the caller's `sources` list. `Some(i)` for sources the
+    /// caller supplied directly; `None` for transitively discovered
+    /// channels. The finalize step uses this as the "anchor" so that
+    /// caller-supplied custom sources keep their caller-specified
+    /// position even when CEP-42 reorders the channel buckets.
+    caller_source_idx: Option<usize>,
 }
 
 /// Origin of a [`SubdirHandle`]; drives final-result reordering.
@@ -398,57 +417,61 @@ impl QueryExecutor {
             platforms.clone(),
         );
 
-        let sources_and_platforms = sources
-            .into_iter()
-            .cartesian_product(platforms)
-            .collect_vec();
-
-        let mut subdir_handles = Vec::with_capacity(sources_and_platforms.len());
+        // Iterate per caller-source index then per platform, so each
+        // handle remembers which slot in the caller's `sources` list
+        // it came from.
+        let sources_with_idx: Vec<(usize, Source)> = sources.into_iter().enumerate().collect();
+        let total_handles = sources_with_idx.len() * platforms.len();
+        let mut subdir_handles = Vec::with_capacity(total_handles);
         let pending_subdirs = FuturesUnordered::new();
 
-        for (source, platform) in sources_and_platforms {
-            let barrier = Arc::new(BarrierCell::new());
+        for (caller_idx, source) in sources_with_idx {
+            for &platform in &platforms {
+                let source_clone = source.clone();
+                let barrier = Arc::new(BarrierCell::new());
 
-            let (kind, pending) = match source {
-                Source::Channel(channel) => {
-                    let (url, channel) = expander.register_user_channel(channel);
-                    let kind = SubdirKind::Channel {
-                        url: url.clone(),
-                        platform,
-                    };
-                    let fut = build_channel_subdir_future(
-                        gateway.clone(),
-                        channel,
-                        platform,
-                        url,
-                        reporter.clone(),
-                        barrier.clone(),
-                        FetchErrorPolicy::Propagate,
-                    );
-                    (kind, fut)
-                }
-                Source::Custom(custom_source) => {
-                    let client = CustomSourceClient::new(custom_source, platform);
-                    let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
-                    let b = barrier.clone();
-                    let fut = box_future(async move {
-                        b.set(subdir.clone()).expect("subdir was set twice");
-                        Ok(PendingSubdirOk {
-                            subdir,
-                            kind_url_and_platform: None,
-                            warning: None,
-                        })
-                    });
-                    (SubdirKind::Custom, fut)
-                }
-            };
+                let (kind, pending) = match source_clone {
+                    Source::Channel(channel) => {
+                        let (url, channel) = expander.register_user_channel(channel);
+                        let kind = SubdirKind::Channel {
+                            url: url.clone(),
+                            platform,
+                        };
+                        let fut = build_channel_subdir_future(
+                            gateway.clone(),
+                            channel,
+                            platform,
+                            url,
+                            reporter.clone(),
+                            barrier.clone(),
+                            FetchErrorPolicy::Propagate,
+                        );
+                        (kind, fut)
+                    }
+                    Source::Custom(custom_source) => {
+                        let client = CustomSourceClient::new(custom_source, platform);
+                        let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
+                        let b = barrier.clone();
+                        let fut = box_future(async move {
+                            b.set(subdir.clone()).expect("subdir was set twice");
+                            Ok(PendingSubdirOk {
+                                subdir,
+                                kind_url_and_platform: None,
+                                warning: None,
+                            })
+                        });
+                        (SubdirKind::Custom, fut)
+                    }
+                };
 
-            subdir_handles.push(SubdirHandle {
-                barrier,
-                kind,
-                data: RepoData::default(),
-            });
-            pending_subdirs.push(pending);
+                subdir_handles.push(SubdirHandle {
+                    barrier,
+                    kind,
+                    data: RepoData::default(),
+                    caller_source_idx: Some(caller_idx),
+                });
+                pending_subdirs.push(pending);
+            }
         }
 
         Ok(Self {
@@ -895,15 +918,32 @@ impl QueryExecutor {
             barrier,
             kind: SubdirKind::Channel { url, platform },
             data: RepoData::default(),
+            caller_source_idx: None,
         });
         self.spawn_package_fetches_for_new_handle(handle_idx);
     }
 
-    /// Build the final [`RepoDataQueryOutput`]. When CEP-42 is enabled
-    /// AND at least one subdir contributed relations, reorder channel
-    /// entries by the resolved priority; otherwise preserve the
-    /// original construction order so mixed channel/custom queries
-    /// with no declared relations are not silently re-tiered.
+    /// Build the final [`RepoDataQueryOutput`].
+    ///
+    /// When CEP-42 is enabled and at least one subdir contributed a
+    /// valid relation, slot transitively discovered channels next to
+    /// the user channel that introduced them, ordered by CEP-42
+    /// priority. Caller-supplied sources (channels and custom
+    /// sources) keep their caller-specified position; in particular a
+    /// custom source is NOT pushed to the end of the result merely
+    /// because a sibling channel declared relations.
+    ///
+    /// Sort key per handle:
+    /// `(caller_anchor, cep42_priority, platform_idx, original_idx)`
+    /// where:
+    /// * `caller_anchor` is the caller's `sources` index. User
+    ///   channels and customs use their own; transitively discovered
+    ///   channels inherit the anchor of the user channel that
+    ///   introduced them.
+    /// * `cep42_priority` ranks channels within a slot (lower = higher
+    ///   priority, so bases land before the declaring channel and
+    ///   override targets land after). Customs use `0`; since each
+    ///   custom occupies its own anchor, this never collides.
     fn finalize_channel_relations(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         let direct = self.direct_url_result;
         let mut handles = self.subdir_handles;
@@ -915,9 +955,6 @@ impl QueryExecutor {
                 return Err(GatewayError::ChannelRelationsError(msg));
             }
 
-            // Layout: direct-url bucket at 0, channels by CEP-42 priority
-            // (platform list tiebreaks), custom sources last in construction
-            // order.
             let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
                 .order
                 .iter()
@@ -933,16 +970,47 @@ impl QueryExecutor {
                 .map(|(i, p)| (p, i))
                 .collect();
 
-            let mut tagged: Vec<(usize, SubdirHandle)> = handles.into_iter().enumerate().collect();
-            tagged.sort_by_key(|(orig_idx, h)| match &h.kind {
-                SubdirKind::Channel { url, platform } => {
-                    let prio = priority_of.get(url).copied().unwrap_or(usize::MAX);
-                    let plat = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
-                    (1_usize, prio, plat, *orig_idx)
-                }
-                SubdirKind::Custom => (2, 0, 0, *orig_idx),
-            });
-            handles = tagged.into_iter().map(|(_, h)| h).collect();
+            // Map every user channel URL to its caller-source index
+            // so transitively discovered channels can find the
+            // anchor of the user channel that introduced them.
+            let user_channel_caller_idx: std::collections::HashMap<ChannelUrl, usize> = handles
+                .iter()
+                .filter_map(|h| match (&h.kind, h.caller_source_idx) {
+                    (SubdirKind::Channel { url, .. }, Some(i)) => Some((url.clone(), i)),
+                    _ => None,
+                })
+                .collect();
+
+            let mut tagged: Vec<(usize, usize, usize, usize, SubdirHandle)> = handles
+                .into_iter()
+                .enumerate()
+                .map(|(orig_idx, h)| {
+                    let (anchor, prio, plat) = match (&h.kind, h.caller_source_idx) {
+                        (SubdirKind::Custom, Some(i)) => (i, 0_usize, 0_usize),
+                        (SubdirKind::Channel { url, platform }, Some(i)) => {
+                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                            let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
+                            (i, r, p)
+                        }
+                        (SubdirKind::Channel { url, platform }, None) => {
+                            let anchor = self
+                                .expander
+                                .introducer_of(url)
+                                .and_then(|u| user_channel_caller_idx.get(u).copied())
+                                .unwrap_or(usize::MAX);
+                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                            let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
+                            (anchor, r, p)
+                        }
+                        (SubdirKind::Custom, None) => {
+                            unreachable!("custom sources are always caller-supplied")
+                        }
+                    };
+                    (anchor, prio, plat, orig_idx, h)
+                })
+                .collect();
+            tagged.sort_by_key(|(a, p, pl, oi, _)| (*a, *p, *pl, *oi));
+            handles = tagged.into_iter().map(|(_, _, _, _, h)| h).collect();
         }
 
         let mut repodata: Vec<RepoData> =

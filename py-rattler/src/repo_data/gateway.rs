@@ -9,8 +9,8 @@ use pyo3::{Bound, FromPyObject, PyAny, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, Source, SourceConfig,
-    SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, GatewayWarning, Source,
+    SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -76,6 +76,27 @@ impl<'py> FromPyObject<'py> for Wrap<ChannelRelationsMode> {
         };
         Ok(Wrap(parsed))
     }
+}
+
+/// Forward each [`GatewayWarning`] to Python's `warnings.warn` as a
+/// `UserWarning`. CEP-42's default `Warn` mode produces non-fatal
+/// warnings that the Rust API surfaces on the query output; for the
+/// Python binding we forward them to the host's standard warnings
+/// machinery so they cannot be silently lost.
+fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
+    if warnings.is_empty() {
+        return Ok(());
+    }
+    Python::with_gil(|py| -> PyResult<()> {
+        let warnings_mod = py.import("warnings")?;
+        for w in warnings {
+            // stacklevel=2 so the warning points at the caller of
+            // `Gateway.query()` / `Gateway.names()` rather than at
+            // our binding implementation.
+            warnings_mod.call_method1("warn", (w.to_string(), py.get_type::<pyo3::exceptions::PyUserWarning>(), 2))?;
+        }
+        Ok(())
+    })
 }
 
 /// Convert a Python object to a Rust Source.
@@ -230,6 +251,7 @@ impl PyGateway {
             }
 
             let output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
             Ok(output
@@ -302,6 +324,7 @@ impl PyGateway {
                 }
 
                 let output = query.execute().await.map_err(PyRattlerError::from)?;
+                emit_gateway_warnings(output.warnings)?;
                 all_names.extend(output.names);
             }
 

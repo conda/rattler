@@ -22,11 +22,21 @@ if TYPE_CHECKING:
 ChannelRelationsMode = Literal["disabled", "warn", "strict"]
 """How a gateway query should handle [CEP-42] `channel_relations`:
 
-* `'disabled'`: ignore declared relations; use only the user-supplied channels.
-* `'warn'` (default): follow relations recursively; tolerate cycles, malformed
-  metadata, and failed fetches of transitively discovered channels.
-* `'strict'`: follow relations recursively; raise on a cycle in the declared
-  graph.
+* `'disabled'`: ignore declared relations; use only the user-supplied
+  channels. Setting ``channel_relations_max_depth=0`` has the same effect.
+* `'warn'` (default): follow relations recursively but tolerate problems —
+  cycles, malformed metadata (non-``../`` references, self-relations,
+  ``base==overrides``), depth-exceeded chains, and failed discovery fetches
+  surface via Python's standard :mod:`warnings` module as ``UserWarning``s
+  rather than aborting. **Deviates from CEP-42**, which mandates aborting
+  on cycles / malformed metadata.
+* `'strict'`: follow relations recursively and abort on any violation,
+  raising :class:`GatewayError`. CEP-42 compliant.
+
+Custom :class:`RepoDataSource` instances passed in ``sources`` are not subject
+to CEP-42 reordering — they keep their caller-specified position. Discovered
+transitive channels are slotted next to the user channel that introduced them,
+in CEP-42 priority order.
 
 [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
 """
