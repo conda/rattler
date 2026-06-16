@@ -419,10 +419,7 @@ impl Middleware for AuthChallengeMiddleware {
         let url = req.url().clone();
 
         // We can only react to a challenge if the request can be cloned for
-        // replay. Cloning fails only for streaming bodies; such a request is
-        // sent once (with any cached token already attached) and its response
-        // returned as-is, warning if it turns out to be a challenge we could
-        // otherwise have satisfied.
+        // replay.
         let Some(mut retry_req) = req.try_clone() else {
             let response = next.run(req, extensions).await?;
             if !parse_challenges(response.headers()).is_empty() {
