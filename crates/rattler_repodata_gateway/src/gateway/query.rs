@@ -337,7 +337,8 @@ impl QueryExecutor {
                     gateway.client.clone(),
                     spec.sha256,
                     spec.md5,
-                );
+                )
+                .with_concurrent_requests_semaphore(gateway.concurrent_requests_semaphore.clone());
 
                 let records = query
                     .execute()

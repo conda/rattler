@@ -69,6 +69,7 @@ pub struct Installer {
     downloader: Option<LazyClient>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
@@ -142,6 +143,43 @@ impl Installer {
     /// modifies an existing instance.
     pub fn set_io_concurrency_semaphore(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions. This
+    /// is used to avoid overwhelming a server or saturating the network.
+    #[must_use]
+    pub fn with_max_concurrent_requests(self, limit: usize) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(Arc::new(Semaphore::new(limit))),
+            ..self
+        }
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_max_concurrent_requests`],
+    /// but modifies an existing instance.
+    pub fn set_max_concurrent_requests(&mut self, limit: usize) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    #[must_use]
+    pub fn with_concurrent_requests_semaphore(self, semaphore: Arc<Semaphore>) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(semaphore),
+            ..self
+        }
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_concurrent_requests_semaphore`],
+    /// but modifies an existing instance.
+    pub fn set_concurrent_requests_semaphore(&mut self, semaphore: Arc<Semaphore>) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(semaphore);
         self
     }
 
@@ -320,6 +358,33 @@ impl Installer {
         behavior: AppleCodeSignBehavior,
     ) -> &mut Self {
         self.apple_code_sign_behavior = behavior;
+        self
+    }
+
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// When files are linked into the target directory, hardcoded paths in
+    /// those files are "patched" by replacing the placeholder prefix with the
+    /// full path of the target directory. In exceptional cases you might want
+    /// to patch in a different prefix than the directory that is actually being
+    /// installed to. When set, this prefix is used instead of the target
+    /// directory.
+    #[must_use]
+    pub fn with_alternative_target_prefix(self, prefix: impl Into<PathBuf>) -> Self {
+        Self {
+            alternative_target_prefix: Some(prefix.into()),
+            ..self
+        }
+    }
+
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// This function is similar to [`Self::with_alternative_target_prefix`],
+    /// but modifies an existing instance.
+    pub fn set_alternative_target_prefix(&mut self, prefix: impl Into<PathBuf>) -> &mut Self {
+        self.alternative_target_prefix = Some(prefix.into());
         self
     }
 
@@ -525,6 +590,10 @@ impl Installer {
             .await
             .map_err(InstallerError::FailedToAcquireCacheLock)?;
 
+        // Semaphore that limits concurrent package downloads and extractions. The permit
+        // is held for the duration of both. When None, concurrency is unlimited.
+        let concurrent_requests_semaphore = self.concurrent_requests_semaphore;
+
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
@@ -616,6 +685,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
+            let concurrent_requests_semaphore = &concurrent_requests_semaphore;
             let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
                 if let Some(reporter) = &reporter
@@ -630,6 +700,7 @@ impl Installer {
                     let downloader = downloader.clone();
                     let reporter = reporter.clone();
                     let package_cache = package_cache.clone();
+                    let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
@@ -640,6 +711,7 @@ impl Installer {
                             downloader,
                             &package_cache,
                             populate_cache_report.clone(),
+                            concurrent_requests_semaphore,
                         )
                         .await?;
                         if let Some((reporter, index)) = populate_cache_report {
@@ -804,6 +876,7 @@ async fn populate_cache(
     downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
 ) -> Result<CacheMetadata, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
@@ -851,7 +924,7 @@ async fn populate_cache(
         })?;
 
         cache
-            .get_or_fetch_from_path(&path, reporter)
+            .get_or_fetch_from_path(&path, Some(&record.package_record), reporter)
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
     } else {
@@ -862,6 +935,7 @@ async fn populate_cache(
                 downloader,
                 default_retry_policy(),
                 reporter,
+                concurrent_requests_semaphore,
             )
             .await
             .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
@@ -1570,6 +1644,33 @@ mod tests {
             Some(LinkType::Copy),
             "link_type should be Copy when hard links are disabled"
         );
+    }
+
+    #[test]
+    fn test_alternative_target_prefix_setters() {
+        let prefix = Path::new("/some/other/prefix");
+
+        // The builder-style setter should store the prefix.
+        let installer = Installer::new().with_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+
+        // The mutable setter should store the prefix as well.
+        let mut installer = Installer::new();
+        installer.set_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+    }
+
+    #[tokio::test]
+    async fn test_install_with_alternative_target_prefix() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Installing with an alternative target prefix set should still succeed.
+        let installer = Installer::new().with_alternative_target_prefix("/some/other/prefix");
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "conda-meta file should exist");
     }
 
     /// Test that when hard links are explicitly forced on

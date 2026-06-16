@@ -10,6 +10,7 @@ use crate::{
 /// information backed by a in-memory hashmap
 #[derive(Debug)]
 pub struct MemoryStorage {
+    name: Option<String>,
     store: Mutex<HashMap<String, Authentication>>,
 }
 
@@ -23,6 +24,18 @@ impl MemoryStorage {
     /// Create a new empty memory storage
     pub fn new() -> Self {
         Self {
+            name: None,
+            store: Mutex::default(),
+        }
+    }
+
+    /// Create a new empty memory storage with a custom name. Used by tests
+    /// that need to distinguish between multiple in-memory backends layered
+    /// into the same `AuthenticationStorage` (e.g. to test shadowed-entry
+    /// behavior).
+    pub fn with_name(name: impl Into<String>) -> Self {
+        Self {
+            name: Some(name.into()),
             store: Mutex::default(),
         }
     }
@@ -38,7 +51,10 @@ pub enum MemoryStorageError {
 
 impl StorageBackend for MemoryStorage {
     fn name(&self) -> String {
-        "memory".to_string()
+        match &self.name {
+            Some(n) => format!("memory ({n})"),
+            None => "memory".to_string(),
+        }
     }
 
     fn store(

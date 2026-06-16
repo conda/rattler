@@ -502,9 +502,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-signin"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f5120c1da89637cc9ca83915a8599fbeb02b3c7e8d03ba5acc4ed2b35950a78"
+checksum = "daa3bd918c9d495bd58515877e54f9e6f5b1603163b0a82238426a8625eca44c"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -1171,9 +1171,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.63"
+version = "1.2.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556e016178bb5662a08681bbe0f00f8e17631781a4dfc8c45e466e4b185ec27f"
+checksum = "dad887fd958be91b5098c0248def011f4523ab786cd411be668777e55063501f"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1861,6 +1861,16 @@ checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
  "powerfmt",
  "serde_core",
+]
+
+[[package]]
+name = "dialoguer"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25f104b501bf2364e78d0d3974cbc774f738f5865306ed128e1e0d7499c0ad96"
+dependencies = [
+ "console",
+ "shell-words",
 ]
 
 [[package]]
@@ -4910,6 +4920,7 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "console",
+ "dialoguer",
  "digest 0.11.3",
  "dirs",
  "filetime",
@@ -4965,7 +4976,7 @@ dependencies = [
 
 [[package]]
 name = "rattler-bin"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4976,6 +4987,7 @@ dependencies = [
  "dunce",
  "futures-util",
  "hex",
+ "indexmap 2.14.0",
  "indicatif",
  "itertools 0.14.0",
  "jiff",
@@ -4995,6 +5007,7 @@ dependencies = [
  "rattler_virtual_packages",
  "regex",
  "reqwest 0.13.4",
+ "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
@@ -5177,6 +5190,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_repodata_gateway",
  "rattler_s3",
  "reqwest 0.13.4",
  "retry-policies",
@@ -6530,6 +6544,12 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "shell-words"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
 
 [[package]]
 name = "shlex"
