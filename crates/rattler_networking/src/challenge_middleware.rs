@@ -654,7 +654,7 @@ mod tests {
     }
 
     #[test]
-    fn unparseable_header_value_does_not_hide_others() {
+    fn unparsable_header_value_does_not_hide_others() {
         // First value is malformed; the Bearer challenge in the second
         // must still surface (per-value tolerance).
         let challenges = parse_challenges(&header_map(&["%%% ###", r#"Bearer realm="x""#]));
