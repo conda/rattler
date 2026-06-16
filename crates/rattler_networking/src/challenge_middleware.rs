@@ -25,141 +25,37 @@ use url::Url;
 /// One parsed challenge from a `WWW-Authenticate` response header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
-    /// The authentication scheme, e.g. `Bearer` (case preserved as sent).
+    /// The authentication scheme, e.g. `Bearer` (case preserved as sent;
+    /// compare case-insensitively).
     pub scheme: String,
-    /// Auth parameters with lowercased keys, e.g. `realm` -> `prefix.dev`.
-    /// `token68` payloads (e.g. base64 blobs after the scheme) are skipped.
+    /// Auth parameters with lowercased keys and unescaped values, e.g.
+    /// `realm` -> `prefix.dev`.
     pub params: HashMap<String, String>,
 }
 
 /// Parse all challenges from every `WWW-Authenticate` header in `headers`.
 ///
-/// Tolerant: malformed input yields fewer challenges, never an error or
-/// panic. Handles multiple challenges per header and repeated headers.
+/// RFC 7235 parsing is delegated to the `http-auth` crate. Tolerant: a
+/// header value `http-auth` cannot parse contributes no challenges instead
+/// of failing the whole set, so one malformed header never hides the
+/// others. (`http-auth` does not support the apocryphal `token68` challenge
+/// form; no scheme we react to uses it.)
 pub fn parse_challenges(headers: &http::HeaderMap) -> Vec<Challenge> {
     headers
         .get_all(http::header::WWW_AUTHENTICATE)
         .iter()
         .filter_map(|value| value.to_str().ok())
-        .flat_map(parse_header_value)
+        .filter_map(|value| http_auth::parse_challenges(value).ok())
+        .flatten()
+        .map(|challenge| Challenge {
+            scheme: challenge.scheme.to_string(),
+            params: challenge
+                .params
+                .iter()
+                .map(|(key, value)| (key.to_ascii_lowercase(), value.to_unescaped()))
+                .collect(),
+        })
         .collect()
-}
-
-/// Schemes are ASCII alphanumerics plus `-`, `_`, `.`. Stricter than RFC
-/// 7235's `token` to avoid misreading line noise as a scheme.
-fn is_valid_scheme(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-}
-
-fn parse_header_value(value: &str) -> Vec<Challenge> {
-    let mut challenges: Vec<Challenge> = Vec::new();
-    for item in split_commas_respecting_quotes(value) {
-        let item = item.trim();
-        if item.is_empty() {
-            continue;
-        }
-        // A new challenge starts with a scheme token; a continuation item is
-        // a bare `key=value` auth-param belonging to the current challenge.
-        let (first, rest) = match item.split_once(char::is_whitespace) {
-            Some((first, rest)) => (first, Some(rest.trim())),
-            None => (item, None),
-        };
-        if !first.contains('=') {
-            if !is_valid_scheme(first) {
-                continue;
-            }
-            challenges.push(Challenge {
-                scheme: first.to_string(),
-                params: HashMap::new(),
-            });
-            if let (Some(rest), Some(challenge)) = (rest, challenges.last_mut())
-                && let Some((key, val)) = parse_param(rest)
-            {
-                challenge.params.insert(key, val);
-            }
-        } else if let Some(challenge) = challenges.last_mut()
-            && let Some((key, val)) = parse_param(item)
-        {
-            challenge.params.insert(key, val);
-        }
-    }
-    challenges
-}
-
-/// Parse one `key=value` or `key="quoted value"` auth-param. Returns `None`
-/// for non-params (e.g. token68 blobs like `YII=`, which have an empty
-/// "value" after the trailing `=`).
-fn parse_param(s: &str) -> Option<(String, String)> {
-    let (key, value) = s.split_once('=')?;
-    let key = key.trim().to_ascii_lowercase();
-    let value = value.trim();
-    if key.is_empty() || value.is_empty() || !is_valid_scheme(&key) {
-        return None;
-    }
-    // A value consisting only of `=` characters is padding from a token68
-    // blob (e.g. `dGVzdA==` splits into key `dGVzdA`, value `=`). Skip it.
-    if value.chars().all(|c| c == '=') {
-        return None;
-    }
-    let value = if let Some(rest) = value.strip_prefix('"') {
-        // Quoted string: require a clean closing quote and no unescaped
-        // quotes inside; anything else yields no param rather than a
-        // wrong value.
-        let inner = rest.strip_suffix('"')?;
-        if malformed_quoted_interior(inner) {
-            return None;
-        }
-        inner.replace("\\\"", "\"")
-    } else {
-        // Unquoted token: any stray quote means a mangled quoted string.
-        if value.contains('"') {
-            return None;
-        }
-        value.to_string()
-    };
-    Some((key, value))
-}
-
-/// True when the quoted-string interior `s` (outer quotes stripped)
-/// contains an unescaped `"` or ends with a dangling escape, i.e. the
-/// stripped closing quote was escaped and the string never terminated.
-fn malformed_quoted_interior(s: &str) -> bool {
-    let mut escaped = false;
-    for c in s.chars() {
-        match c {
-            '\\' if !escaped => escaped = true,
-            '"' if !escaped => return true,
-            _ => escaped = false,
-        }
-    }
-    escaped
-}
-
-/// Split on commas that are not inside a double-quoted string.
-fn split_commas_respecting_quotes(s: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut in_quotes = false;
-    let mut escaped = false;
-    for (i, c) in s.char_indices() {
-        match c {
-            '\\' if in_quotes && !escaped => escaped = true,
-            '"' if !escaped => {
-                in_quotes = !in_quotes;
-                escaped = false;
-            }
-            ',' if !in_quotes => {
-                parts.push(&s[start..i]);
-                start = i + 1;
-                escaped = false;
-            }
-            _ => escaped = false,
-        }
-    }
-    parts.push(&s[start..]);
-    parts
 }
 
 /// Refresh tokens this long before their `exp` so a token does not become
@@ -749,39 +645,21 @@ mod tests {
     }
 
     #[test]
-    fn token68_payload_is_skipped_not_a_param() {
-        // `Negotiate YII=`: the trailing blob is not a key=value param
-        let challenges = parse_challenges(&header_map(&["Negotiate YII="]));
-        assert_eq!(challenges.len(), 1);
-        assert_eq!(challenges[0].scheme, "Negotiate");
-        assert!(challenges[0].params.is_empty());
-    }
-
-    #[test]
-    fn space_separated_params_yield_no_wrong_values() {
-        // Non-RFC space-separated params: scheme parsed, malformed param dropped
-        let challenges = parse_challenges(&header_map(&[
-            r#"Bearer realm="prefix.dev" error="invalid_token""#,
-        ]));
-        assert_eq!(challenges.len(), 1);
-        assert_eq!(challenges[0].scheme, "Bearer");
-        assert!(challenges[0].params.is_empty());
-    }
-
-    #[test]
-    fn unbalanced_quote_yields_no_param() {
-        let challenges = parse_challenges(&header_map(&[r#"Bearer realm="unterminated"#]));
-        assert_eq!(challenges.len(), 1);
-        assert!(challenges[0].params.is_empty());
-    }
-
-    #[test]
     fn garbage_yields_no_challenges_and_no_panic() {
         assert!(parse_challenges(&header_map(&["= = ="])).is_empty());
         assert!(parse_challenges(&header_map(&[",,,"])).is_empty());
         assert!(parse_challenges(&header_map(&[""])).is_empty());
         assert!(parse_challenges(&header_map(&["%%% ###"])).is_empty());
         assert!(parse_challenges(&http::HeaderMap::new()).is_empty());
+    }
+
+    #[test]
+    fn unparseable_header_value_does_not_hide_others() {
+        // First value is malformed; the Bearer challenge in the second
+        // must still surface (per-value tolerance).
+        let challenges = parse_challenges(&header_map(&["%%% ###", r#"Bearer realm="x""#]));
+        assert_eq!(challenges.len(), 1);
+        assert_eq!(challenges[0].scheme, "Bearer");
     }
 
     #[test]
@@ -1003,14 +881,6 @@ mod tests {
         assert_eq!(flow.calls.load(Ordering::SeqCst), 1);
         // Disabled = pass-through: both requests still reach the server.
         assert_eq!(hits.load(Ordering::SeqCst), 2);
-    }
-
-    #[test]
-    fn token68_with_double_padding_is_skipped() {
-        let challenges = parse_challenges(&header_map(&["Negotiate dGVzdA=="]));
-        assert_eq!(challenges.len(), 1);
-        assert_eq!(challenges[0].scheme, "Negotiate");
-        assert!(challenges[0].params.is_empty());
     }
 
     /// Flow minting a token tied to the challenged URL's port; pairs with

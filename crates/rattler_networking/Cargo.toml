@@ -52,6 +52,7 @@ aws-sdk-s3 = { workspace = true, optional = true, features = [
 ] }
 aws-smithy-http-client = { workspace = true, optional = true, features = ["rustls-aws-lc"] }
 http = { workspace = true }
+http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }

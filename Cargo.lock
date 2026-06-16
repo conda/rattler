@@ -2776,6 +2776,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-auth"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "150fa4a9462ef926824cf4519c84ed652ca8f4fbae34cb8af045b5cbcaf98822"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5292,6 +5301,7 @@ dependencies = [
  "google-cloud-auth",
  "hex",
  "http 1.4.2",
+ "http-auth",
  "insta",
  "itertools 0.14.0",
  "keyring-core",
