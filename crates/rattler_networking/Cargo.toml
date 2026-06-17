@@ -36,6 +36,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true, optional = true }
 fs-err = { workspace = true }
+futures = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
@@ -51,6 +52,7 @@ aws-sdk-s3 = { workspace = true, optional = true, features = [
 ] }
 aws-smithy-http-client = { workspace = true, optional = true, features = ["rustls-aws-lc"] }
 http = { workspace = true }
+http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
@@ -85,8 +87,11 @@ windows-native-keyring-store = { workspace = true, optional = true }
 anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
-axum = { workspace = true }
+tokio = { workspace = true, features = ["macros", "time"] }
+# `stream` (test-only) lets us build an unclonable streaming-body request to
+# exercise the challenge-middleware's no-replay path.
+reqwest = { workspace = true, features = ["json", "form", "stream"] }
+axum = { workspace = true, features = ["json"] }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
