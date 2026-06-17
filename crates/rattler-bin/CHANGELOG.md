@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/conda/rattler/compare/rattler-bin-v0.1.18...rattler-bin-v0.2.0) - 2026-06-17
+
+### Added
+
+- [**breaking**] challenge-reactive AuthChallengeMiddleware with prefix.dev OIDC wiring ([#2504](https://github.com/conda/rattler/pull/2504))
+- improved logout experience ([#2457](https://github.com/conda/rattler/pull/2457))
+
 ## [0.1.18](https://github.com/conda/rattler/compare/rattler-bin-v0.1.17...rattler-bin-v0.1.18) - 2026-06-11
 
 ### Added

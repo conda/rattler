@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/conda/rattler/compare/rattler_cache-v0.9.2...rattler_cache-v0.10.0) - 2026-06-17
+
+### Added
+
+- use semaphore for concurrent downloads ([#2475](https://github.com/conda/rattler/pull/2475))
+
+### Fixed
+
+- include sha256 in cache key for file:// packages ([#2507](https://github.com/conda/rattler/pull/2507))
+
 ## [0.9.2](https://github.com/conda/rattler/compare/rattler_cache-v0.9.1...rattler_cache-v0.9.2) - 2026-06-09
 
 ### Other
