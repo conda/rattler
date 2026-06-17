@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.2.0](https://github.com/conda/rattler/compare/rattler_solve-v7.1.4...rattler_solve-v7.2.0) - 2026-06-17
+
+### Added
+
+- update resolvo to 0.11.1 and use gateway for snapshot tool ([#2520](https://github.com/conda/rattler/pull/2520))
+
 ## [7.1.4](https://github.com/conda/rattler/compare/rattler_solve-v7.1.3...rattler_solve-v7.1.4) - 2026-06-17
 
 ### Other
