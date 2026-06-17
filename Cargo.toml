@@ -165,8 +165,8 @@ smallvec = { version = "1.15.0", features = [
   "const_generics",
   "union",
 ] }
-sigstore-sign = { version = "0.7", default-features = false }
-sigstore-trust-root = { version = "0.7", default-features = false, features = [
+sigstore-sign = { version = "0.9", default-features = false }
+sigstore-trust-root = { version = "0.9", default-features = false, features = [
   "tuf",
 ] }
 strum = { version = "0.28", features = ["derive"] }
