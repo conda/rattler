@@ -93,7 +93,14 @@ fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
             // stacklevel=2 so the warning points at the caller of
             // `Gateway.query()` / `Gateway.names()` rather than at
             // our binding implementation.
-            warnings_mod.call_method1("warn", (w.to_string(), py.get_type::<pyo3::exceptions::PyUserWarning>(), 2))?;
+            warnings_mod.call_method1(
+                "warn",
+                (
+                    w.to_string(),
+                    py.get_type::<pyo3::exceptions::PyUserWarning>(),
+                    2,
+                ),
+            )?;
         }
         Ok(())
     })
