@@ -17,5 +17,5 @@ pub mod search;
 pub mod shell_hook;
 pub mod virtual_packages;
 
-#[cfg(feature = "sigstore-verify")]
+#[cfg(feature = "sigstore")]
 pub mod verify;

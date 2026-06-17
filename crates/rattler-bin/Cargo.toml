@@ -23,7 +23,7 @@ native-tls = [
   "rattler_repodata_gateway/native-tls",
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
-  "sigstore-verify?/native-tls",
+  "rattler_sigstore?/native-tls",
 ]
 rustls = [
   "reqwest/rustls",
@@ -31,12 +31,12 @@ rustls = [
   "rattler_repodata_gateway/rustls",
   "rattler_networking/rustls",
   "rattler_cache/rustls",
-  "sigstore-verify?/rustls",
+  "rattler_sigstore?/rustls",
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
-sigstore-verify = ["dep:sigstore-verify", "sigstore-verify/tuf"]
+sigstore = ["dep:rattler_sigstore"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -81,8 +81,7 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
-sigstore-verify = { workspace = true, optional = true }
-rattler_digest = { workspace = true }
+rattler_sigstore = { workspace = true, optional = true }
 sha2 = { workspace = true }
 tracing = { workspace = true }
 dunce = { workspace = true }

@@ -60,7 +60,7 @@ enum Command {
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
     Exec(commands::exec::Opt),
-    #[cfg(feature = "sigstore-verify")]
+    #[cfg(feature = "sigstore")]
     VerifyPackage(commands::verify::Opt),
 }
 
@@ -128,7 +128,7 @@ async fn async_main() -> miette::Result<()> {
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
         Command::Exec(opts) => exec::exec(opts).await,
-        #[cfg(feature = "sigstore-verify")]
+        #[cfg(feature = "sigstore")]
         Command::VerifyPackage(opts) => commands::verify::verify(opts).await,
     }
 }
