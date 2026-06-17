@@ -1,6 +1,7 @@
 [package]
+exclude = ["tests/**", "**/snapshots/**"]
 name = "rattler_networking"
-version = "0.27.0"
+version = "0.29.0"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -12,22 +13,30 @@ readme.workspace = true
 
 [features]
 default = ["rustls", "system-integration"]
-native-tls = ["reqwest/native-tls"]
-rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls", "ambient-id/native-tls"]
+rustls = ["reqwest/rustls", "ambient-id/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
+keyring = [
+    "keyring-core",
+    "dep:apple-native-keyring-store",
+    "dep:dbus-secret-service-keyring-store",
+    "dep:windows-native-keyring-store",
+]
 
 [package.metadata.docs.rs]
 features = ["gcs", "s3"]
 
 [dependencies]
+ambient-id = { workspace = true, features = ["reqwest-middleware"] }
 anyhow = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true, optional = true }
 fs-err = { workspace = true }
+futures = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
@@ -43,17 +52,12 @@ aws-sdk-s3 = { workspace = true, optional = true, features = [
 ] }
 aws-smithy-http-client = { workspace = true, optional = true, features = ["rustls-aws-lc"] }
 http = { workspace = true }
+http-auth = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true, optional = true, features = [
-    "apple-native",
-    "windows-native",
-    "async-secret-service",
-    "async-io",
-    "crypto-rust",
-] }
+keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json", "form"] }
-reqwest-middleware = { workspace = true }
+reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -67,14 +71,30 @@ rattler_config = { workspace = true, optional = true }
 [target.'cfg( target_arch = "wasm32" )'.dependencies]
 getrandom = { workspace = true, features = ["wasm_js"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { workspace = true, optional = true, features = ["keychain"] }
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))'.dependencies]
+dbus-secret-service-keyring-store = { workspace = true, optional = true, features = [
+    "crypto-rust",
+    "vendored",
+] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = { workspace = true, optional = true }
+
 [dev-dependencies]
 anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
-axum = { workspace = true }
+tokio = { workspace = true, features = ["macros", "time"] }
+# `stream` (test-only) lets us build an unclonable streaming-body request to
+# exercise the challenge-middleware's no-replay path.
+reqwest = { workspace = true, features = ["json", "form", "stream"] }
+axum = { workspace = true, features = ["json"] }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
+hex = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }
 tracing-test = { workspace = true }

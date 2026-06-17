@@ -1,7 +1,12 @@
 use fs_err::tokio as tokio_fs;
 use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
-use rattler_networking::{Authentication, AuthenticationStorage};
+use rattler_networking::{
+    Authentication, AuthenticationStorage,
+    trusted_publishing::{
+        TrustedPublishResult, TrustedPublishingOptions, check_trusted_publishing,
+    },
+};
 use reqwest::{
     StatusCode,
     header::{self, HeaderMap, HeaderValue},
@@ -19,10 +24,7 @@ use super::opt::{AttestationSource, PrefixData};
 
 #[cfg(feature = "sigstore-sign")]
 use crate::upload::attestation::{AttestationConfig, create_attestation};
-use crate::upload::{
-    default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{TrustedPublishResult, check_trusted_publishing},
-};
+use crate::upload::{default_bytes_style, get_client_with_retry, get_default_client};
 
 use super::package::sha256_sum;
 
@@ -209,7 +211,14 @@ pub async fn upload_package_to_prefix(
             }
             (api_key, false)
         }
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::for_server(&prefix_data.url)
+                .unwrap_or_else(TrustedPublishingOptions::for_prefix_dev),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => {
                 // When using trusted publishing, we can generate attestations
                 // Note: sigstore-sign handles OIDC token retrieval internally
@@ -240,7 +249,14 @@ pub async fn upload_package_to_prefix(
     #[cfg(not(feature = "sigstore-sign"))]
     let token = match prefix_data.api_key {
         Some(api_key) => api_key,
-        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+        None => match check_trusted_publishing(
+            &client,
+            &prefix_data.url,
+            &TrustedPublishingOptions::for_server(&prefix_data.url)
+                .unwrap_or_else(TrustedPublishingOptions::for_prefix_dev),
+        )
+        .await
+        {
             TrustedPublishResult::Configured(token) => token.secret().to_string(),
             TrustedPublishResult::Skipped => {
                 if wants_attestation {

@@ -203,7 +203,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
                 flags: Vec::new(),
                 legacy_bz2_md5: None,
@@ -422,7 +422,7 @@ impl PyRecord {
     #[getter]
     pub fn extra_depends(&self) -> std::collections::HashMap<String, Vec<String>> {
         self.as_package_record()
-            .experimental_extra_depends
+            .extra_depends
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
@@ -433,8 +433,7 @@ impl PyRecord {
         &mut self,
         extra_depends: std::collections::HashMap<String, Vec<String>>,
     ) {
-        self.as_package_record_mut().experimental_extra_depends =
-            extra_depends.into_iter().collect();
+        self.as_package_record_mut().extra_depends = extra_depends.into_iter().collect();
     }
 
     /// Features are a deprecated way to specify different
@@ -609,9 +608,9 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
+                jiff::Timestamp::from_millisecond(ts)
+                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;

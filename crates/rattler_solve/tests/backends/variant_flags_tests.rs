@@ -64,7 +64,7 @@ fn parse_v3_spec(spec: &str) -> MatchSpec {
         spec,
         ParseMatchSpecOptions::lenient()
             .with_repodata_revision(RepodataRevision::V3)
-            .with_experimental_conditionals(true),
+            .with_conditionals(true),
     )
     .unwrap()
 }

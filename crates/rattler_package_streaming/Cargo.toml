@@ -1,6 +1,7 @@
 [package]
+exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
-version = "0.26.0"
+version = "0.26.5"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -12,8 +13,9 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 http = { workspace = true, optional = true }
+filetime = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -22,6 +24,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
   "tokio",
 ] }
 rattler_networking = { workspace = true, default-features = false }
+hex = { workspace = true }
 rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",
@@ -86,6 +89,7 @@ rstest_reuse = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 insta = { workspace = true, features = ["yaml"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 fs-err = { workspace = true }

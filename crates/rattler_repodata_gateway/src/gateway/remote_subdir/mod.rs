@@ -1,6 +1,6 @@
 use crate::gateway::subdir::{PackageRecords, SubdirClient};
 use crate::{GatewayError, Reporter};
-use rattler_conda_types::{PackageName, RepodataRevisionInfo};
+use rattler_conda_types::{PackageName, RepodataRevisions};
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -27,7 +27,7 @@ impl SubdirClient for RemoteSubdirClient {
         self.sparse.package_names()
     }
 
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    fn repodata_revisions(&self) -> &RepodataRevisions {
         self.sparse.repodata_revisions()
     }
 }

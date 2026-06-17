@@ -66,9 +66,9 @@ impl<'a> SolverCase<'a> {
                 MatchSpec::from_str(
                     spec,
                     ParseMatchSpecOptions::lenient()
-                        .with_experimental_extras(true)
-                        .with_experimental_conditionals(true)
-                        .with_experimental_flags(true),
+                        .with_extras(true)
+                        .with_conditionals(true)
+                        .with_flags(true),
                 )
                 .unwrap()
             })
@@ -84,9 +84,9 @@ impl<'a> SolverCase<'a> {
                 MatchSpec::from_str(
                     spec,
                     ParseMatchSpecOptions::lenient()
-                        .with_experimental_extras(true)
-                        .with_experimental_conditionals(true)
-                        .with_experimental_flags(true),
+                        .with_extras(true)
+                        .with_conditionals(true)
+                        .with_flags(true),
                 )
                 .unwrap()
             })

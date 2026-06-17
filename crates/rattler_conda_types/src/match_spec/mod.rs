@@ -214,11 +214,11 @@ impl Display for MatchSpec {
         }
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{md5:x}\""));
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{sha256:x}\""));
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
         }
 
         if let Some(build_number) = &self.build_number {
@@ -262,6 +262,143 @@ impl Display for MatchSpec {
 }
 
 impl MatchSpec {
+    /// Renders this match spec for inclusion inside a `when=` condition value.
+    ///
+    /// Uses the compact `{name}{operator}{version}` form when this is a simple
+    /// name+version query (and the version's rendering starts with one of the
+    /// version-constraint operator characters). Otherwise emits all constraints
+    /// using the bracket syntax `name[key="value", ...]`. Never emits a `when=`
+    /// key — nested conditions are not allowed.
+    pub(crate) fn fmt_in_condition(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        debug_assert!(
+            self.condition.is_none(),
+            "MatchSpec inside a `when=` condition must not itself carry a `when` clause",
+        );
+
+        write!(f, "{}", self.name)?;
+
+        if self.is_simple_for_condition() {
+            if let Some(version) = &self.version {
+                write!(f, "{version}")?;
+            }
+            return Ok(());
+        }
+
+        let mut keys = Vec::new();
+
+        if let Some(version) = &self.version {
+            keys.push(format!(
+                "version=\"{}\"",
+                escape_bracket_value(&version.to_string())
+            ));
+        }
+
+        if let Some(build) = &self.build {
+            keys.push(format!(
+                "build=\"{}\"",
+                escape_bracket_value(&build.to_string())
+            ));
+        }
+
+        if let Some(build_number) = &self.build_number {
+            keys.push(format!("build_number=\"{build_number}\""));
+        }
+
+        if let Some(channel) = &self.channel {
+            keys.push(format!("channel=\"{}\"", channel.name()));
+        }
+
+        if let Some(subdir) = &self.subdir {
+            keys.push(format!("subdir=\"{subdir}\""));
+        }
+
+        if let Some(namespace) = &self.namespace {
+            keys.push(format!("namespace=\"{namespace}\""));
+        }
+
+        if let Some(extras) = &self.extras {
+            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
+        }
+
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
+        if let Some(md5) = &self.md5 {
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
+        }
+
+        if let Some(file_name) = &self.file_name {
+            keys.push(format!("fn=\"{file_name}\""));
+        }
+
+        if let Some(url) = &self.url {
+            keys.push(format!("url=\"{url}\""));
+        }
+
+        if let Some(license) = &self.license {
+            keys.push(format!("license=\"{license}\""));
+        }
+
+        if let Some(license_family) = &self.license_family {
+            keys.push(format!("license_family=\"{license_family}\""));
+        }
+
+        if let Some(track_features) = &self.track_features {
+            keys.push(format!(
+                "track_features=\"{}\"",
+                track_features.iter().format(" ")
+            ));
+        }
+
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns true if this match spec can be emitted as the compact
+    /// `{name}{operator}{version}` form inside a `when=` condition.
+    fn is_simple_for_condition(&self) -> bool {
+        if !matches!(self.name, PackageNameMatcher::Exact(_)) {
+            return false;
+        }
+        if self.build.is_some()
+            || self.build_number.is_some()
+            || self.file_name.is_some()
+            || self.extras.is_some()
+            || self.flags.is_some()
+            || self.channel.is_some()
+            || self.subdir.is_some()
+            || self.namespace.is_some()
+            || self.md5.is_some()
+            || self.sha256.is_some()
+            || self.url.is_some()
+            || self.license.is_some()
+            || self.license_family.is_some()
+            || self.track_features.is_some()
+        {
+            return false;
+        }
+        match &self.version {
+            None => true,
+            // The compact form requires the rendered version to start with a
+            // version-constraint operator character so the parser can split
+            // `{name}` from `{version}`. This excludes e.g. `StartsWith`
+            // (renders `1.2.*`) and the wildcard `Any` (`*`).
+            Some(v) => v
+                .to_string()
+                .chars()
+                .next()
+                .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~')),
+        }
+    }
+
     /// Returns the repodata revision required to represent this matchspec.
     pub fn required_repodata_revision(&self) -> RepodataRevision {
         if self.extras.is_some() || self.condition.is_some() || self.flags.is_some() {
@@ -380,11 +517,11 @@ impl Display for NamelessMatchSpec {
         }
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{md5:x}\""));
+            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{sha256:x}\""));
+            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
         }
 
         if let Some(license_family) = &self.license_family {

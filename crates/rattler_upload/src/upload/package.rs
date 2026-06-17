@@ -10,10 +10,7 @@ use rattler_digest::{Md5, compute_file_digest};
 use sha2::Sha256;
 
 pub fn sha256_sum(package_file: &Path) -> Result<String, std::io::Error> {
-    Ok(format!(
-        "{:x}",
-        compute_file_digest::<Sha256>(&package_file)?
-    ))
+    Ok(hex::encode(compute_file_digest::<Sha256>(&package_file)?))
 }
 
 pub struct ExtractedPackage<'a> {
@@ -69,7 +66,7 @@ impl<'a> ExtractedPackage<'a> {
     }
 
     pub fn md5_hex(&self) -> Result<String, std::io::Error> {
-        compute_file_digest::<Md5>(&self.file).map(|digest| format!("{digest:x}"))
+        compute_file_digest::<Md5>(&self.file).map(hex::encode)
     }
 
     pub fn filename(&self) -> Option<&str> {

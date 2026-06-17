@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.5](https://github.com/conda/rattler/compare/rattler_index-v0.30.4...rattler_index-v0.30.5) - 2026-06-17
+
+### Fixed
+
+- *(rattler_index)* use atomic writes for repodata.json to support memory-mapped files ([#2511](https://github.com/conda/rattler/pull/2511))
+
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_index-v0.30.3...rattler_index-v0.30.4) - 2026-06-09
+
+### Fixed
+
+- (de)serialize `info.repodata_revisions` as dictionary ([#2485](https://github.com/conda/rattler/pull/2485))
+
+## [0.30.3](https://github.com/conda/rattler/compare/rattler_index-v0.30.2...rattler_index-v0.30.3) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
+## [0.30.2](https://github.com/conda/rattler/compare/rattler_index-v0.30.1...rattler_index-v0.30.2) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.30.1](https://github.com/conda/rattler/compare/rattler_index-v0.30.0...rattler_index-v0.30.1) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_index-v0.29.0...rattler_index-v0.30.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
 ## [0.29.0](https://github.com/conda/rattler/compare/rattler_index-v0.28.2...rattler_index-v0.29.0) - 2026-05-13
 
 ### Other

@@ -467,7 +467,7 @@ impl MacOSMenu {
         let name = self.name.clone();
         let slugname = slugify(&name);
         let shortname = if slugname.len() > 16 {
-            let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
+            let hashed = hex::encode(Sha256::digest(slugname.as_bytes()));
             format!("{}{}", &slugname[..10], &hashed[..6])
         } else {
             slugname.clone()

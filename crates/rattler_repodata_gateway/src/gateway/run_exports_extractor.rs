@@ -341,9 +341,6 @@ impl RunExportExtractor {
             .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
-        // Wait for a permit from the semaphore to limit concurrent requests.
-        let _permit = self.acquire_request_permit().await;
-
         match package_cache
             .get_or_fetch_from_url_with_retry(
                 cache_key,
@@ -351,6 +348,7 @@ impl RunExportExtractor {
                 client.clone(),
                 rattler_networking::retry_policies::default_retry_policy(),
                 reporter,
+                self.max_concurrent_requests.clone(),
             )
             .await
         {

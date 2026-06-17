@@ -23,7 +23,7 @@ use crate::{
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
-use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo, ShardedRepodata};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisions, ShardedRepodata};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
@@ -176,7 +176,9 @@ impl SubdirClient for ShardedSubdir {
         };
 
         // Check if we already have the shard in the cache.
-        let shard_cache_path = self.cache_dir.join(format!("{shard:x}.msgpack"));
+        let shard_cache_path = self
+            .cache_dir
+            .join(format!("{}.msgpack", hex::encode(shard)));
 
         // Read the cached shard
         if self.cache_action != CacheAction::NoCache {
@@ -211,7 +213,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{shard:x}.msgpack.zst"))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
             .expect("invalid shard url");
 
         let shard_request = self
@@ -274,7 +276,7 @@ impl SubdirClient for ShardedSubdir {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    fn repodata_revisions(&self) -> &RepodataRevisions {
         &self.sharded_repodata.info.repodata_revisions
     }
 }

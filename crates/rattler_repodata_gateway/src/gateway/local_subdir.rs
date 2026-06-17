@@ -1,13 +1,13 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, PackageName, RepodataRevisionInfo};
+use rattler_conda_types::{Channel, PackageName, RepodataRevisions};
 
 use crate::{
     Reporter,
     gateway::{
         GatewayError,
         error::SubdirNotFoundError,
-        subdir::{PackageRecords, SubdirClient, extract_unique_deps},
+        subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
     },
     sparse::{PackageFormatSelection, SparseRepoData},
 };
@@ -81,10 +81,11 @@ impl SubdirClient for LocalSubdirClient {
             .load_records(&name, PackageFormatSelection::PreferConda)
         {
             Ok(records) => {
-                let unique_deps = extract_unique_deps(&records);
+                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
                 Ok(PackageRecords {
                     records: records.into_iter().map(Arc::new).collect(),
-                    unique_deps,
+                    unique_base_deps,
+                    unique_extra_deps,
                 })
             }
             Err(err) => Err(GatewayError::IoError(
@@ -107,7 +108,7 @@ impl SubdirClient for LocalSubdirClient {
             .collect()
     }
 
-    fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
+    fn repodata_revisions(&self) -> &RepodataRevisions {
         self.sparse.repodata_revisions()
     }
 }

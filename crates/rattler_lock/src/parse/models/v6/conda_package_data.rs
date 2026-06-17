@@ -84,8 +84,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
     pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(rename = "extra_depends")]
-    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -115,7 +114,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputHash<'a>>,
@@ -175,7 +174,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
-            experimental_extra_depends: value.experimental_extra_depends.into_owned(),
+            extra_depends: value.extra_depends.into_owned(),
             features: value.features.into_owned(),
             flags: value.flags.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,

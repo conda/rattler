@@ -56,7 +56,7 @@ pub async fn create_attestation(
     // Step 2: Compute package digest
     let digest = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(package_path)
         .into_diagnostic()?;
-    let digest_hex = format!("{digest:x}");
+    let digest_hex = hex::encode(digest);
 
     // Step 3: Get package filename
     let filename = package_path
@@ -83,7 +83,8 @@ pub async fn create_attestation(
     let tuf_config = TufSigningConfig::production()
         .await
         .map_err(|e| miette::miette!("Failed to fetch Sigstore TUF signing config: {}", e))?;
-    let signing_config = SigningConfig::from_tuf_config(&tuf_config);
+    let signing_config = SigningConfig::from_tuf_config(&tuf_config)
+        .map_err(|e| miette::miette!("Failed to build Sigstore signing config: {}", e))?;
 
     tracing::info!("Signing attestation with Sigstore...");
     let context = SigningContext::with_config(signing_config);

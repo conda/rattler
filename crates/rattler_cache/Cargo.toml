@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.8.0"
+version = "0.10.0"
 description = "A crate to manage the caching of data in rattler"
 categories = { workspace = true }
 homepage = { workspace = true }
@@ -40,6 +40,7 @@ url = { workspace = true }
 thiserror = { workspace = true }
 reqwest-middleware = { workspace = true }
 digest = { workspace = true }
+hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }

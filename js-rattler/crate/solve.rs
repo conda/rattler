@@ -104,7 +104,7 @@ pub async fn simple_solve(
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
                 subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 constrains: vec![],
                 track_features: vec![],
                 features: None,
@@ -211,16 +211,8 @@ pub async fn simple_solve(
             repo_name: r.channel,
             filename: r.identifier.to_file_name(),
             version: r.package_record.version.to_string(),
-            md5: r
-                .package_record
-                .md5
-                .as_ref()
-                .map(|hash| format!("{hash:x}")),
-            sha256: r
-                .package_record
-                .sha256
-                .as_ref()
-                .map(|hash| format!("{hash:x}")),
+            md5: r.package_record.md5.as_ref().map(hex::encode),
+            sha256: r.package_record.sha256.as_ref().map(hex::encode),
             size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),

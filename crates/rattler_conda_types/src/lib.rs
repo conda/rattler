@@ -65,9 +65,10 @@ pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
-    ChannelInfo, ChannelRelations, ConvertSubdirError, ExperimentalV3Packages, PackageRecord,
-    RecordFromPath, RepoData, RepodataRevision, RepodataRevisionInfo, SubdirRunExportsJson,
-    UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
+    ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
+    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
+    SubdirRunExportsJson, UrlOrPath, V3Packages, ValidatePackageRecordsError, WhlPackageRecord,
+    compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
 };

@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-use chrono::DateTime;
 use miette::{Context, IntoDiagnostic};
 use sigstore_verify::trust_root::TrustedRoot;
 use sigstore_verify::{VerificationPolicy, Verifier, types::Bundle};
@@ -10,7 +9,7 @@ use url::Url;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL or path to the conda package to verify (e.g., https://prefix.dev/channel/linux-64/pkg-1.0.0-h123_0.conda)
+    /// URL or path to the conda package to verify (e.g., <https://prefix.dev/channel/linux-64/pkg-1.0.0-h123_0.conda>)
     #[clap(required = true)]
     package: String,
 
@@ -22,7 +21,7 @@ pub struct Opt {
     #[clap(long)]
     identity: Option<String>,
 
-    /// Required issuer (e.g., https://token.actions.githubusercontent.com)
+    /// Required issuer (e.g., <https://token.actions.githubusercontent.com>)
     #[clap(long)]
     issuer: Option<String>,
 }
@@ -82,7 +81,7 @@ fn compute_file_digest(path: &std::path::Path) -> miette::Result<String> {
     let digest = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(path)
         .into_diagnostic()
         .with_context(|| format!("Failed to compute digest for {}", path.display()))?;
-    Ok(format!("{digest:x}"))
+    Ok(hex::encode(digest))
 }
 
 /// Compute SHA256 digest of bytes
@@ -92,7 +91,7 @@ fn compute_bytes_digest(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     let result = hasher.finalize();
-    format!("{result:x}")
+    hex::encode(result)
 }
 
 /// Download package and return bytes
@@ -127,7 +126,7 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
 
     // Determine if package is URL or local path
     let (package_bytes, package_digest, package_name) = if let Ok(url) = Url::parse(&opt.package) {
-        println!("Downloading package from {}...", url);
+        println!("Downloading package from {url}...");
         let bytes = download_package(&client, &url).await?;
         let digest = compute_bytes_digest(&bytes);
         let name = url
@@ -157,8 +156,8 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
         (bytes, digest, name)
     };
 
-    println!("Package: {}", package_name);
-    println!("SHA256:  {}", package_digest);
+    println!("Package: {package_name}");
+    println!("SHA256:  {package_digest}");
 
     // Determine signatures URL
     let signatures_url = if let Some(sig_url) = opt.signatures_url {
@@ -167,7 +166,7 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
             .context("Invalid signatures URL")?
     } else if let Ok(url) = Url::parse(&opt.package) {
         // Append .v0.sigs to the package URL
-        let sig_url_str = format!("{}.v0.sigs", url);
+        let sig_url_str = format!("{url}.v0.sigs");
         Url::parse(&sig_url_str)
             .into_diagnostic()
             .context("Failed to construct signatures URL")?
@@ -177,7 +176,7 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
         ));
     };
 
-    println!("Fetching signatures from {}...", signatures_url);
+    println!("Fetching signatures from {signatures_url}...");
     let bundles = fetch_signatures(&client, &signatures_url).await?;
     println!("Found {} signature(s)", bundles.len());
 
@@ -191,11 +190,11 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
     let mut policy = VerificationPolicy::default();
     if let Some(ref identity) = opt.identity {
         policy = policy.require_identity(identity);
-        println!("Requiring identity: {}", identity);
+        println!("Requiring identity: {identity}");
     }
     if let Some(ref issuer) = opt.issuer {
         policy = policy.require_issuer(issuer);
-        println!("Requiring issuer: {}", issuer);
+        println!("Requiring issuer: {issuer}");
     }
 
     // Create verifier
@@ -214,17 +213,16 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
 
                     // Print identity info if available
                     if let Some(identity) = &result.identity {
-                        println!("  Identity: {}", identity);
+                        println!("  Identity: {identity}");
                     }
                     if let Some(issuer) = &result.issuer {
-                        println!("  Issuer:   {}", issuer);
+                        println!("  Issuer:   {issuer}");
                     }
                     if let Some(time) = result.integrated_time {
                         println!(
                             "  Signed:   {}",
-                            DateTime::from_timestamp(time, 0)
-                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                                .unwrap_or_else(|| time.to_string())
+                            jiff::Timestamp::from_second(time)
+                                .map_or_else(|_| time.to_string(), |t| t.to_string())
                         );
                     }
                     if !result.warnings.is_empty() {

@@ -16,9 +16,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use digest::Digest;
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
-use rattler_digest::Sha256;
+use rattler_digest::{HashingWriter, Sha256};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
@@ -229,15 +228,15 @@ fn validate_package_hard_link_entry(
     if let Some(expected_hash) = &entry.sha256 {
         // Determine the hash of the file on disk
         let mut file = BufReader::with_capacity(64 * 1024, file);
-        let mut hasher = Sha256::default();
-        std::io::copy(&mut file, &mut hasher)?;
-        let hash = hasher.finalize();
+        let mut writer = HashingWriter::<_, Sha256>::new(std::io::sink());
+        std::io::copy(&mut file, &mut writer)?;
+        let (_, hash) = writer.finalize();
 
         // Compare the two hashes
         if expected_hash != &hash {
             return Err(PackageEntryValidationError::HashMismatch(
-                format!("{expected_hash:x}"),
-                format!("{hash:x}"),
+                hex::encode(expected_hash),
+                hex::encode(hash),
             ));
         }
     }

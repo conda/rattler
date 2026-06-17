@@ -23,6 +23,10 @@ pub enum InstallerError {
     #[error("failed to construct a transaction")]
     FailedToConstructTransaction(#[from] TransactionError),
 
+    /// A package's metadata could be used to escape the installation prefix.
+    #[error("refusing to install package with unsafe metadata: {0}")]
+    UnsafePackageRecord(#[source] rattler_conda_types::utils::InvalidPathComponentError),
+
     /// Failed to populate the cache with the package
     #[error("failed to fetch {0}")]
     FailedToFetch(String, #[source] PackageCacheError),

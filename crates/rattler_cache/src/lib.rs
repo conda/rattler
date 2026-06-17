@@ -10,7 +10,7 @@ pub mod run_exports_cache;
 pub mod validation;
 
 mod consts;
-pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, RUN_EXPORTS_CACHE_DIR};
+pub use consts::{EXEC_ENVS_DIR, PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, RUN_EXPORTS_CACHE_DIR};
 
 /// Re-export sigstore types for convenience when using signature verification.
 #[cfg(feature = "sigstore")]

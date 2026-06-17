@@ -117,7 +117,7 @@ impl FileEntry {
     /// objects).
     fn compute_etag(data: &[u8]) -> String {
         let digest = compute_bytes_digest::<rattler_digest::Md5>(data);
-        format!("\"{digest:x}\"")
+        format!("\"{}\"", hex::encode(digest))
     }
 }
 

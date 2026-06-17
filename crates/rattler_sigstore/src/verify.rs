@@ -2,14 +2,17 @@
 
 use crate::error::{SigstoreError, SigstoreResult};
 use crate::policy::{Identity, Issuer, Publisher, VerificationPolicy};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use sigstore_verify::trust_root::TrustedRoot;
-use sigstore_verify::{VerificationPolicy as SigstorePolicy, Verifier, types::Bundle};
+use sigstore_verify::{
+    VerificationPolicy as SigstorePolicy, Verifier,
+    types::{Artifact, Bundle},
+};
 use url::Url;
 
 /// The outcome of a verification attempt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VerificationOutcome {
     /// Whether at least one signature was successfully verified.
     pub verified: bool,
@@ -18,21 +21,9 @@ pub struct VerificationOutcome {
     /// The issuer from the verified signature certificate.
     pub issuer: Option<Issuer>,
     /// Timestamp when the signature was created (from transparency log).
-    pub signed_at: Option<DateTime<Utc>>,
+    pub signed_at: Option<Timestamp>,
     /// Any warnings generated during verification.
     pub warnings: Vec<String>,
-}
-
-impl Default for VerificationOutcome {
-    fn default() -> Self {
-        Self {
-            verified: false,
-            identity: None,
-            issuer: None,
-            signed_at: None,
-            warnings: Vec::new(),
-        }
-    }
 }
 
 /// Verify a package's signatures using full package bytes.
@@ -59,7 +50,13 @@ pub async fn verify_package(
     package_bytes: &[u8],
     client: &ClientWithMiddleware,
 ) -> SigstoreResult<VerificationOutcome> {
-    verify_package_impl(policy, package_url, package_bytes, client).await
+    verify_package_impl(
+        policy,
+        package_url,
+        Artifact::from_bytes(package_bytes),
+        client,
+    )
+    .await
 }
 
 /// Verify a package using pre-computed SHA256 digest instead of full bytes.
@@ -72,18 +69,26 @@ pub async fn verify_package_by_digest(
     package_sha256: &str,
     client: &ClientWithMiddleware,
 ) -> SigstoreResult<VerificationOutcome> {
-    let artifact_bytes = hex::decode(package_sha256).map_err(|e| {
+    let digest_bytes = hex::decode(package_sha256).map_err(|e| {
         SigstoreError::VerificationFailed(format!("Invalid SHA256 hex string: {e}"))
     })?;
 
-    verify_package_impl(policy, package_url, &artifact_bytes, client).await
+    // Pass the SHA256 as a pre-computed digest so the verifier compares it
+    // directly against the bundle instead of hashing it as raw artifact bytes.
+    verify_package_impl(
+        policy,
+        package_url,
+        Artifact::from_digest(&digest_bytes),
+        client,
+    )
+    .await
 }
 
 /// Internal implementation of package verification.
 async fn verify_package_impl(
     policy: &VerificationPolicy,
     package_url: &Url,
-    artifact: &[u8],
+    artifact: Artifact<'_>,
     client: &ClientWithMiddleware,
 ) -> SigstoreResult<VerificationOutcome> {
     let config = match policy {
@@ -120,7 +125,7 @@ async fn verify_package_impl(
     verify_bundles(
         &verifier,
         &bundles,
-        artifact,
+        &artifact,
         publishers,
         policy,
         package_url,
@@ -167,7 +172,7 @@ fn handle_no_signatures(
 fn verify_bundles(
     verifier: &Verifier,
     bundles: &[Bundle],
-    artifact: &[u8],
+    artifact: &Artifact<'_>,
     publishers: Option<&[Publisher]>,
     policy: &VerificationPolicy,
     package_url: &Url,
@@ -177,7 +182,7 @@ fn verify_bundles(
     for (i, bundle) in bundles.iter().enumerate() {
         let sigstore_policy = SigstorePolicy::default();
 
-        match verifier.verify(artifact, bundle, &sigstore_policy) {
+        match verifier.verify(artifact.clone(), bundle, &sigstore_policy) {
             Ok(result) if result.success => {
                 let identity = result.identity.as_deref();
                 let issuer = result.issuer.as_deref();
@@ -202,7 +207,7 @@ fn verify_bundles(
                         issuer: result.issuer.map(Issuer::from),
                         signed_at: result
                             .integrated_time
-                            .and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                            .and_then(|ts| Timestamp::from_second(ts).ok()),
                         warnings: result.warnings,
                     });
                 } else {

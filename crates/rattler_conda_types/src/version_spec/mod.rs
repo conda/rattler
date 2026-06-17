@@ -7,7 +7,6 @@ pub(crate) mod version_tree;
 
 use std::{
     borrow::Cow,
-    convert::TryFrom,
     fmt::{Display, Formatter},
     str::FromStr,
 };
@@ -17,7 +16,6 @@ pub(crate) use constraint::is_start_of_version_constraint;
 pub use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
-use version_tree::VersionTree;
 
 use crate::{
     ParseStrictness, ParseStrictness::Lenient, ParseVersionError, Version, version::StrictVersion,
@@ -175,28 +173,8 @@ impl VersionSpec {
         source: &str,
         strictness: ParseStrictness,
     ) -> Result<Self, ParseVersionSpecError> {
-        fn parse_tree(
-            tree: VersionTree<'_>,
-            strictness: ParseStrictness,
-        ) -> Result<VersionSpec, ParseVersionSpecError> {
-            match tree {
-                VersionTree::Term(str) => Ok(Constraint::from_str(str, strictness)
-                    .map_err(ParseVersionSpecError::InvalidConstraint)?
-                    .into()),
-                VersionTree::Group(op, groups) => Ok(VersionSpec::Group(
-                    op,
-                    groups
-                        .into_iter()
-                        .map(|group| parse_tree(group, strictness))
-                        .collect::<Result<_, ParseVersionSpecError>>()?,
-                )),
-            }
-        }
-
-        let version_tree =
-            VersionTree::try_from(source).map_err(ParseVersionSpecError::InvalidVersionTree)?;
-
-        parse_tree(version_tree, strictness)
+        parse::version_spec_parser(source, strictness)
+            .map_err(ParseVersionSpecError::InvalidConstraint)
     }
 }
 
@@ -365,6 +343,9 @@ mod tests {
             StrictRangeOperator, parse::ParseConstraintError,
         },
     };
+    use EqualityOperator::Equals;
+    use LogicalOperator::{And, Or};
+    use RangeOperator::LessEquals;
 
     #[test]
     fn test_simple() {
@@ -431,6 +412,48 @@ mod tests {
                     VersionSpec::Range(RangeOperator::Less, Version::from_str("1.0.0").unwrap()),
                 ],
             ))
+        );
+    }
+
+    #[test]
+    fn test_group_flattening() {
+        let exact = |v: &str| VersionSpec::Exact(Equals, Version::from_str(v).unwrap());
+        let le = |v: &str| VersionSpec::Range(LessEquals, Version::from_str(v).unwrap());
+
+        // A single-element parenthesized group is unwrapped, not nested.
+        assert_eq!(
+            VersionSpec::from_str("1.2.3,(4.5.6),<=7.8.9", ParseStrictness::Lenient),
+            Ok(VersionSpec::Group(
+                And,
+                vec![exact("1.2.3"), exact("4.5.6"), le("7.8.9")]
+            ))
+        );
+
+        // Nested `Or` groups of the same operator are flattened into one.
+        assert_eq!(
+            VersionSpec::from_str("((1.2.3)|(4.5.6))|<=7.8.9", ParseStrictness::Lenient),
+            Ok(VersionSpec::Group(
+                Or,
+                vec![exact("1.2.3"), exact("4.5.6"), le("7.8.9")]
+            ))
+        );
+
+        // `,` binds tighter than `|`, producing a nested `And` inside an `Or`.
+        assert_eq!(
+            VersionSpec::from_str("1.2.3,4.5.6|<=7.8.9", ParseStrictness::Lenient),
+            Ok(VersionSpec::Group(
+                Or,
+                vec![
+                    VersionSpec::Group(And, vec![exact("1.2.3"), exact("4.5.6")]),
+                    le("7.8.9"),
+                ]
+            ))
+        );
+
+        // Redundant parentheses collapse to a single constraint.
+        assert_eq!(
+            VersionSpec::from_str("((((1.5))))", ParseStrictness::Lenient),
+            Ok(exact("1.5"))
         );
     }
 

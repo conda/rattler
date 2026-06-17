@@ -10,8 +10,8 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
-chrono = { workspace = true }
 hex = { workspace = true }
+jiff = { workspace = true }
 miette = { workspace = true }
 reqwest = { workspace = true, default-features = false }
 reqwest-middleware = { workspace = true }

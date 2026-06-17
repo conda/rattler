@@ -98,11 +98,13 @@ impl PyIndexJson {
                 rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                     IndexJson,
                 >(client.into(), url)
-                .await
-                .map(PyIndexJson::from)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                .await;
 
-            Python::with_gil(|py| Ok(Py::new(py, index_json)?.into_any()))
+            Python::with_gil(|py| match index_json {
+                Ok(r) => Ok(Some(Py::new(py, PyIndexJson::from(r))?.into_any())),
+                Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
+            })
         })
     }
 
@@ -257,9 +259,9 @@ impl PyIndexJson {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.inner.timestamp = Some(TimestampMs::from_datetime_millis(
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            self.inner.timestamp = Some(TimestampMs::from_timestamp_millis(
+                jiff::Timestamp::from_millisecond(ts)
+                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
             ));
         } else {
             self.inner.timestamp = None;

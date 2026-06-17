@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_shell-v0.27.6...rattler_shell-v0.27.7) - 2026-06-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_shell-v0.27.5...rattler_shell-v0.27.6) - 2026-06-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_shell-v0.27.4...rattler_shell-v0.27.5) - 2026-06-04
+
+### Added
+
+- add support for the brush shell ([#2480](https://github.com/conda/rattler/pull/2480))
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_shell-v0.27.3...rattler_shell-v0.27.4) - 2026-06-03
+
+### Fixed
+
+- loop over completion files instead of using glob operator ([#2474](https://github.com/conda/rattler/pull/2474))
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_shell-v0.27.2...rattler_shell-v0.27.3) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_shell-v0.27.1...rattler_shell-v0.27.2) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_shell-v0.27.0...rattler_shell-v0.27.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
 ## [0.27.0](https://github.com/conda/rattler/compare/rattler_shell-v0.26.12...rattler_shell-v0.27.0) - 2026-05-13
 
 ### Added

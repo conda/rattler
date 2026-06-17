@@ -122,7 +122,7 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
@@ -281,8 +281,8 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
-        use chrono::{DateTime, Utc};
         use itertools::Itertools;
+        use jiff::Timestamp;
 
         #[test]
         fn test_solve_quetz() {
@@ -795,11 +795,44 @@ mod resolvo {
 
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
-        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, PackageBuilder, SimpleSolveTask, SolveError, Version,
         dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    /// When a single node in the conflict merges many versions, the version list
+    /// is abbreviated with an ellipsis instead of printing every version.
+    #[test]
+    fn test_unsat_merged_versions_are_abbreviated() {
+        // Eight versions of `foo`, all depending on a `bar` that does not exist.
+        // They merge into a single node in the conflict graph.
+        let repo_data: Vec<RepoDataRecord> = (1..=8)
+            .map(|major| {
+                let version = format!("{major}.0");
+                let mut record = PackageBuilder::new("foo")
+                    .version(&version)
+                    .depends(["bar ==1.0"])
+                    .build();
+                // Give each build a unique identifier so they are not deduplicated.
+                record.identifier.identifier.version = version;
+                record.identifier.identifier.build_string = format!("h{major}_0");
+                record
+            })
+            .collect();
+
+        let task = SolverTask {
+            specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        insta::assert_snapshot!(err, @r###"
+        Cannot solve the request because of: foo * cannot be installed because there are no viable options:
+        └─ foo 1.0 | 2.0 | ... | 8.0 would require
+           └─ bar ==1.0, for which no candidates were found.
+        "###);
+    }
 
     #[test]
     fn test_flags_select_matching_variant() {
@@ -853,7 +886,7 @@ mod resolvo {
 
     #[test]
     fn test_exclude_newer_error() {
-        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+        let date = "2021-12-12T12:12:12Z".parse::<Timestamp>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],
@@ -1105,11 +1138,7 @@ fn solve<T: SolverImpl + Default>(
         .specs
         .iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
@@ -1117,11 +1146,7 @@ fn solve<T: SolverImpl + Default>(
         .constraints
         .into_iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 

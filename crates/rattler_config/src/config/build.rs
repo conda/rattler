@@ -22,6 +22,14 @@ pub struct BuildConfig {
     pub package_format: Option<PackageFormatAndCompression>,
 }
 
+impl BuildConfig {
+    /// Returns `true` when no build-time configuration is set. Useful
+    /// for `#[serde(skip_serializing_if = ...)]` in downstream configs.
+    pub fn is_default(&self) -> bool {
+        self.package_format.is_none()
+    }
+}
+
 // deserializer for the package format and compression level
 impl<'de> Deserialize<'de> for PackageFormatAndCompression {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

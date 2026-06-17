@@ -484,14 +484,13 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 4,
+                    "repodata_revisions": {
+                        "v4": {
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {
@@ -576,12 +575,11 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 3,
+                    "repodata_revisions": {
+                        "v3": {
                             "n_packages": 1
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {
@@ -1372,7 +1370,20 @@ mod test {
 
     #[tokio::test]
     async fn test_ensure_run_exports_remote_conda_forge() {
-        let gateway = Gateway::new();
+        // conda-forge's sharded repodata now embeds `run_exports` directly in the
+        // records. Disable sharded repodata so that the records are fetched from
+        // `repodata.json` (which does not contain `run_exports`). This ensures the
+        // records start out without `run_exports` and allows us to exercise
+        // `ensure_run_exports`.
+        let gateway = Gateway::builder()
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    sharded_enabled: false,
+                    ..SourceConfig::default()
+                },
+                ..crate::ChannelConfig::default()
+            })
+            .finish();
 
         let records = gateway
             .query(
@@ -1450,9 +1461,28 @@ mod test {
     }
 
     fn make_test_record(name: &str, version: &str, subdir: &str) -> RepoDataRecord {
+        make_test_record_full(name, version, subdir, &[], &[])
+    }
+
+    fn make_test_record_full(
+        name: &str,
+        version: &str,
+        subdir: &str,
+        depends: &[&str],
+        extra_depends: &[(&str, &[&str])],
+    ) -> RepoDataRecord {
         use rattler_conda_types::{
             PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
         };
+
+        let mut extra_depends_map: std::collections::BTreeMap<String, Vec<String>> =
+            std::collections::BTreeMap::default();
+        for (extra, items) in extra_depends {
+            extra_depends_map.insert(
+                (*extra).to_string(),
+                items.iter().map(|s| (*s).to_string()).collect(),
+            );
+        }
 
         let package_record = PackageRecord {
             name: PackageName::from_str(name).unwrap(),
@@ -1465,7 +1495,7 @@ mod test {
             size: Some(1000),
             arch: None,
             platform: None,
-            depends: vec![],
+            depends: depends.iter().map(|s| (*s).to_string()).collect(),
             constrains: vec![],
             track_features: vec![],
             features: None,
@@ -1479,7 +1509,7 @@ mod test {
             purls: None,
             run_exports: None,
             python_site_packages_path: None,
-            experimental_extra_depends: std::collections::BTreeMap::default(),
+            extra_depends: extra_depends_map,
         };
 
         RepoDataRecord {
@@ -1892,6 +1922,664 @@ mod test {
                 .map(String::from)
                 .collect::<std::collections::BTreeSet<_>>(),
             "glob should find all lib-* packages across both sources and both subdirs"
+        );
+    }
+
+    /// Mock source that records every name it has been asked to fetch.
+    struct RecordingSource {
+        inner: MockRepoDataSource,
+        fetched: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl RecordingSource {
+        fn new() -> (Self, Arc<std::sync::Mutex<Vec<String>>>) {
+            let fetched = Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    inner: MockRepoDataSource::new(),
+                    fetched: fetched.clone(),
+                },
+                fetched,
+            )
+        }
+
+        fn add(&mut self, platform: Platform, rec: RepoDataRecord) {
+            self.inner.add_record(platform, rec);
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl super::RepoDataSource for RecordingSource {
+        async fn fetch_package_records(
+            &self,
+            platform: Platform,
+            name: &PackageName,
+        ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+            self.fetched
+                .lock()
+                .unwrap()
+                .push(name.as_normalized().to_string());
+            self.inner.fetch_package_records(platform, name).await
+        }
+
+        fn package_names(&self, platform: Platform) -> Vec<String> {
+            self.inner.package_names(platform)
+        }
+    }
+
+    /// `outer` depends on `black` (no extras). Black is reached via the
+    /// transitive walk; aiohttp lives in black's [d] extra. Since [d] was
+    /// never activated, aiohttp must not be fetched.
+    #[tokio::test]
+    async fn extras_skipped_when_inactive_transitive() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("outer", "1.0.0", "linux-64", &["black"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("outer", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"outer".to_string()));
+        assert!(names.contains(&"black".to_string()));
+        assert!(names.contains(&"click".to_string()));
+        assert!(
+            !names.contains(&"aiohttp".to_string()),
+            "aiohttp should not be fetched when black's [d] extra is inactive; got {names:?}",
+        );
+    }
+
+    /// A transitive package can introduce an extra on another package. Here
+    /// `helper` has a base dep `black[extras=[d]]`. Asking for `helper`
+    /// should pull both black and aiohttp.
+    #[tokio::test]
+    async fn extras_walk_followed_when_active_via_transitive() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("helper", "1.0.0", "linux-64", &["black[extras=[d]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["aiohttp >=3"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"helper".to_string()));
+        assert!(names.contains(&"black".to_string()));
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "aiohttp should be fetched via the transitive [d] activation; got {names:?}",
+        );
+    }
+
+    /// `helper` depends on `aiohttp` (base) and on `tornado`, and `tornado`
+    /// in turn depends on `aiohttp[extras=[speedups]]`. The [speedups] extra
+    /// may activate after aiohttp's records have already arrived; when that
+    /// happens we must still walk it. `speedups_helper` is gated by the
+    /// speedups extra and must end up fetched.
+    #[tokio::test]
+    async fn extras_late_activation_walks_cached_records() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("helper", "1.0.0", "linux-64", &["aiohttp", "tornado"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "aiohttp",
+                "3.0.0",
+                "linux-64",
+                &[],
+                &[("speedups", &["speedups_helper >=1"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "tornado",
+                "6.0.0",
+                "linux-64",
+                &["aiohttp[extras=[speedups]]"],
+                &[],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("speedups_helper", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"helper".to_string()));
+        assert!(names.contains(&"aiohttp".to_string()));
+        assert!(names.contains(&"tornado".to_string()));
+        assert!(
+            names.contains(&"speedups_helper".to_string()),
+            "late activation of aiohttp[speedups] should walk the extra's deps; got {names:?}",
+        );
+    }
+
+    /// `pkg[full]` activates `pkg[a]` and `pkg[b]`, both of which add their
+    /// own deps. Chained activation on the same package must terminate and
+    /// fetch all of the involved deps.
+    #[tokio::test]
+    async fn extras_chained_activation_same_package() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("driver", "1.0.0", "linux-64", &["pkg[extras=[full]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[
+                    ("full", &["pkg[extras=[a]]", "pkg[extras=[b]]"]),
+                    ("a", &["dep_a >=1"]),
+                    ("b", &["dep_b >=1"]),
+                ],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_a", "1.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_b", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"dep_a".to_string()),
+            "[full] should chain to [a]; got {names:?}",
+        );
+        assert!(
+            names.contains(&"dep_b".to_string()),
+            "[full] should chain to [b]; got {names:?}",
+        );
+    }
+
+    fn extras_options() -> rattler_conda_types::ParseMatchSpecOptions {
+        rattler_conda_types::ParseMatchSpecOptions::default().with_extras(true)
+    }
+
+    /// User asks for `black` directly (Input). Black has extras `d` and
+    /// `jupyter`, neither requested. Neither aiohttp nor ipython must be
+    /// fetched.
+    #[tokio::test]
+    async fn extras_input_skipped_when_none_active() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"black".to_string()));
+        assert!(names.contains(&"click".to_string()));
+        assert!(
+            !names.contains(&"aiohttp".to_string()),
+            "aiohttp must not be fetched when black has no active extras; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "ipython must not be fetched when black has no active extras; got {names:?}",
+        );
+    }
+
+    /// User asks for `black[extras=[d]]`. aiohttp must be fetched; the other
+    /// extra's deps must not.
+    #[tokio::test]
+    async fn extras_input_walks_only_requested() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black[extras=[d]]", extras_options()).unwrap()]
+                    .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"aiohttp".to_string()));
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "ipython must not be fetched when only [d] is active; got {names:?}",
+        );
+    }
+
+    /// Pattern-expanded specs must still merge extras when another input spec
+    /// already queued the same exact package name.
+    #[tokio::test]
+    async fn extras_pattern_merges_with_existing_input() {
+        use rattler_conda_types::ParseMatchSpecOptions;
+
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        let pattern = MatchSpec::from_str(
+            "bla*[extras=[d]]",
+            ParseMatchSpecOptions::strict()
+                .with_exact_names_only(false)
+                .with_extras(true),
+        )
+        .unwrap();
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("black", Lenient).unwrap(), pattern].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "pattern extras should activate [d] even when black was already queued; got {names:?}",
+        );
+    }
+
+    /// Pattern-expanded specs should activate extras even when the pattern is
+    /// the only user input.
+    #[tokio::test]
+    async fn extras_pattern_only_walks_requested_extra() {
+        use rattler_conda_types::ParseMatchSpecOptions;
+
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &["click >=8"],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("click", "8.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        let pattern = MatchSpec::from_str(
+            "bla*[extras=[d]]",
+            ParseMatchSpecOptions::strict()
+                .with_exact_names_only(false)
+                .with_extras(true),
+        )
+        .unwrap();
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![pattern].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"aiohttp".to_string()),
+            "pattern extras should fetch deps from the requested [d] extra; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "pattern extras should not fetch inactive [jupyter] deps; got {names:?}",
+        );
+    }
+
+    /// User asks for `pkg >=2` (Input with version constraint). A transitive
+    /// dep later activates `pkg[extras=[d]]`. The extra's deps must only be
+    /// walked from records that match the original version constraint.
+    #[tokio::test]
+    async fn extras_input_late_activation_respects_spec_filter() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        // Two versions of pkg with different deps in the [d] extra.
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_for_v1 >=1"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "2.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_for_v2 >=1"])],
+            ),
+        );
+        // Transitive activator: introduced via a separate top-level package.
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_for_v1", "1.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("dep_for_v2", "1.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![
+                    MatchSpec::from_str("pkg >=2", Lenient).unwrap(),
+                    MatchSpec::from_str("activator", Lenient).unwrap(),
+                ]
+                .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(
+            names.contains(&"dep_for_v2".to_string()),
+            "dep from matching pkg record must be fetched; got {names:?}",
+        );
+        assert!(
+            !names.contains(&"dep_for_v1".to_string()),
+            "dep from non-matching pkg record must not be fetched; got {names:?}",
+        );
+    }
+
+    /// Black has two extras `d` and `jupyter`. A transitive activation of [d]
+    /// must fetch aiohttp but not ipython.
+    #[tokio::test]
+    async fn extras_walk_only_requested_extra_transitive() {
+        let gateway = Gateway::new();
+        let (mut src, fetched) = RecordingSource::new();
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("helper", "1.0.0", "linux-64", &["black[extras=[d]]"], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "black",
+                "25.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["aiohttp >=3"]), ("jupyter", &["ipython >=8"])],
+            ),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("aiohttp", "3.0.0", "linux-64", &[], &[]),
+        );
+        src.add(
+            Platform::Linux64,
+            make_test_record_full("ipython", "8.0.0", "linux-64", &[], &[]),
+        );
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(src);
+
+        gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("helper", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let names = fetched.lock().unwrap().clone();
+        assert!(names.contains(&"aiohttp".to_string()));
+        assert!(
+            !names.contains(&"ipython".to_string()),
+            "ipython must not be fetched when only [d] is active; got {names:?}",
+        );
+    }
+
+    /// Late activation must walk cached records for a package across every
+    /// source/subdir that already returned records for that package.
+    #[tokio::test]
+    async fn extras_late_activation_walks_cached_records_across_sources() {
+        let gateway = Gateway::new();
+        let (mut source_a, fetched_a) = RecordingSource::new();
+        let (mut source_b, fetched_b) = RecordingSource::new();
+
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full("driver", "1.0.0", "linux-64", &["pkg", "activator"], &[]),
+        );
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "1.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_from_source_a >=1"])],
+            ),
+        );
+        source_a.add(
+            Platform::Linux64,
+            make_test_record_full("dep_from_source_a", "1.0.0", "linux-64", &[], &[]),
+        );
+
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full("activator", "1.0.0", "linux-64", &["pkg[extras=[d]]"], &[]),
+        );
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full(
+                "pkg",
+                "2.0.0",
+                "linux-64",
+                &[],
+                &[("d", &["dep_from_source_b >=1"])],
+            ),
+        );
+        source_b.add(
+            Platform::Linux64,
+            make_test_record_full("dep_from_source_b", "1.0.0", "linux-64", &[], &[]),
+        );
+
+        gateway
+            .query(
+                vec![
+                    super::Source::Custom(Arc::new(source_a)),
+                    super::Source::Custom(Arc::new(source_b)),
+                ],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("driver", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let mut names = fetched_a.lock().unwrap().clone();
+        names.extend(fetched_b.lock().unwrap().clone());
+        assert!(
+            names.contains(&"dep_from_source_a".to_string()),
+            "late activation should walk cached pkg records from source A; got {names:?}",
+        );
+        assert!(
+            names.contains(&"dep_from_source_b".to_string()),
+            "late activation should walk cached pkg records from source B; got {names:?}",
         );
     }
 }

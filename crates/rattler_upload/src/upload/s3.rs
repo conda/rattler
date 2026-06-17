@@ -76,8 +76,8 @@ pub async fn upload_package_to_s3(
             .content_disposition(&format!("attachment; filename={filename}"))
             .if_not_exists(!force)
             .user_metadata([
-                (String::from("package-sha256"), format!("{sha256hash:x}")),
-                (String::from("package-md5"), format!("{md5hash:x}")),
+                (String::from("package-sha256"), hex::encode(sha256hash)),
+                (String::from("package-md5"), hex::encode(md5hash)),
             ])
             .await
         {
