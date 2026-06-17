@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["TrustedPublishResult","TrustedPublishingError"],"fn":["check_trusted_publishing","get_token"],"struct":["TrustedPublishingMiddleware","TrustedPublishingOptions","TrustedPublishingToken"]};
+window.SIDEBAR_ITEMS = {"enum":["TrustedPublishResult","TrustedPublishingError"],"fn":["check_trusted_publishing","get_token"],"struct":["PrefixAuthAmbientFlow","TrustedPublishingFlow","TrustedPublishingOptions"],"type":["TrustedPublishingToken"]};
