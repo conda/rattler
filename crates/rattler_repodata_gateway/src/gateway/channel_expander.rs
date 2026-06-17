@@ -22,8 +22,6 @@ use super::{
 /// malformed references, and failed discovery fetches degrade the
 /// result rather than failing the whole query, and the caller
 /// receives them as [`ChannelRelationsWarning`]s on the query output.
-/// Bindings forward these warnings to their host environment (Python
-/// `warnings.warn`, JS `console.warn`); they cannot be silently lost.
 ///
 /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
