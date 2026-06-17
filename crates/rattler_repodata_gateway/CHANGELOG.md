@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.5...rattler_repodata_gateway-v0.29.6) - 2026-06-17
+
+### Added
+
+- use semaphore for concurrent downloads ([#2475](https://github.com/conda/rattler/pull/2475))
+
+### Fixed
+
+- disable sharded repodata in run_exports remote test ([#2514](https://github.com/conda/rattler/pull/2514))
+
 ## [0.29.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.4...rattler_repodata_gateway-v0.29.5) - 2026-06-09
 
 ### Fixed

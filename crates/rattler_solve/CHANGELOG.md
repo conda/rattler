@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.1.4](https://github.com/conda/rattler/compare/rattler_solve-v7.1.3...rattler_solve-v7.1.4) - 2026-06-17
+
+### Other
+
+- avoid parsing matchspecs when checking dependency overrides ([#2506](https://github.com/conda/rattler/pull/2506))
+
 ## [7.1.3](https://github.com/conda/rattler/compare/rattler_solve-v7.1.2...rattler_solve-v7.1.3) - 2026-06-09
 
 ### Fixed

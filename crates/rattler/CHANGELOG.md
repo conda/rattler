@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0](https://github.com/conda/rattler/compare/rattler-v0.44.4...rattler-v0.45.0) - 2026-06-17
+
+### Added
+
+- use semaphore for concurrent downloads ([#2475](https://github.com/conda/rattler/pull/2475))
+- improved logout experience ([#2457](https://github.com/conda/rattler/pull/2457))
+- allow setting alternative target prefix on Installer ([#2484](https://github.com/conda/rattler/pull/2484))
+
+### Fixed
+
+- include sha256 in cache key for file:// packages ([#2507](https://github.com/conda/rattler/pull/2507))
+
+### Other
+
+- probe reflink support once per filesystem instead of per file ([#2508](https://github.com/conda/rattler/pull/2508))
+
 ## [0.44.4](https://github.com/conda/rattler/compare/rattler-v0.44.3...rattler-v0.44.4) - 2026-06-09
 
 ### Added
