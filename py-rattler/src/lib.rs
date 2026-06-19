@@ -100,6 +100,7 @@ impl<T> Deref for Wrap<T> {
 
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
+    pyo3_log::init();
     m.add_class::<PyVersion>()?;
     m.add_class::<PyVersionSpec>()?;
 
