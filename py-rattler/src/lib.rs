@@ -80,6 +80,9 @@ use repo_data::{
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
@@ -101,6 +104,10 @@ impl<T> Deref for Wrap<T> {
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     pyo3_log::init();
+    // tracing_subscriber::registry()
+    //     .with(EnvFilter::try_from_default_env().unwrap())
+    //     .with(tracing_subscriber::fmt::layer())
+    //     .init();
     m.add_class::<PyVersion>()?;
     m.add_class::<PyVersionSpec>()?;
 
