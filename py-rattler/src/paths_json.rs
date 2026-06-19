@@ -106,7 +106,7 @@ impl PyPathsJson {
                 >(client.into(), url)
                 .await;
 
-            Python::with_gil(|py| match paths_json {
+            Python::attach(|py| match paths_json {
                 Ok(r) => Ok(Some(Py::new(py, PyPathsJson::from(r))?.into_any())),
                 Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
