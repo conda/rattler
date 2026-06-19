@@ -91,7 +91,7 @@ tokio = { workspace = true, features = ["macros", "time"] }
 # `stream` (test-only) lets us build an unclonable streaming-body request to
 # exercise the challenge-middleware's no-replay path.
 reqwest = { workspace = true, features = ["json", "form", "stream"] }
-axum = { workspace = true, features = ["json"] }
+axum = { workspace = true, features = ["json", "form"] }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }

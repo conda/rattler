@@ -6,6 +6,8 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
 };
+
+use futures::lock::Mutex as AsyncMutex;
 use url::Url;
 
 use crate::authentication_storage::{AuthenticationStorageError, backends::file::FileStorage};
@@ -20,6 +22,8 @@ use crate::authentication_storage::backends::keyring::KeyringAuthenticationStora
 
 #[cfg(feature = "keyring")]
 use super::backends::keyring::KeyringAuthenticationStorage;
+
+type OAuthRefreshLocks = Arc<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>>;
 
 /// A single entry returned by [`AuthenticationStorage::list_keys_with_sources`].
 /// Carries host metadata without the stored credential, so callers can build
@@ -65,6 +69,7 @@ pub struct AuthenticationStorage {
     /// Authentication backends
     pub backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
+    oauth_refresh_locks: OAuthRefreshLocks,
 }
 
 impl AuthenticationStorage {
@@ -73,6 +78,7 @@ impl AuthenticationStorage {
         Self {
             backends: vec![],
             cache: Arc::new(Mutex::new(HashMap::new())),
+            oauth_refresh_locks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -112,6 +118,22 @@ impl AuthenticationStorage {
     /// (backends are tried in the order they are added)
     pub fn add_backend(&mut self, backend: Arc<dyn StorageBackend + Send + Sync>) {
         self.backends.push(backend);
+    }
+
+    /// Returns the per-key OAuth refresh gate.
+    ///
+    /// The gate only coalesces concurrent refresh attempts. Refreshed tokens
+    /// are still stored in and read from the configured authentication
+    /// backends/cache; the gate itself never caches credentials.
+    pub(crate) fn oauth_refresh_lock(&self, key: &str) -> Arc<AsyncMutex<()>> {
+        let mut locks = self
+            .oauth_refresh_locks
+            .lock()
+            .expect("OAuth refresh lock map poisoned");
+        locks
+            .entry(key.to_string())
+            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+            .clone()
     }
 
     /// Store the given authentication information for the given host
@@ -356,7 +378,9 @@ impl AuthenticationStorage {
             // `maybe_refresh_oauth` is a no-op for non-OAuth variants and
             // returns them as-is, so this branch covers every auth type.
             Some((matched_key, auth)) => {
-                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key).await
+                crate::oauth_refresh::maybe_refresh_oauth(self, auth, &matched_key)
+                    .await
+                    .into_authentication()
             }
             None => None,
         };
