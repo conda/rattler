@@ -7,7 +7,11 @@ import logging
 
 FORMAT = "%(levelname)s %(name)s %(asctime)-15s %(filename)s:%(lineno)d %(message)s"
 logging.basicConfig(format=FORMAT)
-logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.DEBUG)
+logger_h2 = logging.getLogger("h2.codec.framed_read")
+logger_h2.setLevel(logging.ERROR)
+logger_h22 = logging.getLogger("h2.codec.framed_write")
+logger_h22.setLevel(logging.ERROR)
 logging.getLogger(__name__).info("logging in python")
 
 
