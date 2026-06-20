@@ -102,7 +102,6 @@ pub fn fetch_raw_package_file_from_url<'a>(
     let url = parse_url(&url)?;
     let path = PathBuf::from(path);
     tracing::debug!(
-        target: "package_streaming",
         "fetching raw package file from remote package: {}",
         path.display()
     );
