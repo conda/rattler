@@ -3841,7 +3841,7 @@ dependencies = [
 [[package]]
 name = "pyo3-log"
 version = "0.13.4"
-source = "git+https://github.com/pavelzw/pyo3-log?branch=exit#ebcde749109457ae5dda96803c706db4ed8f2b2f"
+source = "git+https://github.com/pavelzw/pyo3-log?branch=exit#4d4f22745b4563a0de9153b3db88c5360e9a4e4d"
 dependencies = [
  "arc-swap",
  "log",
