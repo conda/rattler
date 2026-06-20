@@ -9,13 +9,14 @@ use std::{
     fmt, io,
     marker::PhantomData,
     path::Path,
+    sync::LazyLock,
 };
 
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
     Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    RepodataRevisionInfo, UrlOrPath, WhlPackageRecord, compute_package_url,
+    RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
@@ -29,6 +30,12 @@ use serde::{
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
+
+/// Shared empty revisions, returned by accessors when none are advertised.
+pub(crate) fn empty_repodata_revisions() -> &'static RepodataRevisions {
+    static EMPTY: LazyLock<RepodataRevisions> = LazyLock::new(RepodataRevisions::new);
+    &EMPTY
+}
 
 /// Defines how different variants of packages are consolidated.
 #[derive(
@@ -473,12 +480,11 @@ impl SparseRepoData {
     }
 
     /// Returns the repodata revisions advertised by this repodata file.
-    pub fn repodata_revisions(&self) -> &[RepodataRevisionInfo] {
-        self.inner
-            .borrow_repo_data()
-            .info
-            .as_ref()
-            .map_or(&[], |info| info.repodata_revisions.as_slice())
+    pub fn repodata_revisions(&self) -> &RepodataRevisions {
+        match &self.inner.borrow_repo_data().info {
+            Some(info) => &info.repodata_revisions,
+            None => empty_repodata_revisions(),
+        }
     }
 }
 
@@ -1076,6 +1082,7 @@ mod test {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+        RepodataRevision,
     };
     use rstest::rstest;
 
@@ -1412,6 +1419,26 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let count = sparse.record_count(variant);
         assert_eq!(count, expected_count);
+    }
+
+    #[test]
+    fn test_repodata_revisions_from_file() {
+        // The channel advertises a `v3` revision in the CEP `vN`-keyed
+        // dictionary form; make sure we parse it back into the map.
+        let (channel, platform, path) = wheel_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let revisions = sparse.repodata_revisions();
+        assert_eq!(revisions.len(), 1);
+        let metadata = &revisions[&RepodataRevision::V3];
+        assert_eq!(metadata.n_packages, Some(2));
+        assert_eq!(
+            metadata.oldest.map(|ts| ts.timestamp_millis()),
+            Some(1768249989851)
+        );
+        assert_eq!(
+            metadata.newest.map(|ts| ts.timestamp_millis()),
+            Some(1773851561010)
+        );
     }
 
     #[test]

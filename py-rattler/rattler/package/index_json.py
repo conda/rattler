@@ -71,11 +71,14 @@ class IndexJson:
         return IndexJson._from_py_index_json(PyIndexJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> IndexJson:
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[IndexJson]:
         """
         Fetches `info/index.json` from a remote package archive URL.
         """
-        return cls._from_py_index_json(await PyIndexJson.from_remote_url(client._client, url))
+        py_index_json = await PyIndexJson.from_remote_url(client._client, url)
+        if py_index_json is None:
+            return None
+        return cls._from_py_index_json(py_index_json)
 
     @staticmethod
     def package_path() -> Path:

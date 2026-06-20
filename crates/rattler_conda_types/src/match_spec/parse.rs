@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
     Finish, IResult, Parser,
@@ -377,27 +377,38 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    // Fast path: skip the regex entirely if no brackets present.
-    if !input.contains('[') {
+    let bytes = input.as_bytes();
+
+    // Brackets are a balanced `[...]` group at the end of the spec.
+    if bytes.last() != Some(&b']') {
         return Ok((input.into(), SmallVec::new()));
     }
 
-    if let Some(matches) =
-        lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input)
-    {
-        let bracket_str = matches.get(1).unwrap().as_str();
-        let bracket_contents = parse_bracket_list(bracket_str)?;
-
-        let input = if let Some(input) = input.strip_suffix(bracket_str) {
-            Cow::Borrowed(input)
-        } else {
-            Cow::Owned(input.replace(bracket_str, ""))
-        };
-
-        Ok((input, bracket_contents))
-    } else {
-        Ok((input.into(), SmallVec::new()))
+    // Scan back to the matching `[`, tracking depth. `[`/`]` are ASCII, so byte
+    // scanning is safe on UTF-8 input.
+    let mut depth = 0usize;
+    let mut open = None;
+    for (idx, &b) in bytes.iter().enumerate().rev() {
+        match b {
+            b']' => depth += 1,
+            b'[' => {
+                depth -= 1;
+                if depth == 0 {
+                    open = Some(idx);
+                    break;
+                }
+            }
+            _ => {}
+        }
     }
+
+    let Some(open) = open else {
+        // Unbalanced brackets: leave the input untouched.
+        return Ok((input.into(), SmallVec::new()));
+    };
+
+    let bracket_contents = parse_bracket_list(&input[open..])?;
+    Ok((Cow::Borrowed(&input[..open]), bracket_contents))
 }
 
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
@@ -464,13 +475,14 @@ fn parse_bracket_vec_into_components(
     let mut match_spec = match_spec;
 
     if options.strictness() == ParseStrictness::Strict {
-        // check for duplicate keys
-        let mut seen = HashSet::new();
+        // Reject duplicate keys. Bracket lists are tiny, so a linear scan beats
+        // a `HashSet`.
+        let mut seen: SmallVec<[&str; 8]> = SmallVec::new();
         for (key, _) in &bracket {
             if seen.contains(key) {
                 return Err(ParseMatchSpecError::MultipleValueForKey((*key).to_string()));
             }
-            seen.insert(key);
+            seen.push(key);
         }
     }
 

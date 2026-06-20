@@ -11,7 +11,7 @@ use rattler_shell::{
 /// Print the shell activation hook for a conda prefix to stdout.
 #[derive(Debug, Parser)]
 pub struct Opt {
-    /// Target prefix to generate the shell hook for
+    /// Target prefix (environment path) to generate the shell hook for
     #[clap(
         short = 'p',
         long = "prefix",
@@ -20,7 +20,7 @@ pub struct Opt {
     )]
     target_prefix: PathBuf,
 
-    /// Shell to generate the hook for (bash, zsh, fish, xonsh, cmd, nushell, powershell)
+    /// Shell to generate the hook for (bash, zsh, fish, xonsh, cmd, nushell, powershell, brush)
     #[clap(short, long)]
     shell: Option<String>,
 }

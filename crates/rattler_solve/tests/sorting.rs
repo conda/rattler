@@ -8,7 +8,10 @@ use rattler_conda_types::{
     Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
-use rattler_solve::{ChannelPriority, SolveStrategy, resolvo::CondaDependencyProvider};
+use rattler_solve::{
+    ChannelPriority, SolveStrategy,
+    resolvo::{CondaDependencyProvider, NameType},
+};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
 
@@ -56,7 +59,9 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
     )
     .expect("failed to create dependency provider");
 
-    let name = dependency_provider.pool.intern_package_name(&package_name);
+    let name = dependency_provider
+        .pool
+        .intern_package_name(NameType::from(&package_name));
     let version_set = dependency_provider
         .pool
         .intern_version_set(name, match_spec.into_nameless().1.into());

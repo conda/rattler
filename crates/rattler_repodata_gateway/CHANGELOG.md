@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.5...rattler_repodata_gateway-v0.29.6) - 2026-06-17
+
+### Added
+
+- use semaphore for concurrent downloads ([#2475](https://github.com/conda/rattler/pull/2475))
+
+### Fixed
+
+- disable sharded repodata in run_exports remote test ([#2514](https://github.com/conda/rattler/pull/2514))
+
+## [0.29.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.4...rattler_repodata_gateway-v0.29.5) - 2026-06-09
+
+### Fixed
+
+- (de)serialize `info.repodata_revisions` as dictionary ([#2485](https://github.com/conda/rattler/pull/2485))
+
+## [0.29.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.3...rattler_repodata_gateway-v0.29.4) - 2026-06-04
+
+### Other
+
+- updated the following local packages: rattler_cache
+
+## [0.29.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.2...rattler_repodata_gateway-v0.29.3) - 2026-06-02
+
+### Added
+
+- only walk active extras when fetching repodata ([#2447](https://github.com/conda/rattler/pull/2447))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- graduate extras, conditionals, and flags from experimental ([#2450](https://github.com/conda/rattler/pull/2450))
+- replace `chrono` with `jiff` ([#1905](https://github.com/conda/rattler/pull/1905))
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
 ## [0.29.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.1...rattler_repodata_gateway-v0.29.2) - 2026-05-19
 
 ### Other

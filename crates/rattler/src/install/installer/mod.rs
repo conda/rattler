@@ -22,8 +22,8 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
-    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
-    prefix_record::Link,
+    MatchSpec, PackageName, PackageNameMatcher, PackageRecord, Platform, PrefixRecord,
+    RepoDataRecord, prefix_record::Link, utils::ensure_safe_path_component,
 };
 use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rayon::prelude::*;
@@ -69,6 +69,7 @@ pub struct Installer {
     downloader: Option<LazyClient>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
@@ -142,6 +143,43 @@ impl Installer {
     /// modifies an existing instance.
     pub fn set_io_concurrency_semaphore(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions. This
+    /// is used to avoid overwhelming a server or saturating the network.
+    #[must_use]
+    pub fn with_max_concurrent_requests(self, limit: usize) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(Arc::new(Semaphore::new(limit))),
+            ..self
+        }
+    }
+
+    /// Sets a limit on the number of concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_max_concurrent_requests`],
+    /// but modifies an existing instance.
+    pub fn set_max_concurrent_requests(&mut self, limit: usize) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    #[must_use]
+    pub fn with_concurrent_requests_semaphore(self, semaphore: Arc<Semaphore>) -> Self {
+        Self {
+            concurrent_requests_semaphore: Some(semaphore),
+            ..self
+        }
+    }
+
+    /// Sets a semaphore that limits concurrent package downloads and extractions.
+    ///
+    /// This function is similar to [`Self::with_concurrent_requests_semaphore`],
+    /// but modifies an existing instance.
+    pub fn set_concurrent_requests_semaphore(&mut self, semaphore: Arc<Semaphore>) -> &mut Self {
+        self.concurrent_requests_semaphore = Some(semaphore);
         self
     }
 
@@ -323,6 +361,33 @@ impl Installer {
         self
     }
 
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// When files are linked into the target directory, hardcoded paths in
+    /// those files are "patched" by replacing the placeholder prefix with the
+    /// full path of the target directory. In exceptional cases you might want
+    /// to patch in a different prefix than the directory that is actually being
+    /// installed to. When set, this prefix is used instead of the target
+    /// directory.
+    #[must_use]
+    pub fn with_alternative_target_prefix(self, prefix: impl Into<PathBuf>) -> Self {
+        Self {
+            alternative_target_prefix: Some(prefix.into()),
+            ..self
+        }
+    }
+
+    /// Sets an alternative prefix to use when patching hardcoded paths in
+    /// installed files.
+    ///
+    /// This function is similar to [`Self::with_alternative_target_prefix`],
+    /// but modifies an existing instance.
+    pub fn set_alternative_target_prefix(&mut self, prefix: impl Into<PathBuf>) -> &mut Self {
+        self.alternative_target_prefix = Some(prefix.into());
+        self
+    }
+
     /// Sets the link options for the installer.
     pub fn with_link_options(self, options: LinkOptions) -> Self {
         Self {
@@ -449,6 +514,12 @@ impl Installer {
 
         let transaction = transaction.to_owned();
 
+        // Reject packages whose name/build could escape the prefix once written
+        // to disk, before attempting any installation (GHSA-h672-p7h7-97v9).
+        for record in transaction.installed_packages() {
+            ensure_record_path_safe(&record.package_record)?;
+        }
+
         // Validate that if the target platform is NoArch, all packages to be installed
         // must also be noarch (subdir == "noarch")
         if target_platform == Platform::NoArch {
@@ -518,6 +589,10 @@ impl Installer {
             .acquire_global_lock()
             .await
             .map_err(InstallerError::FailedToAcquireCacheLock)?;
+
+        // Semaphore that limits concurrent package downloads and extractions. The permit
+        // is held for the duration of both. When None, concurrency is unlimited.
+        let concurrent_requests_semaphore = self.concurrent_requests_semaphore;
 
         // Construct a driver.
         let driver = InstallDriver::builder()
@@ -610,6 +685,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
+            let concurrent_requests_semaphore = &concurrent_requests_semaphore;
             let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
                 if let Some(reporter) = &reporter
@@ -624,6 +700,7 @@ impl Installer {
                     let downloader = downloader.clone();
                     let reporter = reporter.clone();
                     let package_cache = package_cache.clone();
+                    let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
@@ -634,6 +711,7 @@ impl Installer {
                             downloader,
                             &package_cache,
                             populate_cache_report.clone(),
+                            concurrent_requests_semaphore,
                         )
                         .await?;
                         if let Some((reporter, index)) = populate_cache_report {
@@ -798,6 +876,7 @@ async fn populate_cache(
     downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
+    concurrent_requests_semaphore: Option<Arc<Semaphore>>,
 ) -> Result<CacheMetadata, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
@@ -826,21 +905,41 @@ async fn populate_cache(
         }
     }
 
-    cache
-        .get_or_fetch_from_url_with_retry(
-            &record.package_record,
-            record.url.clone(),
-            downloader,
-            default_retry_policy(),
-            reporter.map(|(reporter, cache_index)| {
-                Arc::new(CacheReporterBridge {
-                    reporter,
-                    cache_index,
-                }) as _
-            }),
-        )
-        .await
-        .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    let reporter = reporter.map(|(reporter, cache_index)| {
+        Arc::new(CacheReporterBridge {
+            reporter,
+            cache_index,
+        }) as _
+    });
+
+    if record.url.scheme() == "file" {
+        let path = record.url.to_file_path().map_err(|()| {
+            InstallerError::IoError(
+                format!("invalid file URL for {}", record.identifier),
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("could not convert {} to a file path", record.url),
+                ),
+            )
+        })?;
+
+        cache
+            .get_or_fetch_from_path(&path, Some(&record.package_record), reporter)
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    } else {
+        cache
+            .get_or_fetch_from_url_with_retry(
+                &record.package_record,
+                record.url.clone(),
+                downloader,
+                default_retry_policy(),
+                reporter,
+                concurrent_requests_semaphore,
+            )
+            .await
+            .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
+    }
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.
@@ -892,6 +991,15 @@ fn update_requested_specs_in_json(
     fs_err::write(path, updated_content)?;
 
     Ok(())
+}
+
+/// Rejects a record whose `name`/`build` could escape the prefix when written
+/// to disk. Both fields come from lower-trust channel repodata and are
+/// interpolated into `conda-meta` paths (GHSA-h672-p7h7-97v9).
+fn ensure_record_path_safe(record: &PackageRecord) -> Result<(), InstallerError> {
+    ensure_safe_path_component(record.name.as_normalized())
+        .and_then(|()| ensure_safe_path_component(&record.build))
+        .map_err(InstallerError::UnsafePackageRecord)
 }
 
 /// Creates a mapping from package names to their requested spec strings.
@@ -1019,6 +1127,27 @@ mod tests {
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
     use url::Url;
+
+    #[test]
+    fn test_ensure_record_path_safe() {
+        use rattler_conda_types::VersionWithSource;
+
+        let record = |name: &str, build: &str| {
+            PackageRecord::new(
+                PackageName::new_unchecked(name),
+                "1.0".parse::<VersionWithSource>().unwrap(),
+                build.to_string(),
+            )
+        };
+
+        assert!(ensure_record_path_safe(&record("demo", "py39_0")).is_ok());
+        // An empty build string is legitimate and cannot traverse.
+        assert!(ensure_record_path_safe(&record("demo", "")).is_ok());
+        // Path traversal in either field must be rejected.
+        assert!(ensure_record_path_safe(&record("demo", r"x\..\..\..\.git\hooks")).is_err());
+        assert!(ensure_record_path_safe(&record("demo", "a/b")).is_err());
+        assert!(ensure_record_path_safe(&record("../evil", "0")).is_err());
+    }
 
     /// Creates a test environment with a temporary directory and prefix
     fn create_test_environment() -> (TempDir, Prefix) {
@@ -1515,6 +1644,33 @@ mod tests {
             Some(LinkType::Copy),
             "link_type should be Copy when hard links are disabled"
         );
+    }
+
+    #[test]
+    fn test_alternative_target_prefix_setters() {
+        let prefix = Path::new("/some/other/prefix");
+
+        // The builder-style setter should store the prefix.
+        let installer = Installer::new().with_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+
+        // The mutable setter should store the prefix as well.
+        let mut installer = Installer::new();
+        installer.set_alternative_target_prefix(prefix);
+        assert_eq!(installer.alternative_target_prefix.as_deref(), Some(prefix));
+    }
+
+    #[tokio::test]
+    async fn test_install_with_alternative_target_prefix() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Installing with an alternative target prefix set should still succeed.
+        let installer = Installer::new().with_alternative_target_prefix("/some/other/prefix");
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "conda-meta file should exist");
     }
 
     /// Test that when hard links are explicitly forced on

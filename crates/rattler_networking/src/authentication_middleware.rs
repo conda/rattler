@@ -250,11 +250,6 @@ mod tests {
 
         let host = "conda.example.com";
 
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
-
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -304,11 +299,6 @@ mod tests {
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "bearer.example.com";
-
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
 
         let retrieved = storage.get(host);
 
@@ -365,11 +355,6 @@ mod tests {
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "basic.example.com";
-
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring_core::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
 
         let retrieved = storage.get(host);
 

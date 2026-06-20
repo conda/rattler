@@ -273,8 +273,7 @@ async fn test_index_latest_repodata_revision() {
             .pointer("/v3/conda/empty-0.1.0-h4616a5c_0")
             .is_some()
     );
-    let revision = &repodata_json["info"]["repodata_revisions"][0];
-    assert_eq!(revision["revision"], 3);
+    let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
     assert_eq!(revision["n_packages"], 1);
 
     let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
@@ -282,10 +281,9 @@ async fn test_index_latest_repodata_revision() {
     let shard_index: ShardedRepodata = rmp_serde::from_slice(&shard_index_bytes).unwrap();
     assert_eq!(shard_index.info.repodata_revisions.len(), 1);
     assert_eq!(
-        shard_index.info.repodata_revisions[0].revision,
-        RepodataRevision::V3
+        shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
+        Some(1)
     );
-    assert_eq!(shard_index.info.repodata_revisions[0].n_packages, Some(1));
 }
 
 #[tokio::test]
@@ -374,8 +372,7 @@ async fn test_index_repodata_revision_from_index_json() {
             .pointer("/v3/tar.bz2/revision-demo-1.0.0-h123_0")
             .is_some()
     );
-    let revision = &repodata_json["info"]["repodata_revisions"][0];
-    assert_eq!(revision["revision"], 3);
+    let revision = &repodata_json["info"]["repodata_revisions"]["v3"];
     assert_eq!(revision["n_packages"], 1);
     assert_eq!(revision["oldest"], 1710000000000i64);
     assert_eq!(revision["newest"], 1710000000000i64);
@@ -429,11 +426,7 @@ async fn test_index_writes_channel_metadata() {
         "../fallback"
     );
     assert_eq!(
-        repodata_json["info"]["repodata_revisions"][0]["revision"],
-        3
-    );
-    assert_eq!(
-        repodata_json["info"]["repodata_revisions"][0]["n_packages"],
+        repodata_json["info"]["repodata_revisions"]["v3"]["n_packages"],
         0
     );
 
@@ -462,8 +455,7 @@ async fn test_index_writes_channel_metadata() {
         Some("../fallback")
     );
     assert_eq!(
-        shard_index.info.repodata_revisions[0].revision,
-        RepodataRevision::V3
+        shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
+        Some(0)
     );
-    assert_eq!(shard_index.info.repodata_revisions[0].n_packages, Some(0));
 }

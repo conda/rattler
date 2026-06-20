@@ -182,7 +182,7 @@ mod tests {
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -215,7 +215,7 @@ mod tests {
                     base_url: "./".to_string(),
                     shards_base_url: "./shards/".to_string(),
                     created_at: Some(jiff::Timestamp::now()),
-                    repodata_revisions: Vec::new(),
+                    repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
                 },
                 shards,

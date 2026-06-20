@@ -109,12 +109,27 @@ struct LoginArgs {
 
 #[derive(Parser, Debug)]
 struct LogoutArgs {
-    /// The host to remove authentication for
-    host: String,
+    /// The host to remove authentication for. With `auth-interactive`
+    /// enabled, omit this (and `--all`) to pick interactively.
+    #[cfg_attr(
+        not(feature = "auth-interactive"),
+        clap(required_unless_present = "all", conflicts_with = "all")
+    )]
+    #[cfg_attr(feature = "auth-interactive", clap(conflicts_with = "all"))]
+    host: Option<String>,
+
+    /// Remove every stored authentication entry (revoking OAuth tokens for each)
+    #[clap(long)]
+    all: bool,
 }
 
 #[derive(Parser, Debug)]
-struct StatusArgs {}
+struct StatusArgs {
+    /// Show endpoint URLs, client ID, and other IdP-introspection fields
+    /// that are only useful for debugging.
+    #[clap(short, long)]
+    verbose: bool,
+}
 
 #[derive(Parser, Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -188,6 +203,20 @@ pub enum AuthenticationCLIError {
     /// Token is unauthorized or invalid
     #[error("Unauthorized or invalid token")]
     UnauthorizedToken,
+
+    /// No stored credentials were found for the requested host.
+    #[error("No stored credentials found for {0}")]
+    NotLoggedIn(String),
+
+    /// Interactive logout was requested but the process isn't attached to a TTY.
+    #[cfg(feature = "auth-interactive")]
+    #[error("Interactive logout requires a TTY. Pass a host or `--all` instead.")]
+    NotInteractive,
+
+    /// The interactive picker failed (e.g. user interrupted, terminal error).
+    #[cfg(feature = "auth-interactive")]
+    #[error("Interactive selection failed: {0}")]
+    Interactive(String),
 
     /// OAuth error
     #[cfg(feature = "oauth")]
@@ -520,36 +549,201 @@ async fn validate_prefix_dev_token(
     }
 }
 
+/// Show an interactive `MultiSelect` picker so the user can pick which stored
+/// entries to log out from. Returns the chosen subset.
+///
+/// Bails with `NotLoggedIn("any host")` on an empty storage and prints a
+/// helpful note when stdin/stdout isn't a TTY (since dialoguer would just
+/// hang or error obscurely in that case).
+/// Returns `Ok(None)` when the user aborts the picker (Ctrl-C / SIGINT); the
+/// caller treats that as a quiet cancel rather than an error.
+#[cfg(feature = "auth-interactive")]
+async fn interactive_pick(
+    entries: Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>,
+) -> Result<
+    Option<Vec<rattler_networking::authentication_storage::storage::LazyListedEntry>>,
+    AuthenticationCLIError,
+> {
+    use std::io::IsTerminal;
+
+    if entries.is_empty() {
+        // Caller's empty-match branch turns this into a friendly no-op.
+        return Ok(Some(Vec::new()));
+    }
+
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Err(AuthenticationCLIError::NotInteractive);
+    }
+
+    // Auth method isn't shown here — it would require reading the secret,
+    // which on macOS prompts the keychain once per entry. Host + source is
+    // enough to disambiguate every entry in practice.
+    let items: Vec<String> = entries
+        .iter()
+        .map(|e| {
+            let shadowed = if e.active { "" } else { " (shadowed)" };
+            format!("{} ({}){}", e.host, e.source, shadowed)
+        })
+        .collect();
+
+    // dialoguer hides the cursor for the duration of the picker but only
+    // restores it on its Enter/Esc/quit paths. The blocking picker runs on a
+    // dedicated thread so we can race it against Ctrl-C: tokio's SIGINT handler
+    // replaces the default (process-killing) one, giving us a chance to put the
+    // cursor back. The `CursorGuard` covers every return path of the picker
+    // itself (normal exit, error, or the SIGINT that `console` re-raises mid
+    // read); the explicit `show_cursor()` in the Ctrl-C branch covers the case
+    // where the signal future wins the race before the guard runs.
+    let handle = tokio::task::spawn_blocking(move || {
+        struct CursorGuard;
+        impl Drop for CursorGuard {
+            fn drop(&mut self) {
+                let _ = console::Term::stdout().show_cursor();
+            }
+        }
+        let _guard = CursorGuard;
+
+        match dialoguer::MultiSelect::new()
+            .with_prompt("Select credentials to log out from (space to toggle, enter to confirm)")
+            .items(&items)
+            .interact()
+        {
+            Ok(selection) => Ok(Some(
+                selection.into_iter().map(|i| entries[i].clone()).collect(),
+            )),
+            // `console` reports Ctrl-C as an `Interrupted` IO error. Treat it as
+            // a cancel, not a failure, so we don't surface a scary message.
+            Err(e) => {
+                let io: std::io::Error = e.into();
+                if io.kind() == std::io::ErrorKind::Interrupted {
+                    Ok(None)
+                } else {
+                    Err(AuthenticationCLIError::Interactive(io.to_string()))
+                }
+            }
+        }
+    });
+
+    tokio::select! {
+        res = handle => res.map_err(|e| AuthenticationCLIError::Interactive(e.to_string()))?,
+        _ = tokio::signal::ctrl_c() => {
+            let _ = console::Term::stdout().show_cursor();
+            Ok(None)
+        }
+    }
+}
+
+/// Candidate storage keys to look up for a user-supplied host.
+///
+/// `login` historically writes under two different canonical forms:
+/// - the OAuth path uses [`normalize_login_host`] (e.g. `prefix.dev`)
+/// - the token/basic/S3 path uses [`get_url`] (e.g. `*.prefix.dev`)
+///
+/// To stay backwards-compatible with both, logout matches entries against
+/// every form the host could have been stored under.
+fn logout_candidate_keys(host: &str) -> Result<Vec<String>, AuthenticationCLIError> {
+    let mut keys = vec![normalize_login_host(host), get_url(host)?];
+    // Also accept the raw input — covers manually written entries (e.g.
+    // pre-existing `RATTLER_AUTH_FILE` content) that don't match either
+    // derived form.
+    keys.push(host.to_string());
+    keys.sort();
+    keys.dedup();
+    Ok(keys)
+}
+
 async fn logout(
     args: LogoutArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;
+    // Enumerate hosts without reading secrets — important on macOS where each
+    // keychain read prompts the user. We fetch credentials lazily, once per
+    // entry we actually touch.
+    let lazy_entries = storage.list_keys_with_sources()?;
 
-    // Revoke OAuth tokens before deleting credentials
-    #[cfg(feature = "oauth")]
-    if let Ok(Some(Authentication::OAuth {
-        ref access_token,
-        ref refresh_token,
-        revocation_endpoint: Some(ref revocation_endpoint),
-        ref client_id,
-        ..
-    })) = storage.get(&host)
-    {
-        eprintln!("Revoking OAuth tokens...");
-        oauth::revoke_tokens(
-            revocation_endpoint,
-            access_token,
-            refresh_token.as_deref(),
-            client_id,
-            None,
-        )
-        .await;
+    let targets: Vec<_> = match (args.all, args.host.as_deref()) {
+        (true, _) => lazy_entries,
+        (false, Some(host)) => {
+            let candidates = logout_candidate_keys(host)?;
+            lazy_entries
+                .into_iter()
+                .filter(|e| candidates.contains(&e.host))
+                .collect()
+        }
+        // With `auth-interactive`, no host + no --all means "let the user
+        // pick". Without the feature, clap rejects this combo before we get
+        // here; the fall-through treats it like --all for programmatic
+        // callers who construct LogoutArgs directly.
+        (false, None) => {
+            #[cfg(feature = "auth-interactive")]
+            {
+                match interactive_pick(lazy_entries).await? {
+                    Some(picked) => picked,
+                    // User aborted the picker (Ctrl-C) — exit quietly.
+                    None => return Ok(()),
+                }
+            }
+            #[cfg(not(feature = "auth-interactive"))]
+            {
+                lazy_entries
+            }
+        }
+    };
+
+    if targets.is_empty() {
+        // No-op cases:
+        // - `--all` with nothing stored
+        // - interactive picker confirmed with nothing selected (host is None
+        //   because clap allows that under `auth-interactive`)
+        // The only real "error" case is an explicit host that doesn't match.
+        if args.all || args.host.is_none() {
+            eprintln!("No credentials to remove.");
+            return Ok(());
+        }
+        return Err(AuthenticationCLIError::NotLoggedIn(args.host.unwrap()));
     }
 
-    println!("Removing authentication for {host}");
+    // Single fetch per target — for an entry stored in the macOS keychain
+    // this is one prompt per entry being touched, not per entry in storage.
+    for entry in &targets {
+        let Some(auth) = storage.get_entry(&entry.host, &entry.source)? else {
+            // Disappeared between the lazy list and now (concurrent edit, or
+            // a backend that lies about its keys). Skip.
+            continue;
+        };
 
-    storage.delete(&host)?;
+        #[cfg(feature = "oauth")]
+        if let Authentication::OAuth {
+            access_token,
+            refresh_token,
+            revocation_endpoint: Some(revocation_endpoint),
+            client_id,
+            ..
+        } = &auth
+        {
+            eprintln!(
+                "Revoking OAuth tokens for {} ({})",
+                entry.host, entry.source
+            );
+            oauth::revoke_tokens(
+                revocation_endpoint,
+                access_token,
+                refresh_token.as_deref(),
+                client_id,
+                None,
+            )
+            .await;
+        }
+        // Silence unused-variable warning when oauth is off.
+        let _ = auth;
+
+        eprintln!(
+            "Removing authentication for {} ({})",
+            entry.host, entry.source
+        );
+        storage.delete_entry(&entry.host, &entry.source)?;
+    }
+
     Ok(())
 }
 
@@ -658,7 +852,7 @@ fn format_validity(expires_at: Option<i64>, now: i64) -> String {
     }
 }
 
-fn print_token_metadata(metadata: Option<&TokenMetadata>) {
+fn print_token_metadata(metadata: Option<&TokenMetadata>, verbose: bool) {
     let Some(metadata) = metadata else {
         return;
     };
@@ -671,6 +865,11 @@ fn print_token_metadata(metadata: Option<&TokenMetadata>) {
             .collect::<Vec<_>>()
             .join(", ");
         println!("  - Token scopes: {scopes}");
+    }
+    if !verbose {
+        // Issuer/audience/subject are JWT introspection fields — useful for
+        // debugging, noisy for a typical "am I logged in?" check.
+        return;
     }
     if let Some(issuer) = &metadata.issuer {
         println!("  - Issuer: {issuer}");
@@ -690,6 +889,7 @@ fn print_authentication_status(
     active: bool,
     account: Option<&str>,
     now: i64,
+    verbose: bool,
 ) {
     if active {
         println!("{host}");
@@ -722,7 +922,7 @@ fn print_authentication_status(
                     now
                 )
             );
-            print_token_metadata(metadata.as_ref());
+            print_token_metadata(metadata.as_ref(), verbose);
         }
         Authentication::OAuth {
             access_token,
@@ -733,24 +933,35 @@ fn print_authentication_status(
             client_id,
         } => {
             let metadata = token_metadata(access_token);
+            // OAuth's `expires_at` always refers to the short-lived ACCESS
+            // token (RFC 6749 §5.1). Refresh tokens are separate and the
+            // standard response doesn't expose their expiry — they're
+            // typically valid for days/weeks and we only learn they're gone
+            // when a refresh fails.
             println!(
-                "  - Token validity: {}",
+                "  - Access token expires: {}",
                 format_validity(
                     expires_at
                         .or_else(|| metadata.as_ref().and_then(|metadata| metadata.expires_at)),
                     now,
                 )
             );
-            println!("  - Client ID: {client_id}");
             println!(
                 "  - Refresh token: {}",
-                if refresh_token.is_some() { "yes" } else { "no" }
+                if refresh_token.is_some() {
+                    "yes (lifetime not exposed by the provider)"
+                } else {
+                    "no"
+                }
             );
-            println!("  - Token endpoint: {token_endpoint}");
-            if let Some(revocation_endpoint) = revocation_endpoint {
-                println!("  - Revocation endpoint: {revocation_endpoint}");
+            if verbose {
+                println!("  - Client ID: {client_id}");
+                println!("  - Token endpoint: {token_endpoint}");
+                if let Some(revocation_endpoint) = revocation_endpoint {
+                    println!("  - Revocation endpoint: {revocation_endpoint}");
+                }
             }
-            print_token_metadata(metadata.as_ref());
+            print_token_metadata(metadata.as_ref(), verbose);
         }
         Authentication::BasicHTTP { username, .. } => {
             println!("  - Username: {username}");
@@ -802,7 +1013,7 @@ async fn lookup_prefix_dev_account(host: &str, auth: &Authentication) -> Option<
 }
 
 async fn status(
-    _args: StatusArgs,
+    args: StatusArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
     let entries = storage.list_with_sources()?;
@@ -836,6 +1047,7 @@ async fn status(
             entry.active,
             account.as_deref(),
             now,
+            args.verbose,
         );
     }
 
@@ -1194,5 +1406,246 @@ mod tests {
         // No explicit method on a non-OAuth host → still falls through to existing
         // NoAuthenticationMethod error.
         assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
+    }
+
+    fn logout_args(host: Option<&str>, all: bool) -> LogoutArgs {
+        LogoutArgs {
+            host: host.map(ToString::to_string),
+            all,
+        }
+    }
+
+    #[test]
+    fn logout_candidate_keys_covers_both_login_canonical_forms() {
+        // For top-level-domain-style hosts, both forms must appear so we hit
+        // legacy entries stored by either login path.
+        let keys = logout_candidate_keys("prefix.dev").unwrap();
+        assert!(keys.contains(&"prefix.dev".to_string()));
+        assert!(keys.contains(&"*.prefix.dev".to_string()));
+
+        // Full URL inputs normalize down to the same candidates.
+        let keys = logout_candidate_keys("https://prefix.dev/").unwrap();
+        assert!(keys.contains(&"prefix.dev".to_string()));
+        assert!(keys.contains(&"*.prefix.dev".to_string()));
+    }
+
+    #[tokio::test]
+    async fn logout_removes_legacy_wildcard_entry() {
+        // Simulates a token/basic login on a TLD-style host: stored under
+        // `*.prefix.dev` by `get_url`.
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("*.prefix.dev", &Authentication::BearerToken("tok".into()))
+            .unwrap();
+
+        logout(logout_args(Some("prefix.dev"), false), storage.clone())
+            .await
+            .unwrap();
+
+        assert!(storage.list().unwrap().is_empty());
+    }
+
+    #[cfg(feature = "oauth")]
+    #[tokio::test]
+    async fn logout_removes_legacy_oauth_entry_without_wildcard() {
+        // Simulates an OAuth login: stored under `prefix.dev` (no wildcard)
+        // by `normalize_login_host`. The old logout used `get_url` and would
+        // never find this entry.
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store(
+                "prefix.dev",
+                &Authentication::OAuth {
+                    access_token: "a".into(),
+                    refresh_token: None,
+                    expires_at: None,
+                    token_endpoint: "https://prefix.dev/token".into(),
+                    // No revocation endpoint → revoke_tokens won't run, so
+                    // this test stays hermetic (no HTTP needed).
+                    revocation_endpoint: None,
+                    client_id: "rattler".into(),
+                },
+            )
+            .unwrap();
+
+        logout(logout_args(Some("prefix.dev"), false), storage.clone())
+            .await
+            .unwrap();
+
+        assert!(storage.list().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn logout_unknown_host_returns_not_logged_in() {
+        let (storage, _temp_dir) = create_test_storage();
+        let result = logout(logout_args(Some("nothing-here.example"), false), storage).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotLoggedIn(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn logout_all_clears_every_entry() {
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("*.prefix.dev", &Authentication::BearerToken("t".into()))
+            .unwrap();
+        storage
+            .store("*.anaconda.org", &Authentication::CondaToken("c".into()))
+            .unwrap();
+
+        logout(logout_args(None, true), storage.clone())
+            .await
+            .unwrap();
+
+        assert!(storage.list().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn logout_all_on_empty_storage_is_a_noop() {
+        let (storage, _temp_dir) = create_test_storage();
+        // `--all` on a fresh machine should succeed silently, not error.
+        logout(logout_args(None, true), storage).await.unwrap();
+    }
+
+    /// `delete_entry` must remove the host from ONLY the selected backend,
+    /// leaving shadowed copies in other backends intact. This is what makes
+    /// the interactive picker work correctly: picking one entry doesn't wipe
+    /// every backend's copy.
+    #[tokio::test]
+    async fn delete_entry_only_touches_the_named_backend() {
+        use rattler_networking::authentication_storage::StorageBackend;
+        let mut storage = AuthenticationStorage::empty();
+        let backend_a = std::sync::Arc::new(MemoryStorage::with_name("a"));
+        let backend_b = std::sync::Arc::new(MemoryStorage::with_name("b"));
+        storage.add_backend(backend_a.clone());
+        storage.add_backend(backend_b.clone());
+
+        backend_a
+            .store("prefix.dev", &Authentication::BearerToken("tok-a".into()))
+            .unwrap();
+        backend_b
+            .store("prefix.dev", &Authentication::BearerToken("tok-b".into()))
+            .unwrap();
+
+        // Find the listed entry for backend B and ask storage to delete just it.
+        let entries = storage.list_with_sources().unwrap();
+        let b_entry = entries
+            .iter()
+            .find(|e| e.source == backend_b.name())
+            .expect("backend B's entry should be listed");
+        storage
+            .delete_entry(&b_entry.host, &b_entry.source)
+            .unwrap();
+
+        // Backend B is empty…
+        assert!(
+            backend_b.list().unwrap().is_empty(),
+            "selected backend should be cleared"
+        );
+        // …but backend A still holds its copy.
+        assert_eq!(
+            backend_a.list().unwrap(),
+            vec![(
+                "prefix.dev".to_string(),
+                Authentication::BearerToken("tok-a".into())
+            )],
+            "unselected backend must keep its copy"
+        );
+    }
+
+    /// When the same host has OAuth credentials in multiple backends (i.e.
+    /// one entry is "active" and the rest are "shadowed"), logout must
+    /// revoke every copy's tokens at the `IdP` — not just the active one —
+    /// and clear all backends.
+    #[cfg(feature = "oauth")]
+    #[tokio::test]
+    async fn logout_revokes_oauth_tokens_in_every_backend() {
+        use rattler_networking::authentication_storage::StorageBackend;
+        let mut server = Server::new_async().await;
+        // Two backends × one access-token revoke call each = 2 hits.
+        let revoke_mock = server
+            .mock("POST", "/revoke")
+            .expect(2)
+            .with_status(200)
+            .create_async()
+            .await;
+
+        let mut storage = AuthenticationStorage::empty();
+        // Distinct names so `delete_entry` can identify each backend
+        // unambiguously (production backends always have unique identifiers
+        // — file paths, keyring type, etc.).
+        let backend_a = std::sync::Arc::new(MemoryStorage::with_name("a"));
+        let backend_b = std::sync::Arc::new(MemoryStorage::with_name("b"));
+        storage.add_backend(backend_a.clone());
+        storage.add_backend(backend_b.clone());
+
+        let oauth = Authentication::OAuth {
+            access_token: "tok".into(),
+            refresh_token: None,
+            expires_at: None,
+            token_endpoint: format!("{}/token", server.url()),
+            revocation_endpoint: Some(format!("{}/revoke", server.url())),
+            client_id: "rattler".into(),
+        };
+        // Write directly to each backend so both end up holding the entry —
+        // `storage.store()` stops at the first successful backend.
+        backend_a.store("prefix.dev", &oauth).unwrap();
+        backend_b.store("prefix.dev", &oauth).unwrap();
+
+        logout(logout_args(Some("prefix.dev"), false), storage.clone())
+            .await
+            .unwrap();
+
+        revoke_mock.assert_async().await;
+        assert!(
+            storage.list_with_sources().unwrap().is_empty(),
+            "both backends should be cleared, including the shadowed copy"
+        );
+    }
+
+    #[test]
+    fn logout_args_reject_host_combined_with_all() {
+        assert!(LogoutArgs::try_parse_from(["logout", "prefix.dev", "--all"]).is_err());
+    }
+
+    /// Without the interactive picker, a bare `auth logout` has nothing
+    /// sensible to do — clap must reject it instead of silently no-opping.
+    #[cfg(not(feature = "auth-interactive"))]
+    #[test]
+    fn logout_args_require_host_or_all_without_interactive() {
+        assert!(LogoutArgs::try_parse_from(["logout"]).is_err());
+    }
+
+    #[cfg(feature = "auth-interactive")]
+    #[test]
+    fn logout_args_allow_bare_invocation_with_interactive() {
+        assert!(LogoutArgs::try_parse_from(["logout"]).is_ok());
+    }
+
+    /// A bare interactive logout must fail fast off a TTY instead of
+    /// handing a picker to a terminal that isn't there.
+    #[cfg(feature = "auth-interactive")]
+    #[tokio::test]
+    async fn interactive_logout_without_tty_errors() {
+        use std::io::IsTerminal;
+
+        // Only meaningful where stdin/stdout aren't TTYs (CI, nextest). In an
+        // interactive `cargo test` run this would open a real picker, so skip.
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            return;
+        }
+
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("example.com", &Authentication::BearerToken("tok".into()))
+            .unwrap();
+
+        let result = logout(logout_args(None, false), storage).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotInteractive)
+        ));
     }
 }

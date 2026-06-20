@@ -484,14 +484,13 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 4,
+                    "repodata_revisions": {
+                        "v4": {
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {
@@ -576,12 +575,11 @@ mod test {
                 "repodata_version": 1,
                 "info": {
                     "subdir": "noarch",
-                    "repodata_revisions": [
-                        {
-                            "revision": 3,
+                    "repodata_revisions": {
+                        "v3": {
                             "n_packages": 1
                         }
-                    ]
+                    }
                 },
                 "packages": {},
                 "packages.conda": {
@@ -1372,7 +1370,20 @@ mod test {
 
     #[tokio::test]
     async fn test_ensure_run_exports_remote_conda_forge() {
-        let gateway = Gateway::new();
+        // conda-forge's sharded repodata now embeds `run_exports` directly in the
+        // records. Disable sharded repodata so that the records are fetched from
+        // `repodata.json` (which does not contain `run_exports`). This ensures the
+        // records start out without `run_exports` and allows us to exercise
+        // `ensure_run_exports`.
+        let gateway = Gateway::builder()
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    sharded_enabled: false,
+                    ..SourceConfig::default()
+                },
+                ..crate::ChannelConfig::default()
+            })
+            .finish();
 
         let records = gateway
             .query(
