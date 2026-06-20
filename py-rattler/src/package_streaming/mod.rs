@@ -5,7 +5,6 @@ use pyo3_file::PyFileLikeObject;
 use rattler_package_streaming::ExtractResult;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
-use tracing;
 use url::Url;
 
 use crate::{networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes};

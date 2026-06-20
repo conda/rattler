@@ -82,8 +82,6 @@ pyo3-file = "0.14.0"
 pyo3-log = { git = "https://github.com/pavelzw/pyo3-log", branch = "exit" }
 # pyo3-log = "0.12.4"
 tracing = { version = "0.1.44", features = ["log", "log-always"] }
-log = "0.4.32"
-tracing-subscriber = "0.3.23"
 nix = { version = "0.30.1", features = ["process"], optional = true }
 
 [build-dependencies]
