@@ -6,6 +6,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+import rattler
 from pathlib import Path
 from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import (
@@ -75,6 +76,7 @@ async def test_download_to_path(tmpdir: Path) -> None:
 async def test_fetch_raw_package_file_logs_to_python_logging(caplog, package_server: str) -> None:
     logger_name = "rattler.package_streaming"
     caplog.set_level(logging.DEBUG, logger=logger_name)
+    rattler.setup_logging()
 
     raw = await fetch_raw_package_file_from_url(
         Client.default_client(),

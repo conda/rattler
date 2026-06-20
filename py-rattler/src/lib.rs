@@ -98,9 +98,21 @@ impl<T> Deref for Wrap<T> {
     }
 }
 
+#[pyfunction]
+fn setup_logging(py: Python<'_>) -> PyResult<()> {
+    pyo3_log::Logger::new(py, pyo3_log::Caching::LoggersAndLevels)?
+        .set_prefix("rattler")
+        .install()
+        .map(|_| ())
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "failed to initialize Python logging bridge: {e}"
+            ))
+        })
+}
+
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
-    pyo3_log::init();
     m.add_class::<PyVersion>()?;
     m.add_class::<PyVersionSpec>()?;
 
@@ -188,6 +200,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index_fs, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index_s3, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(setup_logging, &m).unwrap())?;
 
     m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
