@@ -123,6 +123,7 @@ pub async fn fetch_file_from_remote_url(
     url: Url,
     target_path: &std::path::Path,
 ) -> Result<Option<Vec<u8>>, ExtractError> {
+    tracing::debug!("Fetching {} from {url}", target_path.to_string_lossy());
     match fetch_file_from_remote_sparse(client.clone(), url.clone(), target_path).await {
         Ok(result) => return Ok(result),
         Err(ExtractError::UnsupportedArchiveType) => {
