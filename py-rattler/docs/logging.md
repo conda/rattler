@@ -15,10 +15,10 @@ rattler.setup_logging()
 ```
 
 Rust tracing targets are exposed below the `rattler` logger namespace. For
-example, package streaming logs are emitted as `rattler.package_streaming`.
+example, package streaming logs are emitted as `rattler.rattler_package_streaming`.
 
 ```python
-logging.getLogger("rattler.package_streaming").setLevel(logging.DEBUG)
+logging.getLogger("rattler.rattler_package_streaming").setLevel(logging.DEBUG)
 ```
 
 `setup_logging()` installs a process-wide Rust logger. Calling it more than once,
