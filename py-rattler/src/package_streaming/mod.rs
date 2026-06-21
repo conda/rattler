@@ -101,10 +101,6 @@ pub fn fetch_raw_package_file_from_url<'a>(
 ) -> PyResult<Bound<'a, PyAny>> {
     let url = parse_url(&url)?;
     let path = PathBuf::from(path);
-    tracing::debug!(
-        "fetching raw package file from remote package: {}",
-        path.display()
-    );
     let future = async move {
         let bytes = rattler_package_streaming::reqwest::fetch::fetch_file_from_remote_url(
             client.into(),

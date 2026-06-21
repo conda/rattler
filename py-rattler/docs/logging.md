@@ -1,8 +1,9 @@
 # logging
 
 Py-rattler does not enable Rust logging when the package is imported. To forward
-Rust logs to Python's `logging` module, call `setup_logging()` once during
-application startup.
+Rust `tracing` events, such as `tracing::info!` and `tracing::debug!`, to
+Python's `logging` module, call `setup_logging()` once during application
+startup.
 
 ```python
 import logging
@@ -13,8 +14,8 @@ logging.basicConfig(level=logging.DEBUG)
 rattler.setup_logging()
 ```
 
-Rust log targets are exposed below the `rattler` logger namespace. For example,
-package streaming logs are emitted as `rattler.package_streaming`.
+Rust tracing targets are exposed below the `rattler` logger namespace. For
+example, package streaming logs are emitted as `rattler.package_streaming`.
 
 ```python
 logging.getLogger("rattler.package_streaming").setLevel(logging.DEBUG)

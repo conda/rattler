@@ -103,12 +103,15 @@ fn setup_logging(py: Python<'_>) -> PyResult<()> {
     pyo3_log::Logger::new(py, pyo3_log::Caching::LoggersAndLevels)?
         .set_prefix("rattler")
         .install()
-        .map(|_| ())
         .map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
                 "failed to initialize Python logging bridge: {e}"
             ))
-        })
+        })?;
+
+    let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry());
+
+    Ok(())
 }
 
 #[pymodule]
