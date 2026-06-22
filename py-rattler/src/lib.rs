@@ -114,10 +114,8 @@ fn setup_logging(py: Python<'_>) -> PyResult<()> {
                 ))
             })?;
 
-        if PYTHON_LOGGING_RESET_HANDLE.set(handle).is_err() {
-            if let Some(handle) = PYTHON_LOGGING_RESET_HANDLE.get() {
-                handle.reset();
-            }
+        if let Err(handle) = PYTHON_LOGGING_RESET_HANDLE.set(handle) {
+            handle.reset();
         }
     }
 

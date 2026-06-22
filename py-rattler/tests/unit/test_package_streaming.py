@@ -73,7 +73,9 @@ async def test_download_to_path(tmpdir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_raw_package_file_logs_to_python_logging(caplog, package_server: str) -> None:
+async def test_fetch_raw_package_file_logs_to_python_logging(
+    caplog: pytest.LogCaptureFixture, package_server: str
+) -> None:
     rattler.setup_logging()
     caplog.set_level(logging.DEBUG, logger="rattler")
     rattler.setup_logging()
