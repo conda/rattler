@@ -57,12 +57,10 @@ del _get_rattler_version
 def setup_logging() -> None:
     """Forward Rust logs to Python's ``logging`` module.
 
-    Logging is disabled by default. Call this once during application startup
-    to route Rust tracing output through Python logging under the ``rattler``
-    logger namespace.
-
-    Raises:
-        RuntimeError: If another Rust logger has already been installed.
+    Logging is disabled by default. Call this during application startup to
+    route Rust tracing output through Python logging under the ``rattler``
+    logger namespace. Calling it again is safe and makes rattler pick up
+    changes to Python logging configuration.
     """
     _setup_logging()
 

@@ -31,7 +31,7 @@ mod exceptions;
 mod index_json;
 mod run_exports_json;
 
-use std::ops::Deref;
+use std::{ops::Deref, sync::OnceLock};
 
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
@@ -98,16 +98,28 @@ impl<T> Deref for Wrap<T> {
     }
 }
 
+static PYTHON_LOGGING_RESET_HANDLE: OnceLock<pyo3_log::ResetHandle> = OnceLock::new();
+
 #[pyfunction]
 fn setup_logging(py: Python<'_>) -> PyResult<()> {
-    pyo3_log::Logger::new(py, pyo3_log::Caching::LoggersAndLevels)?
-        .set_prefix("rattler")
-        .install()
-        .map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                "failed to initialize Python logging bridge: {e}"
-            ))
-        })?;
+    if let Some(handle) = PYTHON_LOGGING_RESET_HANDLE.get() {
+        handle.reset();
+    } else {
+        let handle = pyo3_log::Logger::new(py, pyo3_log::Caching::LoggersAndLevels)?
+            .set_prefix("rattler")
+            .install()
+            .map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "failed to initialize Python logging bridge: {e}"
+                ))
+            })?;
+
+        if PYTHON_LOGGING_RESET_HANDLE.set(handle).is_err() {
+            if let Some(handle) = PYTHON_LOGGING_RESET_HANDLE.get() {
+                handle.reset();
+            }
+        }
+    }
 
     let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry());
 
