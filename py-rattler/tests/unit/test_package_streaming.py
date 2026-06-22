@@ -1,12 +1,13 @@
 import io
-import logging
+import subprocess
+import sys
+import textwrap
 import threading
 from collections.abc import Generator
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
-import rattler
 from pathlib import Path
 from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import (
@@ -15,7 +16,6 @@ from rattler.package_streaming import (
     download_to_path,
     download_to_writer,
     extract,
-    fetch_raw_package_file_from_url,
 )
 from rattler.networking.client import Client
 
@@ -72,25 +72,54 @@ async def test_download_to_path(tmpdir: Path) -> None:
     assert (extract_dest / "info" / "index.json").exists()
 
 
-@pytest.mark.asyncio
-async def test_fetch_raw_package_file_logs_to_python_logging(caplog, package_server: str) -> None:
-    logger_name = "rattler.package_streaming"
-    caplog.set_level(logging.DEBUG, logger=logger_name)
-    rattler.setup_logging()
+def test_fetch_raw_package_file_logs_to_python_logging(package_server: str) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                f"""
+                import asyncio
+                import logging
 
-    raw = await fetch_raw_package_file_from_url(
-        Client.default_client(),
-        package_server,
-        "info/index.json",
+                import rattler
+                from rattler.networking.client import Client
+                from rattler.package_streaming import fetch_raw_package_file_from_url
+
+
+                class Capture(logging.Handler):
+                    def emit(self, record):
+                        print(f"{{record.name}} {{record.levelname}} {{record.getMessage()}}")
+
+
+                logger = logging.getLogger("rattler")
+                logger.setLevel(logging.DEBUG)
+                logger.addHandler(Capture())
+
+                rattler.setup_logging()
+
+
+                async def main():
+                    raw = await fetch_raw_package_file_from_url(
+                        Client.default_client(),
+                        {package_server!r},
+                        "info/index.json",
+                    )
+                    assert raw
+
+
+                asyncio.run(main())
+                """
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
 
-    assert raw
-    assert any(
-        record.name == logger_name
-        and record.levelno == logging.DEBUG
-        and "fetching raw package file from remote package: info/index.json" in record.getMessage()
-        for record in caplog.records
-    )
+    assert result.returncode == 0, result.stderr
+    assert "rattler.rattler_package_streaming" in result.stdout
+    assert "DEBUG Fetching info/index.json from" in result.stdout
 
 
 @pytest.mark.asyncio
