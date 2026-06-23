@@ -81,9 +81,9 @@ struct LoginArgs {
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     oauth_client_secret: Option<String>,
 
-    /// OAuth flow: auto (default), auth-code, device-code
+    /// OAuth flow: device-code (default), auth-code, auto
     #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"], help_heading = "OAuth/OIDC Authentication")]
+    #[clap(long, requires = "oauth", value_parser = ["device-code", "auth-code", "auto"], help_heading = "OAuth/OIDC Authentication")]
     oauth_flow: Option<String>,
 
     /// Additional OAuth scopes to request (repeatable)
@@ -361,7 +361,7 @@ async fn login(
         if args.oauth || auto_default.is_some() {
             if !args.oauth {
                 eprintln!(
-                    "No credentials provided; using OAuth browser login for {}.",
+                    "No credentials provided; using OAuth device code login for {}.",
                     args.host
                 );
             }
@@ -382,8 +382,8 @@ async fn login(
 
             let flow = match args.oauth_flow.as_deref() {
                 Some("auth-code") => oauth::OAuthFlow::AuthCode,
-                Some("device-code") => oauth::OAuthFlow::DeviceCode,
-                _ => oauth::OAuthFlow::Auto,
+                Some("auto") => oauth::OAuthFlow::Auto,
+                _ => oauth::OAuthFlow::DeviceCode,
             };
 
             let redirect_uri = args
