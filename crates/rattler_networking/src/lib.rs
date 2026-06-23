@@ -23,7 +23,7 @@ pub use s3_middleware::S3Middleware;
 pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod challenge_middleware;
-pub mod oauth_refresh;
+pub(crate) mod oauth_refresh;
 
 mod lazy_client;
 pub mod mirror_middleware;
