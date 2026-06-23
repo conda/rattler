@@ -89,8 +89,8 @@ async def test_fetch_raw_package_file_logs_to_python_logging(
     assert raw
     assert any(
         record.name.startswith("rattler.rattler_package_streaming")
-        and record.levelno == logging.DEBUG
-        and "Fetching info/index.json from" in record.getMessage()
+        and "fetch_file_from_remote_url" in record.getMessage()
+        and "url=" in record.getMessage()
         for record in caplog.records
     )
 
