@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/conda/rattler/compare/rattler_upload-v0.8.0...rattler_upload-v0.8.1) - 2026-06-17
+
+### Other
+
+- update opendal and upload concurrently ([#2518](https://github.com/conda/rattler/pull/2518))
+
+## [0.8.0](https://github.com/conda/rattler/compare/rattler_upload-v0.7.4...rattler_upload-v0.8.0) - 2026-06-17
+
+### Added
+
+- [**breaking**] challenge-reactive AuthChallengeMiddleware with prefix.dev OIDC wiring ([#2504](https://github.com/conda/rattler/pull/2504))
+
+### Other
+
+- update, and use latest sigstore ([#2516](https://github.com/conda/rattler/pull/2516))
+
 ## [0.7.4](https://github.com/conda/rattler/compare/rattler_upload-v0.7.3...rattler_upload-v0.7.4) - 2026-06-09
 
 ### Other

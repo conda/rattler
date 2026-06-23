@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.6](https://github.com/conda/rattler/compare/rattler_index-v0.30.5...rattler_index-v0.30.6) - 2026-06-17
+
+### Other
+
+- update opendal and upload concurrently ([#2518](https://github.com/conda/rattler/pull/2518))
+
+## [0.30.5](https://github.com/conda/rattler/compare/rattler_index-v0.30.4...rattler_index-v0.30.5) - 2026-06-17
+
+### Fixed
+
+- *(rattler_index)* use atomic writes for repodata.json to support memory-mapped files ([#2511](https://github.com/conda/rattler/pull/2511))
+
 ## [0.30.4](https://github.com/conda/rattler/compare/rattler_index-v0.30.3...rattler_index-v0.30.4) - 2026-06-09
 
 ### Fixed

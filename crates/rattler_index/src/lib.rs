@@ -1385,7 +1385,13 @@ pub async fn index_fs_with_channel_metadata(
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let root = channel.canonicalize()?;
+    config.root = Some(root.to_string_lossy().to_string());
+    // Write through a temp dir on the same volume and rename over the target,
+    // so a memory-mapped repodata.json isn't truncated in place (fails with
+    // ERROR_USER_MAPPED_FILE on Windows). `.tmp` is skipped during subdir
+    // enumeration since it doesn't parse as a `Platform`.
+    config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let builder = config.into_builder();
     let op = Operator::new(builder)?.finish();
     index_with_channel_metadata(
@@ -1756,7 +1762,10 @@ pub async fn ensure_channel_initialized_fs_with_channel_metadata(
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let root = channel.canonicalize()?;
+    config.root = Some(root.to_string_lossy().to_string());
+    // Atomic writes, see `index_fs_with_channel_metadata`.
+    config.atomic_write_dir = Some(root.join(".tmp").to_string_lossy().to_string());
     let op = Operator::new(config.into_builder())?.finish();
     ensure_channel_initialized_with_channel_metadata(&op, channel_metadata).await
 }
