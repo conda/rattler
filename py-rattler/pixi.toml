@@ -10,6 +10,9 @@ license = "BSD-3-Clause"
 exclude-newer = "7d"
 preview = ["pixi-build"]
 
+[exclude-newer]
+pixi-build-python = "0d"
+
 [package]
 name = "py-rattler"
 
