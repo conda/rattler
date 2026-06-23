@@ -83,9 +83,9 @@
 <a href=#81 id=81 data-nosnippet>81</a>    #[clap(long, requires = <span class="string">"oauth"</span>, help_heading = <span class="string">"OAuth/OIDC Authentication"</span>)]
 <a href=#82 id=82 data-nosnippet>82</a>    </span>oauth_client_secret: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// OAuth flow: auto (default), auth-code, device-code
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// OAuth flow: device-code (default), auth-code, auto
 <a href=#85 id=85 data-nosnippet>85</a>    </span><span class="attr">#[cfg(feature = <span class="string">"oauth"</span>)]
-<a href=#86 id=86 data-nosnippet>86</a>    #[clap(long, requires = <span class="string">"oauth"</span>, value_parser = [<span class="string">"auto"</span>, <span class="string">"auth-code"</span>, <span class="string">"device-code"</span>]</span>, help_heading = <span class="string">"OAuth/OIDC Authentication"</span>)]
+<a href=#86 id=86 data-nosnippet>86</a>    #[clap(long, requires = <span class="string">"oauth"</span>, value_parser = [<span class="string">"device-code"</span>, <span class="string">"auth-code"</span>, <span class="string">"auto"</span>]</span>, help_heading = <span class="string">"OAuth/OIDC Authentication"</span>)]
 <a href=#87 id=87 data-nosnippet>87</a>    oauth_flow: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Additional OAuth scopes to request (repeatable)
@@ -363,7 +363,7 @@
 <a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">if </span>args.oauth || auto_default.is_some() {
 <a href=#362 id=362 data-nosnippet>362</a>            <span class="kw">if </span>!args.oauth {
 <a href=#363 id=363 data-nosnippet>363</a>                <span class="macro">eprintln!</span>(
-<a href=#364 id=364 data-nosnippet>364</a>                    <span class="string">"No credentials provided; using OAuth browser login for {}."</span>,
+<a href=#364 id=364 data-nosnippet>364</a>                    <span class="string">"No credentials provided; using OAuth device code login for {}."</span>,
 <a href=#365 id=365 data-nosnippet>365</a>                    args.host
 <a href=#366 id=366 data-nosnippet>366</a>                );
 <a href=#367 id=367 data-nosnippet>367</a>            }
@@ -384,8 +384,8 @@
 <a href=#382 id=382 data-nosnippet>382</a>
 <a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">let </span>flow = <span class="kw">match </span>args.oauth_flow.as_deref() {
 <a href=#384 id=384 data-nosnippet>384</a>                <span class="prelude-val">Some</span>(<span class="string">"auth-code"</span>) =&gt; oauth::OAuthFlow::AuthCode,
-<a href=#385 id=385 data-nosnippet>385</a>                <span class="prelude-val">Some</span>(<span class="string">"device-code"</span>) =&gt; oauth::OAuthFlow::DeviceCode,
-<a href=#386 id=386 data-nosnippet>386</a>                <span class="kw">_ </span>=&gt; oauth::OAuthFlow::Auto,
+<a href=#385 id=385 data-nosnippet>385</a>                <span class="prelude-val">Some</span>(<span class="string">"auto"</span>) =&gt; oauth::OAuthFlow::Auto,
+<a href=#386 id=386 data-nosnippet>386</a>                <span class="kw">_ </span>=&gt; oauth::OAuthFlow::DeviceCode,
 <a href=#387 id=387 data-nosnippet>387</a>            };
 <a href=#388 id=388 data-nosnippet>388</a>
 <a href=#389 id=389 data-nosnippet>389</a>            <span class="kw">let </span>redirect_uri = args
