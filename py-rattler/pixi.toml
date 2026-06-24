@@ -46,7 +46,6 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-# rust = ">=1.93.1"
 rust-src = ">=1.93.1"
 
 [feature.test.tasks]
