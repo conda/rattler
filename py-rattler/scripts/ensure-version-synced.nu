@@ -1,7 +1,9 @@
 #!/usr/bin/env nu
 
-let py = (open pyproject.toml | get project.version)
-let cargo = (open Cargo.toml | get package.version)
+const py_rattler_dir = path self ..
+
+let py = (open ($py_rattler_dir | path join pyproject.toml) | get project.version)
+let cargo = (open ($py_rattler_dir | path join Cargo.toml) | get package.version)
 
 if $py == $cargo {
   exit 0
