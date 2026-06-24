@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    environment: release
     steps:
       - name: Obtain GitHub app token
         id: octo-sts
