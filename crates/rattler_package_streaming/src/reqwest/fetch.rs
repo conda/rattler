@@ -33,8 +33,9 @@
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use rattler_conda_types::package::PackageFile;
+use rattler_redaction::{DEFAULT_REDACTION_STR, redact_known_secrets_from_url};
 use reqwest_middleware::ClientWithMiddleware;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 pub use super::full_download::{
@@ -118,6 +119,7 @@ pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
 /// unavailable.
 ///
 /// Returns `Ok(None)` when the target path does not exist in the archive.
+#[instrument(skip_all, fields(url = %redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
 pub async fn fetch_file_from_remote_url(
     client: ClientWithMiddleware,
     url: Url,

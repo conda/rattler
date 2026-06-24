@@ -199,7 +199,7 @@ pub struct PyAddHeadersMiddleware {
 
 impl Clone for PyAddHeadersMiddleware {
     fn clone(&self) -> Self {
-        Python::with_gil(|py| Self {
+        Python::attach(|py| Self {
             callback: self.callback.clone_ref(py),
         })
     }
@@ -250,7 +250,7 @@ impl Middleware for AddHeadersMiddleware {
 
         // Call the Python callback with host and path
         let callback = self.callback.clone();
-        let headers_to_add: Option<HashMap<String, String>> = Python::with_gil(
+        let headers_to_add: Option<HashMap<String, String>> = Python::attach(
             |py| -> reqwest_middleware::Result<Option<HashMap<String, String>>> {
                 let result = callback
                     .call1(py, (host.as_str(), path.as_str()))

@@ -87,7 +87,7 @@ impl PyAboutJson {
                 >(client.into(), url)
                 .await;
 
-            Python::with_gil(|py| match about_json {
+            Python::attach(|py| match about_json {
                 Ok(r) => Ok(Some(Py::new(py, PyAboutJson::from(r))?.into_any())),
                 Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),

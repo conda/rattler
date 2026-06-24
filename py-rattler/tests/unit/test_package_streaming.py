@@ -1,6 +1,12 @@
 import io
+import logging
+import threading
+from collections.abc import Generator
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+import rattler
 from pathlib import Path
 from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import (
@@ -9,12 +15,29 @@ from rattler.package_streaming import (
     download_to_path,
     download_to_writer,
     extract,
+    fetch_raw_package_file_from_url,
 )
 from rattler.networking.client import Client
 
 
 def get_test_data() -> Path:
     return (Path(__file__).parent / "../../../test-data/test-server/repo/noarch/test-package-0.1-0.tar.bz2").absolute()
+
+
+@pytest.fixture
+def package_server() -> Generator[str]:
+    package_path = get_test_data()
+    handler = partial(SimpleHTTPRequestHandler, directory=str(package_path.parent))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/{package_path.name}"
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
 
 
 def test_extract(tmpdir: Path) -> None:
@@ -47,6 +70,29 @@ async def test_download_to_path(tmpdir: Path) -> None:
 
     assert (extract_dest / "info").exists()
     assert (extract_dest / "info" / "index.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_fetch_raw_package_file_logs_to_python_logging(
+    caplog: pytest.LogCaptureFixture, package_server: str
+) -> None:
+    rattler.setup_logging()
+    caplog.set_level(logging.DEBUG, logger="rattler")
+    rattler.setup_logging()
+
+    raw = await fetch_raw_package_file_from_url(
+        Client.default_client(),
+        package_server,
+        "info/index.json",
+    )
+
+    assert raw
+    assert any(
+        record.name.startswith("rattler.rattler_package_streaming")
+        and "fetch_file_from_remote_url" in record.getMessage()
+        and "url=" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
