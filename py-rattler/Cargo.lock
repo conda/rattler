@@ -2323,6 +2323,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-auth"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "150fa4a9462ef926824cf4519c84ed652ca8f4fbae34cb8af045b5cbcaf98822"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3266,9 +3275,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "opendal"
-version = "0.56.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97b31d3d8e99a85d83b73ec26647f5607b80578ed9375810b6e44ffa3590a236"
+checksum = "96c9c85ce253ff87225e7669979d877a20c98a06604ec9d6dd5f4473e08f1ae1"
 dependencies = [
  "opendal-core",
  "opendal-layer-retry",
@@ -3278,9 +3287,9 @@ dependencies = [
 
 [[package]]
 name = "opendal-core"
-version = "0.56.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1849dd2687e173e776d3af5fce1ba3ae47b9dd37a09d1c4deba850ef45fe00ca"
+checksum = "c4f8607c90e2c963a91467f50fb49fbc7fb3d573f88cea219ca59ccd3740b309"
 dependencies = [
  "anyhow",
  "base64",
@@ -3290,10 +3299,10 @@ dependencies = [
  "http-body 1.0.1",
  "jiff",
  "log",
- "md-5 0.10.6",
+ "md-5 0.11.0",
  "mea",
  "percent-encoding",
- "quick-xml 0.38.4",
+ "quick-xml 0.39.4",
  "reqsign-core",
  "reqwest",
  "serde",
@@ -3306,9 +3315,9 @@ dependencies = [
 
 [[package]]
 name = "opendal-layer-retry"
-version = "0.56.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4eac134ffa4ddda6131a640a84a5315996424b9416c85052f8c64c1a33b70ad4"
+checksum = "7b2a25a718afb81fad81cb9a0580a1cb989221fa2317f888c6a37f8dad408eb7"
 dependencies = [
  "backon",
  "log",
@@ -3317,9 +3326,9 @@ dependencies = [
 
 [[package]]
 name = "opendal-service-fs"
-version = "0.56.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf0be0417abeeb0053376d816b90fceb9ca98f20dfb54ebf1f2a282729f83663"
+checksum = "22e89a665fef0e6bd249cf5ea47fc174b7ba892159bee4b9382528b1ca873a2c"
 dependencies = [
  "bytes",
  "log",
@@ -3331,18 +3340,18 @@ dependencies = [
 
 [[package]]
 name = "opendal-service-s3"
-version = "0.56.0"
+version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dadddeb9bb50b0d30927dd914c298c4ddca47e4c1cfa7674d311f0cf9b051c8"
+checksum = "313d46c9f5ae70bca26b7c3e3fbb9b639292625f28af73aa016f47e788af9deb"
 dependencies = [
  "base64",
  "bytes",
  "crc32c",
  "http 1.4.0",
  "log",
- "md-5 0.10.6",
+ "md-5 0.11.0",
  "opendal-core",
- "quick-xml 0.38.4",
+ "quick-xml 0.39.4",
  "reqsign-aws-v4",
  "reqsign-core",
  "reqsign-file-read-tokio",
@@ -3941,6 +3950,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.39.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
+dependencies = [
+ "memchr",
  "serde",
 ]
 
@@ -4107,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.44.4"
+version = "0.45.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4154,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.9.2"
+version = "0.10.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4186,7 +4204,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.47.1"
+version = "0.47.2"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4226,7 +4244,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "console",
  "fs-err",
@@ -4260,7 +4278,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.4"
+version = "0.30.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4298,7 +4316,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.1"
+version = "0.31.3"
 dependencies = [
  "ahash",
  "file_url",
@@ -4333,7 +4351,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.66"
+version = "0.2.67"
 dependencies = [
  "configparser",
  "dirs",
@@ -4362,7 +4380,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.28.1"
+version = "0.29.0"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4377,9 +4395,11 @@ dependencies = [
  "dbus-secret-service-keyring-store",
  "dirs",
  "fs-err",
+ "futures",
  "getrandom 0.4.2",
  "google-cloud-auth",
  "http 1.4.0",
+ "http-auth",
  "itertools 0.14.0",
  "keyring-core",
  "netrc-rs",
@@ -4397,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.26.4"
+version = "0.26.5"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4455,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.29.5"
+version = "0.29.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4517,7 +4537,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4533,7 +4553,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.6"
+version = "0.27.7"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4552,7 +4572,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "7.1.3"
+version = "7.2.0"
 dependencies = [
  "futures",
  "hex",
@@ -4569,7 +4589,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "archspec",
  "libloading",
@@ -4807,9 +4827,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.10.2"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a085c6cecab01bf88df532b7a03f066d5ab92e461bf4614a9de13f562eb163"
+checksum = "cbc9b6c092a52fadb381b74d0f859b321ea7b9f4f8365acd7e4947f3a26517aa"
 dependencies = [
  "ahash",
  "bitvec",
