@@ -11,7 +11,7 @@ exclude-newer = "7d"
 preview = ["pixi-build"]
 
 [exclude-newer]
-# TODO: remove
+# TODO: remove 29.06.2026
 pixi-build-python = "0d"
 
 [package]
