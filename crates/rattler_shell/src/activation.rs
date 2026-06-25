@@ -655,6 +655,16 @@ impl<T: Shell + Clone> Activator<T> {
             activation_command.env_clear().envs(environment);
         }
 
+        // On Windows, force the subprocess to use UTF-8 encoding for its output.
+        // Without this, Python subprocesses may use the system 'charmap' codec
+        // (e.g. CP1252) even when the active code page is 65001, causing
+        // UnicodeEncodeError when the output contains non-ASCII characters.
+        #[cfg(target_os = "windows")]
+        {
+            activation_command.env("PYTHONUTF8", "1");
+            activation_command.env("PYTHONIOENCODING", "utf-8");
+        }
+
         let activation_result = activation_command.output()?;
 
         if !activation_result.status.success() {
