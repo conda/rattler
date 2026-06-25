@@ -46,7 +46,10 @@ async fn get_reader(
                 .await
                 .map_err(ExtractError::IoError)?;
 
-        Ok(Either::Left(BufReader::new(file)))
+        Ok(Either::Left(BufReader::with_capacity(
+            crate::tokio::shared::DEFAULT_BUF_SIZE,
+            file,
+        )))
     } else {
         // Send the request for the file
         let mut request = client.get(url.clone());
@@ -117,7 +120,11 @@ pub async fn extract_tar_bz2(
 ) -> Result<ExtractResult, ExtractError> {
     let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
     // The `response` is used to stream in the package data
-    let result = crate::tokio::async_read::extract_tar_bz2(reader, destination).await?;
+    let result = if url.scheme() == "file" {
+        crate::tokio::async_read::extract_tar_bz2(reader, destination).await?
+    } else {
+        crate::tokio::async_read::extract_tar_bz2_via_buffering(reader, destination).await?
+    };
     if let Some(reporter) = &reporter {
         reporter.on_download_complete();
     }
