@@ -24,7 +24,7 @@ use tokio::{
     time::{Duration, Instant, sleep},
 };
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::pty::ptsname_r;
 
 #[cfg(target_os = "netbsd")]
