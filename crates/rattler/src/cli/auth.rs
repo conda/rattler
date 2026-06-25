@@ -196,6 +196,10 @@ pub enum AuthenticationCLIError {
     #[error("General http request error")]
     ReqwestError(#[from] reqwest::Error),
 
+    /// Network access was requested while offline mode was enabled.
+    #[error("network access is disabled by offline mode")]
+    Offline,
+
     /// JSON parsing failed
     #[error("Failed to parse JSON: {0}")]
     JsonParseError(String),
@@ -350,15 +354,27 @@ pub enum ValidationResult {
 /// This function validates the authentication method based on the host and
 /// stores the credentials if successful. For prefix.dev hosts, it validates the
 /// token by making a GraphQL API call.
+#[cfg(test)]
 async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    login_with_offline(args, storage, false).await
+}
+
+async fn login_with_offline(
+    args: LoginArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
     // explicit `--oauth` *or* no explicit method on an OAuth-capable host
     #[cfg(feature = "oauth")]
     {
         let auto_default = default_oauth_for_login(&args);
         if args.oauth || auto_default.is_some() {
+            if offline {
+                return Err(AuthenticationCLIError::Offline);
+            }
             if !args.oauth {
                 eprintln!(
                     "No credentials provided; using OAuth device code login for {}.",
@@ -463,6 +479,10 @@ async fn login(
 
     // Only validate token for prefix.dev
     if args.host.contains("prefix.dev") {
+        if offline {
+            return Err(AuthenticationCLIError::Offline);
+        }
+
         // Extract the token from BearerToken
         let token = match &auth {
             Authentication::BearerToken(t) => t,
@@ -652,9 +672,18 @@ fn logout_candidate_keys(host: &str) -> Result<Vec<String>, AuthenticationCLIErr
     Ok(keys)
 }
 
+#[cfg(test)]
 async fn logout(
     args: LogoutArgs,
     storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
+    logout_with_offline(args, storage, false).await
+}
+
+async fn logout_with_offline(
+    args: LogoutArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
 ) -> Result<(), AuthenticationCLIError> {
     // Enumerate hosts without reading secrets — important on macOS where each
     // keychain read prompts the user. We fetch credentials lazily, once per
@@ -721,18 +750,25 @@ async fn logout(
             ..
         } = &auth
         {
-            eprintln!(
-                "Revoking OAuth tokens for {} ({})",
-                entry.host, entry.source
-            );
-            oauth::revoke_tokens(
-                revocation_endpoint,
-                access_token,
-                refresh_token.as_deref(),
-                client_id,
-                None,
-            )
-            .await;
+            if offline {
+                eprintln!(
+                    "Skipping OAuth token revocation for {} ({}) because offline mode is enabled",
+                    entry.host, entry.source
+                );
+            } else {
+                eprintln!(
+                    "Revoking OAuth tokens for {} ({})",
+                    entry.host, entry.source
+                );
+                oauth::revoke_tokens(
+                    revocation_endpoint,
+                    access_token,
+                    refresh_token.as_deref(),
+                    client_id,
+                    None,
+                )
+                .await;
+            }
         }
         // Silence unused-variable warning when oauth is off.
         let _ = auth;
@@ -1056,11 +1092,16 @@ async fn status(
 
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
+    execute_with_offline(args, false).await
+}
+
+/// CLI entrypoint for authentication with optional offline mode.
+pub async fn execute_with_offline(args: Args, offline: bool) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
-        Subcommand::Login(args) => login(args, storage).await,
-        Subcommand::Logout(args) => logout(args, storage).await,
+        Subcommand::Login(args) => login_with_offline(args, storage, offline).await,
+        Subcommand::Logout(args) => logout_with_offline(args, storage, offline).await,
         Subcommand::Status(args) => status(args, storage).await,
     }
 }

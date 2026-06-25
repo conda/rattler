@@ -25,7 +25,7 @@ use tokio;
 
 use crate::{
     commands::{
-        client::create_client_with_middleware,
+        client::{create_client_with_middleware, repodata_cache_action},
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
@@ -72,7 +72,7 @@ pub struct Opt {
 }
 
 /// CLI entry point for `rattler exec`.
-pub async fn exec(opt: Opt) -> miette::Result<()> {
+pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -123,6 +123,7 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
         opt.force_reinstall,
         opt.list.as_deref(),
         &cache_dir,
+        offline,
     )
     .await?;
 
@@ -187,6 +188,7 @@ async fn create_exec_prefix(
     force_reinstall: bool,
     list: Option<&str>,
     cache_dir: &Path,
+    offline: bool,
 ) -> miette::Result<PathBuf> {
     let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
@@ -207,7 +209,7 @@ async fn create_exec_prefix(
         return Ok(prefix);
     }
 
-    let download_client = create_client_with_middleware()?;
+    let download_client = create_client_with_middleware(offline)?;
 
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
@@ -218,6 +220,7 @@ async fn create_exec_prefix(
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
+                cache_action: repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),
