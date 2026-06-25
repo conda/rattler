@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 
 //! Networking utilities for Rattler, specifically authenticating requests
-pub use authentication_middleware::AuthenticationMiddleware;
+pub use authentication_middleware::{AuthenticationExpired, AuthenticationMiddleware};
 pub use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 pub use challenge_middleware::{
     AuthChallengeMiddleware, AuthFlow, AuthFlowError, BearerToken, Challenge,

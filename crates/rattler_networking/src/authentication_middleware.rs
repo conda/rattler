@@ -15,6 +15,17 @@ use crate::{
     oauth_refresh,
 };
 
+/// Error returned when a request to `host` failed authentication while the
+/// stored OAuth credential for that host was expired and could not be
+/// refreshed. Surfaced so callers can tell the user to authenticate again
+/// (e.g. by re-running their login command).
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("authentication for '{host}' has expired; please re-authenticate")]
+pub struct AuthenticationExpired {
+    /// The host that requires re-authentication.
+    pub host: String,
+}
+
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]
 pub struct AuthenticationMiddleware {
@@ -42,6 +53,15 @@ impl Middleware for AuthenticationMiddleware {
                 next.run(req, extensions).await
             }
             Ok((url, auth_with_key)) => {
+                // Remember whether we started with an OAuth credential for this
+                // host, so that if the refresh drops it (expired and not
+                // refreshable) and the request still fails authentication, we
+                // can tell the user to re-authenticate.
+                let oauth_host = match &auth_with_key {
+                    Some((_, Authentication::OAuth { .. })) => url.host_str().map(str::to_string),
+                    _ => None,
+                };
+
                 // If this is an OAuth token, attempt refresh if expired
                 let auth = match auth_with_key {
                     Some((matched_key, auth)) => {
@@ -51,13 +71,32 @@ impl Middleware for AuthenticationMiddleware {
                     None => None,
                 };
 
+                // An OAuth credential the refresh dropped (now `None`) means the
+                // request goes out unauthenticated and any auth-challenge
+                // middleware gets its turn; if the request still comes back
+                // unauthorized, the user needs to re-authenticate.
+                let reauth_host = match (&auth, oauth_host) {
+                    (None, Some(host)) => Some(host),
+                    _ => None,
+                };
+
                 let url = Self::authenticate_url(url, &auth);
 
                 let mut req = req;
                 *req.url_mut() = url;
 
                 let req = Self::authenticate_request(req, &auth).await?;
-                next.run(req, extensions).await
+                let response = next.run(req, extensions).await?;
+
+                if let Some(host) = reauth_host
+                    && matches!(response.status().as_u16(), 401 | 403)
+                {
+                    return Err(reqwest_middleware::Error::middleware(AuthenticationExpired {
+                        host,
+                    }));
+                }
+
+                Ok(response)
             }
         }
     }
