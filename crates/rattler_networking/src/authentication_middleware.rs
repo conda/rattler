@@ -11,9 +11,21 @@ use reqwest_middleware::{Middleware, Next};
 use url::Url;
 
 use crate::{
-    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
-    oauth_refresh,
+    Authentication, AuthenticationStorage,
+    authentication_storage::AuthenticationStorageError,
+    oauth_refresh::{self, OAuthRefreshFailure},
 };
+
+/// Error returned when a request to `host` failed authentication while the
+/// stored OAuth credential for that host was expired and could not be
+/// refreshed. Surfaced so callers can tell the user to authenticate again
+/// (e.g. by re-running their login command).
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("authentication for '{host}' has expired; please re-authenticate")]
+pub struct AuthenticationExpired {
+    /// The host that requires re-authentication.
+    pub host: String,
+}
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]
@@ -43,7 +55,7 @@ impl Middleware for AuthenticationMiddleware {
             }
             Ok((url, auth_with_key)) => {
                 // If this is an OAuth token, attempt refresh if expired
-                let auth = match auth_with_key {
+                let (auth, reauth_host) = match auth_with_key {
                     Some((matched_key, auth)) => {
                         let refresh_result = oauth_refresh::maybe_refresh_oauth(
                             &self.auth_storage,
@@ -51,14 +63,33 @@ impl Middleware for AuthenticationMiddleware {
                             &matched_key,
                         )
                         .await;
+                        // A failure that means the stored login itself is no
+                        // longer usable (vs. a transient refresh problem).
+                        let needs_reauth = matches!(
+                            refresh_result.failure(),
+                            Some(
+                                OAuthRefreshFailure::MissingRefreshToken
+                                    | OAuthRefreshFailure::ReauthenticationRequired { .. }
+                            )
+                        );
                         if let Some(failure) = refresh_result.failure() {
                             tracing::warn!(
                                 "OAuth refresh for '{matched_key}' did not produce fresh credentials: {failure}"
                             );
                         }
-                        refresh_result.into_authentication()
+                        let auth = refresh_result.into_authentication();
+                        // Only when the dead credential was actually dropped does
+                        // the request go out unauthenticated; remember the host
+                        // so we can prompt for re-authentication if it still
+                        // fails.
+                        let reauth_host = if needs_reauth && auth.is_none() {
+                            url.host_str().map(str::to_string)
+                        } else {
+                            None
+                        };
+                        (auth, reauth_host)
                     }
-                    None => None,
+                    None => (None, None),
                 };
 
                 let url = Self::authenticate_url(url, &auth);
@@ -67,7 +98,20 @@ impl Middleware for AuthenticationMiddleware {
                 *req.url_mut() = url;
 
                 let req = Self::authenticate_request(req, &auth).await?;
-                next.run(req, extensions).await
+                let response = next.run(req, extensions).await?;
+
+                // The stored login expired, could not be refreshed, and the
+                // request still came back unauthorized: surface a typed error so
+                // callers can tell the user to re-authenticate.
+                if let Some(host) = reauth_host
+                    && matches!(response.status().as_u16(), 401 | 403)
+                {
+                    return Err(reqwest_middleware::Error::middleware(
+                        AuthenticationExpired { host },
+                    ));
+                }
+
+                Ok(response)
             }
         }
     }
