@@ -178,7 +178,10 @@ struct ResolvedPackage {
 /// (including `file://` URLs).
 fn parse_remote_url(package: &str) -> Option<Url> {
     match Url::parse(package) {
-        Ok(url) if url.scheme() != "file" => Some(url),
+        // A single-character scheme is almost certainly a Windows drive letter
+        // (e.g. `C:\pkgs\foo.conda`), not a URL scheme. Treat those and
+        // `file://` URLs as local paths.
+        Ok(url) if url.scheme().len() > 1 && url.scheme() != "file" => Some(url),
         _ => None,
     }
 }
@@ -747,6 +750,24 @@ mod tests {
         .unwrap();
 
         target_package
+    }
+
+    #[test]
+    fn test_parse_remote_url_classifies_paths_and_urls() {
+        // Remote URLs.
+        assert!(parse_remote_url("https://example.com/pkg-1.0-0.conda").is_some());
+        assert!(parse_remote_url("http://example.com/pkg-1.0-0.conda").is_some());
+        assert!(parse_remote_url("s3://bucket/pkg-1.0-0.conda").is_some());
+
+        // Local paths must never be treated as remote.
+        assert!(parse_remote_url("/home/user/pkg-1.0-0.conda").is_none());
+        assert!(parse_remote_url("./pkg-1.0-0.conda").is_none());
+        assert!(parse_remote_url("pkg-1.0-0.conda").is_none());
+        // Windows drive-letter paths parse with a single-character "scheme".
+        assert!(parse_remote_url(r"C:\pkgs\pkg-1.0-0.conda").is_none());
+        assert!(parse_remote_url("C:/pkgs/pkg-1.0-0.conda").is_none());
+        // Explicit file:// URLs are local too.
+        assert!(parse_remote_url("file:///home/user/pkg-1.0-0.conda").is_none());
     }
 
     fn path_string(path: &Path) -> String {

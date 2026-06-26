@@ -39,7 +39,10 @@ async fn read_file<P: PackageFile + Send + 'static>(
 /// (including `file://` URLs).
 fn parse_remote_url(package: &str) -> Option<Url> {
     match Url::parse(package) {
-        Ok(url) if url.scheme() != "file" => Some(url),
+        // A single-character scheme is almost certainly a Windows drive letter
+        // (e.g. `C:\pkgs\foo.conda`), not a URL scheme. Treat those and
+        // `file://` URLs as local paths.
+        Ok(url) if url.scheme().len() > 1 && url.scheme() != "file" => Some(url),
         _ => None,
     }
 }
