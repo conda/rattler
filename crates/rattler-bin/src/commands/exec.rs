@@ -25,7 +25,7 @@ use tokio;
 
 use crate::{
     commands::{
-        client::create_client_with_middleware,
+        client::{create_client_with_middleware, repodata_cache_action},
         progress::{wrap_in_async_progress, wrap_in_progress},
     },
     global_multi_progress,
@@ -72,7 +72,7 @@ pub struct Opt {
 }
 
 /// CLI entry point for `rattler exec`.
-pub async fn exec(opt: Opt) -> miette::Result<()> {
+pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -115,15 +115,16 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     let dir_prefix = exec_dir_prefix(&install_specs, Some(command), should_guess);
 
     // Solve + install (or reuse) the cached environment
-    let prefix = create_exec_prefix(
-        &install_specs,
-        &channels,
-        opt.platform,
+    let prefix = create_exec_prefix(CreateExecPrefixOptions {
+        specs: &install_specs,
+        channels: &channels,
+        platform: opt.platform,
         dir_prefix,
-        opt.force_reinstall,
-        opt.list.as_deref(),
-        &cache_dir,
-    )
+        force_reinstall: opt.force_reinstall,
+        list: opt.list.as_deref(),
+        cache_dir: &cache_dir,
+        offline,
+    })
     .await?;
 
     // Build extra environment variables
@@ -178,16 +179,29 @@ pub async fn exec(opt: Opt) -> miette::Result<()> {
     std::process::exit(status.code().unwrap_or(1));
 }
 
-/// Creates a prefix for the `rattler exec` command.
-async fn create_exec_prefix(
-    specs: &[MatchSpec],
-    channels: &[Channel],
+struct CreateExecPrefixOptions<'a> {
+    specs: &'a [MatchSpec],
+    channels: &'a [Channel],
     platform: Platform,
     dir_prefix: Option<String>,
     force_reinstall: bool,
-    list: Option<&str>,
-    cache_dir: &Path,
-) -> miette::Result<PathBuf> {
+    list: Option<&'a str>,
+    cache_dir: &'a Path,
+    offline: bool,
+}
+
+/// Creates a prefix for the `rattler exec` command.
+async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Result<PathBuf> {
+    let CreateExecPrefixOptions {
+        specs,
+        channels,
+        platform,
+        dir_prefix,
+        force_reinstall,
+        list,
+        cache_dir,
+        offline,
+    } = options;
     let channel_urls: Vec<String> = channels.iter().map(|c| c.base_url.to_string()).collect();
     let env_hash = compute_env_hash(specs, &channel_urls, platform);
 
@@ -207,7 +221,7 @@ async fn create_exec_prefix(
         return Ok(prefix);
     }
 
-    let download_client = create_client_with_middleware()?;
+    let download_client = create_client_with_middleware(offline)?;
 
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
@@ -218,6 +232,7 @@ async fn create_exec_prefix(
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
+                cache_action: repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),

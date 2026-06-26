@@ -17,10 +17,13 @@ pub struct Opt {
 }
 
 /// Reads a typed package file from either a remote URL or a local path.
-async fn read_file<P: PackageFile + Send + 'static>(package: &str) -> miette::Result<P> {
+async fn read_file<P: PackageFile + Send + 'static>(
+    package: &str,
+    offline: bool,
+) -> miette::Result<P> {
     match parse_remote_url(package) {
         Some(url) => {
-            let client = super::client::create_client_with_middleware()?;
+            let client = super::client::create_client_with_middleware(offline)?;
             fetch_package_file_from_remote_url(client, url)
                 .await
                 .into_diagnostic()
@@ -44,8 +47,8 @@ fn parse_remote_url(package: &str) -> Option<Url> {
     }
 }
 
-pub async fn inspect(opt: Opt) -> miette::Result<()> {
-    let index_json: IndexJson = read_file(&opt.package)
+pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
+    let index_json: IndexJson = read_file(&opt.package, offline)
         .await
         .context("failed to read index.json")?;
 
@@ -71,7 +74,7 @@ pub async fn inspect(opt: Opt) -> miette::Result<()> {
         }
     }
 
-    let paths_json: PathsJson = read_file(&opt.package)
+    let paths_json: PathsJson = read_file(&opt.package, offline)
         .await
         .context("failed to read paths.json")?;
 

@@ -125,7 +125,7 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
     }
 }
 
-pub async fn create(opt: Opt) -> miette::Result<()> {
+pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
@@ -175,7 +175,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // `repodata.json` that should be available from the corresponding Url. The
     // code below also displays a nice CLI progress-bar to give users some more
     // information about what is going on.
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
@@ -188,6 +188,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
+                cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),

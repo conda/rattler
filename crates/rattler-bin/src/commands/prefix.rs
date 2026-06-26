@@ -45,7 +45,7 @@ pub struct RemoveFromPrefixOpt {
     skip_compatibility_checks: bool,
 }
 
-pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
+pub async fn inject(opt: InjectOpt, offline: bool) -> miette::Result<()> {
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
     // Temporary directory that holds remote archives while they are being
@@ -58,7 +58,7 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
     // requested.
     let client: Option<ClientWithMiddleware> =
         if opt.packages.iter().any(|p| parse_remote_url(p).is_some()) {
-            Some(super::client::create_client_with_middleware()?)
+            Some(super::client::create_client_with_middleware(offline)?)
         } else {
             None
         };
@@ -517,11 +517,14 @@ mod tests {
             .join("empty-0.1.0-h4616a5c_0.conda");
         let other_package = write_empty_package(prefix.path(), "other-empty");
 
-        inject(InjectOpt {
-            packages: vec![path_string(&package), path_string(&other_package)],
-            target_prefix: prefix.path().to_path_buf(),
-            skip_compatibility_checks: false,
-        })
+        inject(
+            InjectOpt {
+                packages: vec![path_string(&package), path_string(&other_package)],
+                target_prefix: prefix.path().to_path_buf(),
+                skip_compatibility_checks: false,
+            },
+            false,
+        )
         .await
         .unwrap();
 
@@ -568,19 +571,25 @@ mod tests {
             .join("packages")
             .join("empty-0.1.0-h4616a5c_0.conda");
 
-        inject(InjectOpt {
-            packages: vec![path_string(&package)],
-            target_prefix: prefix.path().to_path_buf(),
-            skip_compatibility_checks: false,
-        })
+        inject(
+            InjectOpt {
+                packages: vec![path_string(&package)],
+                target_prefix: prefix.path().to_path_buf(),
+                skip_compatibility_checks: false,
+            },
+            false,
+        )
         .await
         .unwrap();
 
-        let result = inject(InjectOpt {
-            packages: vec![path_string(&package)],
-            target_prefix: prefix.path().to_path_buf(),
-            skip_compatibility_checks: false,
-        })
+        let result = inject(
+            InjectOpt {
+                packages: vec![path_string(&package)],
+                target_prefix: prefix.path().to_path_buf(),
+                skip_compatibility_checks: false,
+            },
+            false,
+        )
         .await;
 
         assert!(
@@ -599,11 +608,14 @@ mod tests {
             .join("packages")
             .join("empty-0.1.0-h4616a5c_0.conda");
 
-        let result = inject(InjectOpt {
-            packages: vec![path_string(&package), path_string(&package)],
-            target_prefix: prefix.path().to_path_buf(),
-            skip_compatibility_checks: false,
-        })
+        let result = inject(
+            InjectOpt {
+                packages: vec![path_string(&package), path_string(&package)],
+                target_prefix: prefix.path().to_path_buf(),
+                skip_compatibility_checks: false,
+            },
+            false,
+        )
         .await;
 
         assert!(
@@ -622,11 +634,14 @@ mod tests {
             .join("packages")
             .join("empty-0.1.0-h4616a5c_0.conda");
 
-        inject(InjectOpt {
-            packages: vec![path_string(&package)],
-            target_prefix: prefix.path().to_path_buf(),
-            skip_compatibility_checks: false,
-        })
+        inject(
+            InjectOpt {
+                packages: vec![path_string(&package)],
+                target_prefix: prefix.path().to_path_buf(),
+                skip_compatibility_checks: false,
+            },
+            false,
+        )
         .await
         .unwrap();
 

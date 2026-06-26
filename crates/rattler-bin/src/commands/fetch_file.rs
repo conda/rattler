@@ -20,14 +20,14 @@ pub struct Opt {
     path: String,
 }
 
-pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
+pub async fn fetch_file(opt: Opt, offline: bool) -> miette::Result<()> {
     let Opt { package, path } = opt;
 
     let target_path = Path::new(&path);
 
     let bytes = match parse_remote_url(&package) {
         Some(url) => {
-            let client = super::client::create_client_with_middleware()?;
+            let client = super::client::create_client_with_middleware(offline)?;
             fetch_file_from_remote_url(client, url, target_path)
                 .await
                 .into_diagnostic()?
