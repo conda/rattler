@@ -547,7 +547,7 @@ class PrefixPlaceholder:
 
     _inner: PyPrefixPlaceholder
 
-    def __init__(self, file_mode: FileMode, placeholder: str) -> None:
+    def __init__(self, file_mode: FileMode, placeholder: str, c_string: Optional[bool] = None) -> None:
         """
         Create a new prefix placeholder.
 
@@ -557,17 +557,19 @@ class PrefixPlaceholder:
             The file mode of the entry.
         placeholder: str
             The placeholder prefix used in the file.
+        c_string: Optional[bool]
+            Whether to use c-string padding. If None or True, NUL padding is used. If False, slash padding is used.
 
         Examples
         --------
         ```python
-        >>> placeholder = PrefixPlaceholder(FileMode("text"), "placeholder")
+        >>> placeholder = PrefixPlaceholder(FileMode("text"), "placeholder", c_string=True)
         >>> placeholder
-        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder")
+        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder", c_string=True)
         >>>
         ```
         """
-        self._inner = PyPrefixPlaceholder(file_mode._inner, placeholder)
+        self._inner = PyPrefixPlaceholder(file_mode._inner, placeholder, c_string)
 
     @property
     def file_mode(self) -> FileMode:
@@ -608,6 +610,18 @@ class PrefixPlaceholder:
         """
         return self._inner.placeholder
 
+    @property
+    def c_string(self) -> Optional[bool]:
+        """
+        Optionally indicates whether to use C-string (NUL-terminated) padding when replacing the prefix.
+        If `True` or `None`, NUL padding is used. If `False`, slash padding (`///`) is used.
+        """
+        return self._inner.c_string
+
+    @c_string.setter
+    def c_string(self, c_string: Optional[bool]) -> None:
+        self._inner.c_string = c_string
+
     @classmethod
     def _from_py_prefix_placeholder(cls, py_prefix_placeholder: PyPrefixPlaceholder) -> PrefixPlaceholder:
         prefix_placeholder = cls.__new__(cls)
@@ -619,7 +633,10 @@ class PrefixPlaceholder:
         """
         Returns a representation of the PrefixPlaceholder.
         """
-        return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}")'
+        if self.c_string is not None:
+            return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}", c_string={self.c_string})'
+        else:
+            return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}")'
 
 
 class FileMode:

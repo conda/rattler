@@ -176,6 +176,7 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
+        c_string,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -222,6 +223,7 @@ pub fn link_file(
             &target_prefix,
             &target_platform,
             *file_mode,
+            *c_string,
         )
         .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
 
@@ -621,6 +623,7 @@ pub fn copy_and_replace_placeholders(
     target_prefix: &str,
     target_platform: &Platform,
     file_mode: FileMode,
+    c_string_padding: Option<bool>,
 ) -> Result<(), std::io::Error> {
     match file_mode {
         FileMode::Text => {
@@ -643,6 +646,7 @@ pub fn copy_and_replace_placeholders(
                     destination,
                     prefix_placeholder,
                     target_prefix,
+                    c_string_padding.unwrap_or(true),
                 )?;
             }
         }
@@ -809,6 +813,7 @@ pub fn copy_and_replace_cstring_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    c_string_padding: bool,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
@@ -819,6 +824,25 @@ pub fn copy_and_replace_cstring_placeholder(
             std::io::ErrorKind::InvalidData,
             "target prefix cannot be longer than the placeholder prefix",
         ));
+    }
+
+    if !c_string_padding {
+        let mut padded_prefix = new_prefix.to_vec();
+        padded_prefix.resize(old_prefix.len(), b'/');
+
+        let mut last_match = 0;
+
+        for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
+            destination.write_all(&source_bytes[last_match..index])?;
+            destination.write_all(&padded_prefix)?;
+            last_match = index + old_prefix.len();
+        }
+
+        if last_match < source_bytes.len() {
+            destination.write_all(&source_bytes[last_match..])?;
+        }
+
+        return Ok(());
     }
 
     let finder = memchr::memmem::Finder::new(old_prefix);
@@ -966,6 +990,7 @@ mod test {
             prefix_placeholder: Some(PrefixPlaceholder {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
+                c_string: None,
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1150,17 +1175,27 @@ mod test {
     }
 
     #[rstest]
+    #[rstest]
     #[case(
         b"12345Hello, fabulous world!\x006789",
         "fabulous",
         "cruel",
-        b"12345Hello, cruel world!\x00\x00\x00\x006789"
+        b"12345Hello, cruel/// world!\x006789",
+        false
+    )]
+    #[case(
+        b"12345Hello, fabulous world!\x006789",
+        "fabulous",
+        "cruel",
+        b"12345Hello, cruel world!\x00\x00\x00\x006789",
+        true
     )]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,
         #[case] target_prefix: &str,
         #[case] expected_output: &[u8],
+        #[case] c_string_padding: bool,
     ) {
         assert_eq!(
             expected_output.len(),
@@ -1173,6 +1208,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
+            c_string_padding,
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
@@ -1194,19 +1230,50 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
+            false,
         );
         assert!(result.is_err());
     }
 
     #[test]
-    fn replace_binary_path_var() {
+    fn replace_binary_path_var_slash_padding() {
         let input =
             b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
         let mut output = Cursor::new(Vec::new());
-        super::copy_and_replace_cstring_placeholder(input, &mut output, "/placeholder", "/target")
-            .unwrap();
+        super::copy_and_replace_cstring_placeholder(
+            input,
+            &mut output,
+            "/placeholder",
+            "/target",
+            false,
+        )
+        .unwrap();
         let out = &output.into_inner();
-        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
+        assert_eq!(
+            out,
+            b"beginrandomdataPATH=/target//////etc/share:/target//////bin/:\x00somemoretext"
+        );
+        assert_eq!(out.len(), input.len());
+    }
+
+    #[test]
+    fn replace_binary_path_var_nul_padding() {
+        let input =
+            b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder(
+            input,
+            &mut output,
+            "/placeholder",
+            "/target",
+            true,
+        )
+        .unwrap();
+        let out = &output.into_inner();
+        assert_eq!(
+            out,
+            b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext"
+        );
         assert_eq!(out.len(), input.len());
     }
 
