@@ -54,10 +54,14 @@ extern "C" {
 #[wasm_bindgen(js_class = "PackageRecord")]
 impl JsPackageRecord {
     /// Constructs a new instance from the json representation of a
-    /// PackageRecord.
+    /// PackageRecord. Returns an error if the build string is not a valid
+    /// CEP26 value (the underlying serde representation is permissive, so the
+    /// validation is applied here instead).
     #[wasm_bindgen(constructor)]
     pub fn new(json: JsPackageRecordJson) -> Result<JsPackageRecord, crate::error::JsError> {
         let package_record: PackageRecord = serde_wasm_bindgen::from_value(json.into())?;
+        rattler_conda_types::package::BuildString::new(package_record.build.as_str())
+            .map_err(crate::error::JsError::from)?;
         Ok(JsPackageRecord::from(package_record))
     }
 
@@ -98,12 +102,15 @@ macro_rules! impl_package_record {
             /// The build string of the package.
             #[wasm_bindgen::prelude::wasm_bindgen(getter)]
             pub fn build(&self) -> String {
-                AsRef::<PackageRecord>::as_ref(self).build.clone()
+                AsRef::<PackageRecord>::as_ref(self).build.to_string()
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
-            pub fn set_build(&mut self, build: String) {
-                AsMut::<PackageRecord>::as_mut(self).build = build;
+            pub fn set_build(&mut self, build: String) -> Result<(), crate::error::JsError> {
+                AsMut::<PackageRecord>::as_mut(self).build =
+                    rattler_conda_types::package::BuildString::new(build)
+                        .map_err(crate::error::JsError::from)?;
+                Ok(())
             }
 
             /// The build number of the package.

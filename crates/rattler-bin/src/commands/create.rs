@@ -16,7 +16,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
+    ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version, package::BuildString,
 };
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
@@ -233,7 +233,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
                             .get(1)
                             .map_or(Version::from_str("0"), |s| Version::from_str(s))
                             .into_diagnostic()?,
-                        build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
+                        build_string: BuildString::new_unchecked(*elems.get(2).unwrap_or(&"")),
                     })
                 })
                 .collect::<miette::Result<Vec<_>>>()?)
@@ -360,13 +360,14 @@ fn print_transaction(
             String::new()
         };
 
+        let build = r.package_record.build.to_string();
         if let Some(features) = features.get(&r.package_record.name) {
             format!(
                 "{}[{}] {} {} {}",
                 r.package_record.name.as_normalized(),
                 features.join(", "),
                 r.package_record.version,
-                r.package_record.build,
+                build,
                 direct_url_print,
             )
         } else {
@@ -374,7 +375,7 @@ fn print_transaction(
                 "{} {} {} {}",
                 r.package_record.name.as_normalized(),
                 r.package_record.version,
-                r.package_record.build,
+                build,
                 direct_url_print,
             )
         }

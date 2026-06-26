@@ -190,10 +190,11 @@ pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
 
         for record in records.iter().take(limit_versions) {
             let channel = record.channel.as_deref().unwrap_or("unknown");
+            let build = record.package_record.build.to_string();
             println!(
                 "  {} {} [{}] {}",
                 console::style(&record.package_record.version).cyan(),
-                record.package_record.build,
+                build,
                 record.package_record.subdir,
                 console::style(channel).dim()
             );

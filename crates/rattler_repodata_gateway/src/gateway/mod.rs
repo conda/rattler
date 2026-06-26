@@ -1472,7 +1472,8 @@ mod test {
         extra_depends: &[(&str, &[&str])],
     ) -> RepoDataRecord {
         use rattler_conda_types::{
-            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
+            PackageRecord, VersionWithSource,
+            package::{BuildString, DistArchiveIdentifier},
         };
 
         let mut extra_depends_map: std::collections::BTreeMap<String, Vec<String>> =
@@ -1487,7 +1488,7 @@ mod test {
         let package_record = PackageRecord {
             name: PackageName::from_str(name).unwrap(),
             version: VersionWithSource::from_str(version).unwrap(),
-            build: "0".to_string(),
+            build: BuildString::new("0").unwrap(),
             build_number: 0,
             subdir: subdir.to_string(),
             md5: None,

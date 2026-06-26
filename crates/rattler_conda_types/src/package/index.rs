@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use thiserror::Error;
 
-use super::PackageFile;
+use super::{BuildString, PackageFile};
 use crate::{
     Flag, MatchSpec, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseMatchSpecOptions, RepodataRevision, VersionWithSource,
@@ -28,7 +28,7 @@ pub struct IndexJson {
     pub arch: Option<String>,
 
     /// The build string of the package.
-    pub build: String,
+    pub build: BuildString,
 
     /// The build number of the package. This is also included in the build
     /// string.
