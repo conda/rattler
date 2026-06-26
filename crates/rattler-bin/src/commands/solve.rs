@@ -108,7 +108,7 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
     }
 }
 
-pub async fn solve(opt: Opt) -> miette::Result<()> {
+pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -139,7 +139,7 @@ pub async fn solve(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
@@ -150,6 +150,7 @@ pub async fn solve(opt: Opt) -> miette::Result<()> {
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
+                cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),
