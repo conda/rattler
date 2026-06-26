@@ -770,6 +770,12 @@ impl Matches<RepoDataRecord> for MatchSpec {
             return false;
         }
 
+        if let Some(file_name) = self.file_name.as_ref()
+            && !file_name_matches(file_name, &other.identifier.to_file_name())
+        {
+            return false;
+        }
+
         if !self.matches(&other.package_record) {
             return false;
         }
@@ -783,6 +789,12 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     fn matches(&self, other: &RepoDataRecord) -> bool {
         if let Some(url_spec) = self.url.as_ref()
             && url_spec != &other.url
+        {
+            return false;
+        }
+
+        if let Some(file_name) = self.file_name.as_ref()
+            && !file_name_matches(file_name, &other.identifier.to_file_name())
         {
             return false;
         }
@@ -814,6 +826,27 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
             return false;
         }
         true
+    }
+}
+
+fn file_name_matches(spec_file_name: &str, record_file_name: &str) -> bool {
+    // Conda matches MatchSpec `fn` against PackageRecord.fn, which is the
+    // archive file name. RepoDataRecord stores the same value in its archive
+    // identifier, so callers should pass identifier.to_file_name() instead of
+    // deriving it from the record URL.
+    spec_file_name_basename(spec_file_name) == record_file_name
+}
+
+fn spec_file_name_basename(value: &str) -> &str {
+    let value = match value.find(['?', '#']) {
+        Some(index) => &value[..index],
+        None => value,
+    };
+    let value = value.trim_end_matches(['/', '\\']);
+    if let Some(index) = value.rfind(['/', '\\']) {
+        &value[index + 1..]
+    } else {
+        value
     }
 }
 
@@ -895,8 +928,11 @@ mod tests {
 
     use crate::{
         Flag, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError,
-        ParseMatchSpecOptions, ParseStrictness::*, RepoDataRecord, RepodataRevision, StringMatcher,
-        Version, match_spec::Matches, package::DistArchiveIdentifier,
+        ParseMatchSpecOptions,
+        ParseStrictness::*,
+        RepoDataRecord, RepodataRevision, StringMatcher, Version,
+        match_spec::{Matches, file_name_matches},
+        package::DistArchiveIdentifier,
         parse_mode::ParseStrictnessWithNameMatcher,
     };
     use insta::assert_snapshot;
@@ -1206,6 +1242,53 @@ mod tests {
         assert!(match_spec.matches(&package_record));
         assert!(nameless_spec.matches(&repodata_record));
         assert!(nameless_spec.matches(&package_record));
+    }
+
+    #[test]
+    fn test_file_name_matches_repodata_identifier() {
+        let repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            url: url::Url::parse("file:///tmp/mamba-1.0-py37_0.conda").unwrap(),
+            channel: None,
+        };
+
+        // Match against the archive identifier, mirroring conda's PackageRecord.fn
+        // semantics without parsing the record URL during matching.
+        let match_spec = MatchSpec::from_str("mamba[fn=mamba-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&repodata_record));
+
+        let match_spec =
+            MatchSpec::from_str("mamba[fn=file:///tmp/mamba-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&repodata_record));
+
+        assert!(file_name_matches(
+            "/tmp/mamba-1.0-py37_0.conda",
+            "mamba-1.0-py37_0.conda"
+        ));
+        assert!(file_name_matches(
+            r"C:\tmp\mamba-1.0-py37_0.conda",
+            "mamba-1.0-py37_0.conda"
+        ));
+        assert!(file_name_matches(
+            "file:///tmp/mamba-1.0-py37_0.conda?download=1#sha256:abc",
+            "mamba-1.0-py37_0.conda"
+        ));
+
+        let match_spec = MatchSpec::from_str("mamba[fn=other-1.0-py37_0.conda]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(!match_spec.matches(&repodata_record));
+        assert!(!nameless_spec.matches(&repodata_record));
     }
 
     #[test]
