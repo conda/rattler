@@ -130,7 +130,7 @@ async fn async_main() -> miette::Result<()> {
         Command::Run(opts) => commands::run::run(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts, offline).await,
         Command::Link(opts) => commands::link::link(opts).await,
-        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
+        Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts, offline).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
         Command::Upload(opts) => {
             if offline {
