@@ -126,7 +126,7 @@ struct UniqueBinaryIdentifier {
 impl<'a> From<&'a CondaBinaryData> for UniqueBinaryIdentifier {
     fn from(data: &'a CondaBinaryData) -> Self {
         Self {
-            location: data.location.clone(),
+            location: data.location.inner().clone(),
             normalized_name: data.package_record.name.as_normalized().to_string(),
             version: data.package_record.version.version().clone(),
             build: data.package_record.build.clone(),
@@ -1228,7 +1228,8 @@ mod test {
                 package_record: record,
                 location: UrlOrPath::Path(Utf8TypedPathBuf::from(format!(
                     "./{name}-1.0.0-build0.tar.bz2"
-                ))),
+                )))
+                .into(),
                 file_name: format!("{name}-1.0.0-build0.tar.bz2")
                     .parse::<DistArchiveIdentifier>()
                     .unwrap(),
