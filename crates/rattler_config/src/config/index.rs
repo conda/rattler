@@ -63,6 +63,35 @@ impl PackageRevisionAssignment {
     }
 }
 
+/// How `indexed_timestamp` is backfilled for records in existing repodata
+/// that lack the field. Newly indexed packages always get the current
+/// indexing time, regardless of this setting.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Deserialize,
+    Serialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum BackfillIndexedTimestamps {
+    /// Seed missing values from the package's build `timestamp` (clamped to
+    /// the indexing time), falling back to the indexing time when the package
+    /// has no `timestamp`.
+    #[default]
+    FromCondaPackageTimestamp,
+    /// Seed missing values with the indexing time.
+    Now,
+    /// Leave records without an `indexed_timestamp` untouched.
+    Off,
+}
+
 /// Index options that apply to a single channel.
 ///
 /// Every field is optional so that `IndexConfig` can layer multiple entries
@@ -90,6 +119,11 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_revision_assignment: Option<PackageRevisionAssignment>,
 
+    /// How `indexed_timestamp` is backfilled for records in existing repodata
+    /// that lack the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backfill_indexed_timestamps: Option<BackfillIndexedTimestamps>,
+
     /// `info.base_url` value written to generated repodata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
@@ -106,6 +140,7 @@ impl IndexChannelConfig {
             && self.write_shards.is_none()
             && self.repodata_revisions.is_none()
             && self.package_revision_assignment.is_none()
+            && self.backfill_indexed_timestamps.is_none()
             && self.base_url.is_none()
             && self.channel_relations.is_none()
     }
@@ -121,6 +156,9 @@ impl IndexChannelConfig {
             package_revision_assignment: other
                 .package_revision_assignment
                 .or(self.package_revision_assignment),
+            backfill_indexed_timestamps: other
+                .backfill_indexed_timestamps
+                .or(self.backfill_indexed_timestamps),
             base_url: other.base_url.or_else(|| self.base_url.clone()),
             channel_relations: other
                 .channel_relations
@@ -417,6 +455,22 @@ base-url = "../packages/"
         );
         let resolved = cfg.resolve("s3://my-bucket-other/channel");
         assert!(resolved.base_url.is_none());
+    }
+
+    #[test]
+    fn parses_backfill_indexed_timestamps() {
+        let cfg = parse("backfill-indexed-timestamps = \"off\"\n");
+        assert_eq!(
+            cfg.default.backfill_indexed_timestamps,
+            Some(BackfillIndexedTimestamps::Off)
+        );
+        assert_eq!(
+            "from-conda-package-timestamp"
+                .parse::<BackfillIndexedTimestamps>()
+                .unwrap(),
+            BackfillIndexedTimestamps::FromCondaPackageTimestamp
+        );
+        assert!("invalid".parse::<BackfillIndexedTimestamps>().is_err());
     }
 
     #[test]

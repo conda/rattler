@@ -446,6 +446,11 @@ pub struct PackageRecord {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<Flag>,
 
+    /// The time at which an indexing tool first added this artifact to the
+    /// channel index. Set by indexing tools, never by build tools.
+    /// See the draft CEP: <https://github.com/conda/ceps/pull/154>.
+    pub indexed_timestamp: Option<crate::utils::TimestampMs>,
+
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
@@ -790,6 +795,7 @@ impl PackageRecord {
             depends: vec![],
             features: None,
             flags: vec![],
+            indexed_timestamp: None,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: None,
@@ -1051,6 +1057,7 @@ impl PackageRecord {
             depends: index.depends,
             features: index.features,
             flags: index.flags,
+            indexed_timestamp: None,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: index.license,
@@ -1135,6 +1142,46 @@ mod test {
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    // See the draft CEP: https://github.com/conda/ceps/pull/154
+    #[test]
+    fn test_indexed_timestamp_roundtrip() {
+        // A record with `indexed_timestamp` round-trips through JSON.
+        let raw = r#"{
+            "build": "h123_0",
+            "build_number": 0,
+            "depends": [],
+            "indexed_timestamp": 1650000000000,
+            "name": "demo",
+            "subdir": "noarch",
+            "timestamp": 1640000000000,
+            "version": "1.0.0"
+        }"#;
+        let record: PackageRecord = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            record
+                .indexed_timestamp
+                .map(|timestamp| timestamp.timestamp_millis()),
+            Some(1_650_000_000_000)
+        );
+        let json = serde_json::to_value(&record).unwrap();
+        assert_eq!(json["indexed_timestamp"], 1_650_000_000_000_i64);
+
+        // A record without the field omits it on serialization.
+        let record: PackageRecord = serde_json::from_str(
+            r#"{
+            "build": "h123_0",
+            "build_number": 0,
+            "name": "demo",
+            "subdir": "noarch",
+            "version": "1.0.0"
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(record.indexed_timestamp, None);
+        let json = serde_json::to_value(&record).unwrap();
+        assert!(json.get("indexed_timestamp").is_none());
     }
 
     // See https://github.com/conda/ceps/blob/main/cep-0042.md

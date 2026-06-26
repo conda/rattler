@@ -52,6 +52,7 @@ impl PackageBuilder {
                     license: None,
                     license_family: None,
                     timestamp: None,
+                    indexed_timestamp: None,
                     legacy_bz2_size: None,
                     legacy_bz2_md5: None,
                     purls: None,
@@ -137,6 +138,12 @@ impl PackageBuilder {
     pub fn timestamp(mut self, timestamp: &str) -> Self {
         let ts: Timestamp = timestamp.parse().expect("invalid timestamp format");
         self.record.package_record.timestamp = Some(ts.into());
+        self
+    }
+
+    pub fn indexed_timestamp(mut self, timestamp: &str) -> Self {
+        let ts: Timestamp = timestamp.parse().expect("invalid timestamp format");
+        self.record.package_record.indexed_timestamp = Some(ts.into());
         self
     }
 

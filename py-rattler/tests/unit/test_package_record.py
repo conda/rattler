@@ -194,3 +194,26 @@ def test_package_record_topological_sort_robust() -> None:
         sorted_records = PackageRecord.sort_topologically(records)
         sorted_names = [r.name.normalized for r in sorted_records]
         assert sorted_names == expected_order
+
+
+def test_indexed_timestamp_roundtrip() -> None:
+    record = PackageRecord(
+        name="test-pkg",
+        version="1.0.0",
+        build="py_0",
+        build_number=0,
+        subdir="noarch",
+    )
+
+    assert record.indexed_timestamp is None
+
+    ts = datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+    record.indexed_timestamp = ts
+    assert record.indexed_timestamp == ts
+
+    json_data = json.loads(record.to_json())
+    assert json_data["indexed_timestamp"] == int(ts.timestamp() * 1000)
+
+    record.indexed_timestamp = None
+    assert record.indexed_timestamp is None
+    assert "indexed_timestamp" not in json.loads(record.to_json())

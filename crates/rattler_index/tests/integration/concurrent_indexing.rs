@@ -12,7 +12,9 @@ use std::path::Path;
 
 use opendal::Operator;
 use rattler_conda_types::Platform;
-use rattler_index::{PackageRevisionAssignment, PreconditionChecks, index};
+use rattler_index::{
+    BackfillIndexedTimestamps, PackageRevisionAssignment, PreconditionChecks, index,
+};
 use tracing::Instrument;
 
 use super::etag_memory_backend::ETagMemoryBuilder;
@@ -109,6 +111,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 false,
                 Vec::new(),
                 PackageRevisionAssignment::default(),
+                BackfillIndexedTimestamps::default(),
                 false,
                 1,
                 None,
@@ -130,6 +133,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 false,
                 Vec::new(),
                 PackageRevisionAssignment::default(),
+                BackfillIndexedTimestamps::default(),
                 false,
                 1,
                 None,

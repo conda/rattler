@@ -217,6 +217,85 @@ pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
+/// Test that `indexed_timestamp` takes precedence over the build `timestamp`
+/// when filtering: a record with an old build timestamp but a recent
+/// `indexed_timestamp` is excluded.
+pub fn solve_min_age_prefers_indexed_timestamp<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .indexed_timestamp("2020-01-16T12:00:00Z")
+            .build(),
+        // Old build timestamp, but only recently added to the channel index.
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .indexed_timestamp("2026-03-23T12:00:00Z")
+            .build(),
+    ];
+
+    // 1000 days minimum age - cutoff is 2023-06-28
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+
+    SolverCase::new("min_age prefers indexed_timestamp")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(exclude_newer_duration_config(min_age))
+        .expect_present([("pkg-a", "1.0")])
+        .expect_absent([("pkg-a", "2.0")])
+        .run::<T>();
+}
+
+/// Test that a record with a new build `timestamp` but an old
+/// `indexed_timestamp` is kept: the indexed time wins over the build time.
+pub fn solve_min_age_indexed_timestamp_overrides_new_build_timestamp<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            // Future-dated build timestamp, but indexed long ago.
+            .timestamp("2026-03-23T12:00:00Z")
+            .indexed_timestamp("2020-01-16T12:00:00Z")
+            .build(),
+    ];
+
+    // 1000 days minimum age - cutoff is 2023-06-28
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+
+    SolverCase::new("min_age indexed_timestamp overrides new build timestamp")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(exclude_newer_duration_config(min_age))
+        .expect_present([("pkg-a", "1.0")])
+        .run::<T>();
+}
+
+/// Test that records without an `indexed_timestamp` fall back to the build
+/// `timestamp`.
+pub fn solve_min_age_falls_back_to_build_timestamp<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            .timestamp("2024-06-15T12:00:00Z")
+            .build(),
+    ];
+
+    // 1000 days minimum age - cutoff is 2023-06-28
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+
+    SolverCase::new("min_age falls back to build timestamp")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .exclude_newer(exclude_newer_duration_config(min_age))
+        .expect_present([("pkg-a", "1.0")])
+        .expect_absent([("pkg-a", "2.0")])
+        .run::<T>();
+}
+
 /// Test that channel-specific minimum ages override the global minimum age.
 pub fn solve_min_age_per_channel<T: SolverImpl + Default>() {
     let repo = vec![

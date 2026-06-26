@@ -133,6 +133,7 @@ impl PackageBuilder {
                     license: None,
                     license_family: None,
                     timestamp: None,
+                    indexed_timestamp: None,
                     legacy_bz2_size: None,
                     legacy_bz2_md5: None,
                     purls: None,
@@ -498,6 +499,21 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_min_age_per_channel() {
             crate::min_age_tests::solve_min_age_per_channel::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_prefers_indexed_timestamp() {
+            crate::min_age_tests::solve_min_age_prefers_indexed_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_indexed_timestamp_overrides_new_build_timestamp() {
+            crate::min_age_tests::solve_min_age_indexed_timestamp_overrides_new_build_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_falls_back_to_build_timestamp() {
+            crate::min_age_tests::solve_min_age_falls_back_to_build_timestamp::<$T>();
         }
 
         #[test]

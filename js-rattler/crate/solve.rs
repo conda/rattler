@@ -118,6 +118,7 @@ pub async fn simple_solve(
                 license: None,
                 license_family: None,
                 timestamp: None,
+                indexed_timestamp: None,
                 python_site_packages_path: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,

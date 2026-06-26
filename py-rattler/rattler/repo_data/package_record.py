@@ -812,6 +812,45 @@ class PackageRecord:
             self._record.timestamp = None
 
     @property
+    def indexed_timestamp(self) -> Optional[datetime.datetime]:
+        """
+        The date this entry was first added to the channel index by an
+        indexing tool. Unlike `timestamp` (which is set by the build tool),
+        this field is assigned by the indexing tool and preserved across
+        re-indexing runs. See the draft CEP: https://github.com/conda/ceps/pull/154.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> import datetime
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.indexed_timestamp is None
+        True
+        >>> record.indexed_timestamp = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+        >>> record.indexed_timestamp
+        datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+        >>> record.indexed_timestamp = None
+        >>> record.indexed_timestamp is None
+        True
+        >>>
+        ```
+        """
+        if self._record.indexed_timestamp:
+            return datetime.datetime.fromtimestamp(self._record.indexed_timestamp / 1000.0, tz=datetime.timezone.utc)
+
+        return self._record.indexed_timestamp
+
+    @indexed_timestamp.setter
+    def indexed_timestamp(self, value: Optional[datetime.datetime]) -> None:
+        if value is not None:
+            self._record.indexed_timestamp = int(value.timestamp() * 1000)
+        else:
+            self._record.indexed_timestamp = None
+
+    @property
     def track_features(self) -> List[str]:
         """
         Track features are nowadays only used to downweight
