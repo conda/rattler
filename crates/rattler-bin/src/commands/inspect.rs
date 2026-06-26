@@ -21,20 +21,17 @@ async fn read_file<P: PackageFile + Send + 'static>(
     package: &str,
     offline: bool,
 ) -> miette::Result<P> {
-    match parse_remote_url(package) {
-        Some(url) => {
-            let client = super::client::create_client_with_middleware(offline)?;
-            fetch_package_file_from_remote_url(client, url)
-                .await
-                .into_diagnostic()
-        }
-        None => {
-            let package = package.to_string();
-            tokio::task::spawn_blocking(move || read_package_file::<P>(&package))
-                .await
-                .into_diagnostic()?
-                .into_diagnostic()
-        }
+    if let Some(url) = parse_remote_url(package) {
+        let client = super::client::create_client_with_middleware(offline)?;
+        fetch_package_file_from_remote_url(client, url)
+            .await
+            .into_diagnostic()
+    } else {
+        let package = package.to_string();
+        tokio::task::spawn_blocking(move || read_package_file::<P>(&package))
+            .await
+            .into_diagnostic()?
+            .into_diagnostic()
     }
 }
 
