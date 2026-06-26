@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_networking-v0.29.0...rattler_networking-v0.30.0) - 2026-06-26
+
+### Added
+
+- add offline mode to rattler CLI ([#2537](https://github.com/conda/rattler/pull/2537))
+
+### Fixed
+
+- coalesce concurrent OAuth token refresh ([#2522](https://github.com/conda/rattler/pull/2522))
+
 ## [0.29.0](https://github.com/conda/rattler/compare/rattler_networking-v0.28.1...rattler_networking-v0.29.0) - 2026-06-17
 
 ### Added
