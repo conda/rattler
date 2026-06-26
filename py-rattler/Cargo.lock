@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4172,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4278,7 +4278,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.6"
+version = "0.30.7"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4351,7 +4351,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.67"
+version = "0.2.68"
 dependencies = [
  "configparser",
  "dirs",
@@ -4380,7 +4380,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4417,7 +4417,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.26.5"
+version = "0.26.6"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4456,7 +4456,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.13"
+version = "0.2.14"
 dependencies = [
  "libc",
  "nix",
@@ -4475,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.29.6"
+version = "0.29.7"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4537,7 +4537,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4553,7 +4553,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.7"
+version = "0.27.8"
 dependencies = [
  "anyhow",
  "enum_dispatch",
