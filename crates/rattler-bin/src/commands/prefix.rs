@@ -1,11 +1,14 @@
 use std::path::{Path, PathBuf};
 
+use futures_util::StreamExt;
 use miette::{Context, IntoDiagnostic};
-use rattler::install::Installer;
+use rattler::{default_cache_dir, install::Installer, package_cache::PackageCache};
 use rattler_conda_types::{
     MatchSpec, Matches, PackageName, PackageRecord, ParseStrictness, Platform, PrefixRecord,
     RepoDataRecord, package::DistArchiveIdentifier,
 };
+use reqwest_middleware::ClientWithMiddleware;
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
@@ -13,9 +16,9 @@ const PIXI_ENVIRONMENT_FINGERPRINT_FILE: &str = ".pixi-environment-fingerprint";
 /// Add one or more conda package archives to a prefix without solving.
 #[derive(Debug, clap::Parser)]
 pub struct InjectOpt {
-    /// Local paths to conda package archives (.conda or .tar.bz2)
+    /// Paths or URLs to conda package archives (.conda or .tar.bz2)
     #[clap(required = true)]
-    packages: Vec<PathBuf>,
+    packages: Vec<String>,
 
     /// Target prefix to inject the package into
     #[clap(short = 'p', long = "prefix", default_value = ".prefix")]
@@ -44,69 +47,84 @@ pub struct RemoveFromPrefixOpt {
 
 pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
-    let packages = opt
-        .packages
-        .into_iter()
-        .map(|package_path| {
-            let package_path = package_path.canonicalize().into_diagnostic()?;
-            let package_record = rattler_index::package_record_from_archive(&package_path)
-                .into_diagnostic()
-                .with_context(|| {
-                    format!(
-                        "failed to read package metadata from {}",
-                        package_path.display()
-                    )
-                })?;
 
-            if !opt.skip_compatibility_checks {
-                validate_package_compatibility(&package_record)?;
+    // Temporary directory that holds remote archives while they are being
+    // injected. It must outlive the installer call below.
+    let download_dir = tempfile::tempdir()
+        .into_diagnostic()
+        .context("failed to create temporary download directory")?;
+
+    // Only create the download client when at least one remote package is
+    // requested.
+    let client: Option<ClientWithMiddleware> =
+        if opt.packages.iter().any(|p| parse_remote_url(p).is_some()) {
+            Some(super::client::create_client_with_middleware()?)
+        } else {
+            None
+        };
+
+    let mut resolved = Vec::with_capacity(opt.packages.len());
+    for package in opt.packages {
+        let resolved_package = match parse_remote_url(&package) {
+            Some(url) => {
+                let client = client
+                    .as_ref()
+                    .expect("client is created when a remote package is present");
+                resolve_remote_package(client, url, download_dir.path()).await?
             }
+            None => resolve_local_package(&package)?,
+        };
 
-            Ok((package_path, package_record))
-        })
-        .collect::<miette::Result<Vec<_>>>()?;
+        if !opt.skip_compatibility_checks {
+            validate_package_compatibility(&resolved_package.package_record)?;
+        }
+
+        resolved.push(resolved_package);
+    }
 
     let installed_packages =
         PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix).into_diagnostic()?;
 
-    for (_, package_record) in &packages {
-        reject_already_installed(&installed_packages, &package_record.name)?;
+    for resolved_package in &resolved {
+        reject_already_installed(&installed_packages, &resolved_package.package_record.name)?;
     }
-    reject_duplicate_package_records(packages.iter().map(|(_, package_record)| package_record))?;
+    reject_duplicate_package_records(resolved.iter().map(|p| &p.package_record))?;
 
     if !opt.skip_compatibility_checks {
         let records = installed_packages
             .iter()
             .map(|record| &record.repodata_record.package_record)
-            .chain(packages.iter().map(|(_, package_record)| package_record))
+            .chain(resolved.iter().map(|p| &p.package_record))
             .collect::<Vec<_>>();
         PackageRecord::validate(records)
             .into_diagnostic()
             .context("injecting these packages would make the prefix incompatible")?;
     }
 
-    let repodata_records = packages
-        .into_iter()
-        .map(|(package_path, package_record)| {
-            let repodata_record = RepoDataRecord {
-                package_record,
-                identifier: DistArchiveIdentifier::try_from_path(&package_path).ok_or_else(
-                    || {
-                        miette::miette!(
-                            "could not derive package identity from {}",
-                            package_path.display()
-                        )
-                    },
-                )?,
-                url: Url::from_file_path(&package_path).map_err(|_err| {
-                    miette::miette!("could not convert {} to a file URL", package_path.display())
-                })?,
-                channel: None,
-            };
+    // Reuse the shared package cache so that archives downloaded for remote
+    // packages are not fetched a second time during installation.
+    let cache_dir = default_cache_dir()
+        .map_err(|e| miette::miette!("could not determine default cache directory: {e}"))?;
+    let package_cache = PackageCache::new(cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR));
+    for resolved_package in &resolved {
+        if let Some(archive_path) = &resolved_package.cache_seed {
+            package_cache
+                .get_or_fetch_from_path(archive_path, Some(&resolved_package.package_record), None)
+                .await
+                .into_diagnostic()
+                .context("failed to populate package cache from downloaded archive")?;
+        }
+    }
 
-            Ok((package_path, repodata_record))
+    let repodata_records = resolved
+        .into_iter()
+        .map(|resolved_package| RepoDataRecord {
+            package_record: resolved_package.package_record,
+            identifier: resolved_package.identifier,
+            url: resolved_package.url,
+            channel: None,
         })
-        .collect::<miette::Result<Vec<_>>>()?;
+        .collect::<Vec<_>>();
 
     let mut desired_records = installed_packages
         .iter()
@@ -114,17 +132,14 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .collect::<Vec<_>>();
     let injected_package_records = repodata_records
         .iter()
-        .map(|(_, repodata_record)| repodata_record.package_record.clone())
+        .map(|repodata_record| repodata_record.package_record.clone())
         .collect::<Vec<_>>();
-    desired_records.extend(
-        repodata_records
-            .iter()
-            .map(|(_, repodata_record)| repodata_record.clone()),
-    );
+    desired_records.extend(repodata_records);
 
     Installer::new()
         .with_target_platform(Platform::current())
         .with_installed_packages(installed_packages)
+        .with_package_cache(package_cache)
         .with_execute_link_scripts(true)
         .install(&target_prefix, desired_records)
         .await
@@ -141,6 +156,124 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
             target_prefix.display()
         );
     }
+
+    Ok(())
+}
+
+/// A conda package archive resolved from a local path or a remote URL, ready to
+/// be injected into a prefix.
+struct ResolvedPackage {
+    package_record: PackageRecord,
+    identifier: DistArchiveIdentifier,
+    /// The URL recorded for the package in the prefix. A `file://` URL for local
+    /// archives, the original remote URL otherwise.
+    url: Url,
+    /// Local archive used to pre-populate the package cache, avoiding a second
+    /// download. `None` for local archives, which the installer reads directly
+    /// from their `file://` URL.
+    cache_seed: Option<PathBuf>,
+}
+
+/// Parses the argument as a remote URL, returning `None` for local paths
+/// (including `file://` URLs).
+fn parse_remote_url(package: &str) -> Option<Url> {
+    match Url::parse(package) {
+        Ok(url) if url.scheme() != "file" => Some(url),
+        _ => None,
+    }
+}
+
+/// Resolves a conda package archive from a local file path.
+fn resolve_local_package(package: &str) -> miette::Result<ResolvedPackage> {
+    let package_path = PathBuf::from(package)
+        .canonicalize()
+        .into_diagnostic()
+        .with_context(|| format!("failed to locate {package}"))?;
+    let package_record = rattler_index::package_record_from_archive(&package_path)
+        .into_diagnostic()
+        .with_context(|| {
+            format!(
+                "failed to read package metadata from {}",
+                package_path.display()
+            )
+        })?;
+    let identifier = DistArchiveIdentifier::try_from_path(&package_path).ok_or_else(|| {
+        miette::miette!(
+            "could not derive package identity from {}",
+            package_path.display()
+        )
+    })?;
+    let url = Url::from_file_path(&package_path).map_err(|()| {
+        miette::miette!("could not convert {} to a file URL", package_path.display())
+    })?;
+
+    Ok(ResolvedPackage {
+        package_record,
+        identifier,
+        url,
+        cache_seed: None,
+    })
+}
+
+/// Resolves a conda package archive from a remote URL by downloading it into
+/// `download_dir`.
+async fn resolve_remote_package(
+    client: &ClientWithMiddleware,
+    url: Url,
+    download_dir: &Path,
+) -> miette::Result<ResolvedPackage> {
+    let identifier = DistArchiveIdentifier::try_from_url(&url)
+        .ok_or_else(|| miette::miette!("could not derive package identity from {url}"))?;
+
+    let archive_path = download_dir.join(identifier.to_file_name());
+    download_archive(client, &url, &archive_path).await?;
+
+    let package_record = rattler_index::package_record_from_archive(&archive_path)
+        .into_diagnostic()
+        .with_context(|| format!("failed to read package metadata from {url}"))?;
+
+    Ok(ResolvedPackage {
+        package_record,
+        identifier,
+        url,
+        cache_seed: Some(archive_path),
+    })
+}
+
+/// Streams a remote archive to `destination`.
+async fn download_archive(
+    client: &ClientWithMiddleware,
+    url: &Url,
+    destination: &Path,
+) -> miette::Result<()> {
+    let response = client
+        .get(url.clone())
+        .send()
+        .await
+        .into_diagnostic()
+        .with_context(|| format!("failed to download {url}"))?
+        .error_for_status()
+        .into_diagnostic()
+        .with_context(|| format!("server returned an error for {url}"))?;
+
+    let mut file = tokio::fs::File::create(destination)
+        .await
+        .into_diagnostic()
+        .with_context(|| format!("failed to create {}", destination.display()))?;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .into_diagnostic()
+            .with_context(|| format!("failed to read response body from {url}"))?;
+        file.write_all(&chunk)
+            .await
+            .into_diagnostic()
+            .with_context(|| format!("failed to write {}", destination.display()))?;
+    }
+    file.flush()
+        .await
+        .into_diagnostic()
+        .with_context(|| format!("failed to flush {}", destination.display()))?;
 
     Ok(())
 }
@@ -385,7 +518,7 @@ mod tests {
         let other_package = write_empty_package(prefix.path(), "other-empty");
 
         inject(InjectOpt {
-            packages: vec![package, other_package],
+            packages: vec![path_string(&package), path_string(&other_package)],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -436,7 +569,7 @@ mod tests {
             .join("empty-0.1.0-h4616a5c_0.conda");
 
         inject(InjectOpt {
-            packages: vec![package.clone()],
+            packages: vec![path_string(&package)],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -444,7 +577,7 @@ mod tests {
         .unwrap();
 
         let result = inject(InjectOpt {
-            packages: vec![package],
+            packages: vec![path_string(&package)],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -467,7 +600,7 @@ mod tests {
             .join("empty-0.1.0-h4616a5c_0.conda");
 
         let result = inject(InjectOpt {
-            packages: vec![package.clone(), package],
+            packages: vec![path_string(&package), path_string(&package)],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -490,7 +623,7 @@ mod tests {
             .join("empty-0.1.0-h4616a5c_0.conda");
 
         inject(InjectOpt {
-            packages: vec![package],
+            packages: vec![path_string(&package)],
             target_prefix: prefix.path().to_path_buf(),
             skip_compatibility_checks: false,
         })
@@ -599,6 +732,10 @@ mod tests {
         .unwrap();
 
         target_package
+    }
+
+    fn path_string(path: &Path) -> String {
+        path.to_str().unwrap().to_string()
     }
 
     fn workspace_root() -> PathBuf {
