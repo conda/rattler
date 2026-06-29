@@ -20,6 +20,7 @@ s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 keyring = [
     "keyring-core",
+    "dep:regex",
     "dep:apple-native-keyring-store",
     "dep:dbus-secret-service-keyring-store",
     "dep:windows-native-keyring-store",
@@ -56,6 +57,7 @@ http-auth = { workspace = true }
 itertools = { workspace = true }
 keyring-core = { workspace = true, optional = true }
 netrc-rs = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true, features = ["json"] }
 retry-policies = { workspace = true }

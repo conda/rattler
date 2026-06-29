@@ -63,10 +63,23 @@ fn search_spec(store_key: &str) -> HashMap<String, String> {
 
 #[cfg(target_os = "windows")]
 fn search_spec(store_key: &str) -> HashMap<String, String> {
-    // `\Q...\E` quotes the store_key as a literal so any future caller using a
-    // custom (possibly regex-meaningful) store key still gets the expected
-    // entries back.
-    HashMap::from([("pattern".to_string(), format!(r"\.\Q{store_key}\E\z"))])
+    HashMap::from([("pattern".to_string(), windows_search_pattern(store_key))])
+}
+
+/// Build the regex `windows-native-keyring-store` matches against each
+/// credential's target name (`{user}.{store_key}` with default delimiters), so
+/// `search` only returns entries written by this storage instance.
+///
+/// The store compiles this with the Rust `regex` crate, which — unlike Perl/PCRE
+/// — does not understand `\Q...\E` quoting. Passing such a pattern makes
+/// `Regex::new` fail, `search` error out, and `list`/`list_keys` (and therefore
+/// `auth logout`) silently find nothing on Windows. Escape the store key with
+/// [`regex::escape`] instead so any regex-meaningful characters are matched
+/// literally. Defined outside the `#[cfg(windows)]` gate so it stays unit-tested
+/// on every platform.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn windows_search_pattern(store_key: &str) -> String {
+    format!(r"\.{}\z", regex::escape(store_key))
 }
 
 #[cfg(not(any(
@@ -420,6 +433,30 @@ mod tests {
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
+    }
+
+    /// The Windows store compiles the search `pattern` with the Rust `regex`
+    /// crate. A previous version quoted the store key with `\Q...\E`, which the
+    /// `regex` crate rejects — `search` then errored and `auth logout` found
+    /// nothing on Windows (issue #2531). Guard that the pattern is a valid
+    /// regex and matches the `{host}.{store_key}` target names the store writes.
+    #[test]
+    fn windows_search_pattern_is_a_valid_regex_that_matches_store_entries() {
+        let pattern = windows_search_pattern("rattler");
+        let re = regex::Regex::new(&pattern).expect("search pattern must be a valid regex");
+
+        // Matches target names written by this store: `{host}.{store_key}`.
+        assert!(re.is_match("prefix.dev.rattler"));
+        assert!(re.is_match("repo.prefix.dev.rattler"));
+        // But not entries belonging to a different store key.
+        assert!(!re.is_match("prefix.dev.other"));
+        assert!(!re.is_match("rattler.prefix.dev"));
+
+        // A store key containing regex metacharacters is matched literally,
+        // not interpreted as a pattern.
+        let re = regex::Regex::new(&windows_search_pattern("a.b+c")).unwrap();
+        assert!(re.is_match("host.a.b+c"));
+        assert!(!re.is_match("host.axbbbbc"));
     }
 
     /// The whole point of `list_keys` is to enumerate hosts without reading
