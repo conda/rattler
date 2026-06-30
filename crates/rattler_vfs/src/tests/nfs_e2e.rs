@@ -29,13 +29,13 @@ mod tests {
             .path()
             .join("lib")
             .join("pkgconfig")
-            .join("foo.pc");
+            .join("libffi.pc");
 
         let contents = std::fs::read_to_string(&file)?;
 
         assert!(
-            !contents.contains("/opt/anaconda1anaconda2anaconda3"),
-            "placeholder still present"
+            !contents.contains("_placehold_"),
+            "build-time placeholder still present"
         );
         assert!(
             contents.contains(mount_dir.path().to_str().unwrap()),
