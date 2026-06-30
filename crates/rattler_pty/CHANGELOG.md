@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14](https://github.com/conda/rattler/compare/rattler_pty-v0.2.13...rattler_pty-v0.2.14) - 2026-06-26
+
+### Fixed
+
+- add `ptsname_r` on Android compilation ([#2533](https://github.com/conda/rattler/pull/2533))
+- add openbsd `ptsname_r` shim to `rattler_pty` ([#2524](https://github.com/conda/rattler/pull/2524))
+
 ## [0.2.13](https://github.com/conda/rattler/compare/rattler_pty-v0.2.12...rattler_pty-v0.2.13) - 2026-06-02
 
 ### Fixed

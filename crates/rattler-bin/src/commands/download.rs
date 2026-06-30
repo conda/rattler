@@ -27,14 +27,14 @@ fn default_output_path(url: &Url) -> miette::Result<PathBuf> {
     Ok(PathBuf::from(file_name))
 }
 
-pub async fn download(opt: Opt) -> miette::Result<()> {
+pub async fn download(opt: Opt, offline: bool) -> miette::Result<()> {
     let output = match opt.output {
         Some(output) => output,
         None => default_output_path(&opt.url)?,
     };
     let write_to_stdout = output.as_os_str() == "-";
 
-    let client = super::client::create_client_with_middleware()?;
+    let client = super::client::create_client_with_middleware(offline)?;
 
     let response = client
         .get(opt.url.clone())
