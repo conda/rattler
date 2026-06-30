@@ -44,6 +44,7 @@ async fn extract_from_url(
     url: Url,
     destination: Option<PathBuf>,
     package_display: &str,
+    offline: bool,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
     let destination = destination.map_or_else(|| determine_destination_from_url(&url), Ok)?;
 
@@ -53,7 +54,7 @@ async fn extract_from_url(
         destination.display()
     );
 
-    let client = super::client::create_client_with_middleware()?;
+    let client = super::client::create_client_with_middleware(offline)?;
 
     let result =
         rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
@@ -93,10 +94,10 @@ fn extract_from_path(
     Ok((destination, result))
 }
 
-pub async fn extract(opt: Opt) -> miette::Result<()> {
+pub async fn extract(opt: Opt, offline: bool) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
     let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
-        extract_from_url(url, opt.destination, &opt.package).await?
+        extract_from_url(url, opt.destination, &opt.package, offline).await?
     } else {
         extract_from_path(&opt.package, opt.destination)?
     };

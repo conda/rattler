@@ -36,6 +36,10 @@ struct Opt {
     /// Log verbose
     #[clap(short, long, global = true)]
     verbose: bool,
+
+    /// Disable network access and use only locally cached data.
+    #[clap(long, global = true)]
+    offline: bool,
 }
 
 /// Different commands supported by `rattler`.
@@ -48,6 +52,7 @@ enum Command {
     FetchFile(commands::fetch_file::Opt),
     Inspect(commands::inspect::Opt),
     Search(commands::search::Opt),
+    Solve(commands::solve::Opt),
     ShellHook(commands::shell_hook::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
@@ -107,27 +112,37 @@ async fn async_main() -> miette::Result<()> {
         .try_init()
         .into_diagnostic()?;
 
+    let offline = opt.offline;
+
     // Dispatch the selected comment
     match opt.command {
-        Command::Auth(opts) => commands::auth::auth(*opts).await,
+        Command::Auth(opts) => commands::auth::auth(*opts, offline).await,
         Command::Completion(opts) => commands::completion::completion(opts),
-        Command::Create(opts) => commands::create::create(opts).await,
-        Command::Download(opts) => commands::download::download(opts).await,
-        Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts).await,
-        Command::Inspect(opts) => commands::inspect::inspect(opts).await,
-        Command::Search(opts) => commands::search::search(opts).await,
+        Command::Create(opts) => commands::create::create(opts, offline).await,
+        Command::Download(opts) => commands::download::download(opts, offline).await,
+        Command::FetchFile(opts) => commands::fetch_file::fetch_file(opts, offline).await,
+        Command::Inspect(opts) => commands::inspect::inspect(opts, offline).await,
+        Command::Search(opts) => commands::search::search(opts, offline).await,
+        Command::Solve(opts) => commands::solve::solve(opts, offline).await,
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Run(opts) => commands::run::run(opts).await,
-        Command::Extract(opts) => commands::extract::extract(opts).await,
+        Command::Extract(opts) => commands::extract::extract(opts, offline).await,
         Command::Link(opts) => commands::link::link(opts).await,
         Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
-        Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
-        Command::Exec(opts) => exec::exec(opts).await,
+        Command::Upload(opts) => {
+            if offline {
+                return Err(miette::miette!(
+                    "upload cannot run because network access is disabled by --offline"
+                ));
+            }
+            rattler_upload::upload_from_args(*opts).await
+        }
+        Command::Exec(opts) => exec::exec(opts, offline).await,
         #[cfg(feature = "sigstore")]
         Command::VerifyPackage(opts) => commands::verify::verify(opts).await,
     }

@@ -29,6 +29,10 @@ pub struct CacheMetadata {
     /// opposed to served from an existing cache entry). Used so that, e.g.,
     /// post-fetch verification only removes packages it actually downloaded and
     /// never deletes a pre-existing cache hit on a transient failure.
+    ///
+    /// Only read by the sigstore verification path; allowed to be unused
+    /// otherwise.
+    #[cfg_attr(not(feature = "sigstore"), allow(dead_code))]
     pub(super) from_fetch: bool,
 }
 

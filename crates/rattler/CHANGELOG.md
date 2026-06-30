@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0](https://github.com/conda/rattler/compare/rattler-v0.45.0...rattler-v0.46.0) - 2026-06-26
+
+### Added
+
+- add offline mode to rattler CLI ([#2537](https://github.com/conda/rattler/pull/2537))
+- default OAuth flow to device-code ([#2521](https://github.com/conda/rattler/pull/2521))
+
 ## [0.45.0](https://github.com/conda/rattler/compare/rattler-v0.44.4...rattler-v0.45.0) - 2026-06-17
 
 ### Added

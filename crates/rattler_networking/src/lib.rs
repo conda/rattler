@@ -9,6 +9,7 @@ pub use challenge_middleware::{
 pub use lazy_client::LazyClient;
 pub use mirror_middleware::MirrorMiddleware;
 pub use oci_middleware::OciMiddleware;
+pub use offline_middleware::{OfflineError, OfflineMiddleware};
 
 #[cfg(feature = "gcs")]
 pub mod gcs_middleware;
@@ -23,10 +24,11 @@ pub use s3_middleware::S3Middleware;
 pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod challenge_middleware;
-pub mod oauth_refresh;
+pub(crate) mod oauth_refresh;
 
 mod lazy_client;
 pub mod mirror_middleware;
 pub mod oci_middleware;
+pub mod offline_middleware;
 pub mod retry_policies;
 pub mod trusted_publishing;

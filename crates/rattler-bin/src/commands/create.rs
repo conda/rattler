@@ -24,6 +24,7 @@ use rattler_solve::{
     libsolv_c::{self},
     resolvo,
 };
+use rattler_virtual_packages::{VirtualPackageOverrides, VirtualPackages};
 
 use crate::{
     commands::progress::{wrap_in_async_progress, wrap_in_progress},
@@ -47,13 +48,13 @@ pub struct Opt {
     #[clap(required = true)]
     specs: Vec<String>,
 
-    /// Simulute command without installation
+    /// Simulate command without installation
     #[clap(long)]
     dry_run: bool,
 
-    /// Target platform (e.g., linux-64, osx-arm64)
-    #[clap(long)]
-    platform: Option<String>,
+    /// The platform to create the environment for.
+    #[clap(long, default_value_t = Platform::current())]
+    platform: Platform,
 
     #[clap(long)]
     virtual_package: Option<Vec<String>>,
@@ -124,20 +125,15 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
     }
 }
 
-pub async fn create(opt: Opt) -> miette::Result<()> {
+pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
     // Make the target prefix absolute
     let target_prefix = std::path::absolute(opt.target_prefix).into_diagnostic()?;
 
-    // Determine the platform we're going to install for
-    let install_platform = if let Some(platform) = opt.platform {
-        Platform::from_str(&platform).into_diagnostic()?
-    } else {
-        Platform::current()
-    };
+    let install_platform = opt.platform;
 
-    println!("Installing for platform: {install_platform:?}");
+    println!("Installing for platform: {install_platform}");
 
     // Parse the specs from the command line. We do this explicitly instead of allow
     // clap to deal with this because we need to parse the `channel_config` when
@@ -179,7 +175,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // `repodata.json` that should be available from the corresponding Url. The
     // code below also displays a nice CLI progress-bar to give users some more
     // information about what is going on.
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.
@@ -192,6 +188,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
+                cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),
@@ -241,15 +238,11 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
                 })
                 .collect::<miette::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::detect(
-                &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
+            VirtualPackages::detect_for_platform(
+                install_platform,
+                &VirtualPackageOverrides::from_env(),
             )
-            .map(|vpkgs| {
-                vpkgs
-                    .iter()
-                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                    .collect::<Vec<_>>()
-            })
+            .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
             .into_diagnostic()
         }
     })?;

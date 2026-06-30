@@ -32,7 +32,9 @@ pub struct Opt {
 
 /// Creates an HTTP client with authentication middleware
 fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
-    super::client::create_client_with_middleware()
+    // Verification always needs network access to fetch signatures, so the
+    // client is never created in offline mode.
+    super::client::create_client_with_middleware(false)
 }
 
 /// Download package and return bytes

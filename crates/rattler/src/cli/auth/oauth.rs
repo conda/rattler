@@ -82,6 +82,7 @@ pub struct OAuthConfig {
 }
 
 /// Which OAuth flow to attempt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OAuthFlow {
     /// Try auth code first, fall back to device code on failure.
     Auto,
