@@ -122,9 +122,12 @@ fn handle_input_arguments() -> anyhow::Result<MountArgs> {
     std::fs::create_dir_all(&mount_dir)
         .with_context(|| format!("failed to create mount directory {}", mount_dir.display()))?;
 
-    let mount_dir = mount_dir
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize mount directory {}", mount_dir.display()))?;
+    let mount_dir = mount_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to canonicalize mount directory {}",
+            mount_dir.display()
+        )
+    })?;
 
     Ok(MountArgs {
         pixi_lock,

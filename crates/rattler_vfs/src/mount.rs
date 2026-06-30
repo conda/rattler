@@ -27,7 +27,7 @@ impl MountBackend {
                 NfsProvider::mount(fs, mount_point).await
             }
             /// A windows machine would not be able to setup the server part of this implementation
-            /// When it would be mounting to a seperate server this could work with nfs on windows
+            /// When it would be mounting to a separate server this could work with nfs on windows
             #[cfg(not(unix))]
             MountBackend::Nfs => {
                 anyhow::bail!("NFS backend is not supported on this platform")
