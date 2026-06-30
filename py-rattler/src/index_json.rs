@@ -17,7 +17,7 @@ use crate::{
     version::PyVersion,
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyIndexJson {
@@ -100,7 +100,7 @@ impl PyIndexJson {
                 >(client.into(), url)
                 .await;
 
-            Python::with_gil(|py| match index_json {
+            Python::attach(|py| match index_json {
                 Ok(r) => Ok(Some(Py::new(py, PyIndexJson::from(r))?.into_any())),
                 Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
                 Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
