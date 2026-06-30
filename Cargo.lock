@@ -5499,7 +5499,6 @@ name = "rattler_sigstore"
 version = "0.1.0"
 dependencies = [
  "astral-reqwest-middleware",
- "hex",
  "jiff",
  "miette",
  "reqwest",
@@ -5507,6 +5506,7 @@ dependencies = [
  "serde_json",
  "sigstore-verify",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "url",
 ]

@@ -1,5 +1,6 @@
 //! Verification policy types and configuration.
 
+use crate::error::{SigstoreError, SigstoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -240,7 +241,10 @@ pub struct VerificationConfig {
     /// Default publishers to accept for channels not in `channel_publishers`.
     ///
     /// If `None`, packages from unmapped channels will fail verification in
-    /// `Require` mode or be skipped in `Warn` mode.
+    /// `Require` mode or be skipped (not verified) in `Warn` mode.
+    ///
+    /// If set to an empty `Vec` (or a [`Publisher`] with no constraints), any
+    /// validly-signed package is accepted regardless of its signer identity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_publishers: Option<Vec<Publisher>>,
 
@@ -280,36 +284,48 @@ impl VerificationConfig {
     }
 
     /// Get the signatures URL for a package.
-    pub fn signatures_url(&self, package_url: &Url) -> Url {
-        let pattern = self
-            .signatures_url_pattern
-            .as_deref()
-            .unwrap_or("{url}.v0.sigs");
-        let url_str = pattern.replace("{url}", package_url.as_str());
-        // This should not fail if the pattern is valid
-        Url::parse(&url_str).unwrap_or_else(|_| {
-            let mut url = package_url.clone();
-            url.set_path(&format!("{}.v0.sigs", url.path()));
-            url
-        })
+    ///
+    /// If a custom `signatures_url_pattern` is configured, `{url}` is replaced
+    /// with the package URL and the result is parsed; an invalid pattern result
+    /// is reported as an error instead of silently falling back.
+    ///
+    /// Otherwise the default `.v0.sigs` suffix is appended to the package URL's
+    /// *path* (preserving any query string), so package URLs carrying query
+    /// strings (e.g. auth tokens) produce a correct signatures URL.
+    pub fn signatures_url(&self, package_url: &Url) -> SigstoreResult<Url> {
+        if let Some(pattern) = self.signatures_url_pattern.as_deref() {
+            let url_str = pattern.replace("{url}", package_url.as_str());
+            return Url::parse(&url_str).map_err(|e| SigstoreError::InvalidSignaturesUrl {
+                url: url_str,
+                message: e.to_string(),
+            });
+        }
+
+        let mut url = package_url.clone();
+        let sig_path = format!("{}.v0.sigs", url.path());
+        url.set_path(&sig_path);
+        Ok(url)
     }
 
     /// Find the publishers allowed for a given package URL.
     ///
+    /// Channel prefixes are matched on URL origin and path-segment boundaries
+    /// (not a raw string `starts_with`), so a prefix for `.../conda-forge` does
+    /// not accidentally match `.../conda-forge-staging`. The most specific
+    /// (longest by path-segment count) matching prefix wins.
+    ///
     /// Returns `None` if the channel is not mapped and no default publishers are set.
     pub fn publishers_for_url(&self, package_url: &Url) -> Option<&[Publisher]> {
-        let url_str = package_url.as_str();
-
-        // Find the longest matching prefix
-        let mut best_match: Option<(&str, &Vec<Publisher>)> = None;
+        // Find the most specific matching prefix (by path-segment count).
+        let mut best_match: Option<(usize, &Vec<Publisher>)> = None;
         for (prefix, publishers) in &self.channel_publishers {
-            if url_str.starts_with(prefix) {
+            let Ok(prefix_url) = Url::parse(prefix) else {
+                continue;
+            };
+            if let Some(specificity) = url_prefix_specificity(&prefix_url, package_url) {
                 match best_match {
-                    None => best_match = Some((prefix.as_str(), publishers)),
-                    Some((current_prefix, _)) if prefix.len() > current_prefix.len() => {
-                        best_match = Some((prefix.as_str(), publishers));
-                    }
-                    _ => {}
+                    Some((current, _)) if current >= specificity => {}
+                    _ => best_match = Some((specificity, publishers)),
                 }
             }
         }
@@ -317,6 +333,45 @@ impl VerificationConfig {
         best_match
             .map(|(_, publishers)| publishers.as_slice())
             .or(self.default_publishers.as_deref())
+    }
+}
+
+/// If `package_url` is located under the channel `prefix` URL, returns the
+/// prefix's path-segment count (used as a specificity score). Returns `None`
+/// when the package is not under the prefix.
+///
+/// Matching compares scheme/host/port and then requires the prefix's
+/// non-empty path segments to be a prefix of the package's path segments, so
+/// boundaries are respected (`conda-forge` does not match `conda-forge-staging`).
+fn url_prefix_specificity(prefix: &Url, package_url: &Url) -> Option<usize> {
+    if prefix.scheme() != package_url.scheme()
+        || prefix.host_str() != package_url.host_str()
+        || prefix.port_or_known_default() != package_url.port_or_known_default()
+    {
+        return None;
+    }
+
+    let prefix_segments: Vec<&str> = prefix
+        .path_segments()
+        .map(|segments| segments.filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default();
+    let package_segments: Vec<&str> = package_url
+        .path_segments()
+        .map(|segments| segments.filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default();
+
+    if prefix_segments.len() > package_segments.len() {
+        return None;
+    }
+
+    if prefix_segments
+        .iter()
+        .zip(&package_segments)
+        .all(|(p, u)| p == u)
+    {
+        Some(prefix_segments.len())
+    } else {
+        None
     }
 }
 
@@ -430,5 +485,88 @@ mod tests {
             Url::parse("https://conda.anaconda.org/bioconda/linux-64/pkg.conda").unwrap();
         let publishers = config.publishers_for_url(&other_url).unwrap();
         assert_eq!(publishers[0].issuer.as_deref(), Some("default-issuer"));
+    }
+
+    #[test]
+    fn test_signatures_url_default_appends_to_path() {
+        let config = VerificationConfig::new();
+        let pkg_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        assert_eq!(
+            config.signatures_url(&pkg_url).unwrap().as_str(),
+            "https://conda.anaconda.org/conda-forge/linux-64/pkg.conda.v0.sigs"
+        );
+    }
+
+    #[test]
+    fn test_signatures_url_preserves_query_string() {
+        // The `.v0.sigs` suffix must be appended to the path, not the serialized
+        // URL, so a query string (e.g. an auth token) stays intact.
+        let config = VerificationConfig::new();
+        let pkg_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda?token=secret")
+                .unwrap();
+        assert_eq!(
+            config.signatures_url(&pkg_url).unwrap().as_str(),
+            "https://conda.anaconda.org/conda-forge/linux-64/pkg.conda.v0.sigs?token=secret"
+        );
+    }
+
+    #[test]
+    fn test_signatures_url_invalid_explicit_pattern_errors() {
+        // An explicit but unparseable signatures URL must be a hard error rather
+        // than silently falling back to a derived URL.
+        let config = VerificationConfig::new().with_signatures_url_pattern("not a valid url");
+        let pkg_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        assert!(matches!(
+            config.signatures_url(&pkg_url),
+            Err(SigstoreError::InvalidSignaturesUrl { .. })
+        ));
+    }
+
+    #[test]
+    fn test_publishers_for_url_respects_segment_boundaries() {
+        // A prefix for `conda-forge` must not match `conda-forge-staging`.
+        let mut config = VerificationConfig::new();
+        config.add_channel_publisher(
+            Url::parse("https://conda.anaconda.org/conda-forge/").unwrap(),
+            Publisher::new().with_issuer("conda-forge-issuer"),
+        );
+
+        let cf_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        assert!(config.publishers_for_url(&cf_url).is_some());
+
+        let staging_url =
+            Url::parse("https://conda.anaconda.org/conda-forge-staging/linux-64/pkg.conda")
+                .unwrap();
+        // No default publishers, so a non-matching channel yields `None`.
+        assert!(config.publishers_for_url(&staging_url).is_none());
+    }
+
+    #[test]
+    fn test_publishers_for_url_matches_without_trailing_slash() {
+        // A channel prefix configured without a trailing slash must still match
+        // packages under that channel (boundary-aware, not raw `starts_with`).
+        let mut config = VerificationConfig::new();
+        config
+            .channel_publishers
+            .entry("https://conda.anaconda.org/conda-forge".to_string())
+            .or_default()
+            .push(Publisher::new().with_issuer("conda-forge-issuer"));
+
+        let cf_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        let publishers = config.publishers_for_url(&cf_url).unwrap();
+        assert_eq!(publishers[0].issuer.as_deref(), Some("conda-forge-issuer"));
+    }
+
+    #[test]
+    fn test_publishers_for_url_unmapped_without_default_is_none() {
+        let config = VerificationConfig::new();
+        let pkg_url =
+            Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        assert!(config.publishers_for_url(&pkg_url).is_none());
     }
 }

@@ -25,6 +25,15 @@ pub enum SigstoreError {
     #[error("No signatures found for package at {0}")]
     NoSignatures(String),
 
+    /// The configured signatures URL is not a valid URL.
+    #[error("Invalid signatures URL '{url}': {message}")]
+    InvalidSignaturesUrl {
+        /// The signatures URL that failed to parse.
+        url: String,
+        /// The parse error message.
+        message: String,
+    },
+
     /// Failed to load the Sigstore trusted root.
     #[error("Failed to load Sigstore trusted root: {0}")]
     TrustedRoot(String),

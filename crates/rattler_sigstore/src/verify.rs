@@ -9,7 +9,27 @@ use sigstore_verify::{
     VerificationPolicy as SigstorePolicy, Verifier,
     types::{Artifact, Bundle},
 };
+use tokio::sync::OnceCell;
 use url::Url;
+
+/// Process-wide cache of the Sigstore production trusted root.
+///
+/// [`TrustedRoot::production`] performs network I/O (TUF) to fetch the root, so
+/// loading it once per package verification is wasteful when installing many
+/// packages. We cache the first successful load for the lifetime of the
+/// process; failures are not cached so a later call can retry.
+static TRUSTED_ROOT: OnceCell<TrustedRoot> = OnceCell::const_new();
+
+/// Load the production trusted root, reusing the cached instance if available.
+async fn production_trusted_root() -> SigstoreResult<&'static TrustedRoot> {
+    TRUSTED_ROOT
+        .get_or_try_init(|| async {
+            TrustedRoot::production()
+                .await
+                .map_err(|e| SigstoreError::TrustedRoot(e.to_string()))
+        })
+        .await
+}
 
 /// The outcome of a verification attempt.
 #[derive(Debug, Clone, Default)]
@@ -59,26 +79,24 @@ pub async fn verify_package(
     .await
 }
 
-/// Verify a package using pre-computed SHA256 digest instead of full bytes.
+/// Verify a package using a pre-computed SHA256 digest instead of full bytes.
 ///
 /// This is more efficient for large packages where we already have the digest.
-/// The digest should be a hex-encoded SHA256 hash string.
+/// `package_sha256` is the raw 32-byte SHA256 digest of the package (e.g.
+/// `rattler_digest::Sha256Hash::as_slice`), avoiding a redundant hex
+/// encode/decode round-trip at the call site.
 pub async fn verify_package_by_digest(
     policy: &VerificationPolicy,
     package_url: &Url,
-    package_sha256: &str,
+    package_sha256: &[u8],
     client: &ClientWithMiddleware,
 ) -> SigstoreResult<VerificationOutcome> {
-    let digest_bytes = hex::decode(package_sha256).map_err(|e| {
-        SigstoreError::VerificationFailed(format!("Invalid SHA256 hex string: {e}"))
-    })?;
-
     // Pass the SHA256 as a pre-computed digest so the verifier compares it
     // directly against the bundle instead of hashing it as raw artifact bytes.
     verify_package_impl(
         policy,
         package_url,
-        Artifact::from_digest(&digest_bytes),
+        Artifact::from_digest(package_sha256),
         client,
     )
     .await
@@ -98,16 +116,25 @@ async fn verify_package_impl(
         VerificationPolicy::Warn(config) | VerificationPolicy::Require(config) => config,
     };
 
-    // Check if we have publishers configured for this channel
-    let publishers = config.publishers_for_url(package_url);
-    if publishers.is_none() && policy.is_required() {
-        return Err(SigstoreError::NoMatchingPublisher {
-            channel: package_url.to_string(),
-        });
-    }
+    // Determine which publishers are allowed for this channel. If the channel
+    // is not mapped and no default publishers are configured we have nothing to
+    // verify against: fail closed in `Require` mode and skip (do not verify) in
+    // `Warn` mode, matching the documented behaviour.
+    let Some(publishers) = config.publishers_for_url(package_url) else {
+        if policy.is_required() {
+            return Err(SigstoreError::NoMatchingPublisher {
+                channel: package_url.to_string(),
+            });
+        }
+        tracing::debug!(
+            "No publishers configured for {}; skipping signature verification",
+            package_url
+        );
+        return Ok(VerificationOutcome::default());
+    };
 
     // Fetch signatures
-    let signatures_url = config.signatures_url(package_url);
+    let signatures_url = config.signatures_url(package_url)?;
     let bundles =
         fetch_signatures_with_policy(client, &signatures_url, policy, package_url).await?;
 
@@ -116,11 +143,9 @@ async fn verify_package_impl(
         return handle_no_signatures(policy, package_url);
     }
 
-    // Load trusted root and verify
-    let trusted_root = TrustedRoot::production()
-        .await
-        .map_err(|e| SigstoreError::TrustedRoot(e.to_string()))?;
-    let verifier = Verifier::new(&trusted_root);
+    // Load (or reuse the cached) trusted root and verify.
+    let trusted_root = production_trusted_root().await?;
+    let verifier = Verifier::new(trusted_root);
 
     verify_bundles(
         &verifier,
@@ -173,7 +198,7 @@ fn verify_bundles(
     verifier: &Verifier,
     bundles: &[Bundle],
     artifact: &Artifact<'_>,
-    publishers: Option<&[Publisher]>,
+    publishers: &[Publisher],
     policy: &VerificationPolicy,
     package_url: &Url,
 ) -> SigstoreResult<VerificationOutcome> {
@@ -187,12 +212,10 @@ fn verify_bundles(
                 let identity = result.identity.as_deref();
                 let issuer = result.issuer.as_deref();
 
-                let matches_publisher = match publishers {
-                    Some(pubs) if !pubs.is_empty() => {
-                        pubs.iter().any(|p| p.matches(identity, issuer))
-                    }
-                    _ => true, // No publisher constraints
-                };
+                // An empty publisher list (an explicitly configured channel
+                // with no signer constraints) accepts any valid signature.
+                let matches_publisher =
+                    publishers.is_empty() || publishers.iter().any(|p| p.matches(identity, issuer));
 
                 if matches_publisher {
                     tracing::info!(
@@ -295,4 +318,41 @@ async fn fetch_signatures(client: &ClientWithMiddleware, url: &Url) -> SigstoreR
     }
 
     Ok(bundles)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::policy::VerificationConfig;
+    use reqwest_middleware::ClientBuilder;
+
+    fn dummy_client() -> ClientWithMiddleware {
+        ClientBuilder::new(reqwest::Client::new()).build()
+    }
+
+    /// In `Warn` mode an unmapped channel with no default publishers is skipped
+    /// (no verification performed, no warning emitted) rather than accepting any
+    /// valid signer. This path must return before any network I/O.
+    #[tokio::test]
+    async fn warn_mode_skips_unmapped_channel() {
+        let policy = VerificationPolicy::Warn(VerificationConfig::new());
+        let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        let outcome = verify_package_by_digest(&policy, &url, &[0u8; 32], &dummy_client())
+            .await
+            .expect("warn mode should skip, not error");
+        assert!(!outcome.verified);
+        assert!(outcome.warnings.is_empty());
+    }
+
+    /// In `Require` mode an unmapped channel with no default publishers fails
+    /// closed. This path must return before any network I/O.
+    #[tokio::test]
+    async fn require_mode_errors_on_unmapped_channel() {
+        let policy = VerificationPolicy::Require(VerificationConfig::new());
+        let url = Url::parse("https://conda.anaconda.org/conda-forge/linux-64/pkg.conda").unwrap();
+        let err = verify_package_by_digest(&policy, &url, &[0u8; 32], &dummy_client())
+            .await
+            .expect_err("require mode should fail closed");
+        assert!(matches!(err, SigstoreError::NoMatchingPublisher { .. }));
+    }
 }
