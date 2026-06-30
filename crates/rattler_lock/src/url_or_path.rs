@@ -194,22 +194,22 @@ fn lexically_normalize(path: &Utf8TypedPath<'_>) -> Utf8TypedPathBuf {
         match component {
             Utf8TypedComponent::Unix(unix) => match unix {
                 Utf8UnixComponent::RootDir => {
-                    on_root(&mut has_root, &mut names, &mut leading_parents)
+                    on_root(&mut has_root, &mut names, &mut leading_parents);
                 }
                 Utf8UnixComponent::CurDir => {}
                 Utf8UnixComponent::ParentDir => {
-                    on_parent(has_root, &mut names, &mut leading_parents)
+                    on_parent(has_root, &mut names, &mut leading_parents);
                 }
                 Utf8UnixComponent::Normal(name) => names.push(name.to_string()),
             },
             Utf8TypedComponent::Windows(windows) => match windows {
                 Utf8WindowsComponent::Prefix(p) => prefix = Some(p.as_str().to_string()),
                 Utf8WindowsComponent::RootDir => {
-                    on_root(&mut has_root, &mut names, &mut leading_parents)
+                    on_root(&mut has_root, &mut names, &mut leading_parents);
                 }
                 Utf8WindowsComponent::CurDir => {}
                 Utf8WindowsComponent::ParentDir => {
-                    on_parent(has_root, &mut names, &mut leading_parents)
+                    on_parent(has_root, &mut names, &mut leading_parents);
                 }
                 Utf8WindowsComponent::Normal(name) => names.push(name.to_string()),
             },
