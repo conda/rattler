@@ -5,7 +5,7 @@ use std::sync::Arc;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
-use pyo3::{Bound, FromPyObject, PyAny, PyResult, Python, pyclass, pymethods};
+use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
@@ -22,7 +22,7 @@ use crate::record::PyRecord;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::{PyChannel, Wrap};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyGateway {
     pub(crate) inner: Gateway,
@@ -44,9 +44,10 @@ impl From<Gateway> for PyGateway {
     }
 }
 
-impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
-    fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
-        let parsed = match <Option<HashSet<PyPlatform>>>::extract_bound(ob)? {
+impl<'a, 'source> FromPyObject<'a, 'source> for Wrap<SubdirSelection> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'source, PyAny>) -> PyResult<Self> {
+        let parsed = match ob.extract::<Option<HashSet<PyPlatform>>>()? {
             Some(platforms) => SubdirSelection::Some(
                 platforms
                     .into_iter()
@@ -255,7 +256,7 @@ impl PyGateway {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PySourceConfig {
@@ -274,8 +275,9 @@ impl From<SourceConfig> for PySourceConfig {
     }
 }
 
-impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<CacheAction> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         let as_py_str: PyBackedStr = ob.extract()?;
         let parsed = match as_py_str.as_ref() {
             "cache-or-fetch" => CacheAction::CacheOrFetch,
@@ -313,7 +315,7 @@ impl PySourceConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyFetchRepoDataOptions {
@@ -332,8 +334,9 @@ impl From<FetchRepoDataOptions> for PyFetchRepoDataOptions {
     }
 }
 
-impl<'py> FromPyObject<'py> for Wrap<Variant> {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<Variant> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         let as_py_str: PyBackedStr = ob.extract()?;
         let parsed = match as_py_str.as_ref() {
             "after-patches" => Variant::AfterPatches,

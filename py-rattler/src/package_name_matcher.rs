@@ -9,7 +9,7 @@ use rattler_conda_types::PackageNameMatcher;
 
 use crate::{error::PyRattlerError, package_name::PyPackageName};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyPackageNameMatcher {
     pub(crate) inner: PackageNameMatcher,

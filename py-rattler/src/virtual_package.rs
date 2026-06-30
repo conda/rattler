@@ -3,7 +3,7 @@ use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides
 
 use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Default, PartialEq)]
 pub struct PyOverride {
@@ -54,7 +54,7 @@ impl PyOverride {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVirtualPackageOverrides {
@@ -135,7 +135,7 @@ impl PyVirtualPackageOverrides {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVirtualPackage {

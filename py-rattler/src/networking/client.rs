@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyClientWithMiddleware {
