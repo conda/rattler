@@ -305,6 +305,7 @@ mod tests {
             CacheAction::NoCache,
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -406,6 +407,7 @@ mod tests {
             client,
             cache_dir.path().to_path_buf(),
             CacheAction::NoCache,
+            None,
             None,
             None,
         )
