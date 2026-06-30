@@ -76,7 +76,7 @@ impl MountProvider for NfsProvider {
 
         ready_rx
             .recv()
-            .map_err(|_| anyhow::anyhow!("NFS server thread exited before binding"))?
+            .map_err(|err| anyhow::anyhow!("NFS server thread exited before binding: {err}"))?
             .map_err(|err| anyhow::anyhow!("failed binding NFS listener: {err}"))?;
 
         eprintln!("NFS server listening on {NFS_ADDR}");

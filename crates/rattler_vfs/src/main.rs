@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::{Arg, ArgAction, Command};
-use compio;
 use rattler_cache::{PACKAGE_CACHE_DIR, default_cache_dir};
 use std::path::PathBuf;
 
@@ -92,21 +91,18 @@ fn handle_input_arguments() -> anyhow::Result<MountArgs> {
         .get_one::<PathBuf>("CACHE_ORIGIN")
         .cloned()
         .unwrap_or_else(|| {
-            default_cache_dir()
-                .map(|cache_dir| cache_dir.join(PACKAGE_CACHE_DIR))
-                .unwrap_or_else(|_| PathBuf::from(PACKAGE_CACHE_DIR))
+            default_cache_dir().map_or_else(
+                |_| PathBuf::from(PACKAGE_CACHE_DIR),
+                |cache_dir| cache_dir.join(PACKAGE_CACHE_DIR),
+            )
         });
 
-    let mount_dir = matches
-        .get_one::<PathBuf>("MOUNT_DIR")
-        .unwrap()
-        .to_path_buf();
+    let mount_dir = matches.get_one::<PathBuf>("MOUNT_DIR").unwrap().clone();
 
     let mount_type = MountBackend::from(
         matches
             .get_one::<String>("MOUNT_TYPE")
-            .map(String::as_str)
-            .unwrap_or("nfs"),
+            .map_or("nfs", String::as_str),
     );
 
     let environment_name = matches.get_one::<String>("ENVIRONMENT").unwrap().clone();

@@ -20,9 +20,10 @@ pub fn text_prefix_replacement(
     let new_prefix_str = mount_point.to_string_lossy();
     let new_prefix = new_prefix_str.as_bytes();
 
-    if new_prefix.len() > old_prefix.len() {
-        panic!("New prefix is longer than placeholder");
-    }
+    assert!(
+        new_prefix.len() <= old_prefix.len(),
+        "New prefix is longer than placeholder"
+    );
 
     let mut replaced = Vec::with_capacity(file.len());
     let mut last_pos = 0;
@@ -58,9 +59,11 @@ pub fn binary_prefix_replacement(
     let length_placeholder = placeholder.placeholder.len();
     let length_prefix = new_prefix.len();
 
-    if length_prefix > length_placeholder {
-        panic!("New prefix is longer than placeholder");
-    }
+    assert!(
+        length_prefix <= length_placeholder,
+        "New prefix is longer than placeholder"
+    );
+
     let length_change = length_placeholder - length_prefix;
 
     if start >= end || start >= file.len() {
@@ -72,8 +75,7 @@ pub fn binary_prefix_replacement(
     let mut buffer_pos = 0;
 
     let mut next_placeholder_index = match placeholder.offsets.binary_search(&start) {
-        Ok(index) => index,
-        Err(index) => index,
+        Ok(index) | Err(index) => index,
     };
 
     let mut unfinished_replacements = if next_placeholder_index >= 1 {
@@ -155,10 +157,7 @@ pub fn find_unfinished_replacements(file_before: &[u8], offsets: &[usize]) -> us
         return 0;
     }
 
-    let last_nul_byte = match memmem::rfind(file_before, b"\x00") {
-        Some(pos) => pos,
-        None => 0,
-    };
+    let last_nul_byte = memmem::rfind(file_before, b"\x00").unwrap_or_default();
 
     if offsets.last().unwrap() < &last_nul_byte {
         return 0;

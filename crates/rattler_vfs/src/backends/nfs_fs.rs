@@ -6,7 +6,7 @@ use nfs3_server::vfs::{
 };
 use nfs3_types::nfs3::{
     Nfs3Option, entryplus3, fattr3, filename3, ftype3, nfspath3, nfsstat3, nfstime3, post_op_attr,
-    sattr3,
+    sattr3, specdata3,
 };
 
 use crate::virtual_fs_core::{DirectoryEntry, VirtualAttr, VirtualFSCore};
@@ -24,13 +24,13 @@ fn to_fattr(attr: VirtualAttr, ino: u64) -> fattr3 {
         } else {
             ftype3::NF3REG
         },
-        mode: attr.perm as u32,
+        mode: u32::from(attr.perm),
         nlink: 1,
         uid: attr.uid,
         gid: attr.gid,
         size: attr.size,
         used: attr.size,
-        rdev: Default::default(),
+        rdev: specdata3::default(),
         fsid: 1,
         fileid: ino,
         atime: nfstime3::default(),

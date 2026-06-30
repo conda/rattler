@@ -80,7 +80,7 @@ fn resolve_package_dirs(
                 })
             })
             .join()
-            .map_err(|_| anyhow!("package cache resolution thread panicked"))?
+            .map_err(|err| anyhow!("package cache resolution thread panicked {err:?}"))?
     })
 }
 
@@ -97,12 +97,12 @@ async fn ensure_package_cached(
 
     if download_if_missing {
         let url = match &package_data.location {
-            UrlOrPath::Url(u) => u.clone(),
-            UrlOrPath::Path(p) => {
+            UrlOrPath::Url(url) => url.clone(),
+            UrlOrPath::Path(path) => {
                 return Err(anyhow!(
                     "package '{}' lockfile location is a local path ({}); cannot download",
                     package_ref.name(),
-                    p
+                    path
                 ));
             }
         };
@@ -186,20 +186,19 @@ pub fn path_parse(
                 .prefix_path
                 .join(component);
 
-            parent_index = match directory_indices.get(&current_path) {
-                Some(&index) => index,
-                None => {
-                    let new_dir = FSMetadata::new_directory(current_path.clone(), parent_index);
-                    let child_index = env_paths.len();
-                    env_paths.push(new_dir);
-                    env_paths[parent_index]
-                        .as_directory_mut()
-                        .expect("parent is a directory")
-                        .children
-                        .push(child_index);
-                    directory_indices.insert(current_path, child_index);
-                    child_index
-                }
+            parent_index = if let Some(&index) = directory_indices.get(&current_path) {
+                index
+            } else {
+                let new_dir = FSMetadata::new_directory(current_path.clone(), parent_index);
+                let child_index = env_paths.len();
+                env_paths.push(new_dir);
+                env_paths[parent_index]
+                    .as_directory_mut()
+                    .expect("parent is a directory")
+                    .children
+                    .push(child_index);
+                directory_indices.insert(current_path, child_index);
+                child_index
             };
         }
 
@@ -219,7 +218,7 @@ pub fn path_parse(
             file_name.into(),
             parent_index,
             cache_base,
-            path.path_type.clone(),
+            path.path_type,
             prefix_placeholder,
         ));
 

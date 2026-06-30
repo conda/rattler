@@ -74,7 +74,8 @@ impl VirtualFSCore {
         (idx < self.metadata.len()).then_some(idx)
     }
 
-    fn index_to_ino(&self, idx: usize) -> u64 {
+    /// Converts a 1-based index number to a 0-based metadata inode.
+    fn index_to_ino(idx: usize) -> u64 {
         (idx + 1) as u64
     }
 
@@ -332,7 +333,7 @@ impl VirtualFSCore {
                 let child = &self.metadata[*child_idx];
 
                 DirectoryEntry {
-                    ino: self.index_to_ino(*child_idx),
+                    ino: Self::index_to_ino(*child_idx),
                     name: child.file_name().to_os_string(),
                     is_dir: matches!(child, FSMetadata::FSDirectory(_)),
                     is_symlink: matches!(child, FSMetadata::FSFile(f) if f.path_type == PathType::SoftLink),
