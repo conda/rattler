@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, Command};
 use rattler_cache::{PACKAGE_CACHE_DIR, default_cache_dir};
 use std::path::PathBuf;
@@ -97,8 +97,6 @@ fn handle_input_arguments() -> anyhow::Result<MountArgs> {
             )
         });
 
-    let mount_dir = matches.get_one::<PathBuf>("MOUNT_DIR").unwrap().clone();
-
     let mount_type = MountBackend::from(
         matches
             .get_one::<String>("MOUNT_TYPE")
@@ -109,7 +107,24 @@ fn handle_input_arguments() -> anyhow::Result<MountArgs> {
 
     let download = matches.get_flag("DOWNLOAD");
 
-    let mount_dir = mount_dir.canonicalize().unwrap();
+    let mount_dir = matches
+        .get_one::<PathBuf>("MOUNT_DIR")
+        .cloned()
+        .unwrap_or_else(|| {
+            pixi_lock
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join(".pixi")
+                .join("envs")
+                .join(&environment_name)
+        });
+
+    std::fs::create_dir_all(&mount_dir)
+        .with_context(|| format!("failed to create mount directory {}", mount_dir.display()))?;
+
+    let mount_dir = mount_dir
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize mount directory {}", mount_dir.display()))?;
 
     Ok(MountArgs {
         pixi_lock,
