@@ -327,7 +327,10 @@ mod test {
             UrlOrPath::Path("../a/../b".into()),
             UrlOrPath::Path("../b".into())
         );
-        assert_eq!(UrlOrPath::Path("a/b/..".into()), UrlOrPath::Path("a".into()));
+        assert_eq!(
+            UrlOrPath::Path("a/b/..".into()),
+            UrlOrPath::Path("a".into())
+        );
         assert_ne!(
             UrlOrPath::Path("..".into()),
             UrlOrPath::Path("../..".into())
