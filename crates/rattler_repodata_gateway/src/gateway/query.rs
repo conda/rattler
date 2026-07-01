@@ -949,11 +949,7 @@ impl QueryExecutor {
         let mut handles = self.subdir_handles;
 
         if self.expander.enabled() && self.expander.has_observed_relations() {
-            let resolution = self.expander.finalize();
-
-            if let Some(msg) = self.expander.strict_error(&resolution) {
-                return Err(GatewayError::ChannelRelationsError(msg));
-            }
+            let resolution = self.expander.finalize()?;
 
             let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
                 .order
@@ -981,7 +977,21 @@ impl QueryExecutor {
                 })
                 .collect();
 
-            let mut tagged: Vec<(usize, usize, usize, usize, SubdirHandle)> = handles
+            // Anchors derive from the final edge set and the caller's
+            // source order, so they are identical run to run
+            // regardless of fetch completion order.
+            let mut users_by_caller_idx: Vec<(usize, ChannelUrl)> = user_channel_caller_idx
+                .iter()
+                .map(|(url, idx)| (*idx, url.clone()))
+                .collect();
+            users_by_caller_idx.sort();
+            let user_priority: Vec<ChannelUrl> = users_by_caller_idx
+                .into_iter()
+                .map(|(_, url)| url)
+                .collect();
+            let anchor_of = self.expander.anchors(&user_priority);
+
+            let mut tagged: Vec<((usize, usize, usize, usize), SubdirHandle)> = handles
                 .into_iter()
                 .enumerate()
                 .map(|(orig_idx, h)| {
@@ -993,9 +1003,8 @@ impl QueryExecutor {
                             (i, r, p)
                         }
                         (SubdirKind::Channel { url, platform }, None) => {
-                            let anchor = self
-                                .expander
-                                .introducer_of(url)
+                            let anchor = anchor_of
+                                .get(url)
                                 .and_then(|u| user_channel_caller_idx.get(u).copied())
                                 .unwrap_or(usize::MAX);
                             let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
@@ -1006,11 +1015,11 @@ impl QueryExecutor {
                             unreachable!("custom sources are always caller-supplied")
                         }
                     };
-                    (anchor, prio, plat, orig_idx, h)
+                    ((anchor, prio, plat, orig_idx), h)
                 })
                 .collect();
-            tagged.sort_by_key(|(a, p, pl, oi, _)| (*a, *p, *pl, *oi));
-            handles = tagged.into_iter().map(|(_, _, _, _, h)| h).collect();
+            tagged.sort_by_key(|(key, _)| *key);
+            handles = tagged.into_iter().map(|(_, h)| h).collect();
         }
 
         let mut repodata: Vec<RepoData> =
@@ -1103,21 +1112,29 @@ fn apply_fetch_error_policy(
     platform: Platform,
     policy: FetchErrorPolicy,
 ) -> Result<(Arc<Subdir>, Option<ChannelRelationsWarning>), GatewayError> {
+    // A missing subdir on a transitively discovered channel is not a
+    // relations violation: a channel publishing only some platforms
+    // is valid. Treat it as empty in both non-Propagate policies (the
+    // subdir builder already does this for every platform except
+    // noarch, whose absence surfaces as an error).
+    if !matches!(policy, FetchErrorPolicy::Propagate)
+        && matches!(err, GatewayError::SubdirNotFoundError(_))
+    {
+        return Ok((Arc::new(Subdir::NotFound), None));
+    }
     match policy {
         FetchErrorPolicy::Propagate => Err(err),
-        FetchErrorPolicy::WrapAsChannelRelationsError => {
-            Err(GatewayError::ChannelRelationsError(format!(
-                "failed to fetch transitively discovered channel \
-                 `{url}` for platform `{platform}`: {err}"
-            )))
-        }
-        FetchErrorPolicy::SwallowAsWarning => {
+        FetchErrorPolicy::WrapAsChannelRelationsError | FetchErrorPolicy::SwallowAsWarning => {
             let warning = ChannelRelationsWarning::DiscoveryFetchFailed {
                 url: url.clone(),
                 platform,
                 error: err.to_string(),
             };
-            Ok((Arc::new(Subdir::NotFound), Some(warning)))
+            if matches!(policy, FetchErrorPolicy::WrapAsChannelRelationsError) {
+                Err(GatewayError::ChannelRelationsError(warning.to_string()))
+            } else {
+                Ok((Arc::new(Subdir::NotFound), Some(warning)))
+            }
         }
     }
 }
@@ -1315,10 +1332,9 @@ impl NamesQuery {
         }
 
         if expander.enabled() && expander.has_observed_relations() {
-            let resolution = expander.finalize();
-            if let Some(msg) = expander.strict_error(&resolution) {
-                return Err(GatewayError::ChannelRelationsError(msg));
-            }
+            // Names are an unordered set; finalize only for its
+            // depth/cycle diagnostics and strict-mode errors.
+            expander.finalize()?;
         }
 
         let names = names

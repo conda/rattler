@@ -259,6 +259,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         py.get_type::<crate::exceptions::GatewayError>(),
     )?;
     m.add(
+        "GatewayWarning",
+        py.get_type::<crate::exceptions::GatewayWarning>(),
+    )?;
+    m.add(
         "InstallerError",
         py.get_type::<crate::exceptions::InstallerError>(),
     )?;

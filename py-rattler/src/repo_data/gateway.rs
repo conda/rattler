@@ -79,11 +79,12 @@ impl<'py> FromPyObject<'py> for Wrap<ChannelRelationsMode> {
 }
 
 /// Forward each [`GatewayWarning`] to Python's `warnings.warn` as a
-/// `UserWarning`. CEP-42's default `Warn` mode produces non-fatal
-/// warnings that the Rust API surfaces on the query output; for the
-/// Python binding we forward them to the host's standard warnings
-/// machinery so they cannot be silently lost.
-fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
+/// `rattler.GatewayWarning` (a `UserWarning` subclass, so callers can
+/// filter or escalate the category specifically). CEP-42's default
+/// `Warn` mode produces non-fatal warnings that the Rust API surfaces
+/// on the query output; the binding forwards them to the host's
+/// standard warnings machinery so they cannot be silently lost.
+pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
     if warnings.is_empty() {
         return Ok(());
     }
@@ -97,7 +98,7 @@ fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
                 "warn",
                 (
                     w.to_string(),
-                    py.get_type::<pyo3::exceptions::PyUserWarning>(),
+                    py.get_type::<crate::exceptions::GatewayWarning>(),
                     2,
                 ),
             )?;

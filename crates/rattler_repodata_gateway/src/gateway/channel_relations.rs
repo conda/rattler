@@ -20,7 +20,7 @@
 //! 2. Drop any relation edge that directly contradicts the user's
 //!    explicit ordering. (Edges between two user channels where the
 //!    user listed `to` at or before `from` lose to the user. Self-loop
-//!    relation edges DO fall through to cycle detection — they are
+//!    relation edges DO fall through to cycle detection; they are
 //!    malformed, not user conflicts.)
 //! 3. Topologically sort. User edges are inserted first, so a cycle
 //!    that mixes user and relation edges always breaks by dropping a
@@ -40,7 +40,7 @@ use std::{
 pub const DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH: usize = 10;
 
 /// Where a [`PriorityEdge`] originated from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EdgeSource {
     /// Implied by the user's channel ordering.
     User,
@@ -51,7 +51,7 @@ pub enum EdgeSource {
 }
 
 /// Directed priority edge: `from` outranks `to`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PriorityEdge<K> {
     pub from: K,
     pub to: K,
@@ -68,7 +68,8 @@ pub struct Resolution<K> {
     /// Edges respected by `order`.
     pub edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped because they contradicted the user's
-    /// explicit ordering.
+    /// explicit ordering. Surfaced by the expander as
+    /// `UserOrderConflict` warnings.
     pub ignored_edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped to break a cycle.
     pub broken_cycle_edges: Vec<PriorityEdge<K>>,
@@ -78,13 +79,14 @@ pub struct Resolution<K> {
 ///
 /// `user_channels` is the caller-supplied channel order;
 /// `discovered_channels` lists every node that should appear in the
-/// resolution (user + transitively discovered), in BFS discovery
-/// order; `relation_edges` carries the per-(channel, platform)
-/// `Base` / `Override` edges already deduplicated by the caller.
+/// resolution (user + transitively discovered); `relation_edges`
+/// carries the deduplicated `Base` / `Override` edges. The output is
+/// fully determined by the inputs, so callers that need run-to-run
+/// determinism must pass canonically ordered slices.
 pub fn resolve_channel_priority<K>(
     user_channels: &[K],
     discovered_channels: &[K],
-    relation_edges: Vec<PriorityEdge<K>>,
+    relation_edges: &[PriorityEdge<K>],
 ) -> Resolution<K>
 where
     K: Hash + Eq + Clone + std::fmt::Debug,
@@ -126,7 +128,7 @@ impl<K> Graph<K>
 where
     K: Hash + Eq + Clone,
 {
-    fn build(user_channels: &[K], relation_edges: Vec<PriorityEdge<K>>) -> Self {
+    fn build(user_channels: &[K], relation_edges: &[PriorityEdge<K>]) -> Self {
         // User edges form a linear chain `u0 -> u1 -> ... -> un`, so
         // `user_pos(from) >= user_pos(to)` is equivalent to a reachability
         // check and runs in O(1).
@@ -148,7 +150,12 @@ where
 
         let mut ignored_edges: Vec<PriorityEdge<K>> = Vec::new();
         for edge in relation_edges {
-            dispatch_edge(edge, &user_positions, &mut edges, &mut ignored_edges);
+            dispatch_edge(
+                edge.clone(),
+                &user_positions,
+                &mut edges,
+                &mut ignored_edges,
+            );
         }
 
         Self {
@@ -161,7 +168,7 @@ where
 /// Route `edge` to `accepted` or `ignored`. A relation edge is ignored
 /// when BOTH endpoints are user-listed AND the user placed `to` strictly
 /// before `from` (i.e. the user wants `to` to outrank `from`). Self-loop
-/// relation edges fall through to cycle detection — they are malformed
+/// relation edges fall through to cycle detection; they are malformed
 /// metadata, not user conflicts.
 fn dispatch_edge<K>(
     edge: PriorityEdge<K>,
@@ -406,7 +413,7 @@ mod tests {
     /// Walk `registry` from `user_channels`, gather the BFS discovery
     /// order, and build the deduplicated edge list. Mirrors what
     /// [`ChannelExpander`](super::super::channel_expander::ChannelExpander)
-    /// does at runtime — kept private here so the tests can exercise
+    /// does at runtime. Kept private here so the tests can exercise
     /// the algorithm with concise inputs.
     fn build_inputs<'a>(
         user: &[&'a str],
@@ -470,7 +477,7 @@ mod tests {
 
     fn resolve<'a>(user: &[&'a str], reg: &ChannelRegistry<'a>) -> Resolution<&'a str> {
         let (discovered, edges) = build_inputs(user, reg, DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH);
-        resolve_channel_priority(user, &discovered, edges)
+        resolve_channel_priority(user, &discovered, &edges)
     }
 
     fn resolve_with_depth<'a>(
@@ -479,7 +486,7 @@ mod tests {
         max_depth: usize,
     ) -> Resolution<&'a str> {
         let (discovered, edges) = build_inputs(user, reg, max_depth);
-        resolve_channel_priority(user, &discovered, edges)
+        resolve_channel_priority(user, &discovered, &edges)
     }
 
     #[test]
@@ -652,7 +659,7 @@ mod tests {
     }
 
     /// A self-loop on a user-listed channel is no longer routed to
-    /// `ignored_edges` via the user-conflict check — self-relations
+    /// `ignored_edges` via the user-conflict check; self-relations
     /// are malformed metadata. The algorithm reports them via
     /// `broken_cycle_edges`; the caller (the expander) translates
     /// that into a warning/error per its mode.
@@ -840,7 +847,7 @@ mod tests {
                 source: EdgeSource::Base,
             },
         ];
-        let r = resolve_channel_priority(&user, &discovered, edges);
+        let r = resolve_channel_priority(&user, &discovered, &edges);
         let pos = |ch: &str| r.order.iter().position(|c| *c == ch).unwrap();
         assert!(pos("cf-linux") < pos("app"));
         assert!(pos("cf-osx") < pos("app"));
@@ -848,7 +855,7 @@ mod tests {
     }
 
     /// Exact duplicate relation edges (same from/to/source) must not
-    /// produce a cycle on their own — they're redundant, not
+    /// produce a cycle on their own; they're redundant, not
     /// contradictory.
     #[test]
     fn exact_duplicate_relation_edges_are_not_cycles() {
@@ -866,7 +873,7 @@ mod tests {
                 source: EdgeSource::Base,
             },
         ];
-        let r = resolve_channel_priority(&user, &discovered, edges);
+        let r = resolve_channel_priority(&user, &discovered, &edges);
         assert!(r.broken_cycle_edges.is_empty());
     }
 }

@@ -202,11 +202,19 @@ impl Gateway {
         channel: &Channel,
         platform: Platform,
     ) -> Result<Option<ChannelRelations>, GatewayError> {
-        let subdir = self
+        match self
             .inner
             .get_or_create_subdir(channel, platform, None)
-            .await?;
-        Ok(subdir.channel_relations().cloned())
+            .await
+        {
+            Ok(subdir) => Ok(subdir.channel_relations().cloned()),
+            // A missing subdir has no relations. The subdir builder
+            // maps absence to `Subdir::NotFound` for every platform
+            // except noarch; catch the noarch error here so the
+            // documented `None` contract holds for all platforms.
+            Err(GatewayError::SubdirNotFoundError(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Ensure that given repodata records contain `RunExportsJson`.
@@ -2705,7 +2713,10 @@ mod test {
         assert!(relations.is_none());
     }
 
-    /// A subdir the channel doesn't publish returns `None`, not an error.
+    /// A subdir the channel doesn't publish returns `None`, not an
+    /// error. noarch is the interesting platform: the subdir builder
+    /// propagates its absence as an error instead of `NotFound`, so
+    /// the accessor must catch it to honor the documented contract.
     #[tokio::test]
     async fn test_gateway_channel_relations_missing_subdir() {
         let channel_dir = tempfile::tempdir().unwrap();
@@ -2721,11 +2732,13 @@ mod test {
         let channel = server.channel();
 
         let gateway = Gateway::new();
-        let relations = gateway
-            .channel_relations(&channel, Platform::Osx64)
-            .await
-            .unwrap();
-        assert!(relations.is_none());
+        for platform in [Platform::Osx64, Platform::NoArch] {
+            let relations = gateway
+                .channel_relations(&channel, platform)
+                .await
+                .unwrap_or_else(|e| panic!("{platform} must return None, not error: {e}"));
+            assert!(relations.is_none());
+        }
     }
 
     // ----------------------------------------------------------------------
@@ -3215,7 +3228,7 @@ mod test {
     async fn test_cep42_warn_mode_invalid_reference_surfaces_as_warning() {
         let dir = tempfile::tempdir().unwrap();
         let a = dir.path().join("a");
-        // Absolute URL — exactly the case the CEP forbids and a
+        // Absolute URL: exactly the case the CEP forbids and a
         // common attack shape (malicious metadata pointing at an
         // attacker-controlled URL).
         write_test_subdir(
@@ -3252,7 +3265,7 @@ mod test {
             output.warnings,
         );
         // The query result must not contain a bucket for the
-        // attacker URL — the reference is dropped, not followed.
+        // attacker URL; the reference is dropped, not followed.
         assert_eq!(
             output.repodata.len(),
             1,
@@ -3372,7 +3385,7 @@ mod test {
     }
 
     /// `max_depth=0` with `[Custom, Channel]` must preserve the
-    /// caller's order — the custom must stay first.
+    /// caller's order; the custom must stay first.
     #[tokio::test]
     async fn test_cep42_max_depth_zero_preserves_custom_first() {
         let dir = tempfile::tempdir().unwrap();
@@ -3648,6 +3661,23 @@ mod test {
             "expected BaseAndOverridesSameTarget warning; got {:?}",
             output.warnings,
         );
+        // Both contradictory references are dropped: the target is
+        // not fetched and no cycle is fabricated from the pair.
+        assert_eq!(
+            output.repodata.len(),
+            1,
+            "the malformed declaration must not discover `x`"
+        );
+        assert!(
+            !output.warnings.iter().any(|w| matches!(
+                w,
+                crate::GatewayWarning::ChannelRelations(
+                    crate::ChannelRelationsWarning::CycleBroken { .. }
+                )
+            )),
+            "no spurious CycleBroken warning; got {:?}",
+            output.warnings,
+        );
 
         let err = gateway
             .query(
@@ -3739,6 +3769,201 @@ mod test {
             output.repodata.len(),
             2,
             "conda-forge should be discovered via the relative reference"
+        );
+    }
+
+    /// A discovered channel that publishes only some platforms is
+    /// valid metadata: a missing subdir (including noarch, whose
+    /// absence the subdir builder surfaces as an error rather than
+    /// `NotFound`) must yield an empty bucket, not fail the query,
+    /// even in Strict mode.
+    #[tokio::test]
+    async fn test_cep42_strict_mode_tolerates_missing_noarch_on_discovered_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        let bc_root = dir.path().join("bioconda");
+        let partner_root = dir.path().join("partner");
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../partner"), None);
+        // partner publishes linux-64 only; bioconda needs noarch too
+        // so the user channel itself doesn't fail the query.
+        write_test_subdir(&partner_root, "shared", "1.0.0", None, None);
+        let bc_noarch = bc_root.join("noarch");
+        std::fs::create_dir_all(&bc_noarch).unwrap();
+        std::fs::write(
+            bc_noarch.join("repodata.json"),
+            make_repodata("noarch-pkg", "1.0.0"),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![bioconda],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .channel_relations(crate::ChannelRelationsMode::Strict)
+            .execute()
+            .await
+            .expect("partner lacking a noarch subdir must not fail a Strict query");
+        // bioconda linux-64 + noarch, partner linux-64 + (empty) noarch.
+        assert_eq!(output.repodata.len(), 4);
+        assert!(output.warnings.is_empty(), "got {:?}", output.warnings);
+    }
+
+    /// Bucket anchoring must not depend on which subdir fetch wins
+    /// the network race: a channel referenced by several user
+    /// channels anchors to the earliest one in the caller's source
+    /// order, and its base priority puts it directly before that
+    /// channel.
+    #[tokio::test]
+    async fn test_cep42_shared_base_anchors_to_earliest_user_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        let a_root = dir.path().join("a");
+        let b_root = dir.path().join("b");
+        let cf_root = dir.path().join("conda-forge");
+        write_test_subdir(&a_root, "shared", "1.0.0", Some("../conda-forge"), None);
+        write_test_subdir(&b_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        write_test_subdir(&cf_root, "shared", "3.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+        let b_ch = Channel::from_url(server.url().join("b/").unwrap());
+
+        // Repeat to catch fetch-completion-order dependence: every
+        // run must produce the identical bucket order.
+        for _ in 0..4 {
+            let gateway = Gateway::new();
+            let output = gateway
+                .query(
+                    vec![a_ch.clone(), b_ch.clone()],
+                    vec![Platform::Linux64],
+                    vec![MatchSpec::from_str("shared", Strict).unwrap()],
+                )
+                .recursive(false)
+                .execute()
+                .await
+                .unwrap();
+            let versions: Vec<String> = output
+                .repodata
+                .iter()
+                .map(|b| {
+                    b.iter()
+                        .map(|r| r.package_record.version.as_str().to_string())
+                        .next()
+                        .unwrap_or_default()
+                })
+                .collect();
+            // conda-forge (base of both) anchors to `a` and outranks
+            // it; b keeps its caller slot.
+            assert_eq!(
+                versions,
+                ["3.0.0", "1.0.0", "2.0.0"],
+                "bucket order must be deterministic and respect the base edge"
+            );
+        }
+    }
+
+    /// One malformed declaration must produce ONE warning, not one
+    /// per queried platform.
+    #[tokio::test]
+    async fn test_cep42_warnings_not_duplicated_per_platform() {
+        let dir = tempfile::tempdir().unwrap();
+        let a_root = dir.path().join("a");
+        write_test_subdir(&a_root, "shared", "1.0.0", Some("bad-ref"), None);
+        let a_noarch = a_root.join("noarch");
+        std::fs::create_dir_all(&a_noarch).unwrap();
+        std::fs::write(
+            a_noarch.join("repodata.json"),
+            make_repodata_with_relations("noarch-pkg", "1.0.0", Some("bad-ref"), None),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a_ch = Channel::from_url(server.url().join("a/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![a_ch],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+        let invalid_ref_warnings = output
+            .warnings
+            .iter()
+            .filter(|w| {
+                matches!(
+                    w,
+                    crate::GatewayWarning::ChannelRelations(
+                        crate::ChannelRelationsWarning::InvalidReferenceSyntax { .. }
+                    )
+                )
+            })
+            .count();
+        assert_eq!(
+            invalid_ref_warnings, 1,
+            "identical warning must be deduplicated across platforms; got {:?}",
+            output.warnings,
+        );
+    }
+
+    /// A relation the explicit user order overrides surfaces as a
+    /// `UserOrderConflict` warning instead of being silently dropped.
+    #[tokio::test]
+    async fn test_cep42_user_order_conflict_surfaces_as_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let bc_root = dir.path().join("bioconda");
+        let cf_root = dir.path().join("conda-forge");
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+        let conda_forge = Channel::from_url(server.url().join("conda-forge/").unwrap());
+
+        let gateway = Gateway::new();
+        // The user puts bioconda FIRST, contradicting bioconda's own
+        // `base: conda-forge` declaration. The user wins; the dropped
+        // relation is reported.
+        let output = gateway
+            .query(
+                vec![bioconda, conda_forge],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        let versions: Vec<String> = output
+            .repodata
+            .iter()
+            .map(|b| {
+                b.iter()
+                    .map(|r| r.package_record.version.as_str().to_string())
+                    .next()
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert_eq!(versions, ["2.0.0", "1.0.0"], "user order wins");
+        assert!(
+            output.warnings.iter().any(|w| matches!(
+                w,
+                crate::GatewayWarning::ChannelRelations(
+                    crate::ChannelRelationsWarning::UserOrderConflict { .. }
+                )
+            )),
+            "expected UserOrderConflict warning; got {:?}",
+            output.warnings,
         );
     }
 }

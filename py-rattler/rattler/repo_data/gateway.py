@@ -24,12 +24,13 @@ ChannelRelationsMode = Literal["disabled", "warn", "strict"]
 
 * `'disabled'`: ignore declared relations; use only the user-supplied
   channels. Setting ``channel_relations_max_depth=0`` has the same effect.
-* `'warn'` (default): follow relations recursively but tolerate problems —
+* `'warn'` (default): follow relations recursively but tolerate problems:
   cycles, malformed metadata (non-``../`` references, self-relations,
   ``base==overrides``), depth-exceeded chains, and failed discovery fetches
-  surface via Python's standard :mod:`warnings` module as ``UserWarning``s
+  surface via Python's standard :mod:`warnings` module as
+  :class:`rattler.exceptions.GatewayWarning` (a ``UserWarning`` subclass)
   rather than aborting. **Deviates from CEP-42**, which mandates aborting
-  on cycles / malformed metadata.
+  on cycles and malformed metadata.
 * `'strict'`: follow relations recursively and abort on any violation,
   raising :class:`GatewayError`. CEP-42 compliant.
 
@@ -220,15 +221,23 @@ class Gateway:
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
             channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
-                               uses the gateway default (``"warn"``).
+                               uses the gateway default (``"warn"``). Non-fatal problems
+                               are reported via Python's ``warnings`` module as
+                               :class:`rattler.exceptions.GatewayWarning`.
             channel_relations_max_depth: Maximum recursion depth when following
                                          ``channel_relations``. ``None`` uses the
-                                         default (10). No effect when
-                                         ``channel_relations`` is ``"disabled"``.
+                                         default (10). ``0`` behaves like
+                                         ``channel_relations="disabled"``.
 
         Returns:
-            A list of lists of `RepoDataRecord`s. The outer list contains the results for each
-            source in the same order they are provided in the `sources` argument.
+            A list of lists of `RepoDataRecord`s. The outer list contains one entry per
+            queried source, in the order the sources were provided. When CEP-42
+            ``channel_relations`` are followed (the default) and a channel declares
+            relations, extra entries for the transitively discovered channels are
+            inserted next to the channel that referenced them, with a declared ``base``
+            placed before it. Pass ``channel_relations="disabled"`` (or
+            ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
+            positional correspondence with `sources`.
 
         Examples
         --------

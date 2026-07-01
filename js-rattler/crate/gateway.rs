@@ -21,7 +21,7 @@ unsafe extern "C" {
 /// surfaces on the query output; for the JS binding we forward them
 /// to the host's standard warnings channel so they cannot be
 /// silently lost.
-fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
+pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
     for w in warnings {
         console_warn(&w.to_string());
     }
