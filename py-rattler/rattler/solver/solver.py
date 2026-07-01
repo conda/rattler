@@ -69,6 +69,8 @@ async def solve(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            The cutoff is compared against a record's `indexed_timestamp` when
+            available, falling back to the build `timestamp` otherwise.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.
@@ -175,6 +177,8 @@ async def solve_with_sparse_repodata(
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime,
             or newer than the cutoff produced by subtracting a timedelta from now.
+            The cutoff is compared against a record's `indexed_timestamp` when
+            available, falling back to the build `timestamp` otherwise.
         strategy: The strategy to use when multiple versions of a package are available.
 
             * `"highest"`: Select the highest compatible version of all packages.

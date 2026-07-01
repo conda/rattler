@@ -45,6 +45,34 @@ async def test_index(package_directory):
 
 
 @pytest.mark.asyncio
+async def test_index_assigns_indexed_timestamp(package_directory):
+    test_start_ms = int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp() * 1000)
+    await index_fs(package_directory, Platform("noarch"))
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+    record = repodata["packages"]["pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"]
+    assert record["indexed_timestamp"] >= test_start_ms
+
+
+@pytest.mark.asyncio
+async def test_index_backfill_indexed_timestamps_off(package_directory):
+    await index_fs(package_directory, Platform("noarch"), backfill_indexed_timestamps="off")
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+    # Newly indexed packages always get a value, regardless of the backfill mode.
+    record = repodata["packages"]["pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"]
+    assert "indexed_timestamp" in record
+
+
+@pytest.mark.asyncio
+async def test_index_backfill_indexed_timestamps_invalid(package_directory):
+    with pytest.raises(ValueError, match="backfill_indexed_timestamps"):
+        await index_fs(package_directory, Platform("noarch"), backfill_indexed_timestamps="invalid")
+
+
+@pytest.mark.asyncio
 async def test_index_specific_subdir_non_noarch(package_directory):
     await index_fs(package_directory, Platform("win-64"))
 

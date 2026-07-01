@@ -95,6 +95,7 @@ async def index_fs(
     write_shards: bool = True,
     repodata_revisions: Optional[RepodataRevisions] = None,
     package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
+    backfill_indexed_timestamps: Literal["from-conda-package-timestamp", "now", "off"] = "from-conda-package-timestamp",
     force: bool = False,
     max_parallel: int | None = None,
 ) -> None:
@@ -115,6 +116,10 @@ async def index_fs(
         repodata_revisions: Repodata revisions to advertise, with optional `n_packages`, `oldest`, and `newest` metadata.
                             Either a sequence of revisions or a `vN`-keyed dictionary, e.g. `{"v3": {"n_packages": 1}}`.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
+        backfill_indexed_timestamps: How to backfill `indexed_timestamp` for records in existing repodata that lack the field:
+                                     `"from-conda-package-timestamp"` (default) seeds it from the package's build timestamp (clamped to the indexing time),
+                                     `"now"` seeds it with the indexing time, `"off"` leaves records untouched.
+                                     Newly indexed packages always get the current indexing time.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
@@ -126,6 +131,7 @@ async def index_fs(
         write_shards,
         _repodata_revisions_to_dicts(repodata_revisions),
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
     )
@@ -140,6 +146,7 @@ async def index_s3(
     write_shards: bool = True,
     repodata_revisions: Optional[RepodataRevisions] = None,
     package_revision_assignment: Literal["from-index-json", "latest"] = "from-index-json",
+    backfill_indexed_timestamps: Literal["from-conda-package-timestamp", "now", "off"] = "from-conda-package-timestamp",
     force: bool = False,
     max_parallel: int | None = None,
     precondition_checks: bool = True,
@@ -163,6 +170,10 @@ async def index_s3(
         repodata_revisions: Repodata revisions to advertise, with optional `n_packages`, `oldest`, and `newest` metadata.
                             Either a sequence of revisions or a `vN`-keyed dictionary, e.g. `{"v3": {"n_packages": 1}}`.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
+        backfill_indexed_timestamps: How to backfill `indexed_timestamp` for records in existing repodata that lack the field:
+                                     `"from-conda-package-timestamp"` (default) seeds it from the package's build timestamp (clamped to the indexing time),
+                                     `"now"` seeds it with the indexing time, `"off"` leaves records untouched.
+                                     Newly indexed packages always get the current indexing time.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
         precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
@@ -176,6 +187,7 @@ async def index_s3(
         write_shards,
         _repodata_revisions_to_dicts(repodata_revisions),
         package_revision_assignment,
+        backfill_indexed_timestamps,
         force,
         max_parallel,
         precondition_checks,

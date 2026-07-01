@@ -207,6 +207,7 @@ mod tests {
             depends: deps.iter().map(|s| (*s).to_string()).collect(),
             features: None,
             flags: Vec::new(),
+            indexed_timestamp: None,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: None,

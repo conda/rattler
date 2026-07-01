@@ -168,6 +168,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
             extra_depends: value.extra_depends.into_owned(),
             features: value.features.into_owned(),
             flags: value.flags.into_owned(),
+            indexed_timestamp: None,
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
             license: value.license.into_owned(),

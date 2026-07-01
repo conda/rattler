@@ -145,6 +145,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
                 extra_depends: std::collections::BTreeMap::new(),
                 features: value.features.into_owned(),
                 flags: value.flags.into_owned(),
+                indexed_timestamp: None,
                 legacy_bz2_md5: value.legacy_bz2_md5,
                 legacy_bz2_size: value.legacy_bz2_size.into_owned(),
                 license: value.license.into_owned(),

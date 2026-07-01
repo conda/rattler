@@ -151,6 +151,7 @@ impl<'a> SourcePackageDataModel<'a> {
                 extra_depends: self.extra_depends.into_owned(),
                 features: self.features.into_owned(),
                 flags: self.flags.into_owned(),
+                indexed_timestamp: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: self.license.into_owned(),
