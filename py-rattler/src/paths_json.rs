@@ -390,11 +390,13 @@ impl From<PyPrefixPlaceholder> for PrefixPlaceholder {
 impl PyPrefixPlaceholder {
     /// Constructor
     #[new]
-    pub fn new(file_mode: PyFileMode, placeholder: &str) -> PyResult<Self> {
+    #[pyo3(signature = (file_mode, placeholder, c_string=None))]
+    pub fn new(file_mode: PyFileMode, placeholder: &str, c_string: Option<bool>) -> PyResult<Self> {
         Ok(Self {
             inner: PrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
+                c_string,
             },
         })
     }
@@ -423,6 +425,18 @@ impl PyPrefixPlaceholder {
     #[setter]
     pub fn set_placeholder(&mut self, placeholder: String) {
         self.inner.placeholder = placeholder;
+    }
+
+    /// Whether to use c-string padding
+    #[getter]
+    pub fn c_string(&self) -> Option<bool> {
+        self.inner.c_string
+    }
+
+    /// Set whether to use c-string padding
+    #[setter]
+    pub fn set_c_string(&mut self, c_string: Option<bool>) {
+        self.inner.c_string = c_string;
     }
 }
 
