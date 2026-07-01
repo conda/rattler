@@ -48,9 +48,22 @@ from rattler.lock import (
     PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.rattler import setup_logging as _setup_logging
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
+
+
+def setup_logging() -> None:
+    """Forward Rust logs to Python's ``logging`` module.
+
+    Logging is disabled by default. Call this during application startup to
+    route Rust tracing output through Python logging under the ``rattler``
+    logger namespace. Calling it again is safe and makes rattler pick up
+    changes to Python logging configuration.
+    """
+    _setup_logging()
+
 
 __all__ = [
     "Version",
@@ -93,6 +106,7 @@ __all__ = [
     "PypiLockedPackage",
     "solve",
     "solve_with_sparse_repodata",
+    "setup_logging",
     "Platform",
     "install",
     "InstallerReporter",

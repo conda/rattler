@@ -1,0 +1,35 @@
+# Vendored copy of `pyo3-log` including the `dangerous-shutdown-guard` feature.
+#
+# This corresponds to the `exit` branch of https://github.com/pavelzw/pyo3-log,
+# which adds the `dangerous-shutdown-guard` feature proposed upstream in
+# https://github.com/vorner/pyo3-log/pull/78. Once that PR is merged and
+# released, this vendored copy can be dropped in favor of the crates.io release.
+[package]
+name = "pyo3-log"
+version = "0.13.4"
+authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+description = "Logging bridge from pyo3 native extension to python"
+documentation = "https://docs.rs/pyo3-log"
+repository = "https://github.com/vorner/pyo3-log"
+readme = "README.md"
+keywords = ["pyo3", "python", "logging"]
+categories = ["development-tools::debugging"]
+edition = "2018"
+license = "Apache-2.0 OR MIT"
+rust-version = "1.74"
+publish = false
+
+[features]
+kv = ["log/kv"]
+# Best-effort guard against logging into a Python interpreter that is shutting down. Checks
+# Py_IsInitialized and an atexit hook before each log call. This is racy (the interpreter can
+# start finalizing between the check and the call) and only reduces, not eliminates, the chance
+# of a crash or hang during shutdown -- hence "dangerous". Pulls in pyo3's `macros` feature for
+# the atexit hook.
+dangerous-shutdown-guard = ["pyo3/macros"]
+
+[dependencies]
+arc-swap = "~1"
+# It's OK to ask for std on log, because pyo3 needs it too.
+log = { version = "~0.4.21", default-features = false, features = ["std"] }
+pyo3 = { version = ">=0.26,<0.30", default-features = false }
