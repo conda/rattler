@@ -17,7 +17,7 @@ use crate::{
     version::PyVersion,
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyIndexJson {

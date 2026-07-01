@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::{error::PyRattlerError, platform::PyPlatform};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyChannelConfig {
@@ -37,7 +37,7 @@ impl PyChannelConfig {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct PyChannel {
@@ -83,7 +83,7 @@ impl PyChannel {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum PyChannelPriority {
     /// The channel that the package is first found in will be used as the only channel

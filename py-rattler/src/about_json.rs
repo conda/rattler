@@ -10,7 +10,7 @@ use url::Url;
 use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 
 /// The `about.json` file contains metadata about the package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAboutJson {

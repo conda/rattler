@@ -18,7 +18,7 @@ use crate::{
 /// A representation of the `paths.json` file found in package archives.
 ///
 /// The `paths.json` file contains information about every file included with the package.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathsJson {
@@ -178,7 +178,7 @@ impl PyPathsJson {
 }
 
 /// A single entry in the `paths.json` file.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathsEntry {
@@ -306,7 +306,7 @@ impl PyPathsEntry {
 
 /// The path type of the path entry
 // TODO: Expose this properly later.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathType {
@@ -367,7 +367,7 @@ impl PyPathType {
 
 /// Description off a placeholder text found in a file that must be replaced when installing the
 /// file into the prefix.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPlaceholder {
@@ -427,7 +427,7 @@ impl PyPrefixPlaceholder {
 }
 
 /// The file mode of the entry
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyFileMode {

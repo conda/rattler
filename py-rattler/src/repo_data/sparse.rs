@@ -44,7 +44,7 @@ impl From<SparseRepoData> for PySparseRepoData {
     }
 }
 
-#[pyclass(eq)]
+#[pyclass(eq, from_py_object)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum PyPackageFormatSelection {
     OnlyTarBz2,

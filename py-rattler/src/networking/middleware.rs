@@ -24,7 +24,7 @@ pub enum PyMiddleware {
     AddHeaders(PyAddHeadersMiddleware),
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMirrorMiddleware {
@@ -64,7 +64,7 @@ impl From<PyMirrorMiddleware> for MirrorMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAuthenticationMiddleware {}
@@ -77,7 +77,7 @@ impl PyAuthenticationMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyRetryMiddleware {
     pub(crate) max_retries: u32,
@@ -92,7 +92,7 @@ impl PyRetryMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyOciMiddleware {}
@@ -105,7 +105,7 @@ impl PyOciMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyGCSMiddleware {}
@@ -125,7 +125,7 @@ impl From<PyGCSMiddleware> for GCSMiddleware {
 }
 
 #[derive(Clone)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyS3Config {
     // non-trivial enums are not supported by pyo3 as pyclasses
     pub(crate) custom: Option<PyS3ConfigCustom>,
@@ -174,7 +174,7 @@ impl From<PyS3Config> for S3Config {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyS3Middleware {
     pub(crate) s3_config: HashMap<String, PyS3Config>,
@@ -192,7 +192,7 @@ impl PyS3Middleware {
 ///
 /// The callback receives (host, path) and should return a dict of headers to add,
 /// or None to add no headers.
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyAddHeadersMiddleware {
     pub(crate) callback: Py<PyAny>,
 }
@@ -266,7 +266,7 @@ impl Middleware for AddHeadersMiddleware {
                 }
 
                 // Try to extract as a dictionary
-                let dict = result.downcast_bound::<PyDict>(py).map_err(|_e| {
+                let dict = result.cast_bound::<PyDict>(py).map_err(|_e| {
                     let type_name = result
                         .bind(py)
                         .get_type()

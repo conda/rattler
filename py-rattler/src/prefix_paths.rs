@@ -50,7 +50,7 @@ impl PyPrefixPathsEntry {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPaths {
@@ -72,7 +72,7 @@ impl From<PrefixPaths> for PyPrefixPaths {
 /// An entry in the `paths_data` attribute of the `PrefixRecord`
 /// This is similar to `PathsEntry` from `paths_json` but refers
 /// to an entry for an installed package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPathsEntry {
@@ -94,7 +94,7 @@ impl From<PyPrefixPathsEntry> for PathsEntry {
 /// The path type of the path entry
 /// This is similar to `PathType` from `paths_json`; however, it contains additional enum fields
 /// since it represents a file that's installed
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPathType {
