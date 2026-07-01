@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::GenericVirtualPackage;
+use rattler_conda_types::{GenericVirtualPackage, package::BuildString};
 
 use crate::package_name::PyPackageName;
 use crate::version::PyVersion;
@@ -33,14 +33,15 @@ impl From<PyVirtualPackage> for PyGenericVirtualPackage {
 
 #[pymethods]
 impl PyGenericVirtualPackage {
-    /// Constructs a new `GenericVirtualPackage`.
+    /// Constructs a new `GenericVirtualPackage`. An empty `build_string`
+    /// records the virtual package as having no build identifier.
     #[new]
     pub fn new(name: PyPackageName, version: PyVersion, build_string: String) -> Self {
         Self {
             inner: GenericVirtualPackage {
                 name: name.into(),
                 version: version.into(),
-                build_string,
+                build_string: BuildString::new_unchecked(build_string),
             },
         }
     }
@@ -62,9 +63,10 @@ impl PyGenericVirtualPackage {
         self.inner.version.clone().into()
     }
 
-    /// The build identifier of the package.
+    /// The build identifier of the package. Returns an empty string when the
+    /// virtual package has no build identifier (e.g. `__cuda`).
     #[getter]
     pub fn build_string(&self) -> String {
-        self.inner.build_string.clone()
+        self.inner.build_string.to_string()
     }
 }

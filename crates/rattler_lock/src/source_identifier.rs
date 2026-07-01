@@ -240,6 +240,7 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
     // the branch that initializes it, so the borrow checker accepts this.
     let build_packages;
     let host_packages;
+    let build_str: &str;
     if !source_data.build_packages.is_empty() {
         build_packages = EnvironmentPackagesSelectorIds(&source_data.build_packages);
         fields.insert("build_packages", &build_packages);
@@ -282,7 +283,8 @@ fn compute_source_hash(data: &CondaSourceData) -> u64 {
                 track_features: _,
             } = &**full;
 
-            fields.insert("build", build);
+            build_str = build.as_str();
+            fields.insert("build", &build_str);
             fields.insert("build_number", build_number);
             fields.insert("noarch", noarch);
             fields.insert("subdir", subdir);
@@ -502,7 +504,7 @@ mod tests {
     fn test_from_source_data() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use rattler_conda_types::{PackageRecord, VersionWithSource, package::BuildString};
 
         use crate::CondaSourceData;
 
@@ -510,7 +512,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
-            "py310h3ca6f64_0".to_string(),
+            BuildString::new("py310h3ca6f64_0").unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -538,7 +540,7 @@ mod tests {
     fn test_from_source_data_with_variants() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use rattler_conda_types::{PackageRecord, VersionWithSource, package::BuildString};
 
         use crate::{CondaSourceData, VariantValue};
 
@@ -546,7 +548,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
-            "py310h3ca6f64_0".to_string(),
+            BuildString::new("py310h3ca6f64_0").unwrap(),
         );
         package_record.subdir = "linux-aarch64".to_string();
 
@@ -585,7 +587,7 @@ mod tests {
     fn compute_test_data_hashes() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use rattler_conda_types::{PackageRecord, VersionWithSource, package::BuildString};
 
         use crate::CondaSourceData;
 
@@ -600,7 +602,7 @@ mod tests {
             let mut package_record = PackageRecord::new(
                 pkg_name,
                 VersionWithSource::from_str(version).unwrap(),
-                build.to_string(),
+                BuildString::new(build).unwrap(),
             );
             package_record.subdir = subdir.to_string();
 
@@ -721,7 +723,7 @@ mod tests {
     fn test_into_full_returns_some_for_full() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use rattler_conda_types::{PackageRecord, VersionWithSource, package::BuildString};
 
         use crate::CondaSourceData;
 
@@ -729,7 +731,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("1.0.0").unwrap(),
-            "h0000000_0".to_string(),
+            BuildString::new("h0000000_0").unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -782,7 +784,7 @@ mod tests {
     fn test_different_variants_produce_different_hashes() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use rattler_conda_types::{PackageRecord, VersionWithSource, package::BuildString};
 
         use crate::{CondaSourceData, VariantValue};
 
@@ -790,7 +792,7 @@ mod tests {
         let mut package_record = PackageRecord::new(
             name.clone(),
             VersionWithSource::from_str("1.0.0").unwrap(),
-            "h0000000_0".to_string(),
+            BuildString::new("h0000000_0").unwrap(),
         );
         package_record.subdir = "linux-64".to_string();
 
@@ -841,7 +843,10 @@ mod tests {
     fn test_different_build_host_packages_produce_different_hashes() {
         use std::collections::BTreeMap;
 
-        use rattler_conda_types::{PackageRecord, Version, package::DistArchiveIdentifier};
+        use rattler_conda_types::{
+            PackageRecord, Version,
+            package::{BuildString, DistArchiveIdentifier},
+        };
 
         use crate::{CondaBinaryData, LockFile};
 
@@ -849,7 +854,7 @@ mod tests {
             let mut record = PackageRecord::new(
                 PackageName::from_str(name).unwrap(),
                 Version::from_str("1.0.0").unwrap(),
-                "build0".to_string(),
+                BuildString::new("build0").unwrap(),
             );
             record.subdir = "linux-64".to_string();
             CondaBinaryData {
@@ -870,7 +875,7 @@ mod tests {
             let mut record = PackageRecord::new(
                 PackageName::from_str("my-pkg").unwrap(),
                 Version::from_str("0.1.0").unwrap(),
-                "py_0".to_string(),
+                BuildString::new("py_0").unwrap(),
             );
             record.subdir = "noarch".to_string();
             CondaSourceData::full(

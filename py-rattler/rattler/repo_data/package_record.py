@@ -412,7 +412,7 @@ class PackageRecord:
         >>> record = PackageRecord(
         ...     name="requests",
         ...     version="2.28.0",
-        ...     build="py3-none-any",
+        ...     build="py3_none_any",
         ...     build_number=0,
         ...     subdir="noarch",
         ... )
