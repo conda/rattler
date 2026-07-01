@@ -140,11 +140,13 @@ impl UrlOrPath {
         match self {
             UrlOrPath::Url(url) => {
                 if let Some(path) = url_to_typed_path(url) {
-                    return Cow::Owned(UrlOrPath::Path(path.normalize()));
+                    return Cow::Owned(UrlOrPath::Path(lexically_normalize(&path.to_path())));
                 }
                 Cow::Borrowed(self)
             }
-            UrlOrPath::Path(path) => Cow::Owned(UrlOrPath::Path(path.normalize())),
+            UrlOrPath::Path(path) => {
+                Cow::Owned(UrlOrPath::Path(lexically_normalize(&path.to_path())))
+            }
         }
     }
 
@@ -156,6 +158,90 @@ impl UrlOrPath {
             UrlOrPath::Url(url) if !url.as_str().ends_with('/') => url.path_segments()?.next_back(),
             _ => None,
         }
+    }
+}
+
+/// Lexically normalizes a path, resolving interior `.` and `..` segments
+/// **while preserving leading `..` segments**.
+///
+/// [`typed_path`]'s built-in `normalize()` collapses a path that escapes (or
+/// stays at) its base — e.g. `.`, `./`, `..`, `../` — all the way down to the
+/// empty path. That makes genuinely distinct relative locations compare equal,
+/// which previously caused location-keyed deduplication to merge unrelated
+/// editable path dependencies (e.g. `path = "."` and `path = ".."`). This
+/// implementation keeps leading parent (`..`) segments so those paths stay
+/// distinct, mirroring Go's `filepath.Clean` semantics for relative paths.
+fn lexically_normalize(path: &Utf8TypedPath<'_>) -> Utf8TypedPathBuf {
+    use typed_path::{Utf8TypedComponent, Utf8UnixComponent, Utf8WindowsComponent};
+
+    let mut prefix: Option<String> = None;
+    let mut has_root = false;
+    let mut leading_parents: usize = 0;
+    let mut names: Vec<String> = Vec::new();
+
+    let on_root = |has_root: &mut bool, names: &mut Vec<String>, parents: &mut usize| {
+        *has_root = true;
+        names.clear();
+        *parents = 0;
+    };
+    let on_parent = |has_root: bool, names: &mut Vec<String>, parents: &mut usize| {
+        if names.pop().is_none() && !has_root {
+            *parents += 1;
+        }
+    };
+
+    for component in path.components() {
+        match component {
+            Utf8TypedComponent::Unix(unix) => match unix {
+                Utf8UnixComponent::RootDir => {
+                    on_root(&mut has_root, &mut names, &mut leading_parents);
+                }
+                Utf8UnixComponent::CurDir => {}
+                Utf8UnixComponent::ParentDir => {
+                    on_parent(has_root, &mut names, &mut leading_parents);
+                }
+                Utf8UnixComponent::Normal(name) => names.push(name.to_string()),
+            },
+            Utf8TypedComponent::Windows(windows) => match windows {
+                Utf8WindowsComponent::Prefix(p) => prefix = Some(p.as_str().to_string()),
+                Utf8WindowsComponent::RootDir => {
+                    on_root(&mut has_root, &mut names, &mut leading_parents);
+                }
+                Utf8WindowsComponent::CurDir => {}
+                Utf8WindowsComponent::ParentDir => {
+                    on_parent(has_root, &mut names, &mut leading_parents);
+                }
+                Utf8WindowsComponent::Normal(name) => names.push(name.to_string()),
+            },
+        }
+    }
+
+    let is_windows = matches!(path, Utf8TypedPath::Windows(_));
+    let sep = if is_windows { '\\' } else { '/' };
+
+    let mut parts: Vec<String> = Vec::with_capacity(leading_parents + names.len());
+    for _ in 0..leading_parents {
+        parts.push("..".to_string());
+    }
+    parts.extend(names);
+    let body = parts.join(&sep.to_string());
+
+    let rendered = if has_root {
+        format!("{}{}{}", prefix.unwrap_or_default(), sep, body)
+    } else if let Some(prefix) = prefix {
+        // Drive-relative path (e.g. `C:foo`) without a root component.
+        format!("{prefix}{body}")
+    } else if body.is_empty() {
+        // The path refers to the current directory; keep it distinct from `..`.
+        ".".to_string()
+    } else {
+        body
+    };
+
+    if is_windows {
+        Utf8TypedPathBuf::from_windows(rendered)
+    } else {
+        Utf8TypedPathBuf::from_unix(rendered)
     }
 }
 
@@ -215,6 +301,48 @@ mod test {
     #[case("/packages/", None)]
     fn test_file_name(#[case] case: UrlOrPath, #[case] expected_filename: Option<&str>) {
         assert_eq!(case.file_name(), expected_filename);
+    }
+
+    #[test]
+    fn test_distinct_relative_roots_are_not_equal() {
+        // Regression: `typed_path::normalize()` collapses `.`, `./`, `..`, `../`
+        // all to the empty path, which made these distinct editable path roots
+        // compare (and hash) equal and silently dedup in the lockfile builder.
+        use std::collections::HashMap;
+
+        let dot = UrlOrPath::Path(".".into());
+        let dot_slash = UrlOrPath::Path("./".into());
+        let dotdot = UrlOrPath::Path("..".into());
+        let dotdot_slash = UrlOrPath::Path("../".into());
+
+        // `.` and `./` refer to the same location.
+        assert_eq!(dot, dot_slash);
+        // `..` and `../` refer to the same location.
+        assert_eq!(dotdot, dotdot_slash);
+        // But `.` and `..` are different locations and must stay distinct.
+        assert_ne!(dot, dotdot);
+
+        // Interior `..`/`.` segments are still resolved, leading `..` preserved.
+        assert_eq!(
+            UrlOrPath::Path("../a/../b".into()),
+            UrlOrPath::Path("../b".into())
+        );
+        assert_eq!(
+            UrlOrPath::Path("a/b/..".into()),
+            UrlOrPath::Path("a".into())
+        );
+        assert_ne!(
+            UrlOrPath::Path("..".into()),
+            UrlOrPath::Path("../..".into())
+        );
+
+        // And they hash distinctly, so a location-keyed map keeps both.
+        let mut map: HashMap<UrlOrPath, i32> = HashMap::new();
+        map.insert(dot.clone(), 1);
+        map.insert(dotdot.clone(), 2);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&dot_slash), Some(&1));
+        assert_eq!(map.get(&dotdot_slash), Some(&2));
     }
 
     #[test]
