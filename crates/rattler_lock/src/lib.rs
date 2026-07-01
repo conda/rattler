@@ -207,7 +207,11 @@ impl SelectorId {
     pub(crate) fn new(package: &LockedPackage) -> Self {
         match package {
             LockedPackage::Conda(CondaPackageData::Binary(data)) => {
-                Self::from_parts(SelectorKind::CondaBinary, data.location.as_str())
+                let location = data
+                    .location
+                    .given()
+                    .unwrap_or_else(|| data.location.inner().as_str());
+                Self::from_parts(SelectorKind::CondaBinary, location)
             }
             LockedPackage::Conda(CondaPackageData::Source(data)) => Self::from_parts(
                 SelectorKind::CondaSource,
@@ -1720,6 +1724,84 @@ packages:
                 package_pypi_keys.contains(selector_key),
                 "environment selector `pypi: {selector_key}` has no matching \
                  entry in the packages section (available: {package_pypi_keys:?})"
+            );
+        }
+
+        let reparsed = LockFile::from_str_with_base_directory(&rendered, Some(&base_dir)).unwrap();
+        let rerendered = reparsed.render_to_string().unwrap();
+        similar_asserts::assert_eq!(rendered, rerendered);
+    }
+
+    /// Verify that a binary conda package served from a local channel keeps a
+    /// relative `conda:` path verbatim across a roundtrip, and that the
+    /// environment selector still matches the `conda:` key in the packages
+    /// section. Regression coverage for prefix-dev/pixi#6322.
+    #[test]
+    fn test_relative_binary_conda_path_roundtrip() {
+        let lock_file_str = "\
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: ../local-channel
+    packages:
+      linux-64:
+        - conda: ../local-channel/linux-64/my-dep-0.1.0-h0.conda
+packages:
+  - conda: ../local-channel/linux-64/my-dep-0.1.0-h0.conda
+    name: my-dep
+    version: 0.1.0
+    build: h0
+    subdir: linux-64
+";
+        let base_dir = test_path();
+        let lock_file =
+            LockFile::from_str_with_base_directory(lock_file_str, Some(&base_dir)).unwrap();
+
+        let platform = lock_file.platform("linux-64").unwrap();
+        let env = lock_file.environment(DEFAULT_ENVIRONMENT_NAME).unwrap();
+        let binary = env
+            .packages(platform)
+            .unwrap()
+            .filter_map(LockedPackage::as_conda)
+            .find_map(crate::CondaPackageData::as_binary)
+            .expect("binary conda package");
+
+        let relative = "../local-channel/linux-64/my-dep-0.1.0-h0.conda";
+        assert_eq!(
+            binary.location.given(),
+            Some(relative),
+            "relative binary conda path should be preserved verbatim"
+        );
+        assert!(
+            matches!(binary.location.inner(), crate::UrlOrPath::Path(path) if !path.is_absolute()),
+            "inner location should stay a relative path until the consumer resolves it"
+        );
+
+        // The environment selector `conda:` key must match the packages key,
+        // otherwise the package can't be located on reparse.
+        let rendered = lock_file.render_to_string().unwrap();
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+        let package_keys: std::collections::HashSet<&str> = yaml["packages"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|pkg| pkg["conda"].as_str())
+            .collect();
+        let selector_keys: Vec<&str> = yaml["environments"]["default"]["packages"]["linux-64"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|sel| sel["conda"].as_str())
+            .collect();
+        assert_eq!(selector_keys, vec![relative]);
+        for key in &selector_keys {
+            assert!(
+                package_keys.contains(key),
+                "environment selector `conda: {key}` has no matching packages entry \
+                 (available: {package_keys:?})"
             );
         }
 
