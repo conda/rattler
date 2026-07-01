@@ -127,8 +127,13 @@ struct LogoutArgs {
 struct StatusArgs {
     /// Show endpoint URLs, client ID, and other IdP-introspection fields
     /// that are only useful for debugging.
-    #[clap(short, long)]
-    verbose: bool,
+    // NOTE: this intentionally avoids the `--verbose`/`-v` name. `Args` is
+    // embedded as a subcommand in larger CLIs (pixi, the `rattler` binary, ...)
+    // that define their own global `--verbose` logging flag. Sharing the name
+    // makes clap either merge the two args (panicking on a type mismatch) or
+    // reject them as duplicate long names — see prefix-dev/pixi#6466.
+    #[clap(long)]
+    details: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -1083,7 +1088,7 @@ async fn status(
             entry.active,
             account.as_deref(),
             now,
-            args.verbose,
+            args.details,
         );
     }
 
@@ -1162,6 +1167,45 @@ mod tests {
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap()),
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&payload).unwrap())
         )
+    }
+
+    // Auth `Args` must be embeddable as a subcommand of a larger CLI that
+    // defines its own `global = true` `--verbose` flag, without clashing.
+    // pixi uses a `u8` (count) flag, the `rattler` binary a `bool` one — both
+    // previously broke `auth status` (panic on type mismatch or a duplicate
+    // long-name assertion). See prefix-dev/pixi#6466.
+    #[test]
+    fn auth_embeds_under_global_verbose_flag() {
+        #[derive(Parser, Debug)]
+        struct CountParent {
+            #[clap(short, long, action = clap::ArgAction::Count, global = true)]
+            verbose: u8,
+            #[clap(subcommand)]
+            command: ParentCommand,
+        }
+
+        #[derive(Parser, Debug)]
+        struct BoolParent {
+            #[clap(short, long, global = true)]
+            verbose: bool,
+            #[clap(subcommand)]
+            command: ParentCommand,
+        }
+
+        #[derive(Parser, Debug)]
+        enum ParentCommand {
+            Auth(super::Args),
+        }
+
+        // `try_parse_from` panics (rather than returning `Err`) on the clashing
+        // definitions, so reaching an `Ok`/`Err` at all proves the clash is gone.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status"]).is_ok());
+        assert!(BoolParent::try_parse_from(["prog", "auth", "status"]).is_ok());
+
+        // The parent's global `--verbose` is still accepted after the subcommand.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status", "--verbose"]).is_ok());
+        // And our renamed detail flag works on its own.
+        assert!(CountParent::try_parse_from(["prog", "auth", "status", "--details"]).is_ok());
     }
 
     #[test]
