@@ -11,8 +11,9 @@ readme.workspace = true
 
 [features]
 default = ["rustls"]
-rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rustls", "rattler_package_streaming/rustls"]
-native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
+rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rustls", "rattler_package_streaming/rustls", "rattler_sigstore?/rustls"]
+native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls", "rattler_sigstore?/native-tls"]
+sigstore = ["dep:rattler_sigstore"]
 
 [dependencies]
 
@@ -43,6 +44,7 @@ hex = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }
+rattler_sigstore = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

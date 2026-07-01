@@ -49,6 +49,9 @@ mod reporter;
 pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
     cache_origin: bool,
+    /// Signature verification policy for downloaded packages.
+    #[cfg(feature = "sigstore")]
+    verification_policy: rattler_sigstore::VerificationPolicy,
 }
 
 #[derive(Default)]
@@ -103,6 +106,16 @@ pub enum PackageCacheError {
     /// There are no writable layers to cache package to
     #[error("no writable layers to cache package to")]
     NoWritableLayers,
+
+    /// Signature verification failed for a package
+    #[cfg(feature = "sigstore")]
+    #[error("signature verification failed for {url}: {reason}")]
+    SignatureVerificationFailed {
+        /// The URL of the package that failed verification.
+        url: String,
+        /// The reason for the failure.
+        reason: String,
+    },
 
     /// The cache key contains metadata that could lead to path traversal.
     #[error(transparent)]
@@ -319,7 +332,26 @@ impl PackageCache {
         Self {
             inner: Arc::new(PackageCacheInner { layers }),
             cache_origin,
+            #[cfg(feature = "sigstore")]
+            verification_policy: rattler_sigstore::VerificationPolicy::Disabled,
         }
+    }
+
+    /// Set the signature verification policy for downloaded packages.
+    ///
+    /// When enabled, packages will be verified against Sigstore signatures
+    /// after download. The policy controls how verification failures are handled:
+    ///
+    /// - `Disabled`: No verification (default)
+    /// - `Warn(config)`: Verify but only warn on failure
+    /// - `Require(config)`: Require valid signatures for installation
+    #[cfg(feature = "sigstore")]
+    pub fn with_verification_policy(
+        mut self,
+        policy: rattler_sigstore::VerificationPolicy,
+    ) -> Self {
+        self.verification_policy = policy;
+        self
     }
 
     /// Returns a tuple containing two sets of layers:
@@ -511,8 +543,17 @@ impl PackageCache {
         let sha256 = cache_key.sha256();
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
+
+        // Clone URL for verification later
+        #[cfg(feature = "sigstore")]
+        let verification_url = url.clone();
+        #[cfg(feature = "sigstore")]
+        let verification_policy = self.verification_policy.clone();
+        #[cfg(feature = "sigstore")]
+        let verification_client = client.clone();
+
         // Get or fetch the package, using the specified fetch function
-        self.get_or_fetch(cache_key, move |destination| {
+        let result = self.get_or_fetch(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
@@ -633,7 +674,93 @@ impl PackageCache {
                 }
             }
         }, reporter)
-            .await
+            .await?;
+
+        // Verify package signatures if enabled
+        #[cfg(feature = "sigstore")]
+        if verification_policy.is_enabled() {
+            // Signature verification is digest-based, so it requires the
+            // package SHA256. If we don't have one we cannot verify; fail closed
+            // when verification is required, otherwise warn and continue.
+            let Some(sha256) = result.sha256 else {
+                if verification_policy.is_required() {
+                    // Only delete a package we fetched during this call; never
+                    // remove a pre-existing cache hit.
+                    if result.from_fetch {
+                        let _ = tokio_fs::remove_dir_all(&result.path).await;
+                    }
+                    return Err(PackageCacheError::SignatureVerificationFailed {
+                        url: verification_url.to_string(),
+                        reason: "no SHA256 digest available for the package, cannot verify \
+                                 signatures"
+                            .to_string(),
+                    });
+                }
+                tracing::warn!(
+                    "No SHA256 digest available for {}; skipping signature verification \
+                     (continuing because verification is not required)",
+                    verification_url
+                );
+                return Ok(result);
+            };
+
+            tracing::debug!(
+                "Verifying signatures for {} (sha256: {})",
+                verification_url,
+                hex::encode(sha256)
+            );
+
+            let outcome = rattler_sigstore::verify_package_by_digest(
+                &verification_policy,
+                &verification_url,
+                sha256.as_slice(),
+                verification_client.client(),
+            )
+            .await;
+
+            match outcome {
+                Ok(verification_outcome) => {
+                    if verification_outcome.verified {
+                        tracing::info!(
+                            "Package {} signature verified (identity: {:?}, issuer: {:?})",
+                            verification_url,
+                            verification_outcome.identity,
+                            verification_outcome.issuer
+                        );
+                    } else if !verification_outcome.warnings.is_empty() {
+                        for warning in &verification_outcome.warnings {
+                            tracing::warn!(
+                                "Signature verification warning for {}: {}",
+                                verification_url,
+                                warning
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    if verification_policy.is_required() {
+                        // Only delete a package we fetched during this call so a
+                        // transient verification failure (network, trust root,
+                        // signature fetch) never evicts a valid existing cache
+                        // entry.
+                        if result.from_fetch {
+                            let _ = tokio_fs::remove_dir_all(&result.path).await;
+                        }
+                        return Err(PackageCacheError::SignatureVerificationFailed {
+                            url: verification_url.to_string(),
+                            reason: e.to_string(),
+                        });
+                    }
+                    tracing::warn!(
+                        "Signature verification failed for {}: {} (continuing because verification is not required)",
+                        verification_url,
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -777,6 +904,7 @@ where
                 path: path_inner,
                 index_json: None,
                 paths_json: None,
+                from_fetch: false,
             });
         }
 
@@ -799,6 +927,7 @@ where
                     path,
                     index_json: Some(index_json),
                     paths_json: Some(paths_json),
+                    from_fetch: false,
                 });
             }
             Ok(Err(e)) => {
@@ -902,6 +1031,7 @@ where
                     path,
                     index_json: None,
                     paths_json: None,
+                    from_fetch: true,
                 })
             }
             Err(e) => {
@@ -2068,5 +2198,122 @@ mod test {
         assert!(result.is_ok(), "expected cache hit, got {result:?}");
         // The semaphore should still have 0 permits — nothing was acquired.
         assert_eq!(semaphore.available_permits(), 0);
+    }
+
+    /// Serve the `test-data` directory over HTTP on a random local port and
+    /// return its base URL. Unmapped paths (e.g. `*.v0.sigs`) yield 404.
+    #[cfg(feature = "sigstore")]
+    async fn serve_test_data() -> Url {
+        use tower_http::services::ServeDir;
+
+        let app = Router::new().fallback_service(ServeDir::new(get_test_data_dir()));
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, app.into_make_service()).into_future());
+        Url::parse(&format!("http://localhost:{}/", addr.port())).unwrap()
+    }
+
+    /// A transient verification failure on a *cache hit* must not delete the
+    /// existing cache entry. We populate the cache first, then re-request it
+    /// under a `Require` policy while the server has no `.v0.sigs` file (404),
+    /// so verification fails — but the entry must survive.
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn test_cached_package_not_deleted_on_verification_failure() {
+        use rattler_sigstore::{Publisher, VerificationConfig, VerificationPolicy};
+
+        let base_url = serve_test_data().await;
+        let pkg = "clobber/clobber-python-0.1.0-cpython.conda";
+        let url = base_url.join(pkg).unwrap();
+        let sha256 = compute_file_digest::<Sha256>(&get_test_data_dir().join(pkg)).unwrap();
+        let cache_key: CacheKey = CondaArchiveIdentifier::try_from_url(&url).unwrap().into();
+        let cache_key = cache_key.with_sha256(sha256);
+
+        let packages_dir = tempdir().unwrap();
+        let client: rattler_networking::LazyClient =
+            ClientBuilder::new(Client::default()).build().into();
+
+        // 1. Populate the cache with verification disabled.
+        let cached_path = PackageCache::new(packages_dir.path())
+            .get_or_fetch_from_url_with_retry(
+                cache_key.clone(),
+                url.clone(),
+                client.clone(),
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await
+            .unwrap()
+            .path()
+            .to_path_buf();
+        assert!(cached_path.is_dir());
+
+        // 2. Re-request under a `Require` policy. The server returns 404 for the
+        //    `.v0.sigs` URL, so verification fails — but this is a cache hit, so
+        //    the entry must be preserved.
+        let config = VerificationConfig::new().with_default_publishers(vec![Publisher::new()]);
+        let result = PackageCache::new(packages_dir.path())
+            .with_verification_policy(VerificationPolicy::Require(config))
+            .get_or_fetch_from_url_with_retry(cache_key, url, client, DoNotRetryPolicy, None, None)
+            .await;
+
+        assert_matches!(
+            result,
+            Err(PackageCacheError::SignatureVerificationFailed { .. })
+        );
+        assert!(
+            cached_path.is_dir(),
+            "cache hit must not be deleted on verification failure"
+        );
+    }
+
+    /// In `Require` mode with no SHA256 available we cannot verify, so the call
+    /// must fail closed. Because the package was freshly fetched this run, the
+    /// downloaded entry is removed.
+    #[cfg(feature = "sigstore")]
+    #[tokio::test]
+    async fn test_require_mode_fails_closed_without_sha256() {
+        use rattler_sigstore::{Publisher, VerificationConfig, VerificationPolicy};
+
+        let base_url = serve_test_data().await;
+        let url = base_url
+            .join("clobber/clobber-python-0.1.0-cpython.conda")
+            .unwrap();
+        // Identifier-derived key carries no SHA256.
+        let cache_key: CacheKey = CondaArchiveIdentifier::try_from_url(&url).unwrap().into();
+
+        let packages_dir = tempdir().unwrap();
+        let client: rattler_networking::LazyClient =
+            ClientBuilder::new(Client::default()).build().into();
+
+        let config = VerificationConfig::new().with_default_publishers(vec![Publisher::new()]);
+        let cache = PackageCache::new(packages_dir.path())
+            .with_verification_policy(VerificationPolicy::Require(config));
+
+        let result = cache
+            .get_or_fetch_from_url_with_retry(
+                cache_key.clone(),
+                url,
+                client,
+                DoNotRetryPolicy,
+                None,
+                None,
+            )
+            .await;
+
+        assert_matches!(
+            result,
+            Err(PackageCacheError::SignatureVerificationFailed { .. })
+        );
+        // The freshly-fetched package must have been removed.
+        let final_path = packages_dir
+            .path()
+            .join(cache_key.to_path_segment().unwrap());
+        assert!(
+            !final_path.exists(),
+            "freshly-fetched package must be deleted when required verification fails"
+        );
     }
 }

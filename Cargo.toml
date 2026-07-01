@@ -165,10 +165,11 @@ smallvec = { version = "1.15.0", features = [
   "const_generics",
   "union",
 ] }
-sigstore-sign = { version = "0.9", default-features = false }
-sigstore-trust-root = { version = "0.9", default-features = false, features = [
+sigstore-sign = { version = "0.10.0", default-features = false }
+sigstore-trust-root = { version = "0.10.0", default-features = false, features = [
   "tuf",
 ] }
+sigstore-verify = { version = "0.10.0", default-features = false }
 strum = { version = "0.28", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.101"
@@ -228,6 +229,7 @@ rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version =
 rattler_s3 = { path = "crates/rattler_s3", version = "=0.2.6", default-features = false }
 rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.23", default-features = false }
 rattler_shell = { path = "crates/rattler_shell", version = "=0.27.8", default-features = false }
+rattler_sigstore = { path = "crates/rattler_sigstore", version = "=0.1.0", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=7.2.0", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.8.2", default-features = false }
 rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=3.0.2", default-features = false }
