@@ -2401,7 +2401,8 @@ mod tests {
         assert!(parse_extras("gpu, MKL").is_err());
 
         // Non-ASCII "alphanumerics" are rejected even though `char::is_alphanumeric` accepts them.
-        assert!(parse_extras("caf\u{e9}").is_err());
+        assert!(parse_extras("\u{e9}").is_err());
+        assert!(parse_extras("\u{3b1}").is_err());
 
         // Length: 1..=64 characters.
         assert!(parse_extras("").is_err());
