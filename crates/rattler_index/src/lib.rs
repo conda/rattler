@@ -911,12 +911,6 @@ async fn index_subdir_inner(
         IndexMap::default();
     let mut v3 = V3Packages::default();
     let latest_revision = latest_repodata_revision(&repodata_revisions);
-    // Sort by filename so shards serialize deterministically: the
-    // `registered_packages` HashMap's random iteration order would otherwise
-    // leak into each shard's bytes, orphaning content-addressed shards on every
-    // reindex.
-    let mut registered_packages: Vec<_> = registered_packages.into_iter().collect();
-    registered_packages.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
     for (filename, package) in registered_packages {
         let revision =
             package_revision_assignment.assign(package.repodata_revision, latest_revision);

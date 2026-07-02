@@ -5094,6 +5094,7 @@ dependencies = [
  "rattler_redaction",
  "rayon",
  "regex",
+ "rmp-serde",
  "rstest",
  "serde",
  "serde-untagged",
