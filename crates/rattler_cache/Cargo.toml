@@ -33,7 +33,7 @@ rattler_networking = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
 reqwest = { workspace = true, features = ["stream"] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "fs"] }
 tracing = { workspace = true }
 url = { workspace = true }
 thiserror = { workspace = true }
