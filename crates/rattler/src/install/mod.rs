@@ -15,6 +15,7 @@
 //! Or it might contain a file that should be linked into the target directory.
 //! The `paths.json` file also contains a SHA256 hash for each file. This hash
 //! is used to verify that the file was not tampered with.
+mod adhoc_sign;
 pub mod apple_codesign;
 mod clobber_registry;
 mod driver;

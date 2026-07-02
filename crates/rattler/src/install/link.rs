@@ -16,6 +16,7 @@ use std::fs::Permissions;
 use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
+use super::adhoc_sign;
 use super::apple_codesign::{AppleCodeSignBehavior, codesign};
 use super::{ExternalSymlinkPolicy, Prefix};
 
@@ -253,26 +254,50 @@ pub fn link_file(
 
             // If the binary changed it requires resigning.
             if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
-                match codesign(&destination_path) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
-                            return Err(e);
+                // Fast path: conda-forge binaries ship with an ad-hoc signature, and our
+                // prefix replacement is length-preserving, so we can re-sign the binary
+                // in-process by recomputing its code-page hashes. This avoids spawning a
+                // `/usr/bin/codesign` process per binary. Anything we don't handle
+                // (unsigned binaries, unusual layouts) falls back to the `codesign` tool.
+                let signed_in_process = match fs::read(&destination_path) {
+                    Ok(mut bytes) => match adhoc_sign::adhoc_resign(&mut bytes) {
+                        adhoc_sign::ResignOutcome::Resigned => {
+                            fs::write(&destination_path, &bytes)
+                                .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+                            // The file changed, so recompute the hash and size directly
+                            // from the buffer we just wrote (no need to re-read the disk).
+                            sha256 = Some(rattler_digest::compute_bytes_digest::<Sha256>(&bytes));
+                            file_size = Some(bytes.len() as u64);
+                            true
+                        }
+                        adhoc_sign::ResignOutcome::NotMachO
+                        | adhoc_sign::ResignOutcome::NeedsFullSign => false,
+                    },
+                    Err(_) => false,
+                };
+
+                if !signed_in_process {
+                    match codesign(&destination_path) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
+                                return Err(e);
+                            }
                         }
                     }
-                }
 
-                // The file on disk changed from the original file so the hash and file size
-                // also became invalid. Let's recompute them.
-                sha256 = Some(
-                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
-                        .map_err(LinkFileError::FailedToComputeSha)?,
-                );
-                file_size = Some(
-                    fs::symlink_metadata(&destination_path)
-                        .map_err(LinkFileError::FailedToOpenDestinationFile)?
-                        .len(),
-                );
+                    // The file on disk changed from the original file so the hash and file size
+                    // also became invalid. Let's recompute them.
+                    sha256 = Some(
+                        rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                            .map_err(LinkFileError::FailedToComputeSha)?,
+                    );
+                    file_size = Some(
+                        fs::symlink_metadata(&destination_path)
+                            .map_err(LinkFileError::FailedToOpenDestinationFile)?
+                            .len(),
+                    );
+                }
             }
         }
 
