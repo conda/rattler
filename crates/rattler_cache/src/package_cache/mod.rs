@@ -660,9 +660,12 @@ async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
 async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     use rattler_networking::retry_policies::ExponentialBackoff;
 
+    // Roughly 25s of total wait: AV scans of large freshly-extracted packages
+    // (e.g. python, openssl) can hold handles for well over the ~5s the
+    // previous 5x100ms..2s policy allowed.
     let retry_policy = ExponentialBackoff::builder()
-        .retry_bounds(Duration::from_millis(100), Duration::from_secs(2))
-        .build_with_max_retries(5);
+        .retry_bounds(Duration::from_millis(100), Duration::from_secs(5))
+        .build_with_max_retries(10);
     retry_io_on_transient(
         || tokio::fs::rename(from, to),
         is_transient_rename_error,
