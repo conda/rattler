@@ -103,7 +103,7 @@ enum Commands {
 
 /// The configuration type for rattler-index - just extends rattler config and
 /// can load the same TOML files as pixi.
-pub type Config = rattler_config::config::ConfigBase<()>;
+pub type Config = rattler_config::config::ConfigBase;
 
 /// Entry point of the `rattler-index` cli.
 #[tokio::main]
