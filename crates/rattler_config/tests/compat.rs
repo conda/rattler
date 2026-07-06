@@ -195,10 +195,20 @@ fn edit_matrix_set_roundtrip_unset() {
     let (kitchen_sink, _) = parse("kitchen-sink.toml");
 
     for (key, value) in EDIT_MATRIX {
+        // `concurrency.solves` defaults to the local CPU count, so a fixed
+        // literal could equal the default on some machine (macOS CI runners
+        // have 3 CPUs) and make `set` a no-op. Derive a value guaranteed to
+        // differ from the default instead.
+        let value: String = if *key == "concurrency.solves" {
+            (Config::default().concurrency.solves + 1).to_string()
+        } else {
+            (*value).to_string()
+        };
+
         // set on a fully populated config …
         let mut edited = kitchen_sink.clone();
         edited
-            .set(key, Some((*value).to_string()))
+            .set(key, Some(value.clone()))
             .unwrap_or_else(|e| panic!("set {key}={value} must succeed: {e}"));
 
         // … and the result still round-trips losslessly.
@@ -210,7 +220,7 @@ fn edit_matrix_set_roundtrip_unset() {
         // set + unset on a pristine config restores the default state,
         // proving the edit touched nothing else.
         let mut pristine = Config::default();
-        pristine.set(key, Some((*value).to_string())).unwrap();
+        pristine.set(key, Some(value.clone())).unwrap();
         assert_ne!(pristine, Config::default(), "{key}: set must change state");
         pristine.set(key, None).unwrap();
         assert_eq!(
