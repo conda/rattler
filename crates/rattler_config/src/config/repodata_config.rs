@@ -132,16 +132,18 @@ impl RepodataConfig {
 
 impl Config for RepodataConfig {
     /// Merge the given `RepodataConfig` into the current one.
-    /// The `other` configuration should take priority over the current one.
+    /// The `other` configuration takes priority over the current one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
-        // Make `other` mutable to allow for moving the values out of it.
+        // Note: `RepodataChannelConfig::merge` keeps `self` and only fills
+        // the gaps from its argument, so the higher-priority side must be
+        // the receiver.
         let mut merged = self.clone();
-        merged.default = merged.default.merge(other.default.clone());
+        merged.default = other.default.clone().merge(merged.default);
         for (url, config) in &other.per_channel {
             merged
                 .per_channel
                 .entry(url.clone())
-                .and_modify(|existing| *existing = existing.merge(config.clone()))
+                .and_modify(|existing| *existing = config.clone().merge(existing.clone()))
                 .or_insert_with(|| config.clone());
         }
         Ok(merged)

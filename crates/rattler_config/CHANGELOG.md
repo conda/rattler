@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A compatibility test catalog (`tests/compat.rs` + `test-data/compat/`) pinning down the configuration contract: parsing permutations (kebab-case, snake_case aliases, deprecated keys, typos), lossless/idempotent round-trips, a set/unset editing matrix over every key family, and merge semantics per key family. Extend the fixtures and `EDIT_MATRIX` when adding keys.
 - `ConfigBase::from_toml_str` parses a configuration and reports the keys that neither the common configuration nor the extension recognized, so tools can warn about typos — including keys of tool-specific extensions and deprecated keys inside known tables (e.g. `repodata-config.disable-jlap`).
 - `ConfigBase::load_from_default_locations` and the new `locations` module: shared config-file discovery (`/etc/<tool>/config.toml`, `$XDG_CONFIG_HOME/<tool>/config.toml`, `$<TOOL>_HOME` or `~/.<tool>/config.toml`) for a list of cooperating tools, e.g. `&["pixi", "rattler-build"]`.
 - `ConfigBase::set` is now implemented generically by round-tripping through TOML: every key — including extension keys — can be set/unset without any per-field code. Values are interpreted as JSON when possible and fall back to plain strings. Key segments containing dots can be quoted (`mirrors."https://conda.anaconda.org"`).
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `RepodataConfig::merge_config` merged in the wrong direction: repodata flags from an earlier configuration file could not be overridden by later files (e.g. a project config could not re-enable zstd disabled in the global config). It now follows the documented "`other` takes priority" contract like every other section.
 - `ProxyConfig::is_default` checked `https` twice and never `http`.
 - Removed the misleading `load_config` free function (it neither merged nor validated).
 - Removed the unwired `link_config` module in favor of the flat top-level keys.
