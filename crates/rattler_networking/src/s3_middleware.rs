@@ -51,6 +51,32 @@ where
         .collect()
 }
 
+#[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the `s3-options` of the shared rattler
+/// configuration (see [`rattler_config`]).
+///
+/// Accepts a [`rattler_config::config::CommonConfig`]; a `&ConfigBase<T>` of
+/// any extension coerces into it.
+pub fn compute_s3_config_from_config(
+    config: &rattler_config::config::CommonConfig,
+) -> HashMap<String, S3Config> {
+    config
+        .s3_options
+        .0
+        .iter()
+        .map(|(bucket, options)| {
+            (
+                bucket.clone(),
+                S3Config::Custom {
+                    endpoint_url: options.endpoint_url.clone(),
+                    region: options.region.clone(),
+                    force_path_style: options.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {

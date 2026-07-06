@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MirrorMiddleware::from_config`, `s3_middleware::compute_s3_config_from_config` and the new `proxy::proxies_from_config` helper (feature `rattler_config`) build middlewares / reqwest proxies directly from the shared rattler configuration (`CommonConfig`; any `&ConfigBase<T>` coerces into it).
+
 ## [0.30.0](https://github.com/conda/rattler/compare/rattler_networking-v0.29.0...rattler_networking-v0.30.0) - 2026-06-26
 
 ### Added

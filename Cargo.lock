@@ -4950,6 +4950,7 @@ dependencies = [
  "rand 0.10.1",
  "rattler_cache",
  "rattler_conda_types",
+ "rattler_config",
  "rattler_digest",
  "rattler_lock",
  "rattler_menuinst",
