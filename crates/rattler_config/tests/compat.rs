@@ -36,6 +36,20 @@ fn parse(name: &str) -> (Config, BTreeSet<String>) {
     Config::from_toml_str(&fixture(name)).unwrap_or_else(|e| panic!("{name} must parse: {e}"))
 }
 
+/// Strip machine-dependent values before snapshotting: `concurrency.solves`
+/// defaults to the local CPU count and `channel_config.root_dir` to the
+/// working directory, so a raw snapshot would only pass on the machine that
+/// generated it. `solves` is normalized *unconditionally* (a conditional
+/// "only when it equals the default" would flip whenever an explicitly
+/// configured value happens to match the CPU count); explicitly configured
+/// values are asserted in `explicit_concurrency_values_parse` instead.
+fn normalized(mut config: Config) -> Config {
+    config.concurrency.solves = 0;
+    config.channel_config =
+        rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from("<normalized>"));
+    config
+}
+
 /// Every fixture must parse; snapshot the parsed result and the reported
 /// unused keys so schema changes are reviewed consciously.
 #[test]
@@ -47,8 +61,20 @@ fn parsing_permutations() {
         "override-layer.toml",
     ] {
         let (config, unused) = parse(name);
-        insta::assert_debug_snapshot!(format!("parse__{name}"), (unused, config));
+        insta::assert_debug_snapshot!(format!("parse__{name}"), (unused, normalized(config)));
     }
+}
+
+/// Explicitly configured concurrency values parse correctly. Kept out of
+/// the snapshots because `normalized` blanks `solves` (see there).
+#[test]
+fn explicit_concurrency_values_parse() {
+    let (config, _) = parse("kitchen-sink.toml");
+    assert_eq!(config.concurrency.solves, 4);
+    assert_eq!(config.concurrency.downloads, 12);
+
+    let (config, _) = parse("override-layer.toml");
+    assert_eq!(config.concurrency.solves, 9);
 }
 
 /// Snake-case spellings must parse to the same configuration as their

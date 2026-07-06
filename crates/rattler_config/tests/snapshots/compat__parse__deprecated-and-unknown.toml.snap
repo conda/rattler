@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_config/tests/compat.rs
-expression: "(unused, config)"
+expression: "(unused, normalized(config))"
 ---
 (
     {
@@ -44,7 +44,7 @@ expression: "(unused, config)"
                     query: None,
                     fragment: None,
                 },
-                root_dir: "/home/user/rattler/crates/rattler_config",
+                root_dir: "<normalized>",
             },
             repodata_config: RepodataConfig {
                 default: RepodataChannelConfig {
@@ -77,7 +77,7 @@ expression: "(unused, config)"
                 },
             },
             concurrency: ConcurrencyConfig {
-                solves: 4,
+                solves: 0,
                 downloads: 50,
             },
             proxy_config: ProxyConfig {
