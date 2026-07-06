@@ -459,3 +459,78 @@ async fn test_index_writes_channel_metadata() {
         Some(0)
     );
 }
+
+/// Regression test: sharded repodata must be reproducible.
+///
+/// Shard records were serialized in the random iteration order of an ahash
+/// `HashMap`, so every index run produced a different shard digest for any
+/// package name with more than one build. Since shards are content-addressed
+/// and written `if_not_exists`, each reindex wrote a fresh shard file and
+/// orphaned the old one — unbounded `shards/` growth with no package changes.
+#[tokio::test]
+async fn test_sharded_repodata_is_deterministic() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+
+    // One package name with many builds => a single shard holding N records.
+    // Two independent random orderings coincide with probability 1/N!, so
+    // N = 10 (~3e-7) makes a non-deterministic indexer reliably write a fresh
+    // shard file on reindex.
+    let build_dir = temp_dir.path().join("build");
+    for n in 0..10 {
+        let info_dir = build_dir.join("info");
+        fs::create_dir_all(&info_dir).unwrap();
+        fs::write(
+            info_dir.join("index.json"),
+            format!(
+                r#"{{"build":"h_{n}","build_number":{n},"name":"multi","noarch":"generic","subdir":"noarch","timestamp":1710000000000,"version":"1.0.0"}}"#
+            ),
+        )
+        .unwrap();
+        let pkg = subdir_path.join(format!("multi-1.0.0-h_{n}.tar.bz2"));
+        write_tar_bz2_package(
+            File::create(&pkg).unwrap(),
+            &build_dir,
+            &[info_dir.join("index.json")],
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
+        fs::remove_dir_all(&build_dir).unwrap();
+    }
+
+    let config = |force| IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: true,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force,
+        max_parallel: 1,
+        multi_progress: None,
+    };
+
+    // Build the index, then reindex the unchanged channel several times.
+    index_fs(config(true)).await.unwrap();
+    for _ in 0..3 {
+        index_fs(config(false)).await.unwrap();
+    }
+
+    // Exactly one package name => exactly one live shard. A deterministic
+    // indexer rewrites the same content-addressed file, so `shards/` holds a
+    // single file; the bug leaves one new orphan per reshuffled reindex.
+    let shard_files = fs::read_dir(subdir_path.join("shards"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".msgpack.zst"))
+        .count();
+    assert_eq!(
+        shard_files, 1,
+        "sharded repodata is non-deterministic: {shard_files} shard files after \
+         reindexing an unchanged channel (expected 1)"
+    );
+}

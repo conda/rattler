@@ -44,7 +44,7 @@ impl From<SparseRepoData> for PySparseRepoData {
     }
 }
 
-#[pyclass(eq)]
+#[pyclass(eq, from_py_object)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum PyPackageFormatSelection {
     OnlyTarBz2,
@@ -104,7 +104,7 @@ impl PySparseRepoData {
         subdir: String,
         path: PathBuf,
     ) -> PyResult<Self> {
-        py.allow_threads(move || Self::from_args(channel, subdir, path))
+        py.detach(move || Self::from_args(channel, subdir, path))
     }
 
     pub fn package_names(
@@ -113,7 +113,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<String>> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -131,7 +131,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<usize> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -148,7 +148,7 @@ impl PySparseRepoData {
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
         let name = package_name.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -167,7 +167,7 @@ impl PySparseRepoData {
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -188,7 +188,7 @@ impl PySparseRepoData {
     ) -> PyResult<Vec<PyRecord>> {
         let inner = self.inner.clone();
         let owned_specs: Vec<_> = specs.iter().map(|s| s.inner.clone()).collect();
-        py.allow_threads(move || {
+        py.detach(move || {
             let lock = inner.read();
             let Some(sparse) = lock.as_ref() else {
                 return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -233,7 +233,7 @@ impl PySparseRepoData {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        py.allow_threads(move || {
+        py.detach(move || {
             let package_names = package_names.into_iter().map(Into::into);
             Ok(SparseRepoData::load_records_recursive(
                 repo_data_refs,

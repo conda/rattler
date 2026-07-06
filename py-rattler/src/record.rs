@@ -8,8 +8,8 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass,
-    pymethods, types::PyBytes,
+    Bound, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass, pymethods,
+    types::PyBytes,
 };
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
@@ -38,7 +38,7 @@ use crate::{
 ///
 /// `PyO3` cannot expose tagged enums directly, to achieve this we use the
 /// `PyRecord` wrapper pyclass on top of `RecordInner`.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRecord {
@@ -137,7 +137,7 @@ impl PyRecord {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyLink {
     #[pyo3(get, set)]
@@ -846,7 +846,7 @@ impl<'a> TryFrom<Bound<'a, PyAny>> for PyRecord {
             return Err(PyTypeError::new_err("'_record' is invalid"));
         }
 
-        PyRecord::extract_bound(&inner)
+        Ok(inner.extract::<PyRecord>()?)
     }
 }
 

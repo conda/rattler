@@ -9,7 +9,7 @@ use crate::{
     package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMatchSpec {

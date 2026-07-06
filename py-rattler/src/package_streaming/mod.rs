@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::{networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes};
 
-fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject) {
+fn convert_result(py: Python<'_>, result: ExtractResult) -> (Py<PyAny>, Py<PyAny>) {
     let sha256_bytes = PyBytes::new(py, &result.sha256);
     let md5_bytes = PyBytes::new(py, &result.md5);
 
@@ -28,9 +28,9 @@ fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
 #[pyfunction]
 pub fn extract_tar_bz2(
     py: Python<'_>,
-    reader: PyObject,
+    reader: Py<PyAny>,
     destination: String,
-) -> PyResult<(PyObject, PyObject)> {
+) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     // Convert Python file-like object to Read implementation
     let reader = PyFileLikeObject::new(reader)?;
     let destination = Path::new(&destination);
@@ -47,7 +47,7 @@ pub fn extract(
     py: Python<'_>,
     source: PathBuf,
     destination: PathBuf,
-) -> PyResult<(PyObject, PyObject)> {
+) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     match rattler_package_streaming::fs::extract(&source, &destination) {
         Ok(result) => Ok(convert_result(py, result)),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
@@ -84,7 +84,7 @@ pub fn download_and_extract<'a>(
             None,
         )
         .await
-        .map(|result| Python::with_gil(|py| convert_result(py, result)))
+        .map(|result| Python::attach(|py| convert_result(py, result)))
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
     };
 
@@ -116,7 +116,7 @@ pub fn fetch_raw_package_file_from_url<'a>(
             ))
         })?;
 
-        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+        Python::attach(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     };
 
     future_into_py(py, future)
@@ -182,7 +182,7 @@ pub fn download_bytes<'a>(
             .await
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
-        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
+        Python::attach(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     };
 
     future_into_py(py, future)
@@ -209,7 +209,7 @@ pub fn download_to_writer<'a>(
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(io_error)?;
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 writer
                     .bind(py)
                     .call_method1("write", (PyBytes::new(py, &chunk),))

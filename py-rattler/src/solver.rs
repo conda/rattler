@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use jiff::Timestamp;
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
-    pybacked::PyBackedStr, pyfunction, types::PyAnyMethods,
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, exceptions::PyValueError,
+    pybacked::PyBackedStr, pyfunction,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::RepoDataRecord;
@@ -24,8 +24,9 @@ use crate::{
     repo_data::gateway::{PyGateway, py_object_to_source},
 };
 
-impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<SolveStrategy> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         let parsed: PyBackedStr = ob.extract()?;
         let parsed = match parsed.as_ref() {
             "highest" => SolveStrategy::Highest,
