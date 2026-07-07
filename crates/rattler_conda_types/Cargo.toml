@@ -27,6 +27,7 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 nom-language = { workspace = true }
+memchr = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
 rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
