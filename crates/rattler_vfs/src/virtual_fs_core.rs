@@ -62,6 +62,7 @@ impl VirtualFSCore {
             open_files: Mutex::new(HashMap::new()),
             open_handles: Mutex::new(HashMap::new()),
             next_fh: AtomicU64::new(1),
+            #[cfg(target_os = "macos")]
             codesign_cache: Mutex::new(HashMap::new()),
         }
     }
@@ -256,7 +257,7 @@ impl VirtualFSCore {
                         let start = offset.min(replaced.len());
                         let end = start.saturating_add(size).min(replaced.len());
                         let result = replaced[start..end].to_vec();
-                        self.codesign_cache.lock().unwrap().insert(idx, replaced);
+                        self.lock().unwrap().insert(idx, replaced);
                         return Ok(result);
                     }
 
