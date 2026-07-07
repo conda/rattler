@@ -32,6 +32,7 @@ pub struct VirtualFSCore {
     next_fh: AtomicU64,
     /// Lazily-populated cache for Mach-O binaries after binary prefix replacement
     /// and in-place re-signing. Keyed by metadata index. macOS only.
+    #[cfg(target_os = "macos")]
     codesign_cache: Mutex<HashMap<usize, Vec<u8>>>,
 }
 

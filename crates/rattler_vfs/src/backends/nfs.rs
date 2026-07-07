@@ -131,12 +131,6 @@ impl MountProvider for NfsProvider {
 }
 
 /// Mount the NFS server at 127.0.0.1:11111 (registered with rpcbind).
-///
-/// mount(2) / mount.nfs require CAP_SYS_ADMIN. We try, in order:
-///   1. `sudo -n mount.nfs`  — passwordless-sudo path
-///   2. `mount.nfs`          — direct (works if the process is already root)
-///   3. `mount -t nfs`       — fallback for distros without mount.nfs in PATH
-///
 /// If every attempt fails the error includes a hint about privilege requirements.
 #[cfg(target_os = "linux")]
 fn linux_nfs_mount(mount_point: &std::path::Path) -> anyhow::Result<()> {
@@ -256,7 +250,7 @@ fn rpcbind_unregister(port: u16) {
     }
 }
 
-/// Build a TCP-framed portmapper RPC call (PMAPPROC_SET=1 or PMAPPROC_UNSET=2).
+/// Build a TCP-framed portmapper RPC call (`PMAPPROC_SET=1` or `PMAPPROC_UNSET=2`).
 #[cfg(target_os = "linux")]
 fn pmap_request(proc: u32, prog: u32, vers: u32, port: u16) -> Vec<u8> {
     let mut payload = Vec::with_capacity(56);
@@ -275,7 +269,7 @@ fn pmap_request(proc: u32, prog: u32, vers: u32, port: u16) -> Vec<u8> {
     w(prog);
     w(vers);
     w(6);
-    w(port as u32); // mapping: prog, vers, IPPROTO_TCP, port
+    w(u32::from(port)); // mapping: prog, vers, IPPROTO_TCP, port
 
     let mut msg = Vec::with_capacity(4 + payload.len());
     msg.extend_from_slice(&((payload.len() as u32) | 0x8000_0000).to_be_bytes());
