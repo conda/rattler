@@ -257,7 +257,7 @@ impl VirtualFSCore {
                         let start = offset.min(replaced.len());
                         let end = start.saturating_add(size).min(replaced.len());
                         let result = replaced[start..end].to_vec();
-                        self.lock().unwrap().insert(idx, replaced);
+                        self.codesign_cache.lock().unwrap().insert(idx, replaced);
                         return Ok(result);
                     }
 

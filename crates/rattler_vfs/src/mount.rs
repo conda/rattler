@@ -15,6 +15,7 @@ pub enum MountBackend {
 }
 
 impl MountBackend {
+    #[cfg_attr(not(unix), allow(unused_variables))]
     pub async fn mount(
         &self,
         metadata: Vec<FSMetadata>,
@@ -26,8 +27,8 @@ impl MountBackend {
                 let fs = Arc::new(VirtualFSCore::new(metadata, mount_point.clone()));
                 NfsProvider::mount(fs, mount_point).await
             }
-            /// A windows machine would not be able to setup the server part of this implementation
-            /// When it would be mounting to a separate server this could work with nfs on windows
+            // A windows machine would not be able to setup the server part of this implementation
+            // When it would be mounting to a separate server this could work with nfs on windows
             #[cfg(not(unix))]
             MountBackend::Nfs => {
                 anyhow::bail!("NFS backend is not supported on this platform")
