@@ -552,42 +552,44 @@
 <a href=#550 id=550 data-nosnippet>550</a>    <span class="comment">// Extras present.
 <a href=#551 id=551 data-nosnippet>551</a>    </span><span class="attr">#[case(<span class="string">"numpy[extras=[gpu]]"</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[<span class="string">"gpu"</span>]</span>)]
 <a href=#552 id=552 data-nosnippet>552</a>    <span class="attr">#[case(<span class="string">"numpy[extras=[gpu, mkl]]"</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[<span class="string">"gpu"</span>, <span class="string">"mkl"</span>]</span>)]
-<a href=#553 id=553 data-nosnippet>553</a>    <span class="attr">#[case(<span class="string">"Numpy[extras=[GPU]]"</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[<span class="string">"GPU"</span>]</span>)]
-<a href=#554 id=554 data-nosnippet>554</a>    <span class="comment">// Extras combined with other bracket keys.
-<a href=#555 id=555 data-nosnippet>555</a>    </span><span class="attr">#[case(
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="string">r#"aiohttp[extras=[speedups], build="py*"]"#</span>,
-<a href=#557 id=557 data-nosnippet>557</a>        <span class="string">"aiohttp"</span>,
-<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw-2">&amp;</span>[<span class="string">"speedups"</span>]</span>,
-<a href=#559 id=559 data-nosnippet>559</a>    )]
-<a href=#560 id=560 data-nosnippet>560</a>    <span class="comment">// Extras combined with a version constraint outside the bracket.
-<a href=#561 id=561 data-nosnippet>561</a>    </span><span class="attr">#[case(
-<a href=#562 id=562 data-nosnippet>562</a>        <span class="string">"aiohttp &gt;=3.7.4 [extras=[speedups]]"</span>,
-<a href=#563 id=563 data-nosnippet>563</a>        <span class="string">"aiohttp"</span>,
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw-2">&amp;</span>[<span class="string">"speedups"</span>]</span>,
-<a href=#565 id=565 data-nosnippet>565</a>    )]
-<a href=#566 id=566 data-nosnippet>566</a>    <span class="comment">// Malformed bracket section falls back to empty extras but still extracts name.
-<a href=#567 id=567 data-nosnippet>567</a>    </span><span class="attr">#[case(<span class="string">"numpy["</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[]</span>)]
-<a href=#568 id=568 data-nosnippet>568</a>    <span class="attr">#[case(<span class="string">"foo[extras=["</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
-<a href=#569 id=569 data-nosnippet>569</a>    <span class="comment">// Empty extras list is rejected by the parser; we fall back gracefully.
-<a href=#570 id=570 data-nosnippet>570</a>    </span><span class="attr">#[case(<span class="string">"foo[extras=[]]"</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
-<a href=#571 id=571 data-nosnippet>571</a>    <span class="comment">// Trailing comma is rejected by the parser; we fall back gracefully.
-<a href=#572 id=572 data-nosnippet>572</a>    </span><span class="attr">#[case(<span class="string">"foo[extras=[a,]]"</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
-<a href=#573 id=573 data-nosnippet>573</a>    <span class="comment">// Multiple bracket sections are rejected by the parser; extras silently
-<a href=#574 id=574 data-nosnippet>574</a>    // dropped. Documented limitation, captured here so future changes notice.
-<a href=#575 id=575 data-nosnippet>575</a>    </span><span class="attr">#[case(
-<a href=#576 id=576 data-nosnippet>576</a>        <span class="string">r#"aiohttp[extras=[a]] [build="py*"]"#</span>,
-<a href=#577 id=577 data-nosnippet>577</a>        <span class="string">"aiohttp"</span>,
-<a href=#578 id=578 data-nosnippet>578</a>        <span class="kw-2">&amp;</span>[]</span>,
-<a href=#579 id=579 data-nosnippet>579</a>    )]
-<a href=#580 id=580 data-nosnippet>580</a>    <span class="kw">fn </span>test_name_and_extras_from_matchspec_str(
-<a href=#581 id=581 data-nosnippet>581</a>        <span class="attr">#[case] </span>spec: <span class="kw-2">&amp;</span>str,
-<a href=#582 id=582 data-nosnippet>582</a>        <span class="attr">#[case] </span>expected_name: <span class="kw-2">&amp;</span>str,
-<a href=#583 id=583 data-nosnippet>583</a>        <span class="attr">#[case] </span>expected_extras: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str],
-<a href=#584 id=584 data-nosnippet>584</a>    ) {
-<a href=#585 id=585 data-nosnippet>585</a>        <span class="kw">let </span>(name, extras) = PackageName::name_and_extras_from_matchspec_str(spec);
-<a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;*</span>name, expected_name);
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span>expected: Vec&lt;String&gt; = expected_extras.iter().map(|s| (<span class="kw-2">*</span>s).to_string()).collect();
-<a href=#588 id=588 data-nosnippet>588</a>        <span class="macro">assert_eq!</span>(extras, expected);
-<a href=#589 id=589 data-nosnippet>589</a>    }
-<a href=#590 id=590 data-nosnippet>590</a>}
+<a href=#553 id=553 data-nosnippet>553</a>    <span class="comment">// Uppercase group names violate the CEP 44 grammar ([a-z0-9_.+-]); the
+<a href=#554 id=554 data-nosnippet>554</a>    // parser rejects them, so extras fall back to empty (name still extracted).
+<a href=#555 id=555 data-nosnippet>555</a>    </span><span class="attr">#[case(<span class="string">"Numpy[extras=[GPU]]"</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[]</span>)]
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="comment">// Extras combined with other bracket keys.
+<a href=#557 id=557 data-nosnippet>557</a>    </span><span class="attr">#[case(
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="string">r#"aiohttp[extras=[speedups], build="py*"]"#</span>,
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="string">"aiohttp"</span>,
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw-2">&amp;</span>[<span class="string">"speedups"</span>]</span>,
+<a href=#561 id=561 data-nosnippet>561</a>    )]
+<a href=#562 id=562 data-nosnippet>562</a>    <span class="comment">// Extras combined with a version constraint outside the bracket.
+<a href=#563 id=563 data-nosnippet>563</a>    </span><span class="attr">#[case(
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="string">"aiohttp &gt;=3.7.4 [extras=[speedups]]"</span>,
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="string">"aiohttp"</span>,
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw-2">&amp;</span>[<span class="string">"speedups"</span>]</span>,
+<a href=#567 id=567 data-nosnippet>567</a>    )]
+<a href=#568 id=568 data-nosnippet>568</a>    <span class="comment">// Malformed bracket section falls back to empty extras but still extracts name.
+<a href=#569 id=569 data-nosnippet>569</a>    </span><span class="attr">#[case(<span class="string">"numpy["</span>, <span class="string">"numpy"</span>, <span class="kw-2">&amp;</span>[]</span>)]
+<a href=#570 id=570 data-nosnippet>570</a>    <span class="attr">#[case(<span class="string">"foo[extras=["</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
+<a href=#571 id=571 data-nosnippet>571</a>    <span class="comment">// Empty extras list is rejected by the parser; we fall back gracefully.
+<a href=#572 id=572 data-nosnippet>572</a>    </span><span class="attr">#[case(<span class="string">"foo[extras=[]]"</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
+<a href=#573 id=573 data-nosnippet>573</a>    <span class="comment">// Trailing comma is rejected by the parser; we fall back gracefully.
+<a href=#574 id=574 data-nosnippet>574</a>    </span><span class="attr">#[case(<span class="string">"foo[extras=[a,]]"</span>, <span class="string">"foo"</span>, <span class="kw-2">&amp;</span>[]</span>)]
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="comment">// Multiple bracket sections are rejected by the parser; extras silently
+<a href=#576 id=576 data-nosnippet>576</a>    // dropped. Documented limitation, captured here so future changes notice.
+<a href=#577 id=577 data-nosnippet>577</a>    </span><span class="attr">#[case(
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="string">r#"aiohttp[extras=[a]] [build="py*"]"#</span>,
+<a href=#579 id=579 data-nosnippet>579</a>        <span class="string">"aiohttp"</span>,
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw-2">&amp;</span>[]</span>,
+<a href=#581 id=581 data-nosnippet>581</a>    )]
+<a href=#582 id=582 data-nosnippet>582</a>    <span class="kw">fn </span>test_name_and_extras_from_matchspec_str(
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="attr">#[case] </span>spec: <span class="kw-2">&amp;</span>str,
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="attr">#[case] </span>expected_name: <span class="kw-2">&amp;</span>str,
+<a href=#585 id=585 data-nosnippet>585</a>        <span class="attr">#[case] </span>expected_extras: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str],
+<a href=#586 id=586 data-nosnippet>586</a>    ) {
+<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span>(name, extras) = PackageName::name_and_extras_from_matchspec_str(spec);
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;*</span>name, expected_name);
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw">let </span>expected: Vec&lt;String&gt; = expected_extras.iter().map(|s| (<span class="kw-2">*</span>s).to_string()).collect();
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="macro">assert_eq!</span>(extras, expected);
+<a href=#591 id=591 data-nosnippet>591</a>    }
+<a href=#592 id=592 data-nosnippet>592</a>}
 </code></pre></div></section></main></body></html>
