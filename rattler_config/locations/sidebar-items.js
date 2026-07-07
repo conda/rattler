@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONFIG_FILE_NAME"],"fn":["config_search_paths","system_config_path","tool_home","user_config_paths"]};

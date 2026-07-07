@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["S3Config"],"fn":["compute_s3_config"],"struct":["S3","S3Middleware"]};
+window.SIDEBAR_ITEMS = {"enum":["S3Config"],"fn":["compute_s3_config","compute_s3_config_from_config"],"struct":["S3","S3Middleware"]};
