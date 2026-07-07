@@ -31,10 +31,10 @@ rattler_networking = { workspace = true }
 # compio's default io_uring driver ships prebuilt bindings that don't cover
 # 32-bit arm or s390x; fall back to the polling (epoll) driver there.
 [target.'cfg(not(any(target_arch = "arm", target_arch = "s390x")))'.dependencies]
-compio = { version = "0.14", features = ["runtime", "macros", "signal"] }
+compio = { version = "0.18", features = ["runtime", "macros", "signal"] }
 
 [target.'cfg(any(target_arch = "arm", target_arch = "s390x"))'.dependencies]
-compio = { version = "0.14", default-features = false, features = [
+compio = { version = "0.18", default-features = false, features = [
     "runtime",
     "macros",
     "signal",
