@@ -8,7 +8,7 @@ from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
-from rattler.repo_data.gateway import Gateway, _convert_sources
+from rattler.repo_data.gateway import ChannelRelationsMode, Gateway, _convert_sources
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.virtual_package.generic import GenericVirtualPackage
@@ -34,6 +34,8 @@ async def solve(
     exclude_newer: Optional[datetime.datetime | datetime.timedelta] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
+    channel_relations: Optional[ChannelRelationsMode] = None,
+    channel_relations_max_depth: Optional[int] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -79,6 +81,14 @@ async def solve(
         constraints: Additional constraints that should be satisfied by the solver.
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
+        channel_relations: How to treat CEP-42 ``channel_relations`` metadata while
+            acquiring repodata. ``None`` uses the gateway default (``"warn"``), which
+            follows relations recursively and reports problems via Python's
+            :mod:`warnings` module as :class:`rattler.GatewayWarning`. Pass
+            ``"disabled"`` to solve against exactly the given sources, or
+            ``"strict"`` to raise on malformed relation metadata.
+        channel_relations_max_depth: Maximum recursion depth when following
+            ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -124,6 +134,8 @@ async def solve(
             ]
             if constraints is not None
             else [],
+            channel_relations=channel_relations,
+            channel_relations_max_depth=channel_relations_max_depth,
         )
     ]
 

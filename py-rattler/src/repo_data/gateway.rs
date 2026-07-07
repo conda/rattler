@@ -9,7 +9,8 @@ use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclas
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, Gateway, Source, SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, GatewayWarning, Source,
+    SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -19,6 +20,7 @@ use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
+use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
 use crate::{PyChannel, Wrap};
 
@@ -58,6 +60,53 @@ impl<'a, 'source> FromPyObject<'a, 'source> for Wrap<SubdirSelection> {
         };
         Ok(Wrap(parsed))
     }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<ChannelRelationsMode> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        let as_py_str: PyBackedStr = ob.extract()?;
+        let parsed = match as_py_str.as_ref() {
+            "disabled" => ChannelRelationsMode::Disabled,
+            "warn" => ChannelRelationsMode::Warn,
+            "strict" => ChannelRelationsMode::Strict,
+            v => {
+                return Err(PyValueError::new_err(format!(
+                    "channel_relations must be one of {{'disabled', 'warn', 'strict'}}, got {v}",
+                )));
+            }
+        };
+        Ok(Wrap(parsed))
+    }
+}
+
+/// Forward each [`GatewayWarning`] to Python's `warnings.warn` as a
+/// `rattler.GatewayWarning` (a `UserWarning` subclass, so callers can
+/// filter or escalate the category specifically). CEP-42's default
+/// `Warn` mode produces non-fatal warnings that the Rust API surfaces
+/// on the query output; the binding forwards them to the host's
+/// standard warnings machinery so they cannot be silently lost.
+pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<()> {
+    if warnings.is_empty() {
+        return Ok(());
+    }
+    Python::attach(|py| -> PyResult<()> {
+        let warnings_mod = py.import("warnings")?;
+        for w in warnings {
+            // stacklevel=2 so the warning points at the caller of
+            // `Gateway.query()` / `Gateway.names()` rather than at
+            // our binding implementation.
+            warnings_mod.call_method1(
+                "warn",
+                (
+                    w.to_string(),
+                    py.get_type::<crate::exceptions::GatewayWarning>(),
+                    2,
+                ),
+            )?;
+        }
+        Ok(())
+    })
 }
 
 /// Convert a Python object to a Rust Source.
@@ -149,6 +198,33 @@ impl PyGateway {
         Ok(())
     }
 
+    /// Returns the CEP-42 `channel_relations` declared by the given
+    /// `(channel, platform)` subdirectory, or `None` if absent.
+    pub fn channel_relations<'a>(
+        &self,
+        py: Python<'a>,
+        channel: PyChannel,
+        platform: PyPlatform,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            let relations = gateway
+                .channel_relations(&channel.inner, platform.inner)
+                .await
+                .map_err(PyRattlerError::from)?;
+            Ok(relations.map(PyChannelRelations::from))
+        })
+    }
+
+    #[pyo3(signature = (
+        sources,
+        platforms,
+        specs,
+        recursive,
+        channel_relations=None,
+        channel_relations_max_depth=None,
+    ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
         &self,
         py: Python<'a>,
@@ -156,6 +232,8 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         specs: Vec<PyMatchSpec>,
         recursive: bool,
+        channel_relations: Option<Wrap<ChannelRelationsMode>>,
+        channel_relations_max_depth: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -170,15 +248,24 @@ impl PyGateway {
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
                 .recursive(recursive);
 
+            if let Some(mode) = channel_relations {
+                query = query.channel_relations(mode.0);
+            }
+            if let Some(depth) = channel_relations_max_depth {
+                query = query.channel_relations_max_depth(depth);
+            }
+
             if show_progress {
                 query = query
                     .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
             }
 
-            let repodatas = query.execute().await.map_err(PyRattlerError::from)?;
+            let output = query.execute().await.map_err(PyRattlerError::from)?;
+            emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
-            Ok(repodatas
+            Ok(output
+                .repodata
                 .into_iter()
                 .map(|r| {
                     r.iter_arc()
@@ -189,11 +276,19 @@ impl PyGateway {
         })
     }
 
+    #[pyo3(signature = (
+        sources,
+        platforms,
+        channel_relations=None,
+        channel_relations_max_depth=None,
+    ))]
     pub fn names<'a>(
         &self,
         py: Python<'a>,
         sources: Vec<Bound<'a, PyAny>>,
         platforms: Vec<PyPlatform>,
+        channel_relations: Option<Wrap<ChannelRelationsMode>>,
+        channel_relations_max_depth: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -225,14 +320,22 @@ impl PyGateway {
             if !channels.is_empty() {
                 let mut query = gateway.names(channels, platforms_vec.iter().copied());
 
+                if let Some(mode) = channel_relations {
+                    query = query.channel_relations(mode.0);
+                }
+                if let Some(depth) = channel_relations_max_depth {
+                    query = query.channel_relations_max_depth(depth);
+                }
+
                 if show_progress {
                     query = query.with_reporter(
                         rattler_repodata_gateway::IndicatifReporter::builder().finish(),
                     );
                 }
 
-                let channel_names = query.execute().await.map_err(PyRattlerError::from)?;
-                all_names.extend(channel_names);
+                let output = query.execute().await.map_err(PyRattlerError::from)?;
+                emit_gateway_warnings(output.warnings)?;
+                all_names.extend(output.names);
             }
 
             // Collect names from custom sources directly

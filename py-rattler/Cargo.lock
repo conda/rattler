@@ -4323,6 +4323,7 @@ dependencies = [
  "itertools 0.14.0",
  "keyring-core",
  "netrc-rs",
+ "regex",
  "reqwest",
  "retry-policies",
  "serde",

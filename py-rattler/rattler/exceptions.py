@@ -11,6 +11,7 @@ try:
         ExtractError,
         FetchRepoDataError,
         GatewayError,
+        GatewayWarning,
         InstallerError,
         InvalidChannelError,
         InvalidHeaderNameError,
@@ -71,6 +72,10 @@ except ImportError:
 
     class GatewayError(Exception):  # type: ignore[no-redef]
         """An error that can occur when querying the repodata gateway."""
+
+    class GatewayWarning(UserWarning):  # type: ignore[no-redef]
+        """A non-fatal problem reported by the repodata gateway, e.g. while
+        resolving CEP-42 channel relations."""
 
     class InstallerError(Exception):  # type: ignore[no-redef]
         """An error that can occur when installing a package"""
@@ -154,6 +159,7 @@ __all__ = [
     "ExtractError",
     "FetchRepoDataError",
     "GatewayError",
+    "GatewayWarning",
     "InstallerError",
     "InvalidChannelError",
     "InvalidHeaderNameError",

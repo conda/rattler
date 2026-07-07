@@ -23,7 +23,9 @@ use crate::{
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{HeaderValue, header::CACHE_CONTROL};
-use rattler_conda_types::{Channel, PackageName, RepodataRevisions, ShardedRepodata};
+use rattler_conda_types::{
+    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
@@ -278,6 +280,10 @@ impl SubdirClient for ShardedSubdir {
 
     fn repodata_revisions(&self) -> &RepodataRevisions {
         &self.sharded_repodata.info.repodata_revisions
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sharded_repodata.info.channel_relations.as_ref()
     }
 }
 

@@ -15,8 +15,8 @@ use std::{
 use bytes::Bytes;
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
+    Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
+    RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
@@ -485,6 +485,16 @@ impl SparseRepoData {
             Some(info) => &info.repodata_revisions,
             None => empty_repodata_revisions(),
         }
+    }
+
+    /// CEP-42 channel relations from `info.channel_relations`, if any.
+    pub fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()?
+            .channel_relations
+            .as_ref()
     }
 }
 
