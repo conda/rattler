@@ -5327,6 +5327,7 @@ dependencies = [
  "keyring-core",
  "netrc-rs",
  "rattler_config",
+ "regex",
  "reqwest",
  "retry-policies",
  "rstest",
