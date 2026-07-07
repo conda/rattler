@@ -1830,6 +1830,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.ChannelRelationsMode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChannelRelationsMode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.repo_data.gateway.Gateway" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1857,6 +1868,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.channel_relations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channel_relations
       
     </span>
   </a>
@@ -3131,6 +3153,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.ChannelRelationsMode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChannelRelationsMode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.repo_data.gateway.Gateway" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3158,6 +3191,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.channel_relations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channel_relations
       
     </span>
   </a>
@@ -3325,6 +3369,47 @@
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="rattler.repo_data.gateway.ChannelRelationsMode" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">ChannelRelationsMode</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.ChannelRelationsMode" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">ChannelRelationsMode</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;disabled&quot;</span><span class="p">,</span> <span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How a gateway query should handle <a href="https://github.com/conda/ceps/blob/main/cep-0042.md">CEP-42</a> <code>channel_relations</code>:</p>
+<ul>
+<li><code>'disabled'</code>: ignore declared relations; use only the user-supplied
+  channels. Setting <code>channel_relations_max_depth=0</code> has the same effect.</li>
+<li><code>'warn'</code> (default): follow relations recursively but tolerate problems:
+  cycles, malformed metadata (non-<code>../</code> references, self-relations,
+  <code>base==overrides</code>), depth-exceeded chains, and failed discovery fetches
+  surface via Python's standard :mod:<code>warnings</code> module as
+  :class:<code>rattler.exceptions.GatewayWarning</code> (a <code>UserWarning</code> subclass)
+  rather than aborting. <strong>Deviates from CEP-42</strong>, which mandates aborting
+  on cycles and malformed metadata.</li>
+<li><code>'strict'</code>: follow relations recursively and abort on any violation,
+  raising :class:<code>GatewayError</code>. CEP-42 compliant.</li>
+</ul>
+<p>Custom :class:<code>RepoDataSource</code> instances passed in <code>sources</code> are not subject
+to CEP-42 reordering — they keep their caller-specified position. Discovered
+transitive channels are slotted next to the user channel that introduced them,
+in CEP-42 priority order.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -3561,6 +3646,81 @@ gateway itself to methods that accepts it.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="rattler.repo_data.gateway.Gateway.channel_relations" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">channel_relations</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.Gateway.channel_relations" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">channel_relations</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">platform</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the CEP-42 <code>channel_relations</code> declared by the given
+<code>(channel, platform)</code> subdirectory, or <code>None</code> if none were declared
+or the subdirectory doesn't exist.</p>
+<p>Reuses the gateway's internal subdir cache, so if the pair has
+already been fetched by a <code>query</code> this is free.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Channel (rattler.channel.channel.Channel)" href="../channel/#rattler.channel.channel.Channel">Channel</a> | <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The channel to read relations from.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>platform</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Platform (rattler.platform.platform.Platform)" href="../platform/#rattler.platform.platform.Platform">Platform</a> | <span title="rattler.platform.platform.PlatformLiteral">PlatformLiteral</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The platform whose subdir to inspect.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="rattler.repo_data.gateway.Gateway.clear_repodata_cache" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">clear_repodata_cache</span>
 
@@ -3665,7 +3825,12 @@ gateway itself to methods that accepts it.</p>
   </span>
 
 <a href="#rattler.repo_data.gateway.Gateway.names" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">names</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">platforms</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">names</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">sources</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">platforms</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3715,6 +3880,46 @@ gateway itself to methods that accepts it.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+
+
+  
+      module-attribute
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How to treat CEP-42 <code>channel_relations</code> metadata. <code>None</code>
+               uses the gateway default (<code>"warn"</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations_max_depth</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum recursion depth when following
+                         <code>channel_relations</code>. <code>None</code> uses the
+                         default (10).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -3768,7 +3973,14 @@ gateway itself to methods that accepts it.</p>
   </span>
 
 <a href="#rattler.repo_data.gateway.Gateway.query" class="headerlink" title="Permanent link">#</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">query</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">platforms</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">query</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">sources</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">platforms</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">specs</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3865,6 +4077,49 @@ is needed for custom sources, it must be implemented within the source itself.</
                   <code>True</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+
+
+  
+      module-attribute
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How to treat CEP-42 <code>channel_relations</code> metadata. <code>None</code>
+               uses the gateway default (<code>"warn"</code>). Non-fatal problems
+               are reported via Python's <code>warnings</code> module as
+               :class:<code>rattler.exceptions.GatewayWarning</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations_max_depth</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum recursion depth when following
+                         <code>channel_relations</code>. <code>None</code> uses the
+                         default (10). <code>0</code> behaves like
+                         <code>channel_relations="disabled"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -3884,7 +4139,7 @@ is needed for custom sources, it must be implemented within the source itself.</
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A list of lists of <code>RepoDataRecord</code>s. The outer list contains the results for each</p>
+                <p>A list of lists of <code>RepoDataRecord</code>s. The outer list contains one entry per</p>
               </div>
             </td>
           </tr>
@@ -3894,7 +4149,67 @@ is needed for custom sources, it must be implemented within the source itself.</
             </td>
             <td>
               <div class="doc-md-description">
-                <p>source in the same order they are provided in the <code>sources</code> argument.</p>
+                <p>queried source, in the order the sources were provided. When CEP-42</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>channel_relations</code> are followed (the default) and a channel declares</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>relations, extra entries for the transitively discovered channels are</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>inserted next to the channel that referenced them, with a declared <code>base</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>placed before it. Pass <code>channel_relations="disabled"</code> (or</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>channel_relations_max_depth=0</code>) to guarantee a strict one-to-one,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>positional correspondence with <code>sources</code>.</p>
               </div>
             </td>
           </tr>

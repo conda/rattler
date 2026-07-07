@@ -3158,7 +3158,9 @@
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">exclude_newer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;highest&quot;</span><span class="p">,</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">constraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3397,6 +3399,49 @@ or newer than the cutoff produced by subtracting a timedelta from now.</p>
                 <p>Additional constraints that should be satisfied by the solver.
 Packages included in the <code>constraints</code> are not necessarily installed,
 but they must be satisfied by the solution.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="ChannelRelationsMode
+
+
+  
+      module-attribute
+   (rattler.repo_data.gateway.ChannelRelationsMode)" href="../gateway/#rattler.repo_data.gateway.ChannelRelationsMode">ChannelRelationsMode</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How to treat CEP-42 <code>channel_relations</code> metadata while
+acquiring repodata. <code>None</code> uses the gateway default (<code>"warn"</code>), which
+follows relations recursively and reports problems via Python's
+:mod:<code>warnings</code> module as :class:<code>rattler.GatewayWarning</code>. Pass
+<code>"disabled"</code> to solve against exactly the given sources, or
+<code>"strict"</code> to raise on malformed relation metadata.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_relations_max_depth</code>
+            </td>
+            <td>
+                  <code><span title="typing.Optional">Optional</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum recursion depth when following
+<code>channel_relations</code>. <code>0</code> behaves like <code>channel_relations="disabled"</code>.</p>
               </div>
             </td>
             <td>
