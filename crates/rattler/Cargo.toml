@@ -13,8 +13,7 @@ readme.workspace = true
 
 [features]
 default = ['rustls']
-rattler_config = ['dep:rattler_config']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
+native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth', 'dep:console']

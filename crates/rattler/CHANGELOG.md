@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `Installer::with_config`/`set_config` (feature `rattler_config`) apply the shared rattler configuration: link options from the `allow-*-links` keys, `concurrency.downloads`, and `run-post-link-scripts`. `LinkOptions` implements `From<&CommonConfig>`.
-
 ## [0.46.0](https://github.com/conda/rattler/compare/rattler-v0.45.0...rattler-v0.46.0) - 2026-06-26
 
 ### Added
