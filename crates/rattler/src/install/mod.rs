@@ -246,12 +246,13 @@ pub struct InstallOptions {
     /// this field to `AppleCodeSignBehavior::Ignore` or
     /// `AppleCodeSignBehavior::DoNothing`.
     ///
-    /// To sign the binaries, the `/usr/bin/codesign` executable is called with
-    /// `--force`, `--sign -`, and `--preserve-metadata=entitlements` arguments.
-    /// The `--force` argument is used to overwrite existing signatures, the `--sign -`
-    /// argument is used to sign with an ad-hoc certificate (which does not use an identity
-    /// at all), and `--preserve-metadata=entitlements` preserves the original entitlements
-    /// from the binary (required for programs that need specific permissions like virtualization).
+    /// Binaries are signed in-process with an ad-hoc signature (no identity), preserving the
+    /// original entitlements from the binary (required for programs that need specific
+    /// permissions like virtualization). This is the equivalent of running
+    /// `/usr/bin/codesign --force --sign - --preserve-metadata=entitlements`, but works from
+    /// any host platform and, for thin Mach-O binaries, is fused with prefix replacement into
+    /// a single streaming pass. On macOS hosts, `/usr/bin/codesign` remains available as a
+    /// fallback for binaries the in-process signer cannot handle.
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 
     /// Controls how symlinks that point outside the target prefix are handled.

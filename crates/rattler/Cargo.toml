@@ -28,6 +28,7 @@ features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
+arwen-codesign = { workspace = true }
 base64 = { workspace = true }
 jiff = { workspace = true }
 clap = { workspace = true, optional = true }
