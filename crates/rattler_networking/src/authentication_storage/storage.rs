@@ -152,6 +152,8 @@ impl AuthenticationStorage {
                     AuthenticationStorageError::KeyringStorageError(
                         KeyringAuthenticationStorageError::StorageError(_)
                             | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                            | KeyringAuthenticationStorageError::Timeout { .. }
+                            | KeyringAuthenticationStorageError::Disabled
                     )
                 ) {
                     tracing::debug!("Error storing credentials in keyring: {}", error);
@@ -193,6 +195,8 @@ impl AuthenticationStorage {
                         AuthenticationStorageError::KeyringStorageError(
                             KeyringAuthenticationStorageError::StorageError(_)
                                 | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                                | KeyringAuthenticationStorageError::Timeout { .. }
+                                | KeyringAuthenticationStorageError::Disabled
                         )
                     ) {
                         tracing::trace!("Error storing credentials in keyring: {}", _e);
@@ -509,6 +513,8 @@ fn is_benign_storage_error(error: &AuthenticationStorageError) -> bool {
         AuthenticationStorageError::KeyringStorageError(
             KeyringAuthenticationStorageError::StorageError(_)
                 | KeyringAuthenticationStorageError::UnsupportedTarget { .. }
+                | KeyringAuthenticationStorageError::Timeout { .. }
+                | KeyringAuthenticationStorageError::Disabled
         )
     ) {
         return true;
