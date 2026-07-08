@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_signatures_url_invalid_explicit_pattern_errors() {
-        // An explicit but unparseable signatures URL must be a hard error rather
+        // An explicit but unparsable signatures URL must be a hard error rather
         // than silently falling back to a derived URL.
         let config = VerificationConfig::new().with_signatures_url_pattern("not a valid url");
         let pkg_url =
