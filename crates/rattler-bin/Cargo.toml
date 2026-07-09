@@ -16,13 +16,14 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls", "s3", "gcs", "oauth"]
+default = ["rustls", "s3", "gcs", "oauth", "mount"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
   "rattler_repodata_gateway/native-tls",
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
+  "rattler_vfs?/native-tls",
 ]
 rustls = [
   "reqwest/rustls",
@@ -30,10 +31,14 @@ rustls = [
   "rattler_repodata_gateway/rustls",
   "rattler_networking/rustls",
   "rattler_cache/rustls",
+  "rattler_vfs?/rustls",
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
+# `rattler mount` subcommand. Enabled by default; opt out with
+# --no-default-features.
+mount = ["dep:rattler_vfs", "dep:rattler_lock"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -64,6 +69,8 @@ rattler_solve = { workspace = true, default-features = false, features = [
 ] }
 rattler_virtual_packages = { workspace = true, default-features = false }
 rattler_cache = { workspace = true, default-features = false }
+rattler_vfs = { workspace = true, optional = true, features = ["nfs"] }
+rattler_lock = { workspace = true, optional = true }
 rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",

@@ -10,6 +10,8 @@ pub mod inspect;
 pub mod link;
 pub mod list;
 pub mod menu;
+#[cfg(feature = "mount")]
+pub mod mount;
 pub mod prefix;
 pub mod progress;
 pub mod run;
