@@ -1,0 +1,25 @@
+[package]
+name = "rattler_fs"
+version = "0.1.0"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+fuser = { workspace = true }
+libc = { workspace = true }
+mem = { workspace = true }
+memchr = { workspace = true }
+memmap2 = { workspace = true }
+rattler_cache = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_lock = { workspace = true }
+rattler_networking = { workspace = true }
+tokio = { workspace = true, default-features = true }
+tempfile = { workspace = true }
