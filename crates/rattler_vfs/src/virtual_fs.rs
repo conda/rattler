@@ -79,6 +79,17 @@ impl CodesignCache {
     }
 }
 
+/// Pre-computed prefix-replacement plan for a file, keyed by inode.
+enum ReplacementPlan {
+    /// Text file: shebang-aware plan — the shebang region is transformed once
+    /// (exactly as the installer does) and the remaining occurrences are body
+    /// offsets spliced on read.
+    Text(crate::prefix_replacement::TextPlan),
+    /// Binary file: c-string groups, each listing prefix offsets followed by
+    /// the NUL terminator position.
+    Binary(Vec<Vec<usize>>),
+}
+
 pub struct VirtualFS {
     metadata: Vec<MetadataNode>,
     mount_point: PathBuf,
@@ -86,10 +97,10 @@ pub struct VirtualFS {
     platform: Platform,
     uid: u32,
     gid: u32,
-    /// Pre-computed replacement offsets for files with prefix placeholders.
+    /// Pre-computed replacement plans for files with prefix placeholders.
     /// Keyed by inode. Populated eagerly at construction from paths.json
     /// offsets or by scanning the source file.
-    offset_cache: HashMap<u64, Offsets>,
+    offset_cache: HashMap<u64, ReplacementPlan>,
     /// Cache for fully materialized + codesigned binary content (macOS only).
     /// Keyed by inode. Only populated for binary-mode prefix files that need
     /// ad-hoc re-signing, since codesign requires the full file.
@@ -133,42 +144,66 @@ impl VirtualFS {
                 p.join(prefix).join(&file.file_name)
             };
 
-            // Use paths.json offsets if available, otherwise scan the source file
-            let offsets = if let Some(o) = &placeholder.offsets {
-                o.clone()
-            } else {
-                match fs::read(&cache_path) {
-                    Ok(source) => match placeholder.file_mode {
-                        FileMode::Text => Offsets::Text(
-                            crate::prefix_replacement::collect_offsets(&source, old_prefix),
-                        ),
-                        FileMode::Binary => Offsets::Binary(
-                            crate::prefix_replacement::collect_binary_offsets(&source, old_prefix),
-                        ),
-                    },
-                    Err(e) => {
-                        tracing::warn!(
-                            "failed to read {} for offset computation: {}",
-                            cache_path.display(),
-                            e
-                        );
-                        continue;
-                    }
+            // Build the replacement plan. Text plans are always computed from
+            // the source so the shebang region is transformed exactly as the
+            // installer does (a bare offset list can't express the shebang
+            // rewrite); binary plans prefer the paths.json c-string groups.
+            let plan = match placeholder.file_mode {
+                FileMode::Text => {
+                    let source = match fs::read(&cache_path) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            tracing::warn!(
+                                "failed to read {} for offset computation: {}",
+                                cache_path.display(),
+                                e
+                            );
+                            continue;
+                        }
+                    };
+                    let text_plan = crate::prefix_replacement::plan_text_replacement(
+                        &source,
+                        &placeholder.placeholder,
+                        &target_prefix,
+                        &platform,
+                    );
+
+                    // Post-replacement size: the transformed shebang region plus
+                    // the unchanged body length plus the per-occurrence delta.
+                    let delta =
+                        target_prefix.len() as isize - placeholder.placeholder.len() as isize;
+                    let body_len = source.len().saturating_sub(text_plan.region_end);
+                    let new_size = (text_plan.transformed_region.len() as isize
+                        + body_len as isize
+                        + delta * text_plan.body_offsets.len() as isize)
+                        .max(0) as u64;
+                    metadata[i].as_file_mut().unwrap().computed_size = Some(new_size);
+
+                    ReplacementPlan::Text(text_plan)
+                }
+                FileMode::Binary => {
+                    let groups = if let Some(Offsets::Binary(g)) = &placeholder.offsets {
+                        g.clone()
+                    } else {
+                        match fs::read(&cache_path) {
+                            Ok(source) => crate::prefix_replacement::collect_binary_offsets(
+                                &source, old_prefix,
+                            ),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "failed to read {} for offset computation: {}",
+                                    cache_path.display(),
+                                    e
+                                );
+                                continue;
+                            }
+                        }
+                    };
+                    ReplacementPlan::Binary(groups)
                 }
             };
 
-            // For text-mode files, compute post-replacement size from arithmetic:
-            // each replacement changes length by (new_prefix - old_prefix) bytes
-            if let Offsets::Text(ref text_offsets) = offsets
-                && let Ok(source_meta) = fs::symlink_metadata(&cache_path)
-            {
-                let delta = target_prefix.len() as isize - placeholder.placeholder.len() as isize;
-                let new_size = (source_meta.len() as isize + delta * text_offsets.len() as isize)
-                    .max(0) as u64;
-                metadata[i].as_file_mut().unwrap().computed_size = Some(new_size);
-            }
-
-            offset_cache.insert(ino, offsets);
+            offset_cache.insert(ino, plan);
         }
 
         VirtualFS {
@@ -369,15 +404,15 @@ impl VirtualFS {
         let start = offset as usize;
         let end = start + size as usize;
 
-        let Some(offsets) = self.offset_cache.get(&ino) else {
-            // No offsets — serve source bytes directly
+        let Some(plan) = self.offset_cache.get(&ino) else {
+            // No plan — serve source bytes directly
             let s = start.min(mmap.len());
             let e = (s + size as usize).min(mmap.len());
             return Ok(mmap[s..e].to_vec());
         };
 
-        match offsets {
-            Offsets::Binary(groups) => {
+        match plan {
+            ReplacementPlan::Binary(groups) => {
                 // macOS binaries need codesign after prefix replacement.
                 // Codesign rehashes every page so it can't be done as a ranged
                 // operation. Materialize + resign once, cache for subsequent reads.
@@ -395,6 +430,7 @@ impl VirtualFS {
                     // Slow path: materialize, resign, cache
                     let target_prefix = self.mount_point.to_string_lossy();
                     let mut output = Vec::with_capacity(mmap.len());
+                    let binary_offsets = Offsets::Binary(groups.clone());
 
                     let result = copy_and_replace_placeholders_with_offsets(
                         &mmap,
@@ -403,7 +439,7 @@ impl VirtualFS {
                         &target_prefix,
                         &self.platform,
                         placeholder.file_mode,
-                        offsets,
+                        &binary_offsets,
                         placeholder.shebang_length,
                     );
 
@@ -428,11 +464,13 @@ impl VirtualFS {
                     &mmap, old_prefix, new_prefix, groups, start, end,
                 ))
             }
-            Offsets::Text(text_offsets) => Ok(crate::prefix_replacement::text_ranged_read(
+            ReplacementPlan::Text(text_plan) => Ok(crate::prefix_replacement::text_ranged_read(
                 &mmap,
                 old_prefix,
                 new_prefix,
-                text_offsets,
+                &text_plan.body_offsets,
+                text_plan.region_end,
+                &text_plan.transformed_region,
                 start,
                 end,
             )),

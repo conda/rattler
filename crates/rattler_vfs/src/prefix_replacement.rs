@@ -5,25 +5,94 @@
 //! entire transformed file in memory.
 
 use memchr::memmem;
+use rattler::install::link::replace_shebang_region;
+use rattler_conda_types::Platform;
+
+/// A precomputed, CEP-conformant text replacement plan for a single file.
+///
+/// Mirrors how `rattler::install::link` patches a text file: the shebang region
+/// (the first line of a file starting with `#!`) is transformed by the
+/// installer's shebang rules, and every remaining placeholder occurrence is
+/// recorded as a body offset. Keeping this in one place guarantees mount-time
+/// reads stay byte-identical to an install.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextPlan {
+    /// Absolute source offsets of placeholder occurrences after the shebang
+    /// region (each spliced as a plain replacement).
+    pub body_offsets: Vec<usize>,
+    /// Length of the shebang region in the source, i.e. the boundary after
+    /// which `body_offsets` apply. `0` when the file has no shebang.
+    pub region_end: usize,
+    /// The already-transformed shebang region bytes (empty when no shebang).
+    pub transformed_region: Vec<u8>,
+}
+
+/// Build the CEP-conformant text replacement plan for `source`.
+///
+/// If the file starts with `#!`, the shebang region (up to and including the
+/// first newline, or the whole file when there is none) is transformed via the
+/// shared [`replace_shebang_region`] helper — the same code the installer uses,
+/// so an over-long line collapses to `#!/usr/bin/env <program>` on Unix targets
+/// exactly as it would on install. Occurrences inside the region are excluded
+/// from `body_offsets`, matching the CEP.
+pub fn plan_text_replacement(
+    source: &[u8],
+    placeholder: &str,
+    target: &str,
+    platform: &Platform,
+) -> TextPlan {
+    let region_end = if source.starts_with(b"#!") {
+        source
+            .iter()
+            .position(|&c| c == b'\n')
+            .map_or(source.len(), |i| i + 1)
+    } else {
+        0
+    };
+
+    let transformed_region = if region_end > 0 {
+        replace_shebang_region(&source[..region_end], placeholder, target, platform)
+    } else {
+        Vec::new()
+    };
+
+    let body_offsets = memmem::find_iter(source, placeholder.as_bytes())
+        .filter(|&o| o >= region_end)
+        .collect();
+
+    TextPlan {
+        body_offsets,
+        region_end,
+        transformed_region,
+    }
+}
 
 /// Read a range from a text file with prefix replacements applied.
 ///
-/// Text-mode replacement changes `old_prefix` → `new_prefix` at each offset.
-/// Because the replacement can change length, output byte positions shift
-/// relative to source positions. The `offsets` array gives the source-file
-/// positions of each placeholder occurrence.
+/// The transformed output is the already-transformed shebang region (see
+/// [`plan_text_replacement`]) followed by the body — `source[region_end..]`
+/// with `old_prefix` → `new_prefix` spliced at each `body_offsets` position.
+/// Because replacement can change length, output positions shift relative to
+/// source positions.
 ///
 /// Returns the bytes in the output range `[start, end)`.
+#[allow(clippy::too_many_arguments)]
 pub fn text_ranged_read(
     source: &[u8],
     old_prefix: &[u8],
     new_prefix: &[u8],
-    offsets: &[usize],
+    body_offsets: &[usize],
+    region_end: usize,
+    transformed_region: &[u8],
     start: usize,
     end: usize,
 ) -> Vec<u8> {
     let delta = new_prefix.len() as isize - old_prefix.len() as isize;
-    let transformed_len = (source.len() as isize + delta * offsets.len() as isize).max(0) as usize;
+    let body_len = source.len().saturating_sub(region_end);
+    let transformed_len = (transformed_region.len() as isize
+        + body_len as isize
+        + delta * body_offsets.len() as isize)
+        .max(0) as usize;
 
     let actual_end = end.min(transformed_len);
     let actual_start = start.min(transformed_len);
@@ -33,25 +102,30 @@ pub fn text_ranged_read(
 
     let capacity = actual_end - actual_start;
     let mut buffer = Vec::with_capacity(capacity);
-
-    // Walk through the source, tracking the current position in both
-    // source space and output (transformed) space.
-    let mut src_pos = 0usize;
     let mut out_pos = 0usize;
-    let mut offset_idx = 0usize;
 
+    // 1. The already-transformed shebang region.
+    emit_bytes(
+        transformed_region,
+        &mut out_pos,
+        actual_start,
+        actual_end,
+        &mut buffer,
+    );
+
+    // 2. The body: walk `source[region_end..]`, splicing at each body offset.
+    let mut src_pos = region_end;
+    let mut offset_idx = 0usize;
     while src_pos < source.len() && buffer.len() < capacity {
-        if offset_idx < offsets.len() && src_pos == offsets[offset_idx] {
+        if offset_idx < body_offsets.len() && src_pos == body_offsets[offset_idx] {
             // At a replacement site: emit new_prefix bytes
-            for &b in new_prefix {
-                if out_pos >= actual_start && out_pos < actual_end {
-                    buffer.push(b);
-                }
-                out_pos += 1;
-                if buffer.len() >= capacity {
-                    return buffer;
-                }
-            }
+            emit_bytes(
+                new_prefix,
+                &mut out_pos,
+                actual_start,
+                actual_end,
+                &mut buffer,
+            );
             // Skip the old prefix in the source
             src_pos += old_prefix.len();
             offset_idx += 1;
@@ -288,8 +362,10 @@ mod tests {
         start: usize,
         end: usize,
     ) {
+        // These cases have no shebang, so every occurrence is a body offset and
+        // the transformed region is empty.
         let offsets = collect_offsets(source, placeholder);
-        let result = text_ranged_read(source, placeholder, prefix, &offsets, start, end);
+        let result = text_ranged_read(source, placeholder, prefix, &offsets, 0, b"", start, end);
         assert_eq!(
             result, expected,
             "text replacement [{start}..{end}] of {source:?}: expected {expected:?}, got {result:?}"
@@ -585,5 +661,76 @@ mod tests {
             collect_binary_offsets(b"/PFX/a\x00/PFX/b\x00", b"/PFX"),
             vec![vec![0, 6], vec![7, 13]]
         );
+    }
+
+    // ── Shebang-aware text plans ─────────────────────────────────────
+
+    use rattler_conda_types::Platform;
+
+    #[test]
+    fn plan_no_shebang() {
+        let plan = plan_text_replacement(b"hello /PFX world", "/PFX", "/new", &Platform::Linux64);
+        assert_eq!(plan.region_end, 0);
+        assert!(plan.transformed_region.is_empty());
+        assert_eq!(plan.body_offsets, vec![6]);
+    }
+
+    #[test]
+    fn plan_shebang_excludes_region_occurrence() {
+        // "#!/PFX/python\n" is 14 bytes; the region occurrence at offset 2 is
+        // excluded, the body occurrence is kept, and the region is rewritten.
+        let src = b"#!/PFX/python\nimport x  # /PFX/lib\n";
+        let plan = plan_text_replacement(src, "/PFX", "/new", &Platform::Linux64);
+        assert_eq!(plan.region_end, 14);
+        assert_eq!(plan.body_offsets, vec![26]);
+        assert_eq!(plan.transformed_region, b"#!/new/python\n");
+    }
+
+    #[test]
+    fn shebang_full_read_matches() {
+        let src = b"#!/PFX/python\nimport x  # /PFX/lib\n";
+        let plan = plan_text_replacement(src, "/PFX", "/new", &Platform::Linux64);
+        let out = text_ranged_read(
+            src,
+            b"/PFX",
+            b"/new",
+            &plan.body_offsets,
+            plan.region_end,
+            &plan.transformed_region,
+            0,
+            1000,
+        );
+        assert_eq!(out, b"#!/new/python\nimport x  # /new/lib\n");
+    }
+
+    #[test]
+    fn shebang_ranged_reads_cross_region_boundary() {
+        let src = b"#!/PFX/python\nimport x  # /PFX/lib\n";
+        let full: &[u8] = b"#!/new/python\nimport x  # /new/lib\n";
+        let plan = plan_text_replacement(src, "/PFX", "/new", &Platform::Linux64);
+        for (s, e) in [(0usize, 5), (10, 20), (13, 15), (0, full.len()), (30, 100)] {
+            let out = text_ranged_read(
+                src,
+                b"/PFX",
+                b"/new",
+                &plan.body_offsets,
+                plan.region_end,
+                &plan.transformed_region,
+                s,
+                e,
+            );
+            let exp = &full[s.min(full.len())..e.min(full.len())];
+            assert_eq!(out, exp, "range [{s}, {e})");
+        }
+    }
+
+    #[test]
+    fn plan_shebang_no_trailing_newline() {
+        // Whole file is the shebang line; region covers everything, no body.
+        let src = b"#!/PFX/python";
+        let plan = plan_text_replacement(src, "/PFX", "/new", &Platform::Linux64);
+        assert_eq!(plan.region_end, src.len());
+        assert!(plan.body_offsets.is_empty());
+        assert_eq!(plan.transformed_region, b"#!/new/python");
     }
 }
