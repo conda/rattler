@@ -29,3 +29,4 @@ test-data/channels/conda-forge/
 
 # Local environment files
 *.local.*
+crates/rattler_vfs/src/tests/data/cache/
