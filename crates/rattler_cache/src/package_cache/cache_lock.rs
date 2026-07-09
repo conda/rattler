@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use fs4::fs_std::FileExt;
+use fs4::FileExt;
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_digest::Sha256Hash;
 
@@ -77,7 +77,7 @@ impl Debug for CacheGlobalLock {
 impl Drop for CacheGlobalLock {
     fn drop(&mut self) {
         // Ensure that the lock is released when the lock is dropped.
-        let _ = fs4::fs_std::FileExt::unlock(&self.file);
+        let _ = FileExt::unlock(&self.file);
     }
 }
 
@@ -105,7 +105,7 @@ impl CacheGlobalLock {
                     )
                 })?;
 
-            file.lock_exclusive().map_err(move |e| {
+            file.lock().map_err(move |e| {
                 PackageCacheLayerError::LockError(
                     format!(
                         "failed to acquire write lock on global cache lock file: '{}'",
