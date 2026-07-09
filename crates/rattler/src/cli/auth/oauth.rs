@@ -467,13 +467,28 @@ async fn accept_redirect_callback(
     reader.read_line(&mut request_line)?;
 
     // Parse the GET request line: "GET /?code=...&state=... HTTP/1.1"
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .ok_or(OAuthError::InvalidCallback)?;
+    let Some(path) = request_line.split_whitespace().nth(1) else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
-    let callback_url = Url::parse(&format!("http://localhost{path}"))
-        .map_err(|_err| OAuthError::InvalidCallback)?;
+    let callback_url = match Url::parse(&format!("http://localhost{path}")) {
+        Ok(url) => url,
+        Err(_err) => {
+            send_callback_response(
+                &std_stream,
+                false,
+                "Invalid callback from identity provider",
+                callback_page,
+            );
+            return Err(OAuthError::InvalidCallback);
+        }
+    };
 
     // Check for an error response from the identity provider (RFC 6749 Section
     // 4.1.2.1)
@@ -493,17 +508,33 @@ async fn accept_redirect_callback(
         return Err(OAuthError::Authorization(msg));
     }
 
-    let code = callback_url
+    let Some(code) = callback_url
         .query_pairs()
         .find(|(k, _)| k == "code")
         .map(|(_, v)| v.to_string())
-        .ok_or(OAuthError::InvalidCallback)?;
+    else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
-    let state = callback_url
+    let Some(state) = callback_url
         .query_pairs()
         .find(|(k, _)| k == "state")
         .map(|(_, v)| v.to_string())
-        .ok_or(OAuthError::InvalidCallback)?;
+    else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
     Ok(CallbackResult {
         code,
@@ -817,5 +848,30 @@ pub async fn revoke_tokens(
         Err(e) => {
             tracing::warn!("Failed to revoke access token: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{default_callback_page, html_escape};
+
+    #[test]
+    fn escapes_html_detail() {
+        assert_eq!(html_escape("<&>\"'"), "&lt;&amp;&gt;&quot;&#x27;");
+    }
+
+    #[test]
+    fn default_callback_page_escapes_error_detail() {
+        let page = default_callback_page(false, "<script>alert('x')</script>");
+
+        assert!(page.contains("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;"));
+        assert!(!page.contains("<script>alert"));
+    }
+
+    #[test]
+    fn default_callback_page_hides_empty_error_detail() {
+        let page = default_callback_page(false, "");
+
+        assert!(!page.contains("class=\"detail\""));
     }
 }
