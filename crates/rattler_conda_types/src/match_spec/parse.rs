@@ -62,6 +62,12 @@ pub enum ParseMatchSpecError {
     #[error("invalid bracket key: {0}")]
     InvalidBracketKey(String),
 
+    /// An extras group name does not conform to the CEP 44 grammar.
+    #[error(
+        "invalid extras group name '{0}': names must match the pattern [a-z0-9_.+-] and be between 1 and 64 characters long"
+    )]
+    InvalidExtraName(String),
+
     /// Missing package name in match spec
     #[error("missing package name")]
     MissingPackageName,
@@ -411,18 +417,52 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     Ok((Cow::Borrowed(&input[..open]), bracket_contents))
 }
 
+/// Returns whether `name` conforms to the CEP 44 optional dependency group
+/// name grammar: the regex `[a-z0-9_.+-]{1,64}`. This is enforced when parsing
+/// `extras` so we never accept (and later serialize) group names that would be
+/// invalid metadata per the spec.
+fn is_valid_extra_group_name(name: &str) -> bool {
+    let mut len = 0usize;
+    for c in name.chars() {
+        if !(c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | '+')) {
+            return false;
+        }
+        len += 1;
+    }
+    (1..=64).contains(&len)
+}
+
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
 /// -> `vec![feat1, feat2, feat3]`.
+///
+/// Group names are validated against the CEP 44 grammar (`[a-z0-9_.+-]{1,64}`);
+/// names that do not conform produce a [`ParseMatchSpecError::InvalidExtraName`]
+/// error.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
         multi::separated_list1,
     };
 
+    // Permissive tokenizer character set: anything that could plausibly be part
+    // of a group name. The strict CEP 44 grammar is enforced separately below so
+    // that a non-conforming name yields a descriptive error rather than an
+    // opaque "invalid bracket".
+    fn is_name_token_char(c: char) -> bool {
+        c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '+')
+    }
+
     fn parse_feature_name(i: &str) -> IResult<&str, &str> {
+        // A feature name is either a bare identifier or an (optionally) quoted
+        // string, so that Python-style lists like `["science", 'plot']` parse
+        // the same as `[science, plot]`.
         delimited(
             multispace0,
-            take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+            alt((
+                parse_quoted_string_with_escapes('"'),
+                parse_quoted_string_with_escapes('\''),
+                take_while1(is_name_token_char),
+            )),
             multispace0,
         )
         .parse(i)
@@ -432,10 +472,20 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
         separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string())).parse(i)
     }
 
-    match all_consuming(parse_features).parse(input).finish() {
-        Ok((_remaining, features)) => Ok(features),
-        Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
+    let features = match all_consuming(parse_features).parse(input).finish() {
+        Ok((_remaining, features)) => features,
+        Err(_e) => return Err(ParseMatchSpecError::InvalidBracket),
+    };
+
+    // Enforce the CEP 44 group name grammar so we never produce metadata that is
+    // not up to spec (lowercase only, `[a-z0-9_.+-]`, at most 64 characters).
+    for name in &features {
+        if !is_valid_extra_group_name(name) {
+            return Err(ParseMatchSpecError::InvalidExtraName(name.clone()));
+        }
     }
+
+    Ok(features)
 }
 
 /// Parses variant flags from either a single string or a comma-separated list.
@@ -2289,6 +2339,86 @@ mod tests {
             vec!["bar".to_string(), "baz".to_string()]
         );
         assert!(parse_extras("[bar,baz]").is_err());
+    }
+
+    #[test]
+    fn test_quoted_extras() {
+        let opts = ParseMatchSpecOptions::strict().with_extras(true);
+
+        // Double-quoted list items (Python-style list syntax).
+        let spec = MatchSpec::from_str("foobar[extras=[\"science\", \"plot\"]]", opts).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["science".to_string(), "plot".to_string()])
+        );
+
+        // Single-quoted and a mix of quoted/unquoted items should also work.
+        let spec = MatchSpec::from_str("foobar[extras=['science', plot]]", opts).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["science".to_string(), "plot".to_string()])
+        );
+
+        // Direct parse_extras checks.
+        assert_eq!(
+            parse_extras("\"science\", \"plot\"").unwrap(),
+            vec!["science".to_string(), "plot".to_string()]
+        );
+        assert_eq!(
+            parse_extras("'bar' , baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+
+        // CEP 44 group names allow `.` and `+` (regex `[a-z0-9_.+-]{1,64}`);
+        // these must parse both bare and quoted.
+        assert_eq!(
+            parse_extras("foo.bar, c++").unwrap(),
+            vec!["foo.bar".to_string(), "c++".to_string()]
+        );
+        assert_eq!(
+            parse_extras("\"foo.bar\"").unwrap(),
+            vec!["foo.bar".to_string()]
+        );
+
+        // Empty quoted feature names are still rejected.
+        assert!(parse_extras("\"\"").is_err());
+        // Quotes cannot smuggle in characters outside the group-name grammar.
+        assert!(parse_extras("\"foo bar\"").is_err());
+        assert!(parse_extras("\"foo/bar\"").is_err());
+    }
+
+    #[test]
+    fn test_extras_cep44_grammar() {
+        // CEP 44 group names MUST match `[a-z0-9_.+-]{1,64}`. Enforce it so we
+        // never accept (and later serialize) metadata that is not up to spec.
+
+        // Uppercase is rejected (bare and quoted).
+        assert!(matches!(
+            parse_extras("GPU"),
+            Err(ParseMatchSpecError::InvalidExtraName(name)) if name == "GPU"
+        ));
+        assert!(parse_extras("\"GPU\"").is_err());
+        assert!(parse_extras("gpu, MKL").is_err());
+
+        // Non-ASCII "alphanumerics" are rejected even though `char::is_alphanumeric` accepts them.
+        assert!(parse_extras("\u{e9}").is_err());
+        assert!(parse_extras("\u{3b1}").is_err());
+
+        // Length: 1..=64 characters.
+        assert!(parse_extras("").is_err());
+        let max = "a".repeat(64);
+        assert_eq!(parse_extras(&max).unwrap(), vec![max.clone()]);
+        let too_long = "a".repeat(65);
+        assert!(matches!(
+            parse_extras(&too_long),
+            Err(ParseMatchSpecError::InvalidExtraName(_))
+        ));
+
+        // All allowed symbols parse.
+        assert_eq!(
+            parse_extras("a_b-c.d+e").unwrap(),
+            vec!["a_b-c.d+e".to_string()]
+        );
     }
 
     #[test]

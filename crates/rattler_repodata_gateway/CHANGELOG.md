@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GatewayBuilder::with_config`/`set_config` (feature `rattler_config`) apply the shared rattler configuration (repodata source config and `concurrency.downloads`). `ChannelConfig` now also implements `From<&CommonConfig>`.
+
 ## [0.29.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.6...rattler_repodata_gateway-v0.29.7) - 2026-06-26
 
 ### Other

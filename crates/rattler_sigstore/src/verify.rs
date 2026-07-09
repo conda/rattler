@@ -208,7 +208,7 @@ fn verify_bundles(
         let sigstore_policy = SigstorePolicy::default();
 
         match verifier.verify(artifact.clone(), bundle, &sigstore_policy) {
-            Ok(result) if result.success => {
+            Ok(result) => {
                 let identity = result.identity.as_deref();
                 let issuer = result.issuer.as_deref();
 
@@ -243,10 +243,6 @@ fn verify_bundles(
                         i + 1
                     ));
                 }
-            }
-            Ok(_) => {
-                verification_errors
-                    .push(format!("Signature {} verification returned false", i + 1));
             }
             Err(e) => {
                 tracing::debug!("Signature {} verification error: {}", i + 1, e);

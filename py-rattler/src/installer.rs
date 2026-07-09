@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use pyo3::{Bound, PyAny, PyObject, PyResult, Python, exceptions::PyTypeError, pyfunction};
+use pyo3::{Bound, Py, PyAny, PyResult, Python, exceptions::PyTypeError, pyfunction};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler::{
     install::{IndicatifReporter, Installer, Reporter, Transaction},
@@ -18,13 +18,13 @@ use crate::{
 
 /// A [`Reporter`] implementation that delegates progress events to a Python object. The Python object should implement the following methods:
 struct PyReporter {
-    py_obj: Arc<PyObject>,
+    py_obj: Arc<Py<PyAny>>,
 }
 
 impl Reporter for PyReporter {
     fn on_transaction_start(&self, transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
         let total = transaction.operations.len();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_transaction_start", (total,));
@@ -32,7 +32,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_transaction_operation_start(&self, operation: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_transaction_operation_start", (operation,));
@@ -41,7 +41,7 @@ impl Reporter for PyReporter {
 
     fn on_populate_cache_start(&self, operation: usize, record: &RepoDataRecord) -> usize {
         let name = record.package_record.name.as_normalized().to_string();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_populate_cache_start", (operation, name))
@@ -53,7 +53,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_validate_start(&self, cache_entry: usize) -> usize {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_validate_start", (cache_entry,))
@@ -65,7 +65,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_validate_complete(&self, validate_idx: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_validate_complete", (validate_idx,));
@@ -73,7 +73,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_download_start(&self, cache_entry: usize) -> usize {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_download_start", (cache_entry,))
@@ -85,7 +85,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_download_progress(&self, download_idx: usize, progress: u64, total: Option<u64>) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self.py_obj.call_method1(
                 py,
                 "on_download_progress",
@@ -95,7 +95,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_download_completed(&self, download_idx: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_download_completed", (download_idx,));
@@ -103,7 +103,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_populate_cache_complete(&self, cache_entry: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_populate_cache_complete", (cache_entry,));
@@ -117,7 +117,7 @@ impl Reporter for PyReporter {
             .name
             .as_normalized()
             .to_string();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_unlink_start", (operation, name))
@@ -129,14 +129,14 @@ impl Reporter for PyReporter {
     }
 
     fn on_unlink_complete(&self, index: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self.py_obj.call_method1(py, "on_unlink_complete", (index,));
         });
     }
 
     fn on_link_start(&self, operation: usize, record: &RepoDataRecord) -> usize {
         let name = record.package_record.name.as_normalized().to_string();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_link_start", (operation, name))
@@ -148,13 +148,13 @@ impl Reporter for PyReporter {
     }
 
     fn on_link_complete(&self, index: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self.py_obj.call_method1(py, "on_link_complete", (index,));
         });
     }
 
     fn on_transaction_operation_complete(&self, operation: usize) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_transaction_operation_complete", (operation,));
@@ -162,7 +162,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_transaction_complete(&self) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self.py_obj.call_method0(py, "on_transaction_complete");
         });
     }
@@ -170,7 +170,7 @@ impl Reporter for PyReporter {
     fn on_post_link_start(&self, package_name: &str, script_path: &str) -> usize {
         let pkg = package_name.to_string();
         let path = script_path.to_string();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_post_link_start", (pkg, path))
@@ -182,7 +182,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_post_link_complete(&self, index: usize, success: bool) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_post_link_complete", (index, success));
@@ -192,7 +192,7 @@ impl Reporter for PyReporter {
     fn on_pre_unlink_start(&self, package_name: &str, script_path: &str) -> usize {
         let pkg = package_name.to_string();
         let path = script_path.to_string();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             match self
                 .py_obj
                 .call_method1(py, "on_pre_unlink_start", (pkg, path))
@@ -204,7 +204,7 @@ impl Reporter for PyReporter {
     }
 
     fn on_pre_unlink_complete(&self, index: usize, success: bool) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let _ = self
                 .py_obj
                 .call_method1(py, "on_pre_unlink_complete", (index, success));
@@ -228,7 +228,7 @@ pub fn py_install<'a>(
     reinstall_packages: Option<HashSet<String>>,
     ignored_packages: Option<HashSet<String>>,
     requested_specs: Option<Vec<PyMatchSpec>>,
-    reporter: Option<PyObject>,
+    reporter: Option<Py<PyAny>>,
     alternative_target_prefix: Option<PathBuf>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records

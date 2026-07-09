@@ -7,7 +7,6 @@ default-channels = [
     "pytorch",
     "nvidia",
 ]
-tls-no-verify = false
 array_field = []
 
 [concurrency]

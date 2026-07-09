@@ -12,7 +12,7 @@ pub mod patch_instructions;
 pub mod source;
 pub mod sparse;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRepoData {
@@ -80,7 +80,7 @@ impl PyRepoData {
 
 /// Python wrapper around [`ChannelInfo`] — the `info` section of a
 /// `repodata.json` file.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyChannelInfo {
@@ -121,7 +121,7 @@ impl PyChannelInfo {
 
 /// Python wrapper around [`ChannelRelations`] — see
 /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyChannelRelations {

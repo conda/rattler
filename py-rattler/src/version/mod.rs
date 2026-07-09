@@ -12,7 +12,7 @@ use std::{
 };
 pub use version_spec::PyVersionSpec;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersion {

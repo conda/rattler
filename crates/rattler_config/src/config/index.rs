@@ -31,8 +31,6 @@ use rattler_conda_types::{ChannelRelations, RepodataRevision, RepodataRevisionIn
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
-#[cfg(feature = "edit")]
-use crate::edit::ConfigEditError;
 
 /// How packages are assigned to repodata revisions while indexing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -192,10 +190,6 @@ fn is_prefix_match(key: &str, target: &str) -> bool {
 }
 
 impl Config for IndexConfig {
-    fn get_extension_name(&self) -> String {
-        "index-config".to_string()
-    }
-
     /// Merge another `IndexConfig` on top of this one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         let mut merged = self.clone();
@@ -219,27 +213,7 @@ impl Config for IndexConfig {
     }
 
     fn keys(&self) -> Vec<String> {
-        vec!["default".to_string(), "per-channel".to_string()]
-    }
-
-    #[cfg(feature = "edit")]
-    fn set(&mut self, key: &str, value: Option<String>) -> Result<(), ConfigEditError> {
-        if key == "index-config" {
-            *self = value
-                .map(|v| {
-                    serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
-                        key: key.to_string(),
-                        source: e,
-                    })
-                })
-                .transpose()?
-                .unwrap_or_default();
-            return Ok(());
-        }
-        Err(ConfigEditError::UnknownKey {
-            key: key.to_string(),
-            supported_keys: self.keys().join(", "),
-        })
+        Vec::new()
     }
 }
 

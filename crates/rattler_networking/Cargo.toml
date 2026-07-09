@@ -23,6 +23,7 @@ keyring = [
     "dep:apple-native-keyring-store",
     "dep:dbus-secret-service-keyring-store",
     "dep:windows-native-keyring-store",
+    "dep:regex",
 ]
 
 [package.metadata.docs.rs]
@@ -82,6 +83,7 @@ dbus-secret-service-keyring-store = { workspace = true, optional = true, feature
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -98,3 +100,7 @@ hex = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }
 tracing-test = { workspace = true }
+# Compiles the Windows keyring search pattern in tests on every platform —
+# the pattern is only *used* on Windows, but a bad pattern should fail CI
+# everywhere.
+regex = { workspace = true }
