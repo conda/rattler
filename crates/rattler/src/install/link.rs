@@ -922,7 +922,7 @@ fn replace_shebang<'a>(
 /// installer does when writing the patched file, returning the region's contribution to the output.
 ///
 /// On targets with shebang handling ([`Platform::is_unix`]) the region minus its trailing newline
-/// is rewritten by [`replace_shebang`] (which may collapse an over-long line to the
+/// is rewritten by `replace_shebang` (which may collapse an over-long line to the
 /// `#!/usr/bin/env <program>` form) and the trailing newline, if present, is appended unchanged. On
 /// other targets the region receives plain placeholder replacement (searching at most
 /// `shebang_length` bytes).
