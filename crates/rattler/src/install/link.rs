@@ -988,7 +988,7 @@ fn write_replacement_range<W: Write>(
 /// occurrence inside the shebang region. Each listed offset is spliced uniformly. The shebang
 /// region — the first `shebang_length` bytes, present exactly when the file starts with `#!` — is
 /// handled separately: on targets with shebang handling ([`Platform::is_unix`]) the region minus
-/// its trailing newline is rewritten by [`replace_shebang`] and the newline byte copied through
+/// its trailing newline is rewritten by `replace_shebang` and the newline byte copied through
 /// verbatim; on other targets the region gets plain placeholder replacement.
 ///
 /// The recorded metadata is validated before anything is written, so a mismatch surfaces as
@@ -2455,9 +2455,15 @@ mod test {
         }
         let input = fs::read(test_file).unwrap();
 
-        // The only occurrence is inside the shebang region, so `offsets` is empty. The shebang
-        // line is 43 bytes and the first newline is at offset 43, so `shebang_length` is 44.
+        // The only occurrence is inside the shebang region, so `offsets` is empty.
+        // Derive `shebang_length` (first-newline index + 1) from the file rather than
+        // hardcoding it, so the test is robust to a CRLF checkout on Windows — where the
+        // extra carriage return shifts the newline and thus the region length.
         let offsets: Vec<usize> = Vec::new();
+        let shebang_length = input
+            .iter()
+            .position(|&c| c == b'\n')
+            .map_or(input.len(), |i| i + 1);
 
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_textual_placeholder_offsets(
@@ -2467,7 +2473,7 @@ mod test {
             &target_prefix,
             &Platform::Linux64,
             &offsets,
-            Some(44),
+            Some(shebang_length),
         )
         .unwrap();
 
