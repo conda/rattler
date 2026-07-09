@@ -79,6 +79,17 @@ impl CodesignCache {
     }
 }
 
+/// Read the first `n` bytes of a file (fewer when the file is shorter).
+///
+/// Used to load just the shebang region during plan construction; `n` comes
+/// from the recorded `shebang_length`, so it is bounded by `take` rather than
+/// pre-allocated in case the metadata is nonsense.
+fn read_leading_bytes(path: &Path, n: usize) -> std::io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    File::open(path)?.take(n as u64).read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
 /// Pre-computed prefix-replacement plan for a file, keyed by inode.
 enum ReplacementPlan {
     /// Text file: shebang-aware plan — the shebang region is transformed once
@@ -144,35 +155,91 @@ impl VirtualFS {
                 p.join(prefix).join(&file.file_name)
             };
 
-            // Build the replacement plan. Text plans are always computed from
-            // the source so the shebang region is transformed exactly as the
-            // installer does (a bare offset list can't express the shebang
-            // rewrite); binary plans prefer the paths.json c-string groups.
+            // Build the replacement plan. Both modes prefer the offsets
+            // recorded in paths.json — that metadata exists precisely so
+            // consumers don't have to scan file contents, and it is trusted
+            // as-is (the ranged reads are total, so a non-conformant producer
+            // yields wrong bytes for its own package, never a panic). Scanning
+            // remains as the fallback for pre-CEP packages.
             let plan = match placeholder.file_mode {
                 FileMode::Text => {
-                    let source = match fs::read(&cache_path) {
-                        Ok(s) => s,
-                        Err(e) => {
+                    // With recorded offsets, construction reads at most the
+                    // shebang region (`shebang_length` bytes) — the one part
+                    // of the transformation a bare offset list can't express.
+                    let recorded_plan = if let Some(Offsets::Text(body_offsets)) =
+                        &placeholder.offsets
+                    {
+                        let region = match placeholder.shebang_length {
+                            Some(len) if len > 0 => match read_leading_bytes(&cache_path, len) {
+                                Ok(region) => region,
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "failed to read {} for offset computation: {}",
+                                        cache_path.display(),
+                                        e
+                                    );
+                                    continue;
+                                }
+                            },
+                            _ => Vec::new(),
+                        };
+                        let plan = crate::prefix_replacement::TextPlan::from_recorded(
+                            &region,
+                            body_offsets.clone(),
+                            &placeholder.placeholder,
+                            &target_prefix,
+                            &platform,
+                        );
+                        if plan.is_none() {
                             tracing::warn!(
-                                "failed to read {} for offset computation: {}",
-                                cache_path.display(),
-                                e
+                                "{}: recorded shebang_length does not match the file \
+                                 contents; falling back to scanning",
+                                cache_path.display()
                             );
-                            continue;
                         }
+                        plan
+                    } else {
+                        None
                     };
-                    let text_plan = crate::prefix_replacement::plan_text_replacement(
-                        &source,
-                        &placeholder.placeholder,
-                        &target_prefix,
-                        &platform,
-                    );
+
+                    let (text_plan, source_len) = match recorded_plan {
+                        Some(plan) => match fs::symlink_metadata(&cache_path) {
+                            Ok(m) => (plan, m.len() as usize),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "failed to stat {} for offset computation: {}",
+                                    cache_path.display(),
+                                    e
+                                );
+                                continue;
+                            }
+                        },
+                        None => match fs::read(&cache_path) {
+                            Ok(source) => {
+                                let plan = crate::prefix_replacement::plan_text_replacement(
+                                    &source,
+                                    &placeholder.placeholder,
+                                    &target_prefix,
+                                    &platform,
+                                );
+                                (plan, source.len())
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "failed to read {} for offset computation: {}",
+                                    cache_path.display(),
+                                    e
+                                );
+                                continue;
+                            }
+                        },
+                    };
 
                     // Post-replacement size: the transformed shebang region plus
                     // the unchanged body length plus the per-occurrence delta.
                     let delta =
                         target_prefix.len() as isize - placeholder.placeholder.len() as isize;
-                    let body_len = source.len().saturating_sub(text_plan.region_end);
+                    let body_len = source_len.saturating_sub(text_plan.region_end);
                     let new_size = (text_plan.transformed_region.len() as isize
                         + body_len as isize
                         + delta * text_plan.body_offsets.len() as isize)
@@ -443,7 +510,12 @@ impl VirtualFS {
                         placeholder.shebang_length,
                     );
 
-                    if result.is_err() {
+                    if let Err(e) = result {
+                        tracing::warn!(
+                            "prefix replacement failed for {} ({}); serving raw bytes",
+                            path.display(),
+                            e
+                        );
                         let s = start.min(mmap.len());
                         let e = (s + size as usize).min(mmap.len());
                         return Ok(mmap[s..e].to_vec());

@@ -67,6 +67,43 @@ pub fn plan_text_replacement(
     }
 }
 
+impl TextPlan {
+    /// Build a plan from the metadata recorded in `paths.json` instead of
+    /// scanning the file: `body_offsets` come straight from the recorded
+    /// offsets, and `region` must hold the file's shebang region (its first
+    /// `shebang_length` bytes) or be empty when no shebang is recorded. Only
+    /// that region is ever read from disk — recorded offsets exist precisely
+    /// so consumers don't have to scan file contents.
+    ///
+    /// The offsets are trusted as-is: per the CEP they are the producer's
+    /// contract, and the ranged reads are total functions, so a
+    /// non-conformant producer yields wrong bytes for its own package rather
+    /// than a panic. The one sanity check is that a non-empty region starts
+    /// with `#!` — the shared shebang transform requires it — and `None` is
+    /// returned otherwise so the caller can fall back to
+    /// [`plan_text_replacement`].
+    pub fn from_recorded(
+        region: &[u8],
+        body_offsets: Vec<usize>,
+        placeholder: &str,
+        target: &str,
+        platform: &Platform,
+    ) -> Option<TextPlan> {
+        let transformed_region = if region.is_empty() {
+            Vec::new()
+        } else if region.starts_with(b"#!") {
+            replace_shebang_region(region, placeholder, target, platform)
+        } else {
+            return None;
+        };
+        Some(TextPlan {
+            body_offsets,
+            region_end: region.len(),
+            transformed_region,
+        })
+    }
+}
+
 /// Read a range from a text file with prefix replacements applied.
 ///
 /// The transformed output is the already-transformed shebang region (see
@@ -732,5 +769,41 @@ mod tests {
         assert_eq!(plan.region_end, src.len());
         assert!(plan.body_offsets.is_empty());
         assert_eq!(plan.transformed_region, b"#!/new/python");
+    }
+
+    // ── Plans built from recorded paths.json metadata ────────────────
+
+    #[test]
+    fn from_recorded_matches_scan() {
+        let src = b"#!/PFX/python\nimport x  # /PFX/lib\n";
+        let scanned = plan_text_replacement(src, "/PFX", "/new", &Platform::Linux64);
+        let recorded = TextPlan::from_recorded(
+            &src[..scanned.region_end],
+            scanned.body_offsets.clone(),
+            "/PFX",
+            "/new",
+            &Platform::Linux64,
+        )
+        .unwrap();
+        assert_eq!(recorded, scanned);
+    }
+
+    #[test]
+    fn from_recorded_no_shebang() {
+        let plan =
+            TextPlan::from_recorded(b"", vec![6], "/PFX", "/new", &Platform::Linux64).unwrap();
+        assert_eq!(plan.region_end, 0);
+        assert!(plan.transformed_region.is_empty());
+        assert_eq!(plan.body_offsets, vec![6]);
+    }
+
+    #[test]
+    fn from_recorded_rejects_non_shebang_region() {
+        // Recorded shebang_length but the file doesn't start with `#!`:
+        // the caller must fall back to scanning.
+        assert!(
+            TextPlan::from_recorded(b"not a shebang\n", vec![], "/PFX", "/new", &Platform::Linux64)
+                .is_none()
+        );
     }
 }
