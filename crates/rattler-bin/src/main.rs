@@ -62,6 +62,8 @@ enum Command {
     Link(commands::link::Opt),
     InjectIntoPrefix(commands::prefix::InjectOpt),
     RemoveFromPrefix(commands::prefix::RemoveFromPrefixOpt),
+    #[cfg(feature = "mount")]
+    Mount(commands::mount::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
     List(commands::list::Opt),
     Exec(commands::exec::Opt),
@@ -132,6 +134,8 @@ async fn async_main() -> miette::Result<()> {
         Command::Link(opts) => commands::link::link(opts).await,
         Command::InjectIntoPrefix(opts) => commands::prefix::inject(opts).await,
         Command::RemoveFromPrefix(opts) => commands::prefix::remove_from_prefix(opts).await,
+        #[cfg(feature = "mount")]
+        Command::Mount(opts) => commands::mount::mount(opts).await,
         Command::Upload(opts) => {
             if offline {
                 return Err(miette::miette!(
