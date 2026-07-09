@@ -116,6 +116,8 @@ memchr = "2"
 memmap2 = "0.9"
 miette = "7"
 netrc-rs = "0.1"
+nfs3_server = { version = "0.10" }
+nfs3_types = { version = "0.5" }
 nom = "8"
 nom-language = "0.1"
 num_cpus = "1"
@@ -199,6 +201,7 @@ uuid = { version = "1", default-features = false }
 walkdir = "2"
 wasmtimer = "0.4"
 which = "8"
+windows = { version = "0.62", features = ["Win32_Storage_ProjectedFileSystem", "Win32_Foundation", "Win32_System_LibraryLoader"] }
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"
 winver = { version = "1" }
