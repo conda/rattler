@@ -66,6 +66,37 @@ pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access
 /// responsible for escaping if it interpolates the detail into HTML).
 pub type CallbackPageRenderer = Box<dyn Fn(bool, &str) -> String + Send + Sync>;
 
+const DEFAULT_POWERED_BY: &str = "Powered by <a href=\"https://prefix.dev\" rel=\"noopener noreferrer\" target=\"_blank\">prefix.dev</a>";
+
+/// Text inserted into the default OAuth callback page.
+#[derive(Clone, Debug)]
+pub struct CallbackPageTemplate {
+    /// Program name shown in the title and status text.
+    pub application_name: String,
+    /// Raw HTML shown in the footer. When empty, a link to the issuer domain is used.
+    pub powered_by: String,
+}
+
+impl Default for CallbackPageTemplate {
+    fn default() -> Self {
+        Self {
+            application_name: "rattler".to_string(),
+            powered_by: String::new(),
+        }
+    }
+}
+
+/// Build a branded version of the default OAuth callback page renderer.
+pub fn callback_page_renderer(
+    template: CallbackPageTemplate,
+    issuer_url: &str,
+) -> CallbackPageRenderer {
+    let domain = callback_page_domain_from_issuer(issuer_url);
+    Box::new(move |success, detail| {
+        default_callback_page_with_template(success, detail, &template, &domain, DEFAULT_POWERED_BY)
+    })
+}
+
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
     /// The OIDC issuer URL.
@@ -195,9 +226,9 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     let client_secret = config.client_secret.as_deref();
     let redirect_uri = config.redirect_uri.as_deref();
 
-    let callback_page: CallbackPageRenderer = config
-        .callback_page
-        .unwrap_or_else(|| Box::new(default_callback_page));
+    let callback_page: CallbackPageRenderer = config.callback_page.unwrap_or_else(|| {
+        callback_page_renderer(CallbackPageTemplate::default(), &config.issuer_url)
+    });
     let callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync) = &*callback_page;
 
     // 2. Run the appropriate flow
@@ -577,6 +608,13 @@ fn send_callback_response(
         .and_then(|_| writer.flush());
 }
 
+fn callback_page_domain_from_issuer(issuer_url: &str) -> String {
+    Url::parse(issuer_url)
+        .ok()
+        .and_then(|url| url.host_str().map(ToString::to_string))
+        .unwrap_or_else(|| "prefix.dev".to_string())
+}
+
 /// Default HTML page shown in the browser after the OAuth redirect.
 ///
 /// Callers can override this by setting [`OAuthConfig::callback_page`].
@@ -587,6 +625,23 @@ fn send_callback_response(
 /// interpolated, so it is safe to pass raw error messages from the
 /// identity provider.
 pub fn default_callback_page(success: bool, detail: &str) -> String {
+    default_callback_page_with_template(
+        success,
+        detail,
+        &CallbackPageTemplate::default(),
+        "prefix.dev",
+        DEFAULT_POWERED_BY,
+    )
+}
+
+/// Default OAuth callback page with caller-provided text.
+pub fn default_callback_page_with_template(
+    success: bool,
+    detail: &str,
+    template: &CallbackPageTemplate,
+    domain: &str,
+    default_powered_by: &str,
+) -> String {
     const STYLES: &str = "\
         :root{color-scheme:light dark;\
         --bg:#f8fafc;--fg:#0f172a;--muted:#475569;\
@@ -635,12 +690,20 @@ pub fn default_callback_page(success: bool, detail: &str) -> String {
         <line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"/>\
         <line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"/></svg>";
 
+    let application_name = html_escape(&template.application_name);
+    let domain = html_escape(domain);
+    let powered_by = if template.powered_by.is_empty() {
+        default_powered_by
+    } else {
+        &template.powered_by
+    };
+
     let (title, kind, icon, heading, message, detail_block) = if success {
         (
-            "Signed in",
+            format!("Signed in to {application_name}"),
             "success",
             CHECK_SVG,
-            "You're signed in",
+            format!("{application_name} is signed in to {domain}"),
             "Authentication completed. You can close this window and return to your terminal.",
             String::new(),
         )
@@ -652,10 +715,10 @@ pub fn default_callback_page(success: bool, detail: &str) -> String {
             format!("<div class=\"detail\">{escaped}</div>")
         };
         (
-            "Sign-in failed",
+            format!("{application_name} sign-in failed"),
             "error",
             CROSS_SVG,
-            "Sign-in failed",
+            format!("{application_name} sign-in failed"),
             "Authentication did not complete. Please return to your terminal and try again.",
             detail_block,
         )
@@ -677,7 +740,7 @@ pub fn default_callback_page(success: bool, detail: &str) -> String {
 <h1>{heading}</h1>\
 <p>{message}</p>\
 {detail_block}\
-<footer>Powered by <a href=\"https://prefix.dev\" rel=\"noopener noreferrer\" target=\"_blank\">prefix.dev</a></footer>\
+<footer>{powered_by}</footer>\
 </main>\
 </body>\
 </html>"
@@ -853,7 +916,10 @@ pub async fn revoke_tokens(
 
 #[cfg(test)]
 mod tests {
-    use super::{default_callback_page, html_escape};
+    use super::{
+        CallbackPageTemplate, DEFAULT_POWERED_BY, callback_page_domain_from_issuer,
+        default_callback_page, default_callback_page_with_template, html_escape,
+    };
 
     #[test]
     fn escapes_html_detail() {
@@ -873,5 +939,47 @@ mod tests {
         let page = default_callback_page(false, "");
 
         assert!(!page.contains("class=\"detail\""));
+    }
+
+    #[test]
+    fn default_callback_page_uses_template_text() {
+        let page = default_callback_page_with_template(
+            true,
+            "",
+            &CallbackPageTemplate {
+                application_name: "pixi".to_string(),
+                powered_by: "built by <strong>example</strong>".to_string(),
+            },
+            "example.com",
+            "Powered by example.com",
+        );
+
+        assert!(page.contains("pixi is signed in to example.com"));
+        assert!(page.contains("built by <strong>example</strong>"));
+    }
+
+    #[test]
+    fn callback_page_uses_issuer_domain() {
+        let domain = callback_page_domain_from_issuer("https://login.example.com/realms/prefix");
+
+        assert_eq!(domain, "login.example.com");
+    }
+
+    #[test]
+    fn empty_powered_by_uses_prefix_dev() {
+        let page = default_callback_page_with_template(
+            true,
+            "",
+            &CallbackPageTemplate {
+                application_name: "pixi".to_string(),
+                powered_by: String::new(),
+            },
+            "login.example.com",
+            DEFAULT_POWERED_BY,
+        );
+
+        assert!(page.contains("pixi is signed in to login.example.com"));
+        assert!(page.contains("https://prefix.dev"));
+        assert!(page.contains(">prefix.dev</a>"));
     }
 }
