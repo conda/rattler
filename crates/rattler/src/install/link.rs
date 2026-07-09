@@ -918,6 +918,64 @@ fn replace_shebang<'a>(
     }
 }
 
+/// Transform the shebang region (the first `shebang_length` bytes of a text file) exactly as the
+/// installer does when writing the patched file, returning the region's contribution to the output.
+///
+/// On targets with shebang handling ([`Platform::is_unix`]) the region minus its trailing newline
+/// is rewritten by [`replace_shebang`] (which may collapse an over-long line to the
+/// `#!/usr/bin/env <program>` form) and the trailing newline, if present, is appended unchanged. On
+/// other targets the region receives plain placeholder replacement (searching at most
+/// `shebang_length` bytes).
+///
+/// This is the single source of truth for how the shebang region is transformed, shared by the
+/// install-time replacement here and the mount-time ranged reads in `rattler_vfs`, so the two stay
+/// byte-identical.
+pub fn replace_shebang_region(
+    region: &[u8],
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+) -> Vec<u8> {
+    if region.is_empty() {
+        return Vec::new();
+    }
+
+    if target_platform.is_unix() {
+        // Feed the region minus its trailing newline to the shebang rules; the newline byte, when
+        // present, is appended unchanged.
+        let has_newline = region[region.len() - 1] == b'\n';
+        let line_end = if has_newline {
+            region.len() - 1
+        } else {
+            region.len()
+        };
+        let first_line = String::from_utf8_lossy(&region[..line_end]);
+        let new_shebang = replace_shebang(
+            first_line,
+            (prefix_placeholder, target_prefix),
+            target_platform,
+        );
+        let mut out = new_shebang.into_owned().into_bytes();
+        if has_newline {
+            out.extend_from_slice(&region[line_end..]);
+        }
+        out
+    } else {
+        // Non-rewriting target (e.g. Windows for a noarch package): plain placeholder replacement.
+        let old_prefix = prefix_placeholder.as_bytes();
+        let new_prefix = target_prefix.as_bytes();
+        let mut out = Vec::with_capacity(region.len());
+        let mut last = 0;
+        for index in memchr::memmem::find_iter(region, old_prefix) {
+            out.extend_from_slice(&region[last..index]);
+            out.extend_from_slice(new_prefix);
+            last = index + old_prefix.len();
+        }
+        out.extend_from_slice(&region[last..]);
+        out
+    }
+}
+
 /// Given the contents of a file copy it to the `destination` and in the process replace the
 /// `prefix_placeholder` text with the `target_prefix` text.
 ///
@@ -1096,42 +1154,16 @@ pub fn copy_and_replace_textual_placeholder_offsets(
 
     // --- The metadata is consistent; write the patched file. ---
 
-    // Handle the shebang region.
+    // Handle the shebang region via the shared helper, so that install-time and
+    // mount-time (rattler_vfs) replacement stay byte-identical.
     if region_end > 0 {
-        if target_platform.is_unix() {
-            // Feed the region minus its trailing newline to the shebang rules; the newline byte,
-            // when present, is copied through unchanged.
-            let has_newline = source_bytes[region_end - 1] == b'\n';
-            let line_end = if has_newline {
-                region_end - 1
-            } else {
-                region_end
-            };
-            let first_line = String::from_utf8_lossy(&source_bytes[..line_end]);
-            let new_shebang = replace_shebang(
-                first_line,
-                (prefix_placeholder, target_prefix),
-                target_platform,
-            );
-            destination.write_all(new_shebang.as_bytes())?;
-            if has_newline {
-                destination.write_all(&source_bytes[line_end..region_end])?;
-            }
-        } else {
-            // On non-rewriting targets (e.g. Windows for a noarch package) the region gets plain
-            // placeholder replacement, exactly as the body does, searching at most the first
-            // `shebang_length` bytes.
-            let region = &source_bytes[..region_end];
-            let mut last = 0;
-            for index in memchr::memmem::find_iter(region, old_prefix) {
-                destination.write_all(&region[last..index])?;
-                destination.write_all(new_prefix)?;
-                last = index + old_prefix.len();
-            }
-            if last < region.len() {
-                destination.write_all(&region[last..])?;
-            }
-        }
+        let region_out = replace_shebang_region(
+            &source_bytes[..region_end],
+            prefix_placeholder,
+            target_prefix,
+            target_platform,
+        );
+        destination.write_all(&region_out)?;
     }
 
     // Splice the recorded body offsets.
