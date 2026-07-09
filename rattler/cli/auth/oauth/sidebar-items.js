@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_OAUTH_SCOPES"],"enum":["OAuthError","OAuthFlow"],"fn":["perform_oauth_login","revoke_tokens"],"struct":["OAuthConfig"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_OAUTH_SCOPES"],"enum":["OAuthError","OAuthFlow"],"fn":["callback_page_renderer","default_callback_page","default_callback_page_with_template","html_escape","perform_oauth_login","revoke_tokens"],"struct":["CallbackPageTemplate","OAuthConfig"],"type":["CallbackPageRenderer"]};
