@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use pyo3::{
-    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
-    types::PyBytes,
+    Bound, IntoPyObject, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass,
+    pymethods, types::PyBytes,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{
-    FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
+    FileMode, Offsets, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
 };
 use rattler_package_streaming::seek::read_package_file;
 use url::Url;
@@ -425,6 +425,27 @@ impl PyPrefixPlaceholder {
     #[setter]
     pub fn set_placeholder(&mut self, placeholder: String) {
         self.inner.placeholder = placeholder;
+    }
+
+    /// The byte offsets, from the beginning of the file, at which the placeholder occurs.
+    ///
+    /// Returns `None` when the field is absent, a `list[int]` for text-mode files, or a
+    /// `list[list[int]]` for binary-mode files (grouped by c-string). Occurrences inside the
+    /// shebang region (see `shebang_length`) are excluded.
+    #[getter]
+    pub fn offsets<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        Ok(match &self.inner.offsets {
+            None => None,
+            Some(Offsets::Text(positions)) => Some(positions.clone().into_pyobject(py)?.into_any()),
+            Some(Offsets::Binary(groups)) => Some(groups.clone().into_pyobject(py)?.into_any()),
+        })
+    }
+
+    /// The length in bytes of the file's shebang region (first line including its newline), or
+    /// `None` when the file has no recorded shebang region.
+    #[getter]
+    pub fn shebang_length(&self) -> Option<usize> {
+        self.inner.shebang_length
     }
 }
 

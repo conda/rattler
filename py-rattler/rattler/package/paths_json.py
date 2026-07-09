@@ -608,6 +608,47 @@ class PrefixPlaceholder:
         """
         return self._inner.placeholder
 
+    @property
+    def offsets(self) -> Optional[list[int] | list[list[int]]]:
+        """
+        The byte offsets, from the beginning of the file, at which the placeholder occurs.
+
+        Returns `None` when the field is absent, a `list[int]` for text-mode files, or a
+        `list[list[int]]` for binary-mode files (grouped by c-string). Occurrences inside the
+        shebang region (see `shebang_length`) are excluded.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.offsets
+        >>>
+        ```
+        """
+        return self._inner.offsets
+
+    @property
+    def shebang_length(self) -> Optional[int]:
+        """
+        The length in bytes of the file's shebang region (the first line including its trailing
+        newline), or `None` when the file has no recorded shebang region.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.shebang_length
+        >>>
+        ```
+        """
+        return self._inner.shebang_length
+
     @classmethod
     def _from_py_prefix_placeholder(cls, py_prefix_placeholder: PyPrefixPlaceholder) -> PrefixPlaceholder:
         prefix_placeholder = cls.__new__(cls)
