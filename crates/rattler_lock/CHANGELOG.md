@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.4](https://github.com/conda/rattler/compare/rattler_lock-v0.31.3...rattler_lock-v0.31.4) - 2026-07-09
+
+### Fixed
+
+- preserve leading '..' in UrlOrPath normalize so distinct relative paths don't dedup ([#2548](https://github.com/conda/rattler/pull/2548))
+
 ## [0.31.3](https://github.com/conda/rattler/compare/rattler_lock-v0.31.2...rattler_lock-v0.31.3) - 2026-06-17
 
 ### Other

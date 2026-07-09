@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_config-v0.5.2...rattler_config-v0.6.0) - 2026-07-09
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
 ### Added
 
 - A compatibility test catalog (`tests/compat.rs` + `test-data/compat/`) pinning down the configuration contract: parsing permutations (kebab-case, snake_case aliases, deprecated keys, typos), lossless/idempotent round-trips, a set/unset editing matrix over every key family, and merge semantics per key family. Extend the fixtures and `EDIT_MATRIX` when adding keys.

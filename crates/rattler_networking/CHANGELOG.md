@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.1](https://github.com/conda/rattler/compare/rattler_networking-v0.30.0...rattler_networking-v0.30.1) - 2026-07-09
+
+### Fixed
+
+- make Windows keyring credential search use a valid regex ([#2564](https://github.com/conda/rattler/pull/2564))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
 ### Added
 
 - `MirrorMiddleware::from_config`, `s3_middleware::compute_s3_config_from_config` and the new `proxy::proxies_from_config` helper (feature `rattler_config`) build middlewares / reqwest proxies directly from the shared rattler configuration (`CommonConfig`; any `&ConfigBase<T>` coerces into it).
