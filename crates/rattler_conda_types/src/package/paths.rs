@@ -190,15 +190,24 @@ pub struct PrefixPlaceholder {
     #[serde(rename = "prefix_placeholder")]
     pub placeholder: String,
 
-    /// Byte offsets within the file where the placeholder appears.
+    /// Byte offsets, from the beginning of the file, at which the placeholder
+    /// occurs in the file contents as stored in the package (before any
+    /// replacement).
     ///
     /// For text-mode files this is a flat list of byte positions:
     /// `[offset1, offset2, ...]`
     ///
     /// For binary-mode files this is grouped by c-string. Each inner
     /// array lists the prefix offsets followed by the position of the
-    /// NUL terminator:
+    /// NUL terminator, or the file size when the final c-string is
+    /// unterminated at end-of-file:
     /// `[[prefix1, nul], [prefix2, prefix3, nul], ...]`
+    ///
+    /// Occurrences inside the shebang region (the first
+    /// [`Self::shebang_length`] bytes) are **excluded** — that region is
+    /// transformed by the installer's shebang rules rather than by plain
+    /// splicing at these offsets — so every value is greater than or equal to
+    /// `shebang_length` when it is present.
     ///
     /// `None` for older packages or packages whose publisher did not
     /// populate the field — callers must scan the file themselves in
@@ -206,13 +215,19 @@ pub struct PrefixPlaceholder {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offsets: Option<Offsets>,
 
-    /// The length in bytes of the original shebang line (up to and
-    /// including the trailing newline) for text files whose first line
-    /// is a shebang containing the placeholder prefix.
+    /// The length in bytes of the file's shebang region: the first line
+    /// including its terminating newline, or the whole file size when the
+    /// file contains no newline.
     ///
-    /// Used to compute the exact post-replacement file size without
-    /// re-rendering the whole file. `None` for binary-mode placeholders,
-    /// files without a shebang, or older packages.
+    /// Present if and only if [`Self::offsets`] is present, `file_mode` is
+    /// [`FileMode::Text`], and the file starts with the bytes `#!` —
+    /// regardless of whether the first line itself contains the placeholder,
+    /// because installers collapse an over-long shebang even when it does not.
+    ///
+    /// Lets consumers compute the exact post-replacement file size and locate
+    /// the region an installer transforms under its shebang rules without
+    /// rendering the whole file. `None` for binary-mode placeholders, text
+    /// files that do not start with a shebang, or older packages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shebang_length: Option<usize>,
 }
@@ -261,11 +276,17 @@ pub struct PathsEntry {
 /// The format depends on the file mode:
 /// - **Text**: a flat list of byte positions (`[10, 45, 100]`).
 /// - **Binary**: grouped by c-string — each inner array lists the prefix
-///   offsets followed by the position of the NUL terminator
+///   offsets followed by the position of the NUL terminator, or the file size
+///   when the final c-string is unterminated at end-of-file
 ///   (`[[5, 39], [22, 30, 39]]`).
 ///
-/// The two representations are self-describing in JSON: a flat array of
-/// numbers vs. an array of arrays.
+/// Occurrences inside the shebang region (the first
+/// [`PrefixPlaceholder::shebang_length`] bytes) are excluded; the installer
+/// transforms that region under its own shebang rules.
+///
+/// The shape is determined normatively by `file_mode`, not inferred from the
+/// JSON structure: an empty text list and an empty binary list are
+/// indistinguishable.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(untagged)]
 pub enum Offsets {
