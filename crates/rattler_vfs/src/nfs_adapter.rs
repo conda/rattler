@@ -180,6 +180,9 @@ impl NfsServerHandle {
 
 /// Handle to a mounted NFS filesystem. Unmounts and stops the server on drop.
 pub struct NfsMountHandle {
+    // Only read by the macOS/Linux `umount` paths; unused on targets without
+    // NFS-mount support (e.g. Windows).
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     pub(crate) mount_point: std::path::PathBuf,
     pub(crate) server_handle: NfsServerHandle,
     /// Whether `do_unmount` has already run successfully. Set by

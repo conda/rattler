@@ -1106,13 +1106,18 @@ async fn mount_nfs(
         anyhow::bail!("NFS mount is not supported on this platform. Use ProjFS on Windows.");
     }
 
-    tracing::info!("mounted via NFS on {}", config.mount_point.display());
+    // Only reachable on the NFS-capable targets; on other platforms the block
+    // above diverges, so gate the success tail to avoid unreachable-code errors.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        tracing::info!("mounted via NFS on {}", config.mount_point.display());
 
-    Ok(nfs_adapter::NfsMountHandle {
-        mount_point: config.mount_point.clone(),
-        server_handle,
-        unmounted: false,
-    })
+        Ok(nfs_adapter::NfsMountHandle {
+            mount_point: config.mount_point.clone(),
+            server_handle,
+            unmounted: false,
+        })
+    }
 }
 
 /// Create an overlay, wiping and retrying transparently on state-version

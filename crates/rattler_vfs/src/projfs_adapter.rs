@@ -6,6 +6,13 @@
 //!
 //! This adapter is Windows-only and requires Windows 10 version 1809+.
 
+// The ProjFS callbacks are `unsafe extern "system" fn`s whose bodies are almost
+// entirely raw-pointer FFI against the Win32 API. Under Rust 2024's
+// `unsafe_op_in_unsafe_fn` every deref/call would otherwise need its own
+// `unsafe {}` wrapper; the whole module is inherently unsafe FFI, so allow it
+// module-wide rather than peppering the callbacks with blocks.
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
