@@ -61,7 +61,7 @@ fs-err = { workspace = true }
 memmap2 = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = { version = "0.10.1" }
+core-foundation = { version = "0.10" }
 
 [dev-dependencies]
 rand = { workspace = true }

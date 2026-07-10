@@ -88,6 +88,6 @@ axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
-mockito = "1.7"
-tempfile = "3.27"
+mockito = "1"
+tempfile = { workspace = true }
 temp-env = { workspace = true }

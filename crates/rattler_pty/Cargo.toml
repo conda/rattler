@@ -15,5 +15,5 @@ tokio = { workspace = true, features = ["io-util", "fs", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-nix = { version = "0.31.3", features = ["fs", "signal", "term", "poll"] }
-signal-hook = "0.4.4"
+nix = { version = "0.31", features = ["fs", "signal", "term", "poll"] }
+signal-hook = "0.4"
