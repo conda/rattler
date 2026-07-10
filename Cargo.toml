@@ -112,7 +112,6 @@ libc = { version = "0.2" }
 libloading = "0.9"
 libz-sys = { version = "1", default-features = false }
 md-5 = "0.11"
-mem = "0.5"
 memchr = "2"
 memmap2 = "0.9"
 miette = "7"
