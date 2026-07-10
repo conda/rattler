@@ -839,6 +839,26 @@ fn fetch_lfs(
     revision: GitOid,
 ) -> Result<bool, GitError> {
     tracing::debug!("fetching LFS objects for {url} at {revision}");
+
+    // git-lfs does not handle the `file://` protocol correctly (especially
+    // on Windows, where the drive letter in `file:///D:/...` gets mangled),
+    // while a bare local path is not accepted as a remote argument. For
+    // file:// sources, pin the LFS endpoint to the plain local path via the
+    // `lfs.url` config — git-lfs uses that endpoint verbatim with its
+    // standalone file transfer agent — for the duration of the fetch.
+    let endpoint_override = local_lfs_endpoint(url);
+    if let Some(endpoint) = &endpoint_override {
+        let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
+            .args(["config", "lfs.url", endpoint])
+            .env_remove(GIT_DIR)
+            .current_dir(&repo.path)
+            .output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8(output.stderr)?;
+            return Err(GitError::LfsFetch(url.to_string(), stderr));
+        }
+    }
+
     let output = lfs
         .cmd()
         .arg("fetch")
@@ -847,7 +867,21 @@ fn fetch_lfs(
         .env_remove(GIT_DIR)
         .env_remove(GIT_LFS_SKIP_SMUDGE)
         .current_dir(&repo.path)
-        .output()?;
+        .output();
+
+    // Remove the endpoint override again so the database repo stays
+    // pristine (the source might live at a different path next time).
+    if endpoint_override.is_some()
+        && let Ok(git) = GIT.as_ref()
+    {
+        let _ = Command::new(git)
+            .args(["config", "--unset", "lfs.url"])
+            .env_remove(GIT_DIR)
+            .current_dir(&repo.path)
+            .output();
+    }
+
+    let output = output?;
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr)?;
         return Err(GitError::LfsFetch(url.to_string(), stderr));
@@ -855,6 +889,17 @@ fn fetch_lfs(
     tracing::debug!("git lfs fetch output: {:?}", output);
 
     Ok(repo.lfs_fsck_objects(revision))
+}
+
+/// Returns the plain local path to use as the `lfs.url` endpoint when `url`
+/// is a `file://` URL, or `None` for any other kind of URL.
+fn local_lfs_endpoint(url: &str) -> Option<String> {
+    let parsed = Url::parse(url).ok()?;
+    if parsed.scheme() != "file" {
+        return None;
+    }
+    let path = parsed.to_file_path().ok()?;
+    Some(dunce::simplified(&path).display().to_string())
 }
 
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
@@ -1129,6 +1174,33 @@ fn resolve_submodule_urls(repo_path: &Path, source_url: &Url) -> Result<(), GitE
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_local_lfs_endpoint() {
+        // file:// URLs become plain local paths (git-lfs can't handle the
+        // file:// protocol, especially on Windows).
+        if cfg!(windows) {
+            assert_eq!(
+                local_lfs_endpoint("file:///C:/repos/sample").as_deref(),
+                Some(r"C:\repos\sample")
+            );
+        } else {
+            assert_eq!(
+                local_lfs_endpoint("file:///repos/sample").as_deref(),
+                Some("/repos/sample")
+            );
+        }
+
+        // Everything else keeps its regular endpoint resolution.
+        assert_eq!(
+            local_lfs_endpoint("https://github.com/owner/repo.git"),
+            None
+        );
+        assert_eq!(
+            local_lfs_endpoint("ssh://git@github.com/owner/repo.git"),
+            None
+        );
+    }
 
     #[test]
     fn test_resolve_relative_url() {
