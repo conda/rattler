@@ -838,73 +838,42 @@ fn fetch_lfs(
     url: &str,
     revision: GitOid,
 ) -> Result<bool, GitError> {
-    tracing::debug!("fetching LFS objects for {url} at {revision}");
-
-    // git-lfs does not handle the `file://` protocol correctly (especially
-    // on Windows, where the drive letter in `file:///D:/...` gets mangled),
-    // while a bare local path is not accepted as a remote argument. For
-    // file:// sources, pin the LFS endpoint to the plain local path via the
-    // `lfs.url` config — git-lfs uses that endpoint verbatim with its
-    // standalone file transfer agent — for the duration of the fetch.
-    let endpoint_override = local_lfs_endpoint(url);
-    if let Some(endpoint) = &endpoint_override {
-        let output = Command::new(GIT.as_ref().map_err(Clone::clone)?)
-            .args(["config", "lfs.url", endpoint])
-            .env_remove(GIT_DIR)
-            .current_dir(&repo.path)
-            .output()?;
-        if !output.status.success() {
-            let stderr = String::from_utf8(output.stderr)?;
-            return Err(GitError::LfsFetch(url.to_string(), stderr));
-        }
-    }
+    let remote = lfs_remote_url(url);
+    tracing::debug!("fetching LFS objects for {remote} at {revision}");
 
     let output = lfs
         .cmd()
         .arg("fetch")
-        .arg(url)
+        .arg(&*remote)
         .arg(revision.as_str())
         .env_remove(GIT_DIR)
         .env_remove(GIT_LFS_SKIP_SMUDGE)
         .current_dir(&repo.path)
-        .output();
-
-    // Remove the endpoint override again so the database repo stays
-    // pristine (the source might live at a different path next time).
-    if endpoint_override.is_some()
-        && let Ok(git) = GIT.as_ref()
-    {
-        let _ = Command::new(git)
-            .args(["config", "--unset", "lfs.url"])
-            .env_remove(GIT_DIR)
-            .current_dir(&repo.path)
-            .output();
-    }
-
-    let output = output?;
+        .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr)?;
-        return Err(GitError::LfsFetch(url.to_string(), stderr));
+        return Err(GitError::LfsFetch(remote.into_owned(), stderr));
     }
     tracing::debug!("git lfs fetch output: {:?}", output);
 
     Ok(repo.lfs_fsck_objects(revision))
 }
 
-/// Returns the plain local path to use as the `lfs.url` endpoint when `url`
-/// refers to the local filesystem, or `None` for any other kind of URL.
-fn local_lfs_endpoint(url: &str) -> Option<String> {
-    let parsed = Url::parse(url).ok()?;
-    if parsed.scheme() == "file" {
-        let path = parsed.to_file_path().ok()?;
-        return Some(dunce::simplified(&path).display().to_string());
+/// The remote to pass to `git lfs fetch`. git-lfs' standalone file transfer
+/// agent only accepts a literal `file://` URL (or the name of a configured
+/// remote) — plain local paths fail with "missing protocol" and Windows
+/// drive-letter paths (`D:/repo`, parsed with a single-letter URL scheme)
+/// fail with "no valid file:// URLs found". Convert such local paths to
+/// canonical `file://` URLs; everything else passes through unchanged.
+fn lfs_remote_url(url: &str) -> std::borrow::Cow<'_, str> {
+    if let Ok(parsed) = Url::parse(url)
+        && parsed.scheme().len() == 1
+        && parsed.scheme().chars().all(|c| c.is_ascii_alphabetic())
+        && let Ok(file_url) = Url::from_file_path(Path::new(url))
+    {
+        return std::borrow::Cow::Owned(file_url.to_string());
     }
-    // A single-letter scheme is really a Windows drive letter (`D:/repo`):
-    // the string already is a plain local path, use it verbatim.
-    if parsed.scheme().len() == 1 && parsed.scheme().chars().all(|c| c.is_ascii_alphabetic()) {
-        return Some(url.to_string());
-    }
-    None
+    std::borrow::Cow::Borrowed(url)
 }
 
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
@@ -1181,36 +1150,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_local_lfs_endpoint() {
-        // file:// URLs become plain local paths (git-lfs can't handle the
-        // file:// protocol, especially on Windows).
+    fn test_lfs_remote_url() {
+        // A Windows drive-letter path parses as a URL with a single-letter
+        // scheme; git-lfs' standalone file agent needs it as a `file://`
+        // URL. (`Url::from_file_path` only accepts absolute paths, so this
+        // conversion naturally only happens on Windows hosts.)
         if cfg!(windows) {
             assert_eq!(
-                local_lfs_endpoint("file:///C:/repos/sample").as_deref(),
-                Some(r"C:\repos\sample")
+                lfs_remote_url("D:/a/work/lfs_repo"),
+                "file:///D:/a/work/lfs_repo"
             );
         } else {
-            assert_eq!(
-                local_lfs_endpoint("file:///repos/sample").as_deref(),
-                Some("/repos/sample")
-            );
+            assert_eq!(lfs_remote_url("D:/a/work/lfs_repo"), "D:/a/work/lfs_repo");
         }
 
-        // A Windows drive-letter path parses as a URL with a single-letter
-        // scheme; it is already a plain local path.
+        // file:// URLs and remote URLs pass through unchanged.
         assert_eq!(
-            local_lfs_endpoint("D:/a/work/lfs_repo").as_deref(),
-            Some("D:/a/work/lfs_repo")
-        );
-
-        // Everything else keeps its regular endpoint resolution.
-        assert_eq!(
-            local_lfs_endpoint("https://github.com/owner/repo.git"),
-            None
+            lfs_remote_url("file:///repos/sample"),
+            "file:///repos/sample"
         );
         assert_eq!(
-            local_lfs_endpoint("ssh://git@github.com/owner/repo.git"),
-            None
+            lfs_remote_url("https://github.com/owner/repo.git"),
+            "https://github.com/owner/repo.git"
+        );
+        assert_eq!(
+            lfs_remote_url("ssh://git@github.com/owner/repo.git"),
+            "ssh://git@github.com/owner/repo.git"
         );
     }
 
