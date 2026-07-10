@@ -7,6 +7,7 @@ use std::sync::Arc;
 use rattler_prefix_guard::AsyncPrefixGuard;
 use tracing::debug;
 
+use crate::LazyClient;
 use crate::{
     GitError, GitUrl, Reporter,
     git::{CheckoutOptions, GitReference},
@@ -16,7 +17,6 @@ use crate::{
 };
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -50,7 +50,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: GitUrl,
-        client: ClientWithMiddleware,
+        client: impl Into<LazyClient>,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
         checkout_options: CheckoutOptions,
