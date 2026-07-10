@@ -65,8 +65,7 @@ impl GitLfs {
             .args(["lfs", "version"])
             .env(GIT_TERMINAL_PROMPT, "0")
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+            .is_ok_and(|o| o.status.success());
         if ok {
             Ok(Self { git })
         } else {

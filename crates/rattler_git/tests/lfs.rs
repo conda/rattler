@@ -28,8 +28,7 @@ fn require_git_lfs(test: &str) -> bool {
     let ok = Command::new("git")
         .args(["lfs", "version"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+        .is_ok_and(|o| o.status.success());
     if !ok {
         eprintln!("skipping {test}: git-lfs is not installed");
     }
