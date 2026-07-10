@@ -145,13 +145,19 @@ pub enum MountError {
 
     /// The overlay's environment hash doesn't match the current lock file.
     #[error(
-        "the overlay was created for a different environment (expected hash \
-         '{expected}', found '{found}'). The overlay may contain files you \
-         want to keep.\n\
+        "the overlay at {} was created for a different environment (expected \
+         hash '{expected}', found '{found}'). The overlay may contain files \
+         you want to keep.\n\
          To reset the overlay for the new environment, remove it and remount:\n  \
-         rm -rf <overlay_dir>"
+         rm -rf {}",
+        .overlay_dir.display(),
+        .overlay_dir.display()
     )]
-    OverlayEnvHashMismatch { expected: String, found: String },
+    OverlayEnvHashMismatch {
+        expected: String,
+        found: String,
+        overlay_dir: PathBuf,
+    },
 
     /// The overlay directory was created by a different transport.
     #[error(
@@ -797,7 +803,14 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
                 Err(OverlayError::EnvHashMismatch {
                     expected, found, ..
                 }) => {
-                    return Err(MountError::OverlayEnvHashMismatch { expected, found }.into());
+                    return Err(MountError::OverlayEnvHashMismatch {
+                        expected,
+                        found,
+                        // For ProjFS the overlay is the virtualization root,
+                        // i.e. the mount point itself.
+                        overlay_dir: config.mount_point.clone(),
+                    }
+                    .into());
                 }
                 Err(OverlayError::TransportMismatch {
                     expected, found, ..
@@ -1152,7 +1165,12 @@ fn create_overlay(
         Err(OverlayError::EnvHashMismatch {
             expected, found, ..
         }) => {
-            return Err(MountError::OverlayEnvHashMismatch { expected, found }.into());
+            return Err(MountError::OverlayEnvHashMismatch {
+                expected,
+                found,
+                overlay_dir: overlay_dir.to_path_buf(),
+            }
+            .into());
         }
         Err(OverlayError::VersionMismatch { lock, .. }) => {
             tracing::info!("overlay state version changed; wiping and recreating");

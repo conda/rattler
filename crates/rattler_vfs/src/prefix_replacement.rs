@@ -107,10 +107,17 @@ impl TextPlan {
 /// Read a range from a text file with prefix replacements applied.
 ///
 /// The transformed output is the already-transformed shebang region (see
-/// [`plan_text_replacement`]) followed by the body — `source[region_end..]`
-/// with `old_prefix` → `new_prefix` spliced at each `body_offsets` position.
+/// [`TextPlan`]) followed by the body — `source[region_end..]` with
+/// `old_prefix` → `new_prefix` spliced at each `body_offsets` position.
 /// Because replacement can change length, output positions shift relative to
 /// source positions.
+///
+/// Seeks directly to the window: a binary search over `body_offsets` finds
+/// the first replacement overlapping `start` and only the overlapping chunks
+/// are copied, so the cost is `O(log k + (end - start))` rather than a walk
+/// of the file. Offsets that don't match the file (out of range, unsorted)
+/// yield best-effort bytes, never a panic — a panic on a FUSE/NFS read
+/// thread would take down the whole mount.
 ///
 /// Returns the bytes in the output range `[start, end)`.
 #[allow(clippy::too_many_arguments)]
@@ -137,43 +144,73 @@ pub fn text_ranged_read(
         return vec![];
     }
 
-    let capacity = actual_end - actual_start;
-    let mut buffer = Vec::with_capacity(capacity);
-    let mut out_pos = 0usize;
+    let mut buffer = Vec::with_capacity(actual_end - actual_start);
+    let region_out = transformed_region.len();
 
     // 1. The already-transformed shebang region.
-    emit_bytes(
-        transformed_region,
-        &mut out_pos,
-        actual_start,
-        actual_end,
-        &mut buffer,
-    );
+    emit_chunk(transformed_region, 0, actual_start, actual_end, &mut buffer);
 
-    // 2. The body: walk `source[region_end..]`, splicing at each body offset.
-    let mut src_pos = region_end;
-    let mut offset_idx = 0usize;
-    while src_pos < source.len() && buffer.len() < capacity {
-        if offset_idx < body_offsets.len() && src_pos == body_offsets[offset_idx] {
-            // At a replacement site: emit new_prefix bytes
-            emit_bytes(
-                new_prefix,
-                &mut out_pos,
-                actual_start,
-                actual_end,
-                &mut buffer,
-            );
-            // Skip the old prefix in the source
-            src_pos += old_prefix.len();
-            offset_idx += 1;
+    // Source position where the literal segment before replacement `j`
+    // starts, and its output position: the `j` replacements before it each
+    // shifted the output by `delta`.
+    let seg_src = |j: usize| -> usize {
+        if j == 0 {
+            region_end
         } else {
-            // Regular byte: copy through
-            if out_pos >= actual_start && out_pos < actual_end {
-                buffer.push(source[src_pos]);
-            }
-            out_pos += 1;
-            src_pos += 1;
+            body_offsets[j - 1].saturating_add(old_prefix.len())
         }
+    };
+    let seg_out = |j: usize| -> usize {
+        (region_out as isize + seg_src(j).saturating_sub(region_end) as isize + j as isize * delta)
+            .max(0) as usize
+    };
+
+    // 2. Seek: skip replacements whose output ends at or before the window.
+    // `seg_out(j + 1)` is the output position just after replacement `j`.
+    let mut lo = 0usize;
+    let mut hi = body_offsets.len();
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if seg_out(mid + 1) <= actual_start {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    let j0 = lo;
+
+    // 3. Emit the chunks overlapping the window from there.
+    let mut src_pos = seg_src(j0);
+    let mut out_pos = seg_out(j0);
+    for &offset in &body_offsets[j0..] {
+        if out_pos >= actual_end {
+            break;
+        }
+        // Literal bytes before this replacement, then the replacement itself.
+        out_pos = emit_source_range(
+            source,
+            src_pos,
+            offset,
+            out_pos,
+            actual_start,
+            actual_end,
+            &mut buffer,
+        );
+        out_pos = emit_chunk(new_prefix, out_pos, actual_start, actual_end, &mut buffer);
+        src_pos = offset.saturating_add(old_prefix.len());
+    }
+
+    // 4. The tail after the last replacement.
+    if out_pos < actual_end {
+        emit_source_range(
+            source,
+            src_pos,
+            source.len(),
+            out_pos,
+            actual_start,
+            actual_end,
+            &mut buffer,
+        );
     }
 
     buffer
@@ -186,7 +223,13 @@ pub fn text_ranged_read(
 /// c-string: each inner slice lists prefix start positions followed by the
 /// NUL terminator position.
 ///
-/// Output length always equals source length.
+/// Output length always equals source length. Because every group repays its
+/// replacements' byte deficit with padding, source and output positions
+/// coincide at each group boundary; seeking therefore skips whole groups
+/// with a binary search and copies only the chunks overlapping the window:
+/// `O(log g + (end - start))`. Groups that don't match the file (empty, out
+/// of range, unsorted) yield best-effort bytes, never a panic — a panic on a
+/// FUSE/NFS read thread would take down the whole mount.
 ///
 /// Returns the bytes in the output range `[start, end)`.
 pub fn binary_ranged_read(
@@ -202,77 +245,84 @@ pub fn binary_ranged_read(
         "new prefix cannot be longer than old prefix in binary mode"
     );
 
-    let actual_end = end.min(source.len());
-    let actual_start = start.min(source.len());
+    let src_len = source.len();
+    let actual_end = end.min(src_len);
+    let actual_start = start.min(src_len);
     if actual_start >= actual_end {
         return vec![];
     }
 
     let length_change = old_prefix.len() - new_prefix.len();
-    let capacity = actual_end - actual_start;
-    let mut buffer = Vec::with_capacity(capacity);
+    let mut buffer = Vec::with_capacity(actual_end - actual_start);
 
-    // Build a virtual stream of the fully-replaced file, emitting only
-    // the bytes that fall within [actual_start, actual_end).
-    let mut out_pos: usize = 0; // current position in the output stream
-    let mut src_pos: usize = 0; // current position in the source
+    // Seek: skip groups that end at or before the window start (output and
+    // source positions agree at group boundaries, so the comparison is exact).
+    let g0 = groups.partition_point(|group| {
+        group
+            .last()
+            .is_some_and(|&nul| nul.min(src_len) <= actual_start)
+    });
 
-    for group in groups {
-        let (prefix_offsets, nul_slice) = group.split_at(group.len() - 1);
-        let nul_pos = nul_slice[0];
+    let mut src_pos = if g0 == 0 {
+        0
+    } else {
+        groups[g0 - 1].last().copied().unwrap_or(0).min(src_len)
+    };
+    let mut out_pos = src_pos;
+
+    for group in &groups[g0..] {
+        if out_pos >= actual_end {
+            break;
+        }
+        // Each group lists prefix offsets followed by the NUL position (or
+        // the file size for a final unterminated c-string).
+        let Some((&nul_pos, prefix_offsets)) = group.split_last() else {
+            continue;
+        };
 
         for &offset in prefix_offsets {
-            // Emit source bytes from src_pos to this prefix
-            emit_range(
+            // Literal bytes before this prefix, then the replacement.
+            out_pos = emit_source_range(
                 source,
                 src_pos,
                 offset,
-                &mut out_pos,
+                out_pos,
                 actual_start,
                 actual_end,
                 &mut buffer,
             );
-            src_pos = offset;
-
-            // Emit new prefix
-            emit_bytes(
-                new_prefix,
-                &mut out_pos,
-                actual_start,
-                actual_end,
-                &mut buffer,
-            );
-            src_pos += old_prefix.len();
+            out_pos = emit_chunk(new_prefix, out_pos, actual_start, actual_end, &mut buffer);
+            src_pos = offset.saturating_add(old_prefix.len());
         }
 
-        // Emit source bytes from last prefix end to NUL position
-        emit_range(
+        // Bytes from the last prefix end to the NUL, then the zero padding
+        // that restores the group's original length.
+        out_pos = emit_source_range(
             source,
             src_pos,
             nul_pos,
-            &mut out_pos,
+            out_pos,
             actual_start,
             actual_end,
             &mut buffer,
         );
-        src_pos = nul_pos;
-
-        // Emit padding zeros
-        let padding = prefix_offsets.len() * length_change;
-        emit_zeros(padding, &mut out_pos, actual_start, actual_end, &mut buffer);
-
-        if buffer.len() >= capacity {
-            break;
-        }
+        src_pos = nul_pos.min(src_len);
+        out_pos = emit_zeros(
+            prefix_offsets.len().saturating_mul(length_change),
+            out_pos,
+            actual_start,
+            actual_end,
+            &mut buffer,
+        );
     }
 
-    // Emit remaining source bytes after the last group
-    if src_pos < source.len() && buffer.len() < capacity {
-        emit_range(
+    // Remaining source bytes after the last group.
+    if out_pos < actual_end {
+        emit_source_range(
             source,
             src_pos,
-            source.len(),
-            &mut out_pos,
+            src_len,
+            out_pos,
             actual_start,
             actual_end,
             &mut buffer,
@@ -282,67 +332,58 @@ pub fn binary_ranged_read(
     buffer
 }
 
-/// Emit bytes from `source[src_start..src_end]` into buffer, but only those
-/// that fall within the output window `[win_start, win_end)`.
+/// Append the overlap of `chunk` (whose output span begins at `out_pos`) with
+/// the window `[win_start, win_end)` to `buffer`. Returns the output position
+/// just after the chunk.
 #[inline]
-fn emit_range(
+fn emit_chunk(
+    chunk: &[u8],
+    out_pos: usize,
+    win_start: usize,
+    win_end: usize,
+    buffer: &mut Vec<u8>,
+) -> usize {
+    let chunk_end = out_pos.saturating_add(chunk.len());
+    if chunk_end > win_start && out_pos < win_end {
+        let from = win_start.saturating_sub(out_pos);
+        let to = chunk.len() - chunk_end.saturating_sub(win_end);
+        buffer.extend_from_slice(&chunk[from..to]);
+    }
+    chunk_end
+}
+
+/// [`emit_chunk`] for `source[src_start..src_end]`, clamping the range to the
+/// source bounds so offsets that don't match the file cannot panic a read.
+#[inline]
+fn emit_source_range(
     source: &[u8],
     src_start: usize,
     src_end: usize,
-    out_pos: &mut usize,
+    out_pos: usize,
     win_start: usize,
     win_end: usize,
     buffer: &mut Vec<u8>,
-) {
-    for &b in &source[src_start..src_end] {
-        if *out_pos >= win_start && *out_pos < win_end {
-            buffer.push(b);
-        }
-        *out_pos += 1;
-        if *out_pos >= win_end {
-            return;
-        }
-    }
+) -> usize {
+    let from = src_start.min(source.len());
+    let to = src_end.clamp(from, source.len());
+    emit_chunk(&source[from..to], out_pos, win_start, win_end, buffer)
 }
 
-/// Emit a slice of bytes into buffer within the output window.
-#[inline]
-fn emit_bytes(
-    data: &[u8],
-    out_pos: &mut usize,
-    win_start: usize,
-    win_end: usize,
-    buffer: &mut Vec<u8>,
-) {
-    for &b in data {
-        if *out_pos >= win_start && *out_pos < win_end {
-            buffer.push(b);
-        }
-        *out_pos += 1;
-        if *out_pos >= win_end {
-            return;
-        }
-    }
-}
-
-/// Emit `count` zero bytes into buffer within the output window.
+/// [`emit_chunk`] for a run of `count` zero bytes (binary-mode padding).
 #[inline]
 fn emit_zeros(
     count: usize,
-    out_pos: &mut usize,
+    out_pos: usize,
     win_start: usize,
     win_end: usize,
     buffer: &mut Vec<u8>,
-) {
-    for _ in 0..count {
-        if *out_pos >= win_start && *out_pos < win_end {
-            buffer.push(0);
-        }
-        *out_pos += 1;
-        if *out_pos >= win_end {
-            return;
-        }
+) -> usize {
+    let chunk_end = out_pos.saturating_add(count);
+    if chunk_end > win_start && out_pos < win_end {
+        let n = chunk_end.min(win_end) - out_pos.max(win_start);
+        buffer.resize(buffer.len() + n, 0);
     }
+    chunk_end
 }
 
 /// Compute text-mode replacement offsets by scanning the source for the placeholder.
@@ -802,8 +843,102 @@ mod tests {
         // Recorded shebang_length but the file doesn't start with `#!`:
         // the caller must fall back to scanning.
         assert!(
-            TextPlan::from_recorded(b"not a shebang\n", vec![], "/PFX", "/new", &Platform::Linux64)
-                .is_none()
+            TextPlan::from_recorded(
+                b"not a shebang\n",
+                vec![],
+                "/PFX",
+                "/new",
+                &Platform::Linux64
+            )
+            .is_none()
         );
+    }
+
+    // ── Seek correctness: every window equals the same slice of the
+    //    full output ────────────────────────────────────────────────
+
+    #[test]
+    fn text_windows_match_full_output() {
+        let mut source = Vec::new();
+        for i in 0..50u8 {
+            source.extend_from_slice(format!("chunk{i:02}/PFX").as_bytes());
+        }
+        let expected = String::from_utf8(source.clone())
+            .unwrap()
+            .replace("/PFX", "/replacement")
+            .into_bytes();
+        let offsets = collect_offsets(&source, b"/PFX");
+        for start in (0..expected.len()).step_by(7) {
+            for len in [1usize, 3, 17, 64] {
+                let end = start + len;
+                let out = text_ranged_read(
+                    &source,
+                    b"/PFX",
+                    b"/replacement",
+                    &offsets,
+                    0,
+                    b"",
+                    start,
+                    end,
+                );
+                assert_eq!(
+                    out,
+                    &expected[start..end.min(expected.len())],
+                    "window [{start}, {end})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn binary_windows_match_full_output() {
+        let mut source = Vec::new();
+        for i in 0..50u8 {
+            source.extend_from_slice(format!("path{i:02}=/PFXDIR/x\0pad").as_bytes());
+        }
+        let groups = collect_binary_offsets(&source, b"/PFXDIR");
+        let full = binary_ranged_read(&source, b"/PFXDIR", b"/np", &groups, 0, source.len());
+        assert_eq!(full.len(), source.len(), "binary mode preserves length");
+        for start in (0..source.len()).step_by(11) {
+            for len in [1usize, 5, 33] {
+                let end = (start + len).min(source.len());
+                let out = binary_ranged_read(&source, b"/PFXDIR", b"/np", &groups, start, end);
+                assert_eq!(out, &full[start..end], "window [{start}, {end})");
+            }
+        }
+    }
+
+    // ── Robustness: recorded offsets are trusted, so metadata that
+    //    doesn't match the file must yield bounded garbage, never a
+    //    panic (a panic on a FUSE/NFS read thread kills the mount) ────
+
+    #[test]
+    fn binary_malformed_groups_do_not_panic() {
+        let source = b"12345/PFX67890\x00tail";
+        let cases: &[Vec<Vec<usize>>] = &[
+            vec![vec![]],                       // empty group
+            vec![vec![5, 1000]],                // NUL past EOF
+            vec![vec![1000, 2000]],             // everything past EOF
+            vec![vec![9, 5, 14]],               // unsorted prefixes
+            vec![vec![5, 14], vec![3, 8]],      // overlapping groups
+            vec![vec![usize::MAX, usize::MAX]], // overflow bait
+        ];
+        for groups in cases {
+            for (s, e) in [(0usize, 100), (5, 10), (10, 5)] {
+                let out = binary_ranged_read(source, b"/PFX", b"/np", groups, s, e);
+                assert!(out.len() <= source.len(), "groups {groups:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn text_malformed_offsets_do_not_panic() {
+        let source = b"12345/PFX67890";
+        let cases: &[Vec<usize>] = &[vec![1000], vec![9, 2], vec![usize::MAX], vec![5, 6]];
+        for offsets in cases {
+            for (s, e) in [(0usize, 100), (3, 8)] {
+                let _ = text_ranged_read(source, b"/PFX", b"/replacement", offsets, 0, b"", s, e);
+            }
+        }
     }
 }
