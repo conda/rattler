@@ -892,14 +892,19 @@ fn fetch_lfs(
 }
 
 /// Returns the plain local path to use as the `lfs.url` endpoint when `url`
-/// is a `file://` URL, or `None` for any other kind of URL.
+/// refers to the local filesystem, or `None` for any other kind of URL.
 fn local_lfs_endpoint(url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
-    if parsed.scheme() != "file" {
-        return None;
+    if parsed.scheme() == "file" {
+        let path = parsed.to_file_path().ok()?;
+        return Some(dunce::simplified(&path).display().to_string());
     }
-    let path = parsed.to_file_path().ok()?;
-    Some(dunce::simplified(&path).display().to_string())
+    // A single-letter scheme is really a Windows drive letter (`D:/repo`):
+    // the string already is a plain local path, use it verbatim.
+    if parsed.scheme().len() == 1 && parsed.scheme().chars().all(|c| c.is_ascii_alphabetic()) {
+        return Some(url.to_string());
+    }
+    None
 }
 
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
@@ -1190,6 +1195,13 @@ mod tests {
                 Some("/repos/sample")
             );
         }
+
+        // A Windows drive-letter path parses as a URL with a single-letter
+        // scheme; it is already a plain local path.
+        assert_eq!(
+            local_lfs_endpoint("D:/a/work/lfs_repo").as_deref(),
+            Some("D:/a/work/lfs_repo")
+        );
 
         // Everything else keeps its regular endpoint resolution.
         assert_eq!(
