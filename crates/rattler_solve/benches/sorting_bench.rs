@@ -73,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .join("channels")
         .join("conda-forge");
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
-    let channel = Channel::from_directory(&channel_path);
+    let channel = Channel::try_from_directory(&channel_path).unwrap();
 
     let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");

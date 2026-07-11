@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/conda/rattler/compare/rattler-bin-v0.2.2...rattler-bin-v0.2.3) - 2026-07-09
+
+### Added
+
+- support CEP-42 in gateway ([#2462](https://github.com/conda/rattler/pull/2462))
+
 ## [0.2.2](https://github.com/conda/rattler/compare/rattler-bin-v0.2.1...rattler-bin-v0.2.2) - 2026-06-26
 
 ### Added

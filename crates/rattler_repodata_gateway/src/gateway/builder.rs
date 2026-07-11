@@ -133,6 +133,33 @@ impl GatewayBuilder {
         self
     }
 
+    /// Apply the shared rattler configuration (see [`rattler_config`]) to
+    /// this builder: the channel configuration is derived from
+    /// `repodata-config` and the maximum number of concurrent requests from
+    /// `concurrency.downloads`.
+    ///
+    /// Accepts a [`rattler_config::config::CommonConfig`]; a
+    /// `&ConfigBase<T>` of any extension coerces into it.
+    ///
+    /// Note that configuration that affects the HTTP client itself
+    /// (mirrors, S3, proxies, TLS, authentication) must be applied when
+    /// constructing the client passed to [`GatewayBuilder::with_client`].
+    #[cfg(feature = "rattler_config")]
+    #[must_use]
+    pub fn with_config(mut self, config: &rattler_config::config::CommonConfig) -> Self {
+        self.set_config(config);
+        self
+    }
+
+    /// Apply the shared rattler configuration to this builder. See
+    /// [`GatewayBuilder::with_config`].
+    #[cfg(feature = "rattler_config")]
+    pub fn set_config(&mut self, config: &rattler_config::config::CommonConfig) -> &mut Self {
+        self.set_channel_config(ChannelConfig::from(config));
+        self.set_max_concurrent_requests(config.concurrency.downloads);
+        self
+    }
+
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
@@ -174,5 +201,31 @@ impl GatewayBuilder {
                 concurrent_requests_semaphore,
             }),
         }
+    }
+}
+
+#[cfg(all(test, feature = "rattler_config"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_config_applies_repodata_and_concurrency() {
+        let (config, _) = rattler_config::ConfigBase::<rattler_config::NoExtension>::from_toml_str(
+            r#"
+                [repodata-config]
+                disable-zstd = true
+
+                [concurrency]
+                downloads = 7
+                "#,
+        )
+        .unwrap();
+
+        let builder = Gateway::builder().with_config(&config);
+        assert!(!builder.channel_config.default.zstd_enabled);
+        assert!(matches!(
+            builder.max_concurrent_requests,
+            MaxConcurrency::Limited(7)
+        ));
     }
 }

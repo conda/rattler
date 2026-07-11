@@ -253,6 +253,11 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     .into_diagnostic()
     .context("failed to fetch repodata")?;
 
+    // Surface any non-fatal CEP-42 channel-relation problems.
+    for warning in &repo_data.warnings {
+        eprintln!("warning: {warning}");
+    }
+
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     tracing::debug!("loaded {} records from repodata", total_records);
 

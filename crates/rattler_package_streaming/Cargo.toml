@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "benches/**", "**/snapshots/**"]
 name = "rattler_package_streaming"
-version = "0.26.6"
+version = "0.26.7"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"

@@ -95,6 +95,11 @@ pub trait Reporter: Send + Sync {
     /// client supports.
     #[cfg(feature = "sparse")]
     fn on_unsupported_repodata_revision(&self, _message: &UnsupportedRepodataRevision) {}
+
+    /// Called once per unique non-fatal warning as the query records
+    /// it. The warning is also collected on the query output.
+    #[cfg(feature = "gateway")]
+    fn on_gateway_warning(&self, _warning: &crate::GatewayWarning) {}
 }
 
 #[cfg(feature = "gateway")]

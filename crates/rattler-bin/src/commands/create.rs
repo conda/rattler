@@ -210,6 +210,11 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
     .into_diagnostic()
     .context("failed to load repodata")?;
 
+    // Surface any non-fatal CEP-42 channel-relation problems.
+    for warning in &repo_data.warnings {
+        eprintln!("warning: {warning}");
+    }
+
     // Determine the number of records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     println!(

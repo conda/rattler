@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, MergeError, ValidationError};
-#[cfg(feature = "edit")]
-use crate::edit::ConfigEditError;
 
 // Making the default values part of pixi_config to allow for printing the
 // default settings in the future.
@@ -51,10 +49,6 @@ impl ConcurrencyConfig {
 }
 
 impl Config for ConcurrencyConfig {
-    fn get_extension_name(&self) -> String {
-        "concurrency".to_string()
-    }
-
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             solves: if other.solves == ConcurrencyConfig::default().solves {
@@ -90,44 +84,5 @@ impl Config for ConcurrencyConfig {
 
     fn keys(&self) -> Vec<String> {
         vec!["solves".to_string(), "downloads".to_string()]
-    }
-
-    #[cfg(feature = "edit")]
-    fn set(
-        &mut self,
-        key: &str,
-        value: Option<String>,
-    ) -> Result<(), crate::config::ConfigEditError> {
-        let subkey = key.strip_prefix("concurrency.").unwrap();
-        match subkey {
-            "solves" => {
-                let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                    key: key.to_string(),
-                })?;
-                self.solves = value
-                    .parse()
-                    .map_err(|e| ConfigEditError::NumberParseError {
-                        key: key.to_string(),
-                        source: e,
-                    })?;
-            }
-            "downloads" => {
-                let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                    key: key.to_string(),
-                })?;
-                self.downloads = value
-                    .parse()
-                    .map_err(|e| ConfigEditError::NumberParseError {
-                        key: key.to_string(),
-                        source: e,
-                    })?;
-            }
-            _ => {
-                return Err(ConfigEditError::UnknownKeyInner {
-                    key: key.to_string(),
-                });
-            }
-        }
-        Ok(())
     }
 }

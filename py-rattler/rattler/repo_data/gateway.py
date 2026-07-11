@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Optional, Union
 
 from rattler.channel.channel import Channel
 from rattler.match_spec.match_spec import MatchSpec
@@ -13,9 +13,34 @@ from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.repo_data import ChannelRelations
 
 if TYPE_CHECKING:
     from rattler.repo_data.source import RepoDataSource
+
+
+ChannelRelationsMode = Literal["disabled", "warn", "strict"]
+"""How a gateway query should handle [CEP-42] `channel_relations`:
+
+* `'disabled'`: ignore declared relations; use only the user-supplied
+  channels. Setting ``channel_relations_max_depth=0`` has the same effect.
+* `'warn'` (default): follow relations recursively but tolerate problems:
+  cycles, malformed metadata (non-``../`` references, self-relations,
+  ``base==overrides``), depth-exceeded chains, and failed discovery fetches
+  surface via Python's standard :mod:`warnings` module as
+  :class:`rattler.exceptions.GatewayWarning` (a ``UserWarning`` subclass)
+  rather than aborting. **Deviates from CEP-42**, which mandates aborting
+  on cycles and malformed metadata.
+* `'strict'`: follow relations recursively and abort on any violation,
+  raising :class:`GatewayError`. CEP-42 compliant.
+
+Custom :class:`RepoDataSource` instances passed in ``sources`` are not subject
+to CEP-42 reordering — they keep their caller-specified position. Discovered
+transitive channels are slotted next to the user channel that introduced them,
+in CEP-42 priority order.
+
+[CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
+"""
 
 
 class _RepoDataSourceAdapter:
@@ -167,6 +192,8 @@ class Gateway:
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
+        channel_relations: Optional[ChannelRelationsMode] = None,
+        channel_relations_max_depth: Optional[int] = None,
     ) -> List[List[RepoDataRecord]]:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -193,10 +220,24 @@ class Gateway:
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
+                               uses the gateway default (``"warn"``). Non-fatal problems
+                               are reported via Python's ``warnings`` module as
+                               :class:`rattler.exceptions.GatewayWarning`.
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``. ``None`` uses the
+                                         default (10). ``0`` behaves like
+                                         ``channel_relations="disabled"``.
 
         Returns:
-            A list of lists of `RepoDataRecord`s. The outer list contains the results for each
-            source in the same order they are provided in the `sources` argument.
+            A list of lists of `RepoDataRecord`s. The outer list contains one entry per
+            queried source, in the order the sources were provided. When CEP-42
+            ``channel_relations`` are followed (the default) and a channel declares
+            relations, extra entries for the transitively discovered channels are
+            inserted next to the channel that referenced them, with a declared ``base``
+            placed before it. Pass ``channel_relations="disabled"`` (or
+            ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
+            positional correspondence with `sources`.
 
         Examples
         --------
@@ -219,6 +260,8 @@ class Gateway:
                 for spec in specs
             ],
             recursive=recursive,
+            channel_relations=channel_relations,
+            channel_relations_max_depth=channel_relations_max_depth,
         )
 
         # Convert the records into python objects
@@ -228,6 +271,8 @@ class Gateway:
         self,
         sources: Iterable[Union[Channel, str, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
+        channel_relations: Optional[ChannelRelationsMode] = None,
+        channel_relations_max_depth: Optional[int] = None,
     ) -> List[PackageName]:
         """Queries all the names of packages in channels or custom sources.
 
@@ -235,6 +280,11 @@ class Gateway:
             sources: The sources to query. Can be channels (by name, URL, or Channel object)
                      or custom RepoDataSource implementations.
             platforms: The platforms to query.
+            channel_relations: How to treat CEP-42 ``channel_relations`` metadata. ``None``
+                               uses the gateway default (``"warn"``).
+            channel_relations_max_depth: Maximum recursion depth when following
+                                         ``channel_relations``. ``None`` uses the
+                                         default (10).
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -257,10 +307,36 @@ class Gateway:
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
+            channel_relations=channel_relations,
+            channel_relations_max_depth=channel_relations_max_depth,
         )
 
         # Convert the records into python objects
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+
+    async def channel_relations(
+        self,
+        channel: Channel | str,
+        platform: Platform | PlatformLiteral,
+    ) -> Optional[ChannelRelations]:
+        """Returns the CEP-42 ``channel_relations`` declared by the given
+        ``(channel, platform)`` subdirectory, or ``None`` if none were declared
+        or the subdirectory doesn't exist.
+
+        Reuses the gateway's internal subdir cache, so if the pair has
+        already been fetched by a `query` this is free.
+
+        Arguments:
+            channel: The channel to read relations from.
+            platform: The platform whose subdir to inspect.
+        """
+        py_relations = await self._gateway.channel_relations(
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
+            platform._inner if isinstance(platform, Platform) else Platform(platform)._inner,
+        )
+        if py_relations is None:
+            return None
+        return ChannelRelations._from_inner(py_relations)
 
     def clear_repodata_cache(
         self,

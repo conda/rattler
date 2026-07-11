@@ -649,15 +649,25 @@ async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Antivirus scanners and the search indexer hold short-lived handles to
 /// freshly-extracted files, breaking `MoveFileEx`.
 /// See <https://github.com/prefix-dev/pixi/issues/5660>.
+///
+/// This deliberately uses `tokio::fs::rename` instead of the `fs_err` wrapper:
+/// `fs_err` wraps the OS error in a custom `io::Error` whose `raw_os_error()`
+/// returns `None` (and which exposes no `source()`), so the transient-error
+/// check below would never match and the rename would fail on the first
+/// attempt. The caller adds both paths to the error message, so no context is
+/// lost. See <https://github.com/prefix-dev/rattler-build/issues/2474>.
 #[cfg(windows)]
 async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     use rattler_networking::retry_policies::ExponentialBackoff;
 
+    // Roughly 25s of total wait: AV scans of large freshly-extracted packages
+    // (e.g. python, openssl) can hold handles for well over the ~5s the
+    // previous 5x100ms..2s policy allowed.
     let retry_policy = ExponentialBackoff::builder()
-        .retry_bounds(Duration::from_millis(100), Duration::from_secs(2))
-        .build_with_max_retries(5);
+        .retry_bounds(Duration::from_millis(100), Duration::from_secs(5))
+        .build_with_max_retries(10);
     retry_io_on_transient(
-        || tokio_fs::rename(from, to),
+        || tokio::fs::rename(from, to),
         is_transient_rename_error,
         retry_policy,
     )
@@ -1031,6 +1041,25 @@ mod test {
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
+    /// Canary for the constraint documented on `rename_with_retry`: `fs_err`
+    /// wraps errors in a custom `io::Error` whose `raw_os_error()` is `None`,
+    /// so `is_transient_rename_error` never matches it and no retry happens
+    /// (see prefix-dev/rattler-build#2474). If this test starts failing,
+    /// `fs_err` began propagating the OS error code and `rename_with_retry`
+    /// could switch back to the wrapper for richer error messages.
+    #[tokio::test]
+    async fn test_fs_err_rename_error_loses_raw_os_error() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+        let to = dir.path().join("dst");
+
+        let std_err = tokio::fs::rename(&missing, &to).await.unwrap_err();
+        assert!(std_err.raw_os_error().is_some());
+
+        let wrapped_err = super::tokio_fs::rename(&missing, &to).await.unwrap_err();
+        assert_eq!(wrapped_err.raw_os_error(), None);
+    }
+
     #[cfg(windows)]
     #[test]
     fn test_is_transient_rename_error() {
@@ -1204,7 +1233,10 @@ mod test {
                     let release_request = release_request.clone();
                     let release_done = release_done.clone();
                     async move {
-                        let result = super::tokio_fs::rename(from, to).await;
+                        // Use the same rename op as `rename_with_retry`; the
+                        // fs_err wrapper would strip `raw_os_error()` and make
+                        // the transient check below never match.
+                        let result = tokio::fs::rename(from, to).await;
                         if result.is_err() && !signaled.swap(true, Ordering::SeqCst) {
                             release_request.add_permits(1);
                             let _ = release_done.acquire().await;
@@ -1212,7 +1244,7 @@ mod test {
                         result
                     }
                 },
-                |_| true,
+                super::is_transient_rename_error,
                 policy,
             )
             .await

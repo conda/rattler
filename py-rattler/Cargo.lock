@@ -4009,7 +4009,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.46.0"
+version = "0.47.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4056,7 +4056,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4088,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.47.2"
+version = "0.48.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4128,13 +4128,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
- "console",
+ "dirs",
  "fs-err",
  "indexmap 2.14.0",
  "rattler_conda_types",
  "serde",
+ "serde_ignored",
  "serde_json",
  "thiserror 2.0.18",
  "toml",
@@ -4162,7 +4163,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.7"
+version = "0.30.8"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4200,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.3"
+version = "0.31.4"
 dependencies = [
  "ahash",
  "file_url",
@@ -4235,7 +4236,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.68"
+version = "0.2.69"
 dependencies = [
  "configparser",
  "dirs",
@@ -4264,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4287,6 +4288,7 @@ dependencies = [
  "itertools 0.14.0",
  "keyring-core",
  "netrc-rs",
+ "regex",
  "reqwest",
  "retry-policies",
  "serde",
@@ -4301,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.26.6"
+version = "0.26.7"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4359,7 +4361,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.29.7"
+version = "0.30.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4421,7 +4423,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4437,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.8"
+version = "0.27.9"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4456,7 +4458,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "7.2.0"
+version = "7.2.1"
 dependencies = [
  "futures",
  "hex",
@@ -4473,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "3.0.2"
+version = "3.0.3"
 dependencies = [
  "archspec",
  "libloading",
@@ -5127,6 +5129,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_ignored"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115dffd5f3853e06e746965a20dcbae6ee747ae30b543d91b0e089668bb07798"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

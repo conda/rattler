@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0](https://github.com/conda/rattler/compare/rattler-v0.46.0...rattler-v0.47.0) - 2026-07-09
+
+### Added
+
+- nicer OAuth callback page with per-project override ([#2455](https://github.com/conda/rattler/pull/2455))
+
+### Fixed
+
+- rename auth status --verbose to --details to avoid clap clash ([#2551](https://github.com/conda/rattler/pull/2551))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
 ## [0.46.0](https://github.com/conda/rattler/compare/rattler-v0.45.0...rattler-v0.46.0) - 2026-06-26
 
 ### Added

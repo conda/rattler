@@ -21,7 +21,7 @@ use crate::{
     match_spec::PyMatchSpec,
     platform::PyPlatform,
     record::PyRecord,
-    repo_data::gateway::{PyGateway, py_object_to_source},
+    repo_data::gateway::{PyGateway, emit_gateway_warnings, py_object_to_source},
 };
 
 impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<SolveStrategy> {
@@ -63,7 +63,7 @@ fn parse_exclude_newer(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -80,6 +80,8 @@ pub fn py_solve<'a>(
     exclude_newer_timestamp_ms: Option<i64>,
     exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
+    channel_relations: Option<Wrap<rattler_repodata_gateway::ChannelRelationsMode>>,
+    channel_relations_max_depth: Option<usize>,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -88,17 +90,23 @@ pub fn py_solve<'a>(
         .collect::<PyResult<_>>()?;
 
     future_into_py(py, async move {
-        let available_packages = gateway
+        let mut query = gateway
             .inner
             .query(
                 rust_sources,
                 platforms.into_iter().map(Into::into),
                 specs.clone(),
             )
-            .recursive(true)
-            .execute()
-            .await
-            .map_err(PyRattlerError::from)?;
+            .recursive(true);
+        if let Some(mode) = channel_relations {
+            query = query.channel_relations(mode.0);
+        }
+        if let Some(depth) = channel_relations_max_depth {
+            query = query.channel_relations_max_depth(depth);
+        }
+        let output = query.execute().await.map_err(PyRattlerError::from)?;
+        emit_gateway_warnings(output.warnings)?;
+        let available_packages = output.repodata;
 
         let exclude_newer =
             parse_exclude_newer(exclude_newer_timestamp_ms, exclude_newer_duration_seconds)?;
