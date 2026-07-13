@@ -16,6 +16,9 @@ native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_pa
 
 [dependencies]
 
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
 ahash = { workspace = true }
 anyhow = { workspace = true }

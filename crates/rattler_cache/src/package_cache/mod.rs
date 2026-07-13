@@ -163,9 +163,27 @@ impl From<PackageCacheLayerError> for PackageCacheError {
 impl PackageCacheLayer {
     /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
-        self.path
+        if self
+            .path
             .metadata()
             .is_ok_and(|m| m.permissions().readonly())
+        {
+            return true;
+        }
+        // Permission bits miss filesystems that are *mounted* read-only
+        // (CVMFS, squashfs, read-only bind mounts): a mode-0755 directory
+        // still reports as writable. Also check ST_RDONLY on the filesystem.
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            if let Ok(cpath) = std::ffi::CString::new(self.path.as_os_str().as_bytes()) {
+                let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+                if unsafe { libc::statvfs(cpath.as_ptr(), &mut stat) } == 0 {
+                    return stat.f_flag & libc::ST_RDONLY as libc::c_ulong != 0;
+                }
+            }
+        }
+        false
     }
 
     /// Validate the packages.

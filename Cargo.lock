@@ -5005,6 +5005,7 @@ dependencies = [
  "futures",
  "hex",
  "itertools 0.15.0",
+ "libc",
  "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
