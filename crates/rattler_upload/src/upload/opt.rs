@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
-use tracing::warn;
 use url::Url;
 
 /// Newtype wrapper for the force overwrite flag.
@@ -184,11 +183,11 @@ pub struct ArtifactoryOpts {
     pub channels: String,
 
     /// Your Artifactory username
-    #[arg(long, env = "ARTIFACTORY_USERNAME", hide = true)]
+    #[arg(long, env = "ARTIFACTORY_USERNAME")]
     pub username: Option<String>,
 
     /// Your Artifactory password
-    #[arg(long, env = "ARTIFACTORY_PASSWORD", hide = true)]
+    #[arg(long, env = "ARTIFACTORY_PASSWORD")]
     pub password: Option<String>,
 
     /// Your Artifactory token
@@ -196,39 +195,53 @@ pub struct ArtifactoryOpts {
     pub token: Option<String>,
 }
 
+/// Authentication provided directly for an Artifactory upload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ArtifactoryAuthentication {
+    /// Authenticate with a bearer token.
+    Token(String),
+    /// Authenticate with HTTP Basic authentication.
+    Basic {
+        /// The username to use for basic authentication.
+        username: String,
+        /// The password to use for basic authentication.
+        password: String,
+    },
+}
+
 #[derive(Debug)]
 #[allow(missing_docs)]
 pub struct ArtifactoryData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
-    pub token: Option<String>,
+    pub authentication: Option<ArtifactoryAuthentication>,
 }
 
 impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let token = match (value.username, value.password, value.token) {
-            (_, _, Some(token)) => Some(token),
-            (Some(_), Some(password), _) => {
-                warn!(
-                    "Using username and password for Artifactory authentication is deprecated, using password as token. Please use an API token instead."
-                );
-                Some(password)
+        let ArtifactoryOpts {
+            url,
+            channels,
+            username,
+            password,
+            token,
+        } = value;
+
+        match (username, password, token) {
+            (_, _, Some(token)) => Ok(Self::new(url, channels, Some(token))),
+            (Some(username), Some(password), None) => {
+                Ok(Self::new(url, channels, None).with_basic_auth(username, password))
             }
-            (Some(_), None, _) => {
-                return Err(miette::miette!(
-                    "Artifactory username provided without a password"
-                ));
-            }
-            (None, Some(_), _) => {
-                return Err(miette::miette!(
-                    "Artifactory password provided without a username"
-                ));
-            }
-            _ => None,
-        };
-        Ok(Self::new(value.url, value.channels, token))
+            (Some(_), None, None) => Err(miette::miette!(
+                "Artifactory username provided without a password"
+            )),
+            (None, Some(_), None) => Err(miette::miette!(
+                "Artifactory password provided without a username"
+            )),
+            (None, None, None) => Ok(Self::new(url, channels, None)),
+        }
     }
 }
 
@@ -238,8 +251,40 @@ impl ArtifactoryData {
         Self {
             url: url.into(),
             channels,
-            token,
+            authentication: token.map(ArtifactoryAuthentication::Token),
         }
+    }
+
+    /// Use HTTP Basic authentication with the given username and password.
+    pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
+        self
+    }
+}
+
+#[cfg(test)]
+mod artifactory_tests {
+    use super::{ArtifactoryAuthentication, ArtifactoryData, ArtifactoryOpts};
+
+    #[test]
+    fn username_and_password_are_kept_as_basic_auth() {
+        let options = ArtifactoryOpts {
+            url: "https://example.com/artifactory".parse().unwrap(),
+            channels: "test-channel".to_string(),
+            username: Some("test-user".to_string()),
+            password: Some("test-password".to_string()),
+            token: None,
+        };
+
+        let data = ArtifactoryData::try_from(options).unwrap();
+
+        assert_eq!(
+            data.authentication,
+            Some(ArtifactoryAuthentication::Basic {
+                username: "test-user".to_string(),
+                password: "test-password".to_string(),
+            })
+        );
     }
 }
 
