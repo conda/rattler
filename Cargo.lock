@@ -5164,6 +5164,7 @@ dependencies = [
  "dashmap",
  "dunce",
  "fs-err",
+ "rattler_networking",
  "rattler_prefix_guard",
  "reqwest",
  "serde",
