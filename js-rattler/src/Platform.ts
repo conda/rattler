@@ -21,6 +21,8 @@ export const platformNames = [
     "freebsd-32",
     "freebsd-64",
     "freebsd-arm64",
+    "freebsd-ppc64le",
+    "freebsd-ppc64",
     "osx-64",
     "osx-arm64",
     "win-32",
@@ -133,6 +135,10 @@ export function platformArch(platform: Platform): Arch | null {
             return "x86_64";
         case "freebsd-arm64":
             return "arm64";
+        case "freebsd-ppc64le":
+            return "ppc64le";
+        case "freebsd-ppc64":
+            return "ppc64";
         case "osx-64":
             return "x86_64";
         case "osx-arm64":

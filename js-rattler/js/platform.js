@@ -16,6 +16,8 @@ export const platformNames = [
     "freebsd-32",
     "freebsd-64",
     "freebsd-arm64",
+    "freebsd-ppc64le",
+    "freebsd-ppc64",
     "osx-64",
     "osx-arm64",
     "win-32",
