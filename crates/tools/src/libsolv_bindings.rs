@@ -1,4 +1,4 @@
-use crate::{project_root, reformat, update, Mode};
+use crate::{Mode, project_root, reformat, update};
 use std::borrow::Cow;
 use tempfile::TempDir;
 
@@ -132,7 +132,10 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     bindings.write(Box::new(&mut libsolv_bindings))?;
 
     // Add a preamble to the bindings to ensure clippy also passes.
-    let libsolv_bindings = reformat(format!("#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}", String::from_utf8(libsolv_bindings).unwrap()))?;
+    let libsolv_bindings = reformat(format!(
+        "#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}",
+        String::from_utf8(libsolv_bindings).unwrap()
+    ))?;
 
     // Patch out some platform weirdness
     let libsolv_bindings = patch_enum_representation(&libsolv_bindings, "SolverRuleinfo");

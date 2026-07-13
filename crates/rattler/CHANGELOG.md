@@ -7,6 +7,186 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0](https://github.com/conda/rattler/compare/rattler-v0.46.0...rattler-v0.47.0) - 2026-07-09
+
+### Added
+
+- nicer OAuth callback page with per-project override ([#2455](https://github.com/conda/rattler/pull/2455))
+
+### Fixed
+
+- rename auth status --verbose to --details to avoid clap clash ([#2551](https://github.com/conda/rattler/pull/2551))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
+## [0.46.0](https://github.com/conda/rattler/compare/rattler-v0.45.0...rattler-v0.46.0) - 2026-06-26
+
+### Added
+
+- add offline mode to rattler CLI ([#2537](https://github.com/conda/rattler/pull/2537))
+- default OAuth flow to device-code ([#2521](https://github.com/conda/rattler/pull/2521))
+
+## [0.45.0](https://github.com/conda/rattler/compare/rattler-v0.44.4...rattler-v0.45.0) - 2026-06-17
+
+### Added
+
+- use semaphore for concurrent downloads ([#2475](https://github.com/conda/rattler/pull/2475))
+- improved logout experience ([#2457](https://github.com/conda/rattler/pull/2457))
+- allow setting alternative target prefix on Installer ([#2484](https://github.com/conda/rattler/pull/2484))
+
+### Fixed
+
+- include sha256 in cache key for file:// packages ([#2507](https://github.com/conda/rattler/pull/2507))
+
+### Other
+
+- probe reflink support once per filesystem instead of per file ([#2508](https://github.com/conda/rattler/pull/2508))
+
+## [0.44.4](https://github.com/conda/rattler/compare/rattler-v0.44.3...rattler-v0.44.4) - 2026-06-09
+
+### Added
+
+- add signed entry-point launchers for win x86/x64/arm64 ([#2493](https://github.com/conda/rattler/pull/2493))
+
+## [0.44.3](https://github.com/conda/rattler/compare/rattler-v0.44.2...rattler-v0.44.3) - 2026-06-04
+
+### Other
+
+- updated the following local packages: rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.44.2](https://github.com/conda/rattler/compare/rattler-v0.44.1...rattler-v0.44.2) - 2026-06-03
+
+### Added
+
+- *(rattler-bin)* Add inject-into-prefix and remove-from-prefix subcommands ([#2465](https://github.com/conda/rattler/pull/2465))
+
+## [0.44.1](https://github.com/conda/rattler/compare/rattler-v0.44.0...rattler-v0.44.1) - 2026-06-03
+
+### Other
+
+- updated the following local packages: rattler_shell, rattler_menuinst
+
+## [0.44.0](https://github.com/conda/rattler/compare/rattler-v0.43.2...rattler-v0.44.0) - 2026-06-02
+
+### Added
+
+- add auth status command and update to keyring-core ([#2448](https://github.com/conda/rattler/pull/2448))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+### Other
+
+- Merge commit from fork
+- update some crates (sigstore, md5, sha2, ...) ([#2444](https://github.com/conda/rattler/pull/2444))
+
+## [0.43.2](https://github.com/conda/rattler/compare/rattler-v0.43.1...rattler-v0.43.2) - 2026-05-19
+
+### Fixed
+
+- reject path traversal in python entrypoints ([#2445](https://github.com/conda/rattler/pull/2445))
+
+## [0.43.1](https://github.com/conda/rattler/compare/rattler-v0.43.0...rattler-v0.43.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.43.0](https://github.com/conda/rattler/compare/rattler-v0.42.0...rattler-v0.43.0) - 2026-05-13
+
+### Added
+
+- implement shell flavors and fix workspace-wide initialization ([#2259](https://github.com/conda/rattler/pull/2259))
+
+### Fixed
+
+- sort paths returned by link_package_sync ([#2418](https://github.com/conda/rattler/pull/2418))
+- accept full URL as oauth issuer host argument ([#2397](https://github.com/conda/rattler/pull/2397))
+- handle missing symlinks on Windows install path ([#2399](https://github.com/conda/rattler/pull/2399))
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.42.0](https://github.com/conda/rattler/compare/rattler-v0.41.0...rattler-v0.42.0) - 2026-05-07
+
+### Added
+
+- add oauth default login ([#2402](https://github.com/conda/rattler/pull/2402))
+
+### Fixed
+
+- copy symlinked files when symbolic linking is disabled ([#2409](https://github.com/conda/rattler/pull/2409))
+
+## [0.41.0](https://github.com/conda/rattler/compare/rattler-v0.40.7...rattler-v0.41.0) - 2026-05-01
+
+### Added
+
+- [**breaking**] lockfile v7 ([#2348](https://github.com/conda/rattler/pull/2348))
+
+## [0.40.7](https://github.com/conda/rattler/compare/rattler-v0.40.6...rattler-v0.40.7) - 2026-04-30
+
+### Other
+
+- revert lockfile-v7 ([#2339](https://github.com/conda/rattler/pull/2339))
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.40.6](https://github.com/conda/rattler/compare/rattler-v0.40.5...rattler-v0.40.6) - 2026-04-13
+
+### Other
+
+- lock-file v7 ([#2026](https://github.com/conda/rattler/pull/2026))
+
+## [0.40.5](https://github.com/conda/rattler/compare/rattler-v0.40.4...rattler-v0.40.5) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell, rattler_networking, rattler_package_streaming, rattler_cache, rattler_menuinst
+
+## [0.40.4](https://github.com/conda/rattler/compare/rattler-v0.40.3...rattler-v0.40.4) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell, rattler_networking, rattler_package_streaming, rattler_cache, rattler_menuinst
+
+## [0.40.3](https://github.com/conda/rattler/compare/rattler-v0.40.2...rattler-v0.40.3) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.40.2](https://github.com/conda/rattler/compare/rattler-v0.40.1...rattler-v0.40.2) - 2026-03-20
+
+### Added
+
+- add allow external symlinks to options builder ([#2258](https://github.com/conda/rattler/pull/2258))
+
+### Fixed
+
+- Fall back to mkdir when clonefile fails on non-APFS filesystems ([#2260](https://github.com/conda/rattler/pull/2260))
+
+## [0.40.1](https://github.com/conda/rattler/compare/rattler-v0.40.0...rattler-v0.40.1) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.40.0](https://github.com/conda/rattler/compare/rattler-v0.39.15...rattler-v0.40.0) - 2026-03-16
+
+### Added
+
+- [**breaking**] Make name in MatchSpec non-optional ([#2132](https://github.com/conda/rattler/pull/2132))
+
+### Fixed
+
+- record actual link type in PrefixRecord ([#2169](https://github.com/conda/rattler/pull/2169))
+- validate symlink targets to prevent prefix escape ([#2143](https://github.com/conda/rattler/pull/2143))
+
 ## [0.39.15](https://github.com/conda/rattler/compare/rattler-v0.39.14...rattler-v0.39.15) - 2026-02-25
 
 ### Added

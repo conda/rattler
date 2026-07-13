@@ -16,8 +16,8 @@ use tempfile::NamedTempFile;
 
 use crate::utils::serde::is_none_or_empty_string;
 use crate::{
-    menuinst, package::FileMode, repo_data::RecordFromPath, repo_data_record::RepoDataRecord,
-    PackageName, PackageRecord,
+    PackageName, PackageRecord, menuinst, package::FileMode, repo_data::RecordFromPath,
+    repo_data_record::RepoDataRecord,
 };
 
 /// Information about every file installed with the package.

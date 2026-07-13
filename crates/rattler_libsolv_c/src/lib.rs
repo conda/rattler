@@ -1068,7 +1068,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn pool_calc_installsizechange(pool: *mut Pool, installedmap: *mut Map)
-        -> libc::c_longlong;
+    -> libc::c_longlong;
 }
 unsafe extern "C" {
     pub fn pool_add_fileconflicts_deps(pool: *mut Pool, conflicts: *mut Queue);
@@ -1338,7 +1338,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn repodata_lookup_str(data: *mut Repodata, solvid: Id, keyname: Id)
-        -> *const libc::c_char;
+    -> *const libc::c_char;
 }
 unsafe extern "C" {
     pub fn repodata_lookup_num(
@@ -2451,7 +2451,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn solver_set_flag(solv: *mut Solver, flag: libc::c_int, value: libc::c_int)
-        -> libc::c_int;
+    -> libc::c_int;
 }
 unsafe extern "C" {
     pub fn solver_get_flag(solv: *mut Solver, flag: libc::c_int) -> libc::c_int;

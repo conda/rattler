@@ -86,17 +86,19 @@ class MatchSpec:
         spec: str,
         strict: bool = False,
         exact_names_only: bool = True,
-        experimental_extras: bool = False,
-        experimental_conditionals: bool = False,
+        extras: bool = True,
+        conditionals: bool = True,
+        flags: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        When `experimental_extras` is `True`, extras syntax is enabled (e.g., `pkg[extras=[foo,bar]]`).
-
-        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg[when="python >=3.6"]`).
+        When `extras` is `True`, extras syntax (`pkg[extras=[foo,bar]]`) is
+        allowed. When `conditionals` is `True`, conditionals syntax
+        (`pkg[when="python >=3.6"]`) is allowed. When `flags` is `True`, flags
+        syntax (`pkg[flags=[cuda]]`) is allowed.
 
         ```python
         >>> MatchSpec("pip >=24.0")
@@ -115,7 +117,12 @@ class MatchSpec:
         """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(
-                spec, strict, exact_names_only, experimental_extras, experimental_conditionals
+                spec,
+                strict,
+                exact_names_only,
+                extras,
+                conditionals,
+                flags,
             )
         else:
             raise TypeError(

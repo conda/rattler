@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{PackageFile, RunExportsJson};
 use rattler_package_streaming::seek::read_package_file;
@@ -10,7 +10,7 @@ use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware};
 /// A representation of the `run_exports.json` file found in package archives.
 ///
 /// The `run_exports.json` file contains information about the run exports of a package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRunExportsJson {
@@ -115,11 +115,13 @@ impl PyRunExportsJson {
                 rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
                     RunExportsJson,
                 >(client.into(), url)
-                .await
-                .map(PyRunExportsJson::from)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                .await;
 
-            Python::with_gil(|py| Ok(Py::new(py, run_exports_json)?.into_any()))
+            Python::attach(|py| match run_exports_json {
+                Ok(r) => Ok(Some(Py::new(py, PyRunExportsJson::from(r))?.into_any())),
+                Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
+            })
         })
     }
 

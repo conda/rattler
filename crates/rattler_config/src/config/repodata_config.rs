@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::config::{Config, MergeError, ValidationError};
-#[cfg(feature = "edit")]
-use crate::edit::ConfigEditError;
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+// Note: no `deny_unknown_fields` — downstream configs (e.g. pixi) need
+// to silently tolerate deprecated per-channel keys like `disable-jlap`,
+// surfacing them as `serde_ignored` warnings rather than hard errors.
 pub struct RepodataChannelConfig {
     /// Disable bzip2 compression for repodata.
     #[serde(alias = "disable_bzip2")] // BREAK: remove to stop supporting snake_case alias
@@ -41,7 +42,7 @@ impl RepodataChannelConfig {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct RepodataConfig {
     /// Default configuration for all channels.
@@ -53,6 +54,76 @@ pub struct RepodataConfig {
     pub per_channel: HashMap<Url, RepodataChannelConfig>,
 }
 
+// Hand-rolled tolerant deserializer.
+//
+// The default `#[serde(flatten)]`-based deserialization here would
+// dispatch every TOML key either into `RepodataChannelConfig` (known
+// keys) or into the per-channel `HashMap<Url, _>` (which would fail
+// for any non-URL key). That makes deprecated keys like `disable-jlap`
+// a hard error.
+//
+// Instead: recognise the known control keys (with snake_case aliases),
+// route URL-parseable keys to `per_channel`, and silently consume
+// anything else as `IgnoredAny`. Downstreams that wrap the deserializer
+// in `serde_ignored` will see the unknown keys reported as ignored
+// fields, which lets them surface deprecation warnings without
+// breaking the config load.
+impl<'de> Deserialize<'de> for RepodataConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct RepodataConfigVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for RepodataConfigVisitor {
+            type Value = RepodataConfig;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a repodata config map")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut default = RepodataChannelConfig::default();
+                let mut per_channel = HashMap::new();
+
+                while let Some(key) = access.next_key::<String>()? {
+                    match key.as_str() {
+                        "disable-bzip2" | "disable_bzip2" => {
+                            default.disable_bzip2 = Some(access.next_value()?);
+                        }
+                        "disable-zstd" | "disable_zstd" => {
+                            default.disable_zstd = Some(access.next_value()?);
+                        }
+                        "disable-sharded" | "disable_sharded" => {
+                            default.disable_sharded = Some(access.next_value()?);
+                        }
+                        other => {
+                            if let Ok(url) = Url::parse(other) {
+                                per_channel.insert(url, access.next_value()?);
+                            } else {
+                                // Unknown / deprecated key — consume the value
+                                // and drop it. `serde_ignored` (if wrapping the
+                                // outer deserializer) will report this key.
+                                let _: serde::de::IgnoredAny = access.next_value()?;
+                            }
+                        }
+                    }
+                }
+
+                Ok(RepodataConfig {
+                    default,
+                    per_channel,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(RepodataConfigVisitor)
+    }
+}
+
 impl RepodataConfig {
     pub fn is_empty(&self) -> bool {
         self.default.is_empty() && self.per_channel.is_empty()
@@ -60,102 +131,114 @@ impl RepodataConfig {
 }
 
 impl Config for RepodataConfig {
-    fn get_extension_name(&self) -> String {
-        "repodata".to_string()
-    }
-
     /// Merge the given `RepodataConfig` into the current one.
-    /// The `other` configuration should take priority over the current one.
+    /// The `other` configuration takes priority over the current one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
-        // Make `other` mutable to allow for moving the values out of it.
+        // Note: `RepodataChannelConfig::merge` keeps `self` and only fills
+        // the gaps from its argument, so the higher-priority side must be
+        // the receiver.
         let mut merged = self.clone();
-        merged.default = merged.default.merge(other.default.clone());
+        merged.default = other.default.clone().merge(merged.default);
         for (url, config) in &other.per_channel {
             merged
                 .per_channel
                 .entry(url.clone())
-                .and_modify(|existing| *existing = existing.merge(config.clone()))
+                .and_modify(|existing| *existing = config.clone().merge(existing.clone()))
                 .or_insert_with(|| config.clone());
         }
         Ok(merged)
     }
 
     fn validate(&self) -> Result<(), ValidationError> {
-        if self.default.is_empty() && self.per_channel.is_empty() {
-            return Err(ValidationError::InvalidValue(
-                "repodata".to_string(),
-                "RepodataConfig must not be empty".to_string(),
-            ));
-        }
-
+        // An empty repodata config is the default and must be accepted
+        // (every downstream that doesn't opt in to repodata tuning sees
+        // exactly this shape).
         Ok(())
     }
 
     fn keys(&self) -> Vec<String> {
-        vec!["default".to_string(), "per-channel".to_string()]
+        vec![
+            "disable-bzip2".to_string(),
+            "disable-zstd".to_string(),
+            "disable-sharded".to_string(),
+        ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Unknown / deprecated top-level keys (e.g. legacy `disable-jlap`)
+    /// must NOT cause deserialization to fail. Downstreams that wrap
+    /// the deserializer in `serde_ignored` surface them as warnings.
+    #[test]
+    fn tolerant_deserialize_ignores_unknown_top_level_keys() {
+        let toml = r#"
+            disable-bzip2 = true
+            disable-jlap  = true
+            disable-zstd  = false
+        "#;
+        let config: RepodataConfig = toml::from_str(toml).expect("must accept unknown keys");
+        assert_eq!(config.default.disable_bzip2, Some(true));
+        assert_eq!(config.default.disable_zstd, Some(false));
+        assert!(config.per_channel.is_empty());
     }
 
-    #[cfg(feature = "edit")]
-    fn set(
-        &mut self,
-        key: &str,
-        value: Option<String>,
-    ) -> Result<(), crate::config::ConfigEditError> {
-        if key == "repodata-config" {
-            *self = value
-                .map(|v| {
-                    serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
-                        key: key.to_string(),
-                        source: e,
-                    })
-                })
-                .transpose()?
-                .unwrap_or_default();
-            return Ok(());
-        } else if !key.starts_with("repodata-config.") {
-            return Err(ConfigEditError::UnknownKeyInner {
-                key: key.to_string(),
-            });
-        }
+    /// Snake-case spellings for known fields are still accepted.
+    #[test]
+    fn tolerant_deserialize_accepts_snake_case_aliases() {
+        let toml = r#"
+            disable_bzip2 = true
+            disable_zstd  = true
+        "#;
+        let config: RepodataConfig = toml::from_str(toml).expect("snake_case must work");
+        assert_eq!(config.default.disable_bzip2, Some(true));
+        assert_eq!(config.default.disable_zstd, Some(true));
+    }
 
-        let subkey = key.strip_prefix("repodata-config.").unwrap();
-        match subkey {
-            "disable-bzip2" => {
-                self.default.disable_bzip2 = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "disable-zstd" => {
-                self.default.disable_zstd = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            "disable-sharded" => {
-                self.default.disable_sharded = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
-            _ => {
-                return Err(ConfigEditError::UnknownKeyInner {
-                    key: key.to_string(),
-                })
-            }
-        }
-        Ok(())
+    /// URL-shaped keys still route into `per_channel`.
+    #[test]
+    fn tolerant_deserialize_routes_url_keys_to_per_channel() {
+        let toml = r#"
+            disable-bzip2 = true
+
+            ["https://conda.anaconda.org/conda-forge"]
+            disable-sharded = true
+        "#;
+        let config: RepodataConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.default.disable_bzip2, Some(true));
+        assert_eq!(config.per_channel.len(), 1);
+        let key = Url::parse("https://conda.anaconda.org/conda-forge").unwrap();
+        assert_eq!(
+            config.per_channel.get(&key).unwrap().disable_sharded,
+            Some(true)
+        );
+    }
+
+    /// Per-channel sub-tables also tolerate unknown keys (we dropped
+    /// `deny_unknown_fields` from `RepodataChannelConfig` so legacy
+    /// per-channel `disable-jlap = true` no longer hard-errors).
+    #[test]
+    fn tolerant_deserialize_accepts_unknown_per_channel_keys() {
+        let toml = r#"
+            ["https://example.com/foo"]
+            disable-jlap   = true
+            disable-bzip2  = true
+        "#;
+        let config: RepodataConfig = toml::from_str(toml).unwrap();
+        let key = Url::parse("https://example.com/foo").unwrap();
+        assert_eq!(
+            config.per_channel.get(&key).unwrap().disable_bzip2,
+            Some(true)
+        );
+    }
+
+    /// An empty (default) `RepodataConfig` must validate successfully.
+    /// Previously `validate` rejected it.
+    #[test]
+    fn validate_accepts_empty() {
+        let config = RepodataConfig::default();
+        config.validate().expect("empty repodata config is valid");
     }
 }

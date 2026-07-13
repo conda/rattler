@@ -7,16 +7,16 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
-use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
+use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
 use super::{
+    Transaction, TransactionOperation,
     clobber_registry::{ClobberError, ClobberMode, ClobberRegistry, ClobberedPath},
     link_script::{PrePostLinkError, PrePostLinkResult},
-    unlink::{recursively_remove_empty_directories, UnlinkError},
-    Transaction, TransactionOperation,
+    unlink::{UnlinkError, recursively_remove_empty_directories},
 };
 use crate::install::link_script::LinkScriptError;
 
@@ -304,10 +304,10 @@ impl InstallDriver {
             let mut removed_directories = HashSet::new();
 
             for paths in record.paths_data.paths.iter() {
-                if paths.path_type != PathType::Directory {
-                    if let Some(parent) = paths.relative_path.parent() {
-                        removed_directories.insert(parent);
-                    }
+                if paths.path_type != PathType::Directory
+                    && let Some(parent) = paths.relative_path.parent()
+                {
+                    removed_directories.insert(parent);
                 }
             }
 

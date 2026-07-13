@@ -1,5 +1,7 @@
 # type: ignore
+import datetime
 import os
+import json
 import shutil
 import uuid
 from dataclasses import dataclass, field
@@ -32,7 +34,8 @@ def package_directory(tmp_path, package_file_ruff: Path, package_file_pytweening
 async def test_index(package_directory):
     await index_fs(package_directory)
 
-    assert set(os.listdir(package_directory)) == {"noarch", "win-64"}
+    # `.tmp` is the atomic-write staging dir created in the channel root; ignore it.
+    assert {name for name in os.listdir(package_directory) if name != ".tmp"} == {"noarch", "win-64"}
     assert "repodata.json" in os.listdir(package_directory / "win-64")
     with open(package_directory / "win-64/repodata.json") as f:
         assert "ruff-0.0.171-py310h298983d_0" in f.read()
@@ -60,6 +63,40 @@ async def test_index_specific_subdir_noarch(package_directory):
     assert "repodata.json" in os.listdir(package_directory / "noarch")
     with open(package_directory / "noarch/repodata.json") as f:
         assert "pytweening-1.0.4-pyhd8ed1ab_0" in f.read()
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revisions(package_directory):
+    # Timestamps round-trip through Unix milliseconds, so exercise millisecond
+    # precision and assert against the exact millisecond values.
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    oldest_ms = 1710000000123
+    newest_ms = 1773851561010
+    await index_fs(
+        package_directory,
+        Platform("noarch"),
+        repodata_revisions={
+            "v3": {
+                "n_packages": 123,
+                "oldest": epoch + datetime.timedelta(milliseconds=oldest_ms),
+                "newest": epoch + datetime.timedelta(milliseconds=newest_ms),
+            }
+        },
+        package_revision_assignment="latest",
+        force=True,
+    )
+
+    with open(package_directory / "noarch/repodata.json") as f:
+        repodata = json.load(f)
+
+    assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
+    assert repodata["info"]["repodata_revisions"] == {
+        "v3": {
+            "n_packages": 123,
+            "oldest": oldest_ms,
+            "newest": newest_ms,
+        }
+    }
 
 
 # ---------------------------------------- S3 ---------------------------------------- #

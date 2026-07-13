@@ -9,10 +9,10 @@ use std::{
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_condition};
 pub use libc_byte_slice::LibcByteSlice;
-use output::{get_required_packages, SolverOutput};
+use output::{SolverOutput, get_required_packages};
 use rattler_conda_types::{
-    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec,
-    RepoDataRecord, SolverResult,
+    MatchSpec, MatchSpecCondition, NamelessMatchSpec, RepoDataRecord, SolverResult,
+    match_spec::package_name_matcher::PackageNameMatcher,
 };
 use wrapper::{
     flags::SolverFlag,
@@ -83,6 +83,35 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
+fn unsupported_matchspec_flags() -> SolveError {
+    SolveError::UnsupportedOperations(vec!["matchspec flags".to_string()])
+}
+
+fn match_spec_condition_has_flags(condition: &MatchSpecCondition) -> bool {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => match_spec_has_flags(match_spec),
+        MatchSpecCondition::And(left, right) | MatchSpecCondition::Or(left, right) => {
+            match_spec_condition_has_flags(left) || match_spec_condition_has_flags(right)
+        }
+    }
+}
+
+fn match_spec_has_flags(match_spec: &MatchSpec) -> bool {
+    match_spec.flags.is_some()
+        || match_spec
+            .condition
+            .as_ref()
+            .is_some_and(match_spec_condition_has_flags)
+}
+
+fn ensure_matchspec_flags_supported(match_spec: &MatchSpec) -> Result<(), SolveError> {
+    if match_spec_has_flags(match_spec) {
+        Err(unsupported_matchspec_flags())
+    } else {
+        Ok(())
+    }
+}
+
 /// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
 pub struct Solver;
@@ -96,18 +125,22 @@ impl super::SolverImpl for Solver {
         TAvailablePackagesIterator: IntoIterator<Item = R>,
     >(
         &mut self,
-        task: SolverTask<TAvailablePackagesIterator>,
+        task: SolverTask<'a, TAvailablePackagesIterator>,
     ) -> Result<SolverResult, SolveError> {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
-                "timeout".to_string()
+                "timeout".to_string(),
             ]));
         }
 
         if task.strategy != SolveStrategy::Highest {
             return Err(SolveError::UnsupportedOperations(vec![
-                "strategy".to_string()
+                "strategy".to_string(),
             ]));
+        }
+
+        for spec in task.specs.iter().chain(task.constraints.iter()) {
+            ensure_matchspec_flags_supported(spec)?;
         }
 
         // Construct a default libsolv pool
@@ -194,7 +227,6 @@ impl super::SolverImpl for Solver {
                     &repo,
                     repodata.records.iter().copied(),
                     task.exclude_newer.as_ref(),
-                    task.min_age.as_ref(),
                 )?;
             }
 
@@ -206,20 +238,20 @@ impl super::SolverImpl for Solver {
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked", highest_priority);
         let installed_solvables =
-            add_repodata_records(&pool, &repo, &task.locked_packages, None, None)?;
+            add_repodata_records(&pool, &repo, task.locked_packages.iter().copied(), None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(task.locked_packages.iter().collect());
+        all_repodata_records.push(task.locked_packages.clone());
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned", highest_priority);
         let pinned_solvables =
-            add_repodata_records(&pool, &repo, &task.pinned_packages, None, None)?;
+            add_repodata_records(&pool, &repo, task.pinned_packages.iter().copied(), None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(task.pinned_packages.iter().collect());
+        all_repodata_records.push(task.pinned_packages.clone());
 
         // Create data-structures for solving
         pool.create_whatprovides();

@@ -6,11 +6,11 @@ use std::{
 };
 
 use crate::{
-    upload::{get_default_client, opt::ForceOverwrite},
     CondaForgeData,
+    upload::{get_default_client, opt::ForceOverwrite},
 };
 use fs_err::tokio as fs;
-use miette::{miette, IntoDiagnostic};
+use miette::{IntoDiagnostic, miette};
 use tracing::{debug, info};
 
 use super::{

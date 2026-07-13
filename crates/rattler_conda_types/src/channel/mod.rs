@@ -317,27 +317,45 @@ impl Channel {
 
     /// Constructs a channel from a directory path.
     ///
+    /// A relative path is canonicalized, so it must point to an existing
+    /// directory. Use [`Channel::try_from_directory`] for a variant that
+    /// returns an error instead of panicking.
+    ///
     /// # Panics
     ///
     /// Panics if the path is not an absolute path or could not be
     /// canonicalized.
     #[cfg(not(target_arch = "wasm32"))]
+    #[deprecated(
+        since = "0.47.3",
+        note = "this function panics on invalid paths; use `Channel::try_from_directory` instead"
+    )]
     pub fn from_directory(path: &Path) -> Self {
+        Self::try_from_directory(path).expect("could not create channel from directory")
+    }
+
+    /// Constructs a channel from a directory path.
+    ///
+    /// This is the non-panicking variant of [`Channel::from_directory`]. A
+    /// relative path is canonicalized, so it must point to an existing
+    /// directory; otherwise a [`ParseChannelError::InvalidPath`] is returned.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn try_from_directory(path: &Path) -> Result<Self, ParseChannelError> {
         let path = if path.is_absolute() {
             Cow::Borrowed(path)
         } else {
-            Cow::Owned(
-                path.canonicalize()
-                    .expect("path is a not a valid absolute path"),
-            )
+            Cow::Owned(path.canonicalize().map_err(|err| {
+                ParseChannelError::InvalidPath(format!("{}: {err}", path.display()))
+            })?)
         };
 
-        let url = Url::from_directory_path(path).expect("path is a valid url");
-        Self {
+        let url = Url::from_directory_path(&path)
+            .map_err(|()| ParseChannelError::InvalidPath(path.display().to_string()))?;
+        Ok(Self {
             platforms: None,
             base_url: url.into(),
             name: None,
-        }
+        })
     }
 
     /// Returns the name of the channel
@@ -425,22 +443,22 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    if channel.rfind(']').is_some() {
-        if let Some(start_platform_idx) = channel.find('[') {
-            let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms = platform_part
-                .split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(FromStr::from_str)
-                .collect::<Result<Vec<_>, _>>()?;
-            let platforms = if platforms.is_empty() {
-                None
-            } else {
-                Some(platforms)
-            };
-            return Ok((platforms, &channel[0..start_platform_idx]));
-        }
+    if channel.rfind(']').is_some()
+        && let Some(start_platform_idx) = channel.find('[')
+    {
+        let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
+        let platforms = platform_part
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
+        let platforms = if platforms.is_empty() {
+            None
+        } else {
+            Some(platforms)
+        };
+        return Ok((platforms, &channel[0..start_platform_idx]));
     }
 
     Ok((None, channel))
@@ -658,6 +676,24 @@ mod tests {
             channel.base_url.url().to_file_path().unwrap(),
             current_dir.join("dir/does/not_exist")
         );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn try_from_directory() {
+        // An existing absolute directory succeeds.
+        let current_dir = std::env::current_dir().expect("no current dir?");
+        let channel = Channel::try_from_directory(&current_dir).unwrap();
+        assert_eq!(channel.base_url.url().to_file_path().unwrap(), current_dir);
+
+        // A relative path to a directory that does not exist cannot be
+        // canonicalized and returns an error instead of panicking.
+        let missing = Path::new("this/directory/does/not/exist");
+        assert!(!missing.is_absolute());
+        assert!(matches!(
+            Channel::try_from_directory(missing),
+            Err(ParseChannelError::InvalidPath(_))
+        ));
     }
 
     #[test]

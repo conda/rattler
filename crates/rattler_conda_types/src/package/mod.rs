@@ -20,7 +20,7 @@ pub use {
     about::AboutJson,
     archive_identifier::{ArchiveIdentifier, CondaArchiveIdentifier, DistArchiveIdentifier},
     archive_type::{CondaArchiveType, DistArchiveType, WheelArchiveType},
-    entry_point::EntryPoint,
+    entry_point::{EntryPoint, EntryPointDottedField, ParseEntryPointError},
     files::Files,
     has_prefix::HasPrefix,
     has_prefix::HasPrefixEntry,

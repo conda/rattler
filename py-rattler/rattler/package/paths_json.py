@@ -85,11 +85,14 @@ class PathsJson:
         return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> PathsJson:
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[PathsJson]:
         """
         Fetches `info/paths.json` from a remote package archive URL.
         """
-        return cls._from_py_paths_json(await PyPathsJson.from_remote_url(client._client, url))
+        py_paths_json = await PyPathsJson.from_remote_url(client._client, url)
+        if py_paths_json is None:
+            return None
+        return cls._from_py_paths_json(py_paths_json)
 
     @staticmethod
     def package_path() -> Path:

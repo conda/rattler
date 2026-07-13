@@ -1,6 +1,8 @@
 from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
+    ChannelInfo,
+    ChannelRelations,
     PackageRecord,
     RepoData,
     RepoDataRecord,
@@ -37,6 +39,7 @@ from rattler.lock import (
     LockFile,
     Environment,
     LockChannel,
+    LockPlatform,
     PackageHashes,
     LockedPackage,
     CondaLockedSourcePackage,
@@ -55,6 +58,8 @@ __all__ = [
     "VersionWithSource",
     "MatchSpec",
     "NamelessMatchSpec",
+    "ChannelInfo",
+    "ChannelRelations",
     "PackageRecord",
     "Channel",
     "ChannelConfig",
@@ -79,6 +84,7 @@ __all__ = [
     "LockFile",
     "Environment",
     "LockChannel",
+    "LockPlatform",
     "PackageHashes",
     "LockedPackage",
     "CondaLockedSourcePackage",

@@ -1,5 +1,5 @@
 use pyo3::create_exception;
-use pyo3::exceptions::PyException;
+use pyo3::exceptions::{PyException, PyUserWarning};
 
 create_exception!(exceptions, InvalidVersionError, PyException);
 create_exception!(exceptions, InvalidVersionSpecError, PyException);
@@ -25,9 +25,11 @@ create_exception!(exceptions, ParseCondaLockError, PyException);
 create_exception!(exceptions, ConversionError, PyException);
 create_exception!(exceptions, RequirementError, PyException);
 create_exception!(exceptions, EnvironmentCreationError, PyException);
+create_exception!(exceptions, LockFileError, PyException);
 create_exception!(exceptions, ExtractError, PyException);
 create_exception!(exceptions, ActivationScriptFormatError, PyException);
 create_exception!(exceptions, GatewayError, PyException);
+create_exception!(exceptions, GatewayWarning, PyUserWarning);
 create_exception!(exceptions, InstallerError, PyException);
 create_exception!(exceptions, ParseExplicitEnvironmentSpecError, PyException);
 create_exception!(exceptions, ValidatePackageRecordsError, PyException);

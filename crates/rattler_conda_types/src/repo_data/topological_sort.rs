@@ -241,7 +241,7 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{get_test_data_dir, RepoDataRecord};
+    use crate::{RepoDataRecord, get_test_data_dir};
     use rstest::rstest;
 
     /// Ensures that the packages are the same before and after the sort, and panics otherwise

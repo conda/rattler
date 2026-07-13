@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 import datetime
 
 from rattler import VersionWithSource
@@ -200,6 +200,7 @@ class PackageRecord:
         license: Optional[str] = None,
         license_family: Optional[str] = None,
         python_site_packages_path: Optional[str] = None,
+        extra_depends: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -257,6 +258,8 @@ class PackageRecord:
             self._record.license = license
         if license_family is not None:
             self._record.license_family = license_family
+        if extra_depends is not None:
+            self._record.extra_depends = extra_depends
 
     @property
     def arch(self) -> Optional[str]:
@@ -395,6 +398,37 @@ class PackageRecord:
     @depends.setter
     def depends(self, value: List[str]) -> None:
         self._record.depends = value
+
+    @property
+    def extra_depends(self) -> Dict[str, List[str]]:
+        """
+        Conditional or optional dependencies. Maps a condition name (e.g. an
+        extra/feature name) to a list of dependency specifications that are
+        required when that condition is active.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord(
+        ...     name="requests",
+        ...     version="2.28.0",
+        ...     build="py3-none-any",
+        ...     build_number=0,
+        ...     subdir="noarch",
+        ... )
+        >>> record.extra_depends
+        {}
+        >>> record.extra_depends = {"security": ["cryptography >=3.0"]}
+        >>> record.extra_depends
+        {'security': ['cryptography >=3.0']}
+        >>>
+        ```
+        """
+        return self._record.extra_depends
+
+    @extra_depends.setter
+    def extra_depends(self, value: Dict[str, List[str]]) -> None:
+        self._record.extra_depends = value
 
     @property
     def features(self) -> Optional[str]:

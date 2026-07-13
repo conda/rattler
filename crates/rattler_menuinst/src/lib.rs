@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use rattler_conda_types::{
-    menuinst::{MenuMode, Tracker},
     Platform, PrefixRecord,
+    menuinst::{MenuMode, Tracker},
 };
 
 #[cfg(target_os = "linux")]

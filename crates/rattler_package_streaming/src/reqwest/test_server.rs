@@ -43,19 +43,16 @@ async fn clamp_suffix_range(
     mut req: Request,
     next: Next,
 ) -> Response {
-    if let Some(range_val) = req.headers().get(http::header::RANGE) {
-        if let Ok(range_str) = range_val.to_str() {
-            if let Some(suffix) = range_str.strip_prefix("bytes=-") {
-                if let Ok(n) = suffix.parse::<u64>() {
-                    if n > file_size {
-                        req.headers_mut().insert(
-                            http::header::RANGE,
-                            format!("bytes=0-{}", file_size - 1).parse().unwrap(),
-                        );
-                    }
-                }
-            }
-        }
+    if let Some(range_val) = req.headers().get(http::header::RANGE)
+        && let Ok(range_str) = range_val.to_str()
+        && let Some(suffix) = range_str.strip_prefix("bytes=-")
+        && let Ok(n) = suffix.parse::<u64>()
+        && n > file_size
+    {
+        req.headers_mut().insert(
+            http::header::RANGE,
+            format!("bytes=0-{}", file_size - 1).parse().unwrap(),
+        );
     }
     next.run(req).await
 }

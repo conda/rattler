@@ -153,7 +153,7 @@ class RepoDataRecord(PackageRecord):
         --------
         ```python
         >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
+        >>> repo_data = RepoData.from_path(
         ...     "../test-data/test-server/repo/noarch/repodata.json"
         ... )
         >>> repo_data.into_repo_data(Channel("test"))[0]

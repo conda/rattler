@@ -3,11 +3,11 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     install::{
+        InstallError, TransactionError,
         clobber_registry::{ClobberError, ClobberedPath},
         driver::PostProcessingError,
         link_script::PrePostLinkError,
         unlink::UnlinkError,
-        InstallError, TransactionError,
     },
     package_cache::PackageCacheError,
 };
@@ -22,6 +22,10 @@ pub enum InstallerError {
     /// Failed to construct a transaction
     #[error("failed to construct a transaction")]
     FailedToConstructTransaction(#[from] TransactionError),
+
+    /// A package's metadata could be used to escape the installation prefix.
+    #[error("refusing to install package with unsafe metadata: {0}")]
+    UnsafePackageRecord(#[source] rattler_conda_types::utils::InvalidPathComponentError),
 
     /// Failed to populate the cache with the package
     #[error("failed to fetch {0}")]

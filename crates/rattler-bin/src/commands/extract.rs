@@ -1,10 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use miette::{Context, IntoDiagnostic};
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use reqwest::Client;
 use url::Url;
 
+/// Extract a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
     /// Path or URL to the conda package archive (.tar.bz2 or .conda)
@@ -28,34 +27,6 @@ fn strip_package_extension(filename: &str) -> String {
     }
 }
 
-/// Creates an HTTP client with authentication middleware
-fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .into_diagnostic()
-        .context("Failed to create HTTP client")?;
-
-    let authentication_storage =
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-
-    let client = reqwest_middleware::ClientBuilder::new(download_client.clone())
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            authentication_storage.clone(),
-        )))
-        .with(rattler_networking::OciMiddleware::new(download_client));
-    #[cfg(feature = "s3")]
-    let client = client.with(rattler_networking::S3Middleware::new(
-        std::collections::HashMap::new(),
-        authentication_storage,
-    ));
-    #[cfg(feature = "gcs")]
-    let client = client.with(rattler_networking::GCSMiddleware::default());
-    let client = client.build();
-
-    Ok(client)
-}
-
 /// Determines the destination directory from a URL
 fn determine_destination_from_url(url: &Url) -> miette::Result<PathBuf> {
     // Extract filename from URL path
@@ -73,6 +44,7 @@ async fn extract_from_url(
     url: Url,
     destination: Option<PathBuf>,
     package_display: &str,
+    offline: bool,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
     let destination = destination.map_or_else(|| determine_destination_from_url(&url), Ok)?;
 
@@ -82,7 +54,7 @@ async fn extract_from_url(
         destination.display()
     );
 
-    let client = create_authenticated_client()?;
+    let client = super::client::create_client_with_middleware(offline)?;
 
     let result =
         rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
@@ -122,10 +94,10 @@ fn extract_from_path(
     Ok((destination, result))
 }
 
-pub async fn extract(opt: Opt) -> miette::Result<()> {
+pub async fn extract(opt: Opt, offline: bool) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
     let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
-        extract_from_url(url, opt.destination, &opt.package).await?
+        extract_from_url(url, opt.destination, &opt.package, offline).await?
     } else {
         extract_from_path(&opt.package, opt.destination)?
     };
@@ -135,8 +107,8 @@ pub async fn extract(opt: Opt) -> miette::Result<()> {
         console::style("✓").green(),
     );
     println!("  Destination: {}", destination.display());
-    println!("  SHA256: {:x}", result.sha256);
-    println!("  MD5: {:x}", result.md5);
+    println!("  SHA256: {}", hex::encode(result.sha256));
+    println!("  MD5: {}", hex::encode(result.md5));
     println!("  Size: {} bytes", result.total_size);
 
     Ok(())

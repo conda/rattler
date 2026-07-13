@@ -1,7 +1,7 @@
 //! Tests migrated to use the `SolverCase` helper for improved readability and consistency.
 
 use super::helpers::{PackageBuilder, SolverCase};
-use rattler_solve::SolverImpl;
+use rattler_solve::{ExcludeNewer, SolverImpl};
 
 /// Test that already-installed packages are favored when solving.
 pub(super) fn solve_favored<T: SolverImpl + Default>() {
@@ -81,13 +81,21 @@ pub(super) fn solve_exclude_newer<T: SolverImpl + Default>() {
         SolverCase::new("exclude_newer filters out packages newer than timestamp")
             .repository([foo_old, foo_new])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer(ExcludeNewer::from_datetime(
+                "2022-01-01T00:00:00Z"
+                    .parse()
+                    .expect("invalid timestamp format"),
+            ))
             .expect_present([("foo", "1.0")]),
         // When .conda is filtered by timestamp, fall back to .tar.bz2
         SolverCase::new("exclude_newer prefers .tar.bz2 when .conda is too new")
             .repository([foo_tarbz2.clone(), foo_conda, foo_newer_version])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer(ExcludeNewer::from_datetime(
+                "2022-01-01T00:00:00Z"
+                    .parse()
+                    .expect("invalid timestamp format"),
+            ))
             .expect_present([foo_tarbz2]),
     ]);
 }

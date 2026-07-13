@@ -12,7 +12,7 @@ use std::path::Path;
 
 use opendal::Operator;
 use rattler_conda_types::Platform;
-use rattler_index::{index, PreconditionChecks};
+use rattler_index::{PackageRevisionAssignment, PreconditionChecks, index};
 use tracing::Instrument;
 
 use super::etag_memory_backend::ETagMemoryBuilder;
@@ -29,8 +29,8 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 #[tokio::test]
 async fn test_concurrent_index_with_race_condition_and_retry() {
     use std::sync::{
-        atomic::{AtomicU8, Ordering},
         Arc,
+        atomic::{AtomicU8, Ordering},
     };
     use tokio::sync::Barrier;
 
@@ -101,19 +101,20 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     // Process 1: will write first
     let handle1 = tokio::spawn(
         async move {
-            let result = index(
+            index(
                 Some(Platform::NoArch),
                 op1,
                 None,
                 false,
                 false,
+                Vec::new(),
+                PackageRevisionAssignment::default(),
                 false,
                 1,
                 None,
                 PreconditionChecks::Enabled,
             )
-            .await;
-            result
+            .await
         }
         .instrument(tracing::info_span!("Process 1")),
     );
@@ -121,19 +122,20 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     // Process 2: will encounter race condition and retry
     let handle2 = tokio::spawn(
         async move {
-            let result = index(
+            index(
                 Some(Platform::NoArch),
                 op2,
                 None,
                 false,
                 false,
+                Vec::new(),
+                PackageRevisionAssignment::default(),
                 false,
                 1,
                 None,
                 PreconditionChecks::Enabled,
             )
-            .await;
-            result
+            .await
         }
         .instrument(tracing::info_span!("Process 2")),
     );

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use futures::future::OptionFuture;
-use http::StatusCode;
-use rattler_conda_types::{Channel, PackageName, ShardedRepodata};
+use rattler_conda_types::{
+    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+};
 use rattler_networking::LazyClient;
 use url::Url;
 
@@ -11,14 +12,16 @@ use super::add_trailing_slash;
 mod index;
 
 use crate::{
+    GatewayError, Reporter,
     fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
-        sharded_subdir::{decode_zst_bytes_async, parse_records},
+        sharded_subdir::{
+            decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+        },
         subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    GatewayError, Reporter,
 };
 
 pub struct ShardedSubdir {
@@ -54,10 +57,12 @@ impl ShardedSubdir {
         )
         .await
         .map_err(|e| match e {
-            GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
+            GatewayError::ReqwestError(e)
+                if e.status().is_some_and(is_missing_sharded_repodata_status) =>
+            {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
-                    subdir,
+                    subdir: subdir.clone(),
                     source: e.into(),
                 }))
             }
@@ -110,7 +115,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{shard:x}.msgpack.zst"))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
             .expect("invalid shard url");
 
         let shard_request = self
@@ -163,5 +168,13 @@ impl SubdirClient for ShardedSubdir {
 
     fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
+    }
+
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        &self.sharded_repodata.info.repodata_revisions
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sharded_repodata.info.channel_relations.as_ref()
     }
 }

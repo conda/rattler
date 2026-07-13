@@ -1,0 +1,29 @@
+---
+source: crates/rattler_lock/src/builder.rs
+expression: lock_file.render_to_string().unwrap()
+---
+version: 7
+platforms:
+- name: linux-64
+environments:
+  default:
+    channels: []
+    packages:
+      linux-64:
+      - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
+      - conda_source: my-pkg[abf1cfe6] @ ./my-pkg
+packages:
+- conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
+  channel: null
+  run_exports:
+    weak:
+    - libbar >=2
+    strong:
+    - libfoo >=1.0,<2
+- conda_source: my-pkg[abf1cfe6] @ ./my-pkg
+  version: 0.1.0
+  build: py_0
+  subdir: noarch
+  run_exports:
+    strong:
+    - libsource >=3

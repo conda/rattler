@@ -1,7 +1,7 @@
 //! Helpers to run commands in an activated environment.
 
 use rattler_conda_types::Platform;
-use std::process::{Command, Output};
+use std::process::{Command, ExitStatus, Output};
 use std::{collections::HashMap, path::Path};
 
 use crate::activation::{ActivationError, PathModificationBehavior};
@@ -22,6 +22,51 @@ pub enum RunError {
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Unsupported shell: {0}")]
+    UnsupportedShell(String),
+}
+
+/// Run a subprocess in an activated environment (inherited stdio, `command` non-empty).
+/// Uses the full process environment for activation; [`run_in_environment`] seeds from `env_vars` only.
+pub async fn run_command_in_environment(
+    prefix: &Path,
+    command: &[String],
+    shell: ShellEnum,
+    env_vars: &HashMap<String, String>,
+    cwd: Option<&Path>,
+) -> Result<ExitStatus, RunError> {
+    let activator = Activator::from_path(prefix, shell, Platform::current())?;
+
+    let current_path = std::env::var("PATH")
+        .ok()
+        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+    let conda_prefix = std::env::var("CONDA_PREFIX").ok().map(Into::into);
+
+    let activation_vars = ActivationVariables {
+        conda_prefix,
+        path: current_path,
+        path_modification_behavior: PathModificationBehavior::default(),
+        // Full process environment. `run_in_environment` uses only the caller `env_vars` map.
+        current_env: std::env::vars().collect(),
+    };
+
+    let activated_env =
+        tokio::task::spawn_blocking(move || activator.run_activation(activation_vars, None))
+            .await
+            .expect("Activated environment panicked")?;
+
+    let cmd = &command[0];
+    let args = &command[1..];
+    let mut child_cmd = tokio::process::Command::new(cmd);
+    child_cmd.args(args);
+    child_cmd.envs(&activated_env);
+    child_cmd.envs(env_vars);
+    if let Some(cwd) = cwd {
+        child_cmd.current_dir(cwd);
+    }
+
+    Ok(child_cmd.status().await?)
 }
 
 /// Execute a script in an activated environment.
@@ -69,11 +114,20 @@ pub fn run_in_environment(
     )?;
 
     match shell {
-        ShellEnum::Bash(_) => Ok(Command::new(shell.executable()).arg(file.path()).output()?),
+        ShellEnum::Bash(_)
+        | ShellEnum::Zsh(_)
+        | ShellEnum::Fish(_)
+        | ShellEnum::Xonsh(_)
+        | ShellEnum::NuShell(_) => {
+            Ok(Command::new(shell.executable()).arg(file.path()).output()?)
+        }
         ShellEnum::CmdExe(_) => Ok(Command::new(shell.executable())
             .arg("/c")
             .arg(file.path())
             .output()?),
-        _ => unimplemented!("Unsupported shell: {:?}", shell),
+        ShellEnum::PowerShell(_) => Ok(Command::new(shell.executable())
+            .arg("-File")
+            .arg(file.path())
+            .output()?),
     }
 }

@@ -6,7 +6,7 @@
 ))]
 fn main() {
     use clap::Parser;
-    use rattler_sandbox::{sandboxed_command, Exception, Opts};
+    use rattler_sandbox::{Exception, Opts, sandboxed_command};
 
     // Initialize the sandbox trampoline - this checks if we're being called
     // with __sandbox_trampoline__ and if so, sets up the actual sandbox.

@@ -114,6 +114,59 @@ def test_package_record_setters_and_serialization() -> None:
     assert record.legacy_bz2_md5 == b"1234" * 4
 
 
+def test_extra_depends_default_empty() -> None:
+    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    assert record.extra_depends == {}
+
+
+def test_extra_depends_via_init() -> None:
+    record = PackageRecord(
+        name="requests",
+        version="2.28.0",
+        build="py3-none-any",
+        build_number=0,
+        subdir="noarch",
+        extra_depends={"security": ["cryptography >=3.0", "pyOpenSSL >=0.14"]},
+    )
+    assert record.extra_depends == {"security": ["cryptography >=3.0", "pyOpenSSL >=0.14"]}
+
+
+def test_extra_depends_setter() -> None:
+    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record.extra_depends = {"socks": ["PySocks >=1.5.6"]}
+    assert record.extra_depends == {"socks": ["PySocks >=1.5.6"]}
+
+
+def test_extra_depends_multiple_conditions() -> None:
+    record = PackageRecord(name="requests", version="2.28.0", build="py3-none-any", build_number=0, subdir="noarch")
+    record.extra_depends = {
+        "security": ["cryptography >=3.0"],
+        "socks": ["PySocks >=1.5.6"],
+    }
+    assert set(record.extra_depends.keys()) == {"security", "socks"}
+    assert record.extra_depends["security"] == ["cryptography >=3.0"]
+    assert record.extra_depends["socks"] == ["PySocks >=1.5.6"]
+
+
+def test_extra_depends_serialization() -> None:
+    record = PackageRecord(
+        name="requests",
+        version="2.28.0",
+        build="py3-none-any",
+        build_number=0,
+        subdir="noarch",
+        extra_depends={"security": ["cryptography >=3.0"]},
+    )
+    json_data = json.loads(record.to_json())
+    assert json_data["extra_depends"] == {"security": ["cryptography >=3.0"]}
+
+
+def test_extra_depends_not_in_json_when_empty() -> None:
+    record = PackageRecord(name="pkg", version="1.0", build="py_0", build_number=0, subdir="noarch")
+    json_data = json.loads(record.to_json())
+    assert "extra_depends" not in json_data
+
+
 def test_package_record_topological_sort_robust() -> None:
     """
     Verify topological sort using a shuffled chain of 5 dependencies.

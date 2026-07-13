@@ -5,15 +5,15 @@ use std::{
 };
 
 use http::{
-    header::{ACCEPT, AUTHORIZATION},
     Extensions,
+    header::{ACCEPT, AUTHORIZATION},
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use url::{ParseError, Url};
 
-use crate::{mirror_middleware::create_404_response, LazyClient};
+use crate::{LazyClient, mirror_middleware::create_404_response};
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
@@ -180,7 +180,7 @@ impl OCIUrl {
                     return Err(OciMiddlewareError::InvalidUrl(
                         url.clone(),
                         "package filename must have the form name-version-build.conda",
-                    ))
+                    ));
                 }
             }
         } else if let Some(archive_name) = filename.strip_suffix(".tar.bz2") {
@@ -195,7 +195,7 @@ impl OCIUrl {
                     return Err(OciMiddlewareError::InvalidUrl(
                         url.clone(),
                         "package filename must have the form name-version-build.tar.bz2",
-                    ))
+                    ));
                 }
             }
         } else if filename.starts_with("repodata.json") {
@@ -332,7 +332,7 @@ mod tests {
     use crate::OciMiddleware;
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
         let client = reqwest::Client::new();
@@ -355,17 +355,15 @@ mod tests {
         // write out to tempfile
         assert_eq!(response.status(), 200);
         // check that the bytes are the same
-        let mut hasher = Sha256::new();
-        std::io::copy(&mut response.bytes().await.unwrap().as_ref(), &mut hasher).unwrap();
-        let hash = hasher.finalize();
+        let hash = Sha256::digest(response.bytes().await.unwrap());
         assert_eq!(
-            format!("{hash:x}"),
+            hex::encode(hash),
             "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
         );
     }
 
     // test pulling an image from OCI registry
-    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
         let client = reqwest::Client::new();

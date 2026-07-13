@@ -1,9 +1,9 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides};
 
 use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Default, PartialEq)]
 pub struct PyOverride {
@@ -54,7 +54,7 @@ impl PyOverride {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVirtualPackageOverrides {
@@ -110,6 +110,14 @@ impl PyVirtualPackageOverrides {
         self.inner.cuda = value.map(Into::into);
     }
     #[getter]
+    pub fn get_cuda_arch(&self) -> Option<PyOverride> {
+        self.inner.cuda_arch.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_cuda_arch(&mut self, value: Option<PyOverride>) {
+        self.inner.cuda_arch = value.map(Into::into);
+    }
+    #[getter]
     pub fn get_libc(&self) -> Option<PyOverride> {
         self.inner.libc.clone().map(Into::into)
     }
@@ -127,7 +135,7 @@ impl PyVirtualPackageOverrides {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVirtualPackage {

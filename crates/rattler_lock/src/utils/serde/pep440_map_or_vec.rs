@@ -3,7 +3,7 @@ use std::hash::BuildHasherDefault;
 use indexmap::IndexMap;
 use pep508_rs::{Requirement, VersionOrUrl};
 use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
+use serde_with::{DeserializeAs, DisplayFromStr, serde_as};
 
 pub(crate) struct Pep440MapOrVec;
 

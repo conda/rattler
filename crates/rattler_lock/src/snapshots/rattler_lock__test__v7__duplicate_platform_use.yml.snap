@@ -1,0 +1,5 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: error_message
+---
+"environments.default.packages: duplicate entry with key \"DUPLICATE\" at line 12 column 7"

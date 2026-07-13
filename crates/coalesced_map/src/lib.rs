@@ -73,7 +73,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::{DashMap, mapref::entry::Entry};
 use tokio::sync::broadcast;
 
 /// Error type returned by [`CoalescedMap::get_or_try_init`].
@@ -304,8 +304,8 @@ mod tests {
     use std::{
         future::pending,
         sync::{
-            atomic::{AtomicUsize, Ordering},
             Arc,
+            atomic::{AtomicUsize, Ordering},
         },
     };
     use tokio::task::JoinHandle;
@@ -534,10 +534,10 @@ mod tests {
 
         // Retain only keys with even numbers
         map.retain(|key, _| {
-            if let Some(num_str) = key.strip_prefix("key_") {
-                if let Ok(num) = num_str.parse::<i32>() {
-                    return num % 2 == 0;
-                }
+            if let Some(num_str) = key.strip_prefix("key_")
+                && let Ok(num) = num_str.parse::<i32>()
+            {
+                return num % 2 == 0;
             }
             false
         });

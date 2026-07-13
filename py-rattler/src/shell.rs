@@ -1,8 +1,8 @@
 use crate::error::PyRattlerError;
 use crate::platform::PyPlatform;
 use pyo3::{
-    exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pymethods, types::PyAnyMethods,
-    Bound, FromPyObject, PyAny, PyResult,
+    Borrowed, FromPyObject, PyAny, PyErr, PyResult, exceptions::PyValueError,
+    pybacked::PyBackedStr, pyclass, pymethods,
 };
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
@@ -11,7 +11,7 @@ use rattler_shell::{
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyActivationVariables {
@@ -27,8 +27,9 @@ impl From<ActivationVariables> for PyActivationVariables {
 #[repr(transparent)]
 pub struct Wrap<T>(pub T);
 
-impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Wrap<PathModificationBehavior> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         let as_py_str: PyBackedStr = ob.extract()?;
         let parsed = match as_py_str.as_ref() {
             "prepend" => PathModificationBehavior::Prepend,
@@ -37,7 +38,7 @@ impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "keep must be one of {{'prepend', 'append', 'replace'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -104,7 +105,7 @@ impl PyActivationResult {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum PyShellEnum {
     Bash,
@@ -118,7 +119,7 @@ pub enum PyShellEnum {
 impl PyShellEnum {
     pub fn to_shell_enum(&self) -> ShellEnum {
         match self {
-            PyShellEnum::Bash => Bash.into(),
+            PyShellEnum::Bash => Bash::default().into(),
             PyShellEnum::Zsh => Zsh.into(),
             PyShellEnum::Xonsh => Xonsh.into(),
             PyShellEnum::CmdExe => CmdExe.into(),

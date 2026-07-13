@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
 #[derive(Clone, Debug)]
@@ -133,6 +133,10 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
+    fn name(&self) -> String {
+        format!("file ({})", self.path.display())
+    }
+
     fn store(
         &self,
         host: &str,
@@ -146,6 +150,15 @@ impl StorageBackend for FileStorage {
     fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
         let cache = self.cache.read().unwrap();
         Ok(cache.content.get(host).cloned())
+    }
+
+    fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
+        let cache = self.cache.read().unwrap();
+        Ok(cache
+            .content
+            .iter()
+            .map(|(host, auth)| (host.clone(), auth.clone()))
+            .collect())
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {

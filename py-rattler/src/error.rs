@@ -1,18 +1,18 @@
 use std::{error::Error, io};
 
-use pyo3::exceptions::PyValueError;
 use pyo3::PyErr;
+use pyo3::exceptions::PyValueError;
 use rattler::install::TransactionError;
 use rattler_conda_types::{
-    version_spec::ParseVersionSpecError, ConvertSubdirError, InvalidPackageNameError,
-    PackageNameMatcherParseError, ParseArchError, ParseChannelError, ParseMatchSpecError,
-    ParsePlatformError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
-    VersionExtendError,
+    ConvertSubdirError, InvalidPackageNameError, PackageNameMatcherParseError, ParseArchError,
+    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
+    ValidatePackageRecordsError, VersionBumpError, VersionExtendError,
+    version_spec::ParseVersionSpecError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
 use rattler_package_streaming::ExtractError;
-use rattler_repodata_gateway::{fetch::FetchRepoDataError, GatewayError};
+use rattler_repodata_gateway::{GatewayError, fetch::FetchRepoDataError};
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;
 use rattler_virtual_packages::DetectVirtualPackageError;
@@ -69,6 +69,8 @@ pub enum PyRattlerError {
     RequirementError(String),
     #[error("{0}")]
     EnvironmentCreationError(String),
+    #[error("{0}")]
+    LockFileError(String),
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
     #[error(transparent)]
@@ -177,6 +179,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::EnvironmentCreationError(err) => {
                 crate::exceptions::EnvironmentCreationError::new_err(err)
             }
+            PyRattlerError::LockFileError(err) => crate::exceptions::LockFileError::new_err(err),
             PyRattlerError::ExtractError(err) => {
                 crate::exceptions::ExtractError::new_err(pretty_print_error(&err))
             }

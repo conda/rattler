@@ -35,14 +35,14 @@ use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
 use async_zip::base::read::seek::ZipFileReader;
 use http::HeaderMap;
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
-use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
+use rattler_redaction::{DEFAULT_REDACTION_STR, redact_known_secrets_from_url};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
 use crate::ExtractError;
+use crate::tokio::async_read::{conda_entry_prefix, get_file_from_tar_archive};
 
 /// Default number of bytes to fetch from the end of the file.
 /// 64KB should be enough for most packages to include the EOCD, Central Directory,
@@ -97,8 +97,7 @@ pub async fn fetch_file_from_remote_sparse(
         .find(|(_, e)| {
             e.filename()
                 .as_str()
-                .map(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
-                .unwrap_or(false)
+                .is_ok_and(|f| f.starts_with(prefix) && f.ends_with(".tar.zst"))
         })
         .ok_or(ExtractError::MissingComponent)?;
 

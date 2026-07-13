@@ -2,12 +2,12 @@ use std::borrow::Cow;
 
 use fs_err::tokio as fs;
 use miette::IntoDiagnostic;
+use rattler_conda_types::PackageName;
 use rattler_conda_types::package::AboutJson;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use rattler_conda_types::PackageName;
+use reqwest::Client;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use tracing::info;
@@ -16,15 +16,13 @@ use url::Url;
 use crate::upload::opt::ForceOverwrite;
 
 use super::package::ExtractedPackage;
-use super::VERSION;
+use crate::tool_configuration::APP_USER_AGENT;
 
 /// Errors that can occur during Anaconda.org operations.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum AnacondaError {
     /// A conda token is required but a different authentication type was found.
-    #[error(
-        "conda token required for anaconda.org, but a different authentication type was found"
-    )]
+    #[error("conda token required for anaconda.org, but a different authentication type was found")]
     WrongAuthenticationType,
 
     /// No API key was provided and none was found in the keychain.
@@ -142,7 +140,7 @@ impl Anaconda {
 
         let client = Client::builder()
             .no_gzip()
-            .user_agent(format!("rattler-build/{VERSION}"))
+            .user_agent(APP_USER_AGENT)
             .default_headers(default_headers)
             .build()
             .expect("failed to create client");
@@ -445,7 +443,7 @@ impl Anaconda {
 
         debug!("Uploading file to S3 Bucket {}", parsed_response.post_url);
 
-        let base64_md5 = package.base64_md5().into_diagnostic()?;
+        let md5_base64 = package.md5_base64().into_diagnostic()?;
         let file_size = package.file_size().into_diagnostic()?;
 
         let mut form_data = Form::new();
@@ -461,7 +459,7 @@ impl Anaconda {
         let content = fs::read(package.path()).await.into_diagnostic()?;
 
         form_data = form_data.text("Content-Length", file_size.to_string());
-        form_data = form_data.text("Content-MD5", base64_md5);
+        form_data = form_data.text("Content-MD5", md5_base64);
         form_data = form_data.part("file", Part::bytes(content));
 
         reqwest::Client::new()
@@ -510,9 +508,9 @@ mod test {
     use std::net::SocketAddr;
 
     use axum::{
+        Router,
         http::StatusCode,
         routing::{get, post},
-        Router,
     };
     use url::Url;
 

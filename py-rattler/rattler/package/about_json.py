@@ -78,11 +78,14 @@ class AboutJson:
         return AboutJson._from_py_about_json(PyAboutJson.from_str(string))
 
     @classmethod
-    async def from_remote_url(cls, client: Client, url: str) -> AboutJson:
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[AboutJson]:
         """
         Fetches `info/about.json` from a remote package archive URL.
         """
-        return cls._from_py_about_json(await PyAboutJson.from_remote_url(client._client, url))
+        py_about_json = await PyAboutJson.from_remote_url(client._client, url)
+        if py_about_json is None:
+            return None
+        return cls._from_py_about_json(py_about_json)
 
     @staticmethod
     def package_path() -> Path:

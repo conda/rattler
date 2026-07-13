@@ -1,15 +1,14 @@
 use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
-use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{
-    ChannelPriority, MinimumAgeConfig, SolveError, SolveStrategy, SolverImpl, SolverTask,
+    ChannelPriority, ExcludeNewer, SolveError, SolveStrategy, SolverImpl, SolverTask,
 };
 use url::Url;
 
@@ -19,6 +18,7 @@ mod helpers;
 mod min_age_tests;
 mod solver_case_tests;
 mod strategy_tests;
+mod variant_flags_tests;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -122,12 +122,13 @@ impl PackageBuilder {
                     sha256: Some(dummy_sha256_hash()),
                     size: None,
                     arch: None,
-                    experimental_extra_depends: BTreeMap::new(),
+                    extra_depends: BTreeMap::new(),
                     platform: None,
                     depends: Vec::new(),
                     constrains: Vec::new(),
                     track_features: Vec::new(),
                     features: None,
+                    flags: Vec::new(),
                     noarch: NoArchType::default(),
                     license: None,
                     license_family: None,
@@ -280,8 +281,8 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
-        use chrono::{DateTime, Utc};
         use itertools::Itertools;
+        use jiff::Timestamp;
 
         #[test]
         fn test_solve_quetz() {
@@ -466,7 +467,7 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_with_exemption() {
-            crate::min_age_tests::solve_min_age_with_exemption::<$T>();
+            crate::min_age_tests::solve_min_age_with_package_override::<$T>();
         }
 
         #[test]
@@ -476,7 +477,7 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_exempt_dependency() {
-            crate::min_age_tests::solve_min_age_exempt_dependency::<$T>();
+            crate::min_age_tests::solve_min_age_package_override_dependency::<$T>();
         }
 
         #[test]
@@ -491,7 +492,12 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_min_age_exempt_no_timestamp() {
-            crate::min_age_tests::solve_min_age_exempt_no_timestamp::<$T>();
+            crate::min_age_tests::solve_min_age_package_override_no_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_per_channel() {
+            crate::min_age_tests::solve_min_age_per_channel::<$T>();
         }
 
         #[test]
@@ -660,11 +666,32 @@ mod libsolv_c {
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
+
+    #[test]
+    fn test_root_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_root_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_dependency_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_dependency_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_condition_flags_are_unsupported() {
+        crate::variant_flags_tests::solve_condition_flags_are_unsupported::<
+            rattler_solve::libsolv_c::Solver,
+        >();
+    }
 
     #[test]
     #[cfg(target_family = "unix")]
@@ -707,9 +734,9 @@ mod libsolv_c {
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
-                min_age: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
+                cancellation_token: None,
             })
             .unwrap()
             .records;
@@ -760,19 +787,66 @@ mod libsolv_c {
 #[cfg(feature = "resolvo")]
 mod resolvo {
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord,
-        VersionWithSource,
+        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
+        package::DistArchiveIdentifier,
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        FromStr, GenericVirtualPackage, PackageBuilder, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
+
+    /// When a single node in the conflict merges many versions, the version list
+    /// is abbreviated with an ellipsis instead of printing every version.
+    #[test]
+    fn test_unsat_merged_versions_are_abbreviated() {
+        // Eight versions of `foo`, all depending on a `bar` that does not exist.
+        // They merge into a single node in the conflict graph.
+        let repo_data: Vec<RepoDataRecord> = (1..=8)
+            .map(|major| {
+                let version = format!("{major}.0");
+                let mut record = PackageBuilder::new("foo")
+                    .version(&version)
+                    .depends(["bar ==1.0"])
+                    .build();
+                // Give each build a unique identifier so they are not deduplicated.
+                record.identifier.identifier.version = version;
+                record.identifier.identifier.build_string = format!("h{major}_0");
+                record
+            })
+            .collect();
+
+        let task = SolverTask {
+            specs: vec![MatchSpec::from_str("foo", ParseStrictness::Lenient).unwrap()],
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let err = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        insta::assert_snapshot!(err, @r###"
+        Cannot solve the request because of: foo * cannot be installed because there are no viable options:
+        └─ foo 1.0 | 2.0 | ... | 8.0 would require
+           └─ bar ==1.0, for which no candidates were found.
+        "###);
+    }
+
+    #[test]
+    fn test_flags_select_matching_variant() {
+        crate::variant_flags_tests::solve_flags_select_matching_variant::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_dependency_flags_select_matching_variant() {
+        crate::variant_flags_tests::solve_dependency_flags_select_matching_variant::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
 
     #[test]
     fn test_solve_locked() {
@@ -812,13 +886,13 @@ mod resolvo {
 
     #[test]
     fn test_exclude_newer_error() {
-        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+        let date = "2021-12-12T12:12:12Z".parse::<Timestamp>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foo>=4"],
-                exclude_newer: Some(date),
+                exclude_newer: Some(date.into()),
                 ..SimpleSolveTask::default()
             },
         );
@@ -902,6 +976,27 @@ mod resolvo {
         let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
 
         assert!(matches!(solve_error, SolveError::Unsolvable(_)));
+    }
+
+    /// Verifies that a [`CancellationToken`] that is already cancelled causes
+    /// the solver to return [`SolveError::Cancelled`] immediately.
+    #[test]
+    fn test_cancellation_token_pre_cancelled() {
+        use rattler_solve::CancellationToken;
+
+        let cancellation_token = CancellationToken::new();
+        cancellation_token.cancel();
+
+        let specs: Vec<MatchSpec> = vec!["foo".parse().unwrap()];
+
+        let task = SolverTask {
+            specs,
+            cancellation_token: Some(cancellation_token),
+            ..SolverTask::from_iter([&[] as &[RepoDataRecord]])
+        };
+
+        let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
+        assert!(matches!(solve_error, SolveError::Cancelled));
     }
 
     #[test]
@@ -1026,8 +1121,7 @@ struct SimpleSolveTask<'a> {
     installed_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    exclude_newer: Option<DateTime<Utc>>,
-    min_age: Option<MinimumAgeConfig>,
+    exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
 }
 
@@ -1044,11 +1138,7 @@ fn solve<T: SolverImpl + Default>(
         .specs
         .iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
@@ -1056,22 +1146,17 @@ fn solve<T: SolverImpl + Default>(
         .constraints
         .into_iter()
         .map(|m| {
-            MatchSpec::from_str(
-                m,
-                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
-            )
-            .unwrap()
+            MatchSpec::from_str(m, ParseMatchSpecOptions::lenient().with_extras(true)).unwrap()
         })
         .collect();
 
     let task = SolverTask {
-        locked_packages: task.installed_packages,
+        locked_packages: task.installed_packages.iter().collect(),
         virtual_packages: task.virtual_packages,
         specs,
         constraints,
-        pinned_packages: task.pinned_packages,
-        exclude_newer: task.exclude_newer,
-        min_age: task.min_age,
+        pinned_packages: task.pinned_packages.iter().collect(),
+        exclude_newer: task.exclude_newer.clone(),
         strategy: task.strategy,
         ..SolverTask::from_iter(&repo_data)
     };
@@ -1088,7 +1173,7 @@ fn solve<T: SolverImpl + Default>(
 #[derive(Default)]
 struct CompareTask<'a> {
     specs: Vec<&'a str>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 fn compare_solve(task: CompareTask<'_>) {
@@ -1139,7 +1224,7 @@ fn compare_solve(task: CompareTask<'_>) {
                 rattler_solve::libsolv_c::Solver
                     .solve(SolverTask {
                         specs: specs.clone(),
-                        exclude_newer: task.exclude_newer,
+                        exclude_newer: task.exclude_newer.clone(),
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()
@@ -1159,7 +1244,7 @@ fn compare_solve(task: CompareTask<'_>) {
                 rattler_solve::resolvo::Solver
                     .solve(SolverTask {
                         specs: specs.clone(),
-                        exclude_newer: task.exclude_newer,
+                        exclude_newer: task.exclude_newer.clone(),
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()

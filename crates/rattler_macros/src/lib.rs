@@ -4,7 +4,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote_spanned;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed, Ident};
+use syn::{Data, DeriveInput, Fields, FieldsNamed, Ident, parse_macro_input};
 
 /// Macro for enforcing alphabetical order on Structs and Enums.
 ///
@@ -40,16 +40,16 @@ fn check_fields_sorted(outer_ident: &Ident, fields: &FieldsNamed) -> Result<(), 
     let mut prev_field: Option<&Ident> = None;
     for field in &fields.named {
         let current_field = field.ident.as_ref().unwrap();
-        if let Some(prev) = prev_field {
-            if *current_field < *prev {
-                let error = format!(
-                    "The field {current_field} must be sorted before {prev} in struct {outer_ident}.",
-                );
-                let tokens = quote_spanned! {current_field.span() =>
-                    compile_error!(#error);
-                };
-                return Err(TokenStream::from(tokens));
-            }
+        if let Some(prev) = prev_field
+            && *current_field < *prev
+        {
+            let error = format!(
+                "The field {current_field} must be sorted before {prev} in struct {outer_ident}.",
+            );
+            let tokens = quote_spanned! {current_field.span() =>
+                compile_error!(#error);
+            };
+            return Err(TokenStream::from(tokens));
         }
         prev_field = Some(current_field);
     }
@@ -59,16 +59,15 @@ fn check_fields_sorted(outer_ident: &Ident, fields: &FieldsNamed) -> Result<(), 
 fn check_identifiers_sorted(outer_ident: &Ident, idents: &[&Ident]) -> Result<(), TokenStream> {
     let mut prev_ident: Option<&Ident> = None;
     for ident in idents {
-        if let Some(prev) = prev_ident {
-            if *ident < prev {
-                let error = format!(
-                    "The field {ident} must be sorted before {prev} in enum {outer_ident}.",
-                );
-                let tokens = quote_spanned! {ident.span() =>
-                    compile_error!(#error);
-                };
-                return Err(TokenStream::from(tokens));
-            }
+        if let Some(prev) = prev_ident
+            && *ident < prev
+        {
+            let error =
+                format!("The field {ident} must be sorted before {prev} in enum {outer_ident}.",);
+            let tokens = quote_spanned! {ident.span() =>
+                compile_error!(#error);
+            };
+            return Err(TokenStream::from(tokens));
         }
         prev_ident = Some(ident);
     }

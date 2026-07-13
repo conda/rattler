@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rattler_conda_types::RecordFromPath;
 use rattler_conda_types::{
     MinimalPrefixCollection, MinimalPrefixRecord, PackageRecord, PrefixRecord,

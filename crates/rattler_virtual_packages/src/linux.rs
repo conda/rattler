@@ -23,7 +23,7 @@ fn try_detect_linux_version() -> Result<Option<Version>, ParseLinuxVersionError>
     mod ffi {
         use std::os::raw::{c_char, c_int};
 
-        extern "C" {
+        unsafe extern "C" {
             pub fn uname(buf: *mut utsname) -> c_int;
         }
 
@@ -78,10 +78,10 @@ fn parse_linux_version(version_str: &str) -> Result<Version, ParseLinuxVersionEr
 /// Takes the first 2, 3, or 4 digits of the linux uname version.
 #[allow(dead_code)]
 fn extract_linux_version_part(version_str: &str) -> Option<&str> {
+    use nom::Parser;
     use nom::character::complete::{char, digit1};
     use nom::combinator::{opt, recognize};
     use nom::sequence::pair;
-    use nom::Parser;
     let result: Result<_, nom::Err<nom::error::Error<_>>> = recognize((
         digit1,
         char('.'),

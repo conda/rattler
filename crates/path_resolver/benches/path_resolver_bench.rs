@@ -1,4 +1,4 @@
-use divan::{black_box, Bencher};
+use divan::{Bencher, black_box};
 use path_resolver::{PackageName, PathResolver};
 use std::path::PathBuf;
 

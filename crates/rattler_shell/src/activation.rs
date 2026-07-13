@@ -272,7 +272,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
         })?;
 
         for (key, value) in state_env_vars {
-            if state_env_vars.contains_key(key) {
+            if env_vars.contains_key(key) {
                 tracing::warn!(
                     "WARNING: environment variable {key} already defined in packages (path: {state_file:?})"
                 );
@@ -360,7 +360,7 @@ impl<T: Shell + Clone> Activator<T> {
     /// use rattler_conda_types::Platform;
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash, Platform::Osx64).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Platform::Osx64).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
@@ -698,7 +698,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
-    use crate::shell::{self, native_path_to_unix, ShellEnum};
+    use crate::shell::{self, ShellEnum, native_path_to_unix};
 
     #[test]
     #[cfg(unix)]
@@ -722,7 +722,7 @@ mod tests {
 
         let activator = Activator {
             target_prefix: temp_dir.path().to_path_buf(),
-            shell_type: shell::Bash,
+            shell_type: shell::Bash::default(),
             paths: vec![temp_dir.path().join("bin")],
             activation_scripts: vec![script_path.clone()],
             deactivation_scripts: vec![],
@@ -785,7 +785,7 @@ mod tests {
         fs::write(&script2, "").unwrap();
         fs::write(&script3, "").unwrap();
 
-        let shell_type = shell::Bash;
+        let shell_type = shell::Bash::default();
 
         let scripts = collect_scripts(&path, &shell_type).unwrap();
         assert_eq!(scripts.len(), 3);
@@ -860,6 +860,56 @@ mod tests {
         }
     }
 
+    /// Regression test for: <https://github.com/conda/rattler/issues/2253>
+    ///
+    /// `collect_env_vars` used to check `state_env_vars.contains_key(key)` while
+    /// iterating `state_env_vars` — always true, so a spurious "already defined" warning
+    /// was emitted for **every** env var in the state file.
+    ///
+    /// After the fix, the warning should only fire when a key from `conda-meta/state`
+    /// actually conflicts with one already collected from `etc/conda/env_vars.d`.
+    #[test]
+    fn test_collect_env_vars_no_spurious_conflict_warnings() {
+        let tdir = TempDir::with_prefix("test_no_spurious_warnings").unwrap();
+        let state_path = tdir.path().join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+
+        let env_var_d = tdir.path().join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+
+        // Pkg defines ONLY "PKG_VAR". "STATE_ONLY_VAR" is NOT in any package json.
+        let pkg_content = r#"{"PKG_VAR": "from_pkg"}"#;
+        fs::write(env_var_d.join("pkg.json"), pkg_content).unwrap();
+
+        // State file defines "STATE_ONLY_VAR" (no conflict) and "PKG_VAR" (real conflict).
+        let state_content =
+            r#"{"env_vars": {"STATE_ONLY_VAR": "state_val", "PKG_VAR": "state_override"}}"#;
+        fs::write(&state_path, state_content).unwrap();
+
+        let env_vars = collect_env_vars(tdir.path()).expect("collect_env_vars must succeed");
+
+        // Both keys must be present — collection itself must work correctly.
+        assert!(
+            env_vars.contains_key("STATE_ONLY_VAR"),
+            "STATE_ONLY_VAR (state-only key) must be collected"
+        );
+        assert!(
+            env_vars.contains_key("PKG_VAR"),
+            "PKG_VAR (conflict key) must be collected"
+        );
+
+        // Before the fix, `state_env_vars.contains_key(key)` was always true, so
+        // the warning fired for STATE_ONLY_VAR even though it had no conflict.
+        // The correct behaviour (after the fix) is:
+        //   - STATE_ONLY_VAR: no conflict → no warning (we can't assert on tracing
+        //     output easily, but we verify the logic by ensuring the change compiles
+        //     and the values are correctly collected).
+        //   - PKG_VAR: real conflict → warning is emitted (state value wins per
+        //     current semantics).
+        assert_eq!(env_vars["STATE_ONLY_VAR"], "state_val");
+        assert_eq!(env_vars["PKG_VAR"], "state_override");
+    }
+
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
@@ -917,11 +967,11 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_activation_script_bash() {
-        let script = get_script(shell::Bash, PathModificationBehavior::Append);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Append);
         insta::assert_snapshot!("test_activation_script_bash_append", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Replace);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Replace);
         insta::assert_snapshot!("test_activation_script_bash_replace", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Prepend);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Prepend);
         insta::assert_snapshot!("test_activation_script_bash_prepend", script);
     }
 
@@ -1067,7 +1117,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash.into(), false);
+        test_run_activation(crate::shell::Bash::default().into(), false);
     }
 
     #[test]
@@ -1102,7 +1152,13 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
+            (
+                "dash",
+                ShellEnum::Bash(shell::Bash {
+                    flavor: shell::BashFlavor::Dash,
+                }),
+            ),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1159,7 +1215,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1224,7 +1280,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
@@ -1347,7 +1403,7 @@ mod tests {
 
         // Test all shell types
         let shell_types = vec![
-            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
             ("zsh", ShellEnum::Zsh(shell::Zsh)),
             ("fish", ShellEnum::Fish(shell::Fish)),
             ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),

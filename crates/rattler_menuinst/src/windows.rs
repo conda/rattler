@@ -1,14 +1,14 @@
 use create_shortcut::Shortcut;
 use fs_err as fs;
 use rattler_conda_types::{
-    menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
     Platform,
+    menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
 };
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
-use registry::{notify_shell_changes, FileExtension, UrlProtocol};
+use registry::{FileExtension, UrlProtocol, notify_shell_changes};
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
@@ -17,10 +17,10 @@ use terminal::TerminalProfile;
 pub use terminal::TerminalUpdateError;
 
 use crate::{
+    MenuInstError, MenuMode,
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
     utils::{log_output, slugify},
-    MenuInstError, MenuMode,
 };
 
 mod create_shortcut;

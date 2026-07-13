@@ -288,6 +288,7 @@ async def install(
     client: Optional[Client] = None,
     requested_specs: Optional[List[MatchSpec]] = None,
     reporter: Optional[InstallerReporter] = None,
+    alternative_target_prefix: Optional[str | os.PathLike[str]] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -348,6 +349,11 @@ async def install(
         reporter: An optional :class:`InstallerReporter` instance that receives progress
                 callbacks during installation. When provided, `show_progress` is ignored.
                 Subclass :class:`InstallerReporter` and override the methods you need.
+        alternative_target_prefix: An alternative prefix to patch into the hardcoded paths of
+                installed files instead of `target_prefix`. The environment is still created in
+                `target_prefix`; only the prefix written into the linked files differs. This is
+                only needed in exceptional cases, for example when the environment will later be
+                relocated to or used from a different path.
     """
 
     await py_install(
@@ -363,4 +369,5 @@ async def install(
         show_progress=show_progress,
         requested_specs=requested_specs,
         reporter=reporter,
+        alternative_target_prefix=str(alternative_target_prefix) if alternative_target_prefix is not None else None,
     )

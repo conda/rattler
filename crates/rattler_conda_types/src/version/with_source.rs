@@ -1,6 +1,6 @@
 use super::Version;
 use crate::ParseVersionError;
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
 use std::{

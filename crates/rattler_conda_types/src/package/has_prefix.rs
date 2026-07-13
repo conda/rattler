@@ -7,15 +7,15 @@ use std::{
 };
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_till1},
     character::complete::multispace1,
     combinator::{all_consuming, map, value},
     sequence::{preceded, terminated},
-    IResult, Parser,
 };
 
-use crate::package::{paths::FileMode, PackageFile};
+use crate::package::{PackageFile, paths::FileMode};
 
 /// Representation of an entry in `info/has_prefix`.
 #[derive(Debug, Clone, PartialEq, Eq)]

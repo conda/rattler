@@ -390,8 +390,8 @@ impl Drop for RefreshGuard {
 #[cfg(test)]
 mod tests {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     use google_cloud_auth::credentials::{CacheableResource, CredentialsProvider, EntityTag};
@@ -453,10 +453,10 @@ mod tests {
             let current = self.current_etag.lock().unwrap().clone();
 
             // Simulate the library's ETag protocol.
-            if let Some(caller_tag) = extensions.get::<EntityTag>() {
-                if *caller_tag == current {
-                    return Ok(CacheableResource::NotModified);
-                }
+            if let Some(caller_tag) = extensions.get::<EntityTag>()
+                && *caller_tag == current
+            {
+                return Ok(CacheableResource::NotModified);
             }
 
             self.refresh_count.fetch_add(1, Ordering::SeqCst);
@@ -623,7 +623,9 @@ mod tests {
         std::fs::write(&key_file, credentials).unwrap();
 
         let prev_value = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").ok();
-        std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", key_file.path());
+        unsafe {
+            std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", key_file.path());
+        }
 
         let client = reqwest_middleware::ClientBuilder::new(Client::new())
             .with(GCSMiddleware::default())
@@ -637,10 +639,12 @@ mod tests {
         let response = client.get(url).send().await.unwrap();
         assert!(response.status().is_client_error());
 
-        if let Some(value) = prev_value {
-            std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", value);
-        } else {
-            std::env::remove_var("GOOGLE_APPLICATION_CREDENTIALS");
+        unsafe {
+            if let Some(value) = prev_value {
+                std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", value);
+            } else {
+                std::env::remove_var("GOOGLE_APPLICATION_CREDENTIALS");
+            }
         }
     }
 }
