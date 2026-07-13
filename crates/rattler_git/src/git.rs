@@ -13,7 +13,7 @@ use std::{
     sync::LazyLock,
 };
 
-use crate::client::LazyClient;
+use crate::LazyClient;
 use reqwest::StatusCode;
 use url::Url;
 
