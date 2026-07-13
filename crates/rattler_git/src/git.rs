@@ -1029,14 +1029,21 @@ fn github_fast_path(
 
     runtime.block_on(async move {
         tracing::debug!("Attempting GitHub fast path for: {url}");
-        let mut request = client.client().get(&url);
-        request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "rattler");
+        let mut request = client
+            .client()
+            .get(&url)
+            .header("Accept", "application/vnd.github.3.sha");
         if let Some(local_object) = local_object {
             request = request.header("If-None-Match", local_object.to_string());
         }
+        let mut request = request.build()?;
+        if !request.headers().contains_key("User-Agent") {
+            request
+                .headers_mut()
+                .insert("User-Agent", "rattler".parse().unwrap());
+        }
 
-        let response = request.send().await?;
+        let response = client.client().execute(request).await?;
         let response_code = response.status();
         if response_code == StatusCode::NOT_MODIFIED {
             Ok(FastPathRev::UpToDate)
