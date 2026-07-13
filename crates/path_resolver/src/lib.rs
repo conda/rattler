@@ -234,19 +234,17 @@ impl PathResolver {
             }
 
             // Check conflicts at the target node (if we found it and no prefix conflict)
-            if !has_conflict {
-                if let Some(n) = found_node {
-                    // File -> File conflict
-                    if !n.terminals.is_empty() {
-                        conflicts.insert(p.to_path_buf());
-                        continue;
-                    }
-                    // Directory -> File conflict
-                    if !n.children.is_empty() {
-                        let pbuf = p.to_path_buf();
-                        conflicts.insert(pbuf.clone());
-                        dir_inserts.push(pbuf);
-                    }
+            if !has_conflict && let Some(n) = found_node {
+                // File -> File conflict
+                if !n.terminals.is_empty() {
+                    conflicts.insert(p.to_path_buf());
+                    continue;
+                }
+                // Directory -> File conflict
+                if !n.children.is_empty() {
+                    let pbuf = p.to_path_buf();
+                    conflicts.insert(pbuf.clone());
+                    dir_inserts.push(pbuf);
                 }
             }
         }
@@ -377,10 +375,10 @@ impl PathResolver {
                 .prefixes
                 .iter()
                 .max_by_key(|p| old_rank.get(p).copied().unwrap_or(usize::MAX));
-            if let Some(p) = old_winner {
-                if n.terminals.contains(p) {
-                    to_clobbers.push((cur.clone(), p.clone()));
-                }
+            if let Some(p) = old_winner
+                && n.terminals.contains(p)
+            {
+                to_clobbers.push((cur.clone(), p.clone()));
             }
             for (comp, child) in &n.children {
                 cur.push(comp);
@@ -673,9 +671,11 @@ mod tests {
     #[test]
     fn test_insert_file_vs_file_conflict() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["foo.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["foo.txt"])
+                .is_empty()
+        );
         let conflicts = resolver.insert_package("pkg2".into(), &["foo.txt"]);
         assert_eq!(conflicts, vec![PathBuf::from("foo.txt")]);
     }
@@ -683,9 +683,11 @@ mod tests {
     #[test]
     fn test_insert_nested_file_vs_file_conflict() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["foo/bar.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["foo/bar.txt"])
+                .is_empty()
+        );
         let conflicts = resolver.insert_package("pkg2".into(), &["foo/bar.txt"]);
         assert_eq!(conflicts, vec![PathBuf::from("foo/bar.txt")]);
     }
@@ -693,9 +695,11 @@ mod tests {
     #[test]
     fn test_insert_dir_vs_file_conflict() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["foo/bar.txt", "foo/baz.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["foo/bar.txt", "foo/baz.txt"])
+                .is_empty()
+        );
         let mut conflicts = resolver.insert_package("pkg2".into(), &["foo"]);
         conflicts.sort();
         assert_eq!(conflicts, vec![PathBuf::from("foo")]);
@@ -729,9 +733,11 @@ mod tests {
         let paths = ["foo.txt", "foo/bar.txt"];
         assert!(resolver.insert_package("pkg".into(), &paths).is_empty());
         resolver.unregister_package("pkg");
-        assert!(resolver
-            .packages_for_exact("foo.txt")
-            .is_none_or(ahash::HashSet::is_empty));
+        assert!(
+            resolver
+                .packages_for_exact("foo.txt")
+                .is_none_or(ahash::HashSet::is_empty)
+        );
         assert!(resolver.packages_for_prefix("foo").is_none());
     }
 
@@ -981,9 +987,11 @@ mod tests {
     #[test]
     fn test_collect_clobbered_no_conflict() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["a.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["a.txt"])
+                .is_empty()
+        );
 
         let clobbered = resolver.collect_clobbered_paths();
         assert!(clobbered.is_empty());
@@ -992,9 +1000,11 @@ mod tests {
     #[test]
     fn test_collect_clobbered_simple_conflict() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["file.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["file.txt"])
+                .is_empty()
+        );
         let conflicts = resolver.insert_package("pkg2".into(), &["file.txt"]);
         assert_eq!(conflicts, vec![PathBuf::from("file.txt")]);
 
@@ -1009,9 +1019,11 @@ mod tests {
     #[test]
     fn test_collect_clobbered_multiple_conflicts() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["dup.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["dup.txt"])
+                .is_empty()
+        );
         let conflicts = resolver.insert_package("pkg2".into(), &["dup.txt"]);
         assert_eq!(conflicts, vec![PathBuf::from("dup.txt")]);
         let conflicts = resolver.insert_package("pkg3".into(), &["dup.txt"]);
@@ -1030,9 +1042,11 @@ mod tests {
     #[test]
     fn test_collect_clobbered_multiple_files() {
         let mut resolver = PathResolver::new();
-        assert!(resolver
-            .insert_package("pkg1".into(), &["a.txt", "b.txt"])
-            .is_empty());
+        assert!(
+            resolver
+                .insert_package("pkg1".into(), &["a.txt", "b.txt"])
+                .is_empty()
+        );
         let conflicts = resolver.insert_package("pkg2".into(), &["a.txt"]);
         assert_eq!(conflicts, vec![PathBuf::from("a.txt")]);
 
@@ -1068,6 +1082,73 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_unregister_with_multiple_clobbers() {
+        let mut resolver = PathResolver::new();
+        // Insert pkg1 as the winner
+        resolver.insert_package("pkg1".into(), &["a.txt", "b.txt"]);
+        // pkg2 and pkg3 clobber a.txt
+        resolver.insert_package("pkg2".into(), &["a.txt", "c.txt"]);
+        resolver.insert_package("pkg3".into(), &["a.txt", "d.txt"]);
+
+        // Unregister pkg1
+        let (_, from_clobbers) = resolver.unregister_package("pkg1");
+
+        // pkg2 should now win a.txt because it was the first after pkg1
+        assert_eq!(from_clobbers, vec![(PathBuf::from("a.txt"), "pkg2".into())]);
+
+        // Verify state
+        assert_eq!(resolver.packages_for_exact("a.txt").unwrap().len(), 2);
+        assert!(
+            resolver
+                .packages_for_exact("a.txt")
+                .unwrap()
+                .contains(&"pkg2".into())
+        );
+        assert!(
+            resolver
+                .packages_for_exact("a.txt")
+                .unwrap()
+                .contains(&"pkg3".into())
+        );
+        assert!(
+            resolver
+                .packages_for_exact("b.txt")
+                .is_none_or(std::collections::HashSet::is_empty)
+        );
+    }
+
+    #[test]
+    fn test_unregister_clobbering_package_restores_original() {
+        let mut resolver = PathResolver::new();
+        resolver.insert_package("pkg1".into(), &["a.txt"]);
+        resolver.insert_package("pkg2".into(), &["a.txt"]);
+
+        // pkg1 wins, pkg2 clobbers (but logically pkg1 is in terminals first)
+        // If we unregister pkg1 (the winner), pkg2 should move in.
+        let (_, from_clobbers) = resolver.unregister_package("pkg1");
+        assert_eq!(from_clobbers, vec![(PathBuf::from("a.txt"), "pkg2".into())]);
+
+        // If we then unregister pkg2, it should be empty.
+        let (_, from_clobbers) = resolver.unregister_package("pkg2");
+        assert!(from_clobbers.is_empty());
+        assert!(
+            resolver
+                .packages_for_exact("a.txt")
+                .is_none_or(std::collections::HashSet::is_empty)
+        );
+    }
+
+    #[test]
+    fn test_unregister_recursive_prune() {
+        let mut resolver = PathResolver::new();
+        resolver.insert_package("pkg1".into(), &["foo/bar/baz.txt"]);
+        resolver.unregister_package("pkg1");
+
+        // The entire "foo" directory should be gone.
+        assert!(resolver.root.children.is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -1083,42 +1164,41 @@ mod props {
 
     /// Filesystem path trie.
     #[derive(Clone, Debug)]
-    enum Node {
-        File,
-        Dir(BTreeMap<String, Node>),
+    struct Node {
+        is_file: bool,
+        children: BTreeMap<String, Node>,
     }
 
     fn collect_paths(node: &Node, cur: &Path, out: &mut Vec<PathBuf>) {
-        match node {
-            Node::File => out.push(cur.to_path_buf()),
-            Node::Dir(children) => {
-                for (seg, child) in children {
-                    let mut next = cur.to_path_buf();
-                    next.push(seg);
-                    collect_paths(child, &next, out);
-                }
-            }
+        if node.is_file {
+            out.push(cur.to_path_buf());
+        }
+        for (seg, child) in &node.children {
+            let mut next = cur.to_path_buf();
+            next.push(seg);
+            collect_paths(child, &next, out);
         }
     }
 
-    // TODO: Add trie with non-empty paths for more property-based tests.
     /// Strategy to build random path trie.
     fn path_trie() -> impl Strategy<Value = Node> {
-        // atomic leaf
-        let leaf = Just(Node::File).boxed();
-        // directory nodes built from smaller tries
+        let leaf = any::<bool>()
+            .prop_map(|is_file| Node {
+                is_file,
+                children: BTreeMap::new(),
+            })
+            .boxed();
         let dir = |inner: BoxedStrategy<Node>| {
-            prop::collection::btree_map(
-                // unique segment names
-                string_regex("[a-z]{1,1}").unwrap(),
-                inner,
-                1..=5,
+            (
+                any::<bool>(),
+                prop::collection::btree_map(string_regex("[a-z]{1,1}").unwrap(), inner, 0..=5),
             )
-            .prop_map(Node::Dir)
-            .boxed()
+                .prop_map(|(is_file, children)| Node { is_file, children })
+                .boxed()
         };
 
         leaf.prop_recursive(5, 64, 5, dir)
+            .prop_filter("non-empty trie", |n| n.is_file || !n.children.is_empty())
     }
 
     /// Strategy yielding a vector of `(PackageName, Vec<PathBuf>)`,

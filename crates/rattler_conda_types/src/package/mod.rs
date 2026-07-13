@@ -20,7 +20,7 @@ pub use {
     about::AboutJson,
     archive_identifier::{ArchiveIdentifier, CondaArchiveIdentifier, DistArchiveIdentifier},
     archive_type::{CondaArchiveType, DistArchiveType, WheelArchiveType},
-    entry_point::EntryPoint,
+    entry_point::{EntryPoint, EntryPointDottedField, ParseEntryPointError},
     files::Files,
     has_prefix::HasPrefix,
     has_prefix::HasPrefixEntry,
@@ -51,6 +51,11 @@ pub trait PackageFile: Sized {
     /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     fn from_str(str: &str) -> Result<Self, std::io::Error>;
+
+    /// Parses the object from a byte slice, using a format appropriate for the file type.
+    fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
+        Self::from_str(&String::from_utf8_lossy(slice))
+    }
 
     /// Parses the object from a `Read` trait object, using a format appropriate for the file type.
     ///

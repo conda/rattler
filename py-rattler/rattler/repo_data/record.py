@@ -51,7 +51,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_url(value)
+        self._record.url = value
 
     @property
     def channel(self) -> str:
@@ -92,7 +92,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_channel(value)
+        self._record.channel = value
 
     @property
     def file_name(self) -> str:
@@ -131,7 +131,7 @@ class RepoDataRecord(PackageRecord):
         >>>
         ```
         """
-        self._record.set_file_name(value)
+        self._record.file_name = value
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:
@@ -153,7 +153,7 @@ class RepoDataRecord(PackageRecord):
         --------
         ```python
         >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
+        >>> repo_data = RepoData.from_path(
         ...     "../test-data/test-server/repo/noarch/repodata.json"
         ... )
         >>> repo_data.into_repo_data(Channel("test"))[0]

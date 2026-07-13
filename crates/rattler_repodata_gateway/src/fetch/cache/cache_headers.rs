@@ -1,7 +1,6 @@
 use reqwest::{
-    header,
+    Response, header,
     header::{HeaderMap, HeaderValue},
-    Response,
 };
 use serde::{Deserialize, Serialize};
 

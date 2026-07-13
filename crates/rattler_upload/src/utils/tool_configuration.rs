@@ -1,6 +1,6 @@
 use rattler_networking::{
-    authentication_storage::{self, AuthenticationStorageError},
     AuthenticationStorage,
+    authentication_storage::{self, AuthenticationStorageError},
 };
 use std::{path::PathBuf, sync::Arc};
 

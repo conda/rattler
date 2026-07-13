@@ -5,7 +5,7 @@ use std::{collections::HashMap, str::FromStr, vec::Vec};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{package::DistArchiveIdentifier, PackageName, PackageRecord, Platform};
+use crate::{PackageName, PackageRecord, Platform, package::DistArchiveIdentifier};
 
 /// Information about a package from repodata. It includes a
 /// [`crate::PackageRecord`] but it also stores the source of the data (like the

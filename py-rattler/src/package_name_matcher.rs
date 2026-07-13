@@ -5,11 +5,11 @@ use std::{
 };
 
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::{PackageName, PackageNameMatcher};
+use rattler_conda_types::PackageNameMatcher;
 
 use crate::{error::PyRattlerError, package_name::PyPackageName};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyPackageNameMatcher {
     pub(crate) inner: PackageNameMatcher,
@@ -51,7 +51,7 @@ impl PyPackageNameMatcher {
     }
 
     fn as_package_name(&self) -> Option<PyPackageName> {
-        Option::<PackageName>::from(self.inner.clone()).map(PyPackageName::from)
+        self.inner.as_exact().cloned().map(PyPackageName::from)
     }
 
     /// Returns the normalized string representation of the matcher.

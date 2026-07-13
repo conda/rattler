@@ -7,16 +7,16 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
-use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
+use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
 use super::{
-    clobber_registry::{ClobberError, ClobberRegistry, ClobberedPath},
-    link_script::{PrePostLinkError, PrePostLinkResult},
-    unlink::{recursively_remove_empty_directories, UnlinkError},
     Transaction, TransactionOperation,
+    clobber_registry::{ClobberError, ClobberMode, ClobberRegistry, ClobberedPath},
+    link_script::{PrePostLinkError, PrePostLinkResult},
+    unlink::{UnlinkError, recursively_remove_empty_directories},
 };
 use crate::install::link_script::LinkScriptError;
 
@@ -31,6 +31,7 @@ pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
+    clobber_mode: ClobberMode,
 }
 
 impl Default for InstallDriver {
@@ -48,6 +49,7 @@ pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
     execute_link_scripts: bool,
+    clobber_mode: ClobberMode,
 }
 
 /// The result of the post-processing step.
@@ -70,6 +72,10 @@ pub enum PostProcessingError {
     /// Failed to determine the currently installed packages.
     #[error("failed to determine the installed packages")]
     FailedToDetectInstalledPackages(#[source] std::io::Error),
+
+    /// Clobbering was detected and the clobber mode is set to error.
+    #[error("{} file(s) are provided by multiple packages", .0.len())]
+    ClobberingDetected(HashMap<PathBuf, ClobberedPath>),
 }
 
 impl InstallDriverBuilder {
@@ -113,6 +119,19 @@ impl InstallDriverBuilder {
         }
     }
 
+    /// Sets the clobber mode. This controls what happens when multiple packages
+    /// install the same file path.
+    ///
+    /// By default, [`ClobberMode::Rename`] is used, which renames the "losing"
+    /// files to a `__clobbers__/` directory. Use [`ClobberMode::Error`] to
+    /// instead raise an error when clobbering is detected.
+    pub fn clobber_mode(self, clobber_mode: ClobberMode) -> Self {
+        Self {
+            clobber_mode,
+            ..self
+        }
+    }
+
     pub fn finish(self) -> InstallDriver {
         InstallDriver {
             io_concurrency_semaphore: self.io_concurrency_semaphore,
@@ -122,6 +141,7 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
+            clobber_mode: self.clobber_mode,
         }
     }
 }
@@ -228,6 +248,12 @@ impl InstallDriver {
             .clobber_registry()
             .unclobber(&required_packages, target_prefix)?;
 
+        // If the clobber mode is set to error, return an error if any
+        // clobbering was detected.
+        if self.clobber_mode == ClobberMode::Error && !clobbered_paths.is_empty() {
+            return Err(PostProcessingError::ClobberingDetected(clobbered_paths));
+        }
+
         self.remove_empty_directories(&transaction.operations, &prefix_records, target_prefix)
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
@@ -278,10 +304,10 @@ impl InstallDriver {
             let mut removed_directories = HashSet::new();
 
             for paths in record.paths_data.paths.iter() {
-                if paths.path_type != PathType::Directory {
-                    if let Some(parent) = paths.relative_path.parent() {
-                        removed_directories.insert(parent);
-                    }
+                if paths.path_type != PathType::Directory
+                    && let Some(parent) = paths.relative_path.parent()
+                {
+                    removed_directories.insert(parent);
                 }
             }
 

@@ -18,7 +18,9 @@ export const platformNames = [
     "linux-s390x",
     "linux-riscv32",
     "linux-riscv64",
+    "freebsd-32",
     "freebsd-64",
+    "freebsd-arm64",
     "osx-64",
     "osx-arm64",
     "win-32",
@@ -125,8 +127,12 @@ export function platformArch(platform: Platform): Arch | null {
             return "riscv32";
         case "linux-riscv64":
             return "riscv64";
+        case "freebsd-32":
+            return "x86";
         case "freebsd-64":
             return "x86_64";
+        case "freebsd-arm64":
+            return "arm64";
         case "osx-64":
             return "x86_64";
         case "osx-arm64":

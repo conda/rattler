@@ -9,16 +9,17 @@ use std::{
     time::Duration,
 };
 
+use oauth2_reqwest::ReqwestClient;
 use openidconnect::{
+    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
         CoreResponseType, CoreSubjectIdentifierType,
     },
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
-    ProviderMetadata, RedirectUrl, Scope, TokenResponse,
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
@@ -54,6 +55,48 @@ type ExtendedCoreProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
+use super::DEFAULT_USER_AGENT;
+
+/// Generic OIDC scopes used when no host-specific defaults apply.
+pub const DEFAULT_OAUTH_SCOPES: &[&str] = &["openid", "profile", "offline_access"];
+
+/// Renderer for the HTML page shown in the browser after the OAuth
+/// redirect. Receives whether the authentication succeeded and a
+/// human-readable error detail (not HTML-escaped — the renderer is
+/// responsible for escaping if it interpolates the detail into HTML).
+pub type CallbackPageRenderer = Box<dyn Fn(bool, &str) -> String + Send + Sync>;
+
+const DEFAULT_POWERED_BY: &str = "Powered by <a href=\"https://prefix.dev\" rel=\"noopener noreferrer\" target=\"_blank\">prefix.dev</a>";
+
+/// Text inserted into the default OAuth callback page.
+#[derive(Clone, Debug)]
+pub struct CallbackPageTemplate {
+    /// Program name shown in the title and status text.
+    pub application_name: String,
+    /// Raw HTML shown in the footer. When empty, a link to the issuer domain is used.
+    pub powered_by: String,
+}
+
+impl Default for CallbackPageTemplate {
+    fn default() -> Self {
+        Self {
+            application_name: "rattler".to_string(),
+            powered_by: String::new(),
+        }
+    }
+}
+
+/// Build a branded version of the default OAuth callback page renderer.
+pub fn callback_page_renderer(
+    template: CallbackPageTemplate,
+    issuer_url: &str,
+) -> CallbackPageRenderer {
+    let domain = callback_page_domain_from_issuer(issuer_url);
+    Box::new(move |success, detail| {
+        default_callback_page_with_template(success, detail, &template, &domain, DEFAULT_POWERED_BY)
+    })
+}
+
 /// Configuration for an OAuth login flow.
 pub struct OAuthConfig {
     /// The OIDC issuer URL.
@@ -66,9 +109,21 @@ pub struct OAuthConfig {
     pub flow: OAuthFlow,
     /// Additional OAuth scopes to request.
     pub scopes: HashSet<String>,
+    /// Fixed redirect URI for the auth-code flow. When `None`, rattler
+    /// binds to a random localhost port. Required when the OAuth client
+    /// is registered with a specific redirect URI on the `IdP` side.
+    pub redirect_uri: Option<String>,
+    /// Override for the User-Agent header. When `None`, defaults to
+    /// `rattler/<crate version>`.
+    pub user_agent: Option<String>,
+    /// Override for the HTML page shown in the browser after the OAuth
+    /// redirect. When `None`, [`default_callback_page`] is used. Callers
+    /// (e.g. pixi, rattler-build) can supply their own branded page.
+    pub callback_page: Option<CallbackPageRenderer>,
 }
 
 /// Which OAuth flow to attempt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OAuthFlow {
     /// Try auth code first, fall back to device code on failure.
     Auto,
@@ -149,15 +204,33 @@ struct CallbackResult {
 /// Perform an OAuth/OIDC login and return the resulting
 /// `Authentication::OAuth`.
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
-    let http_client = reqwest::Client::builder()
+    let mut config = config;
+    if config.scopes.is_empty() {
+        config.scopes = DEFAULT_OAUTH_SCOPES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect();
+    }
+
+    let user_agent = config.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT);
+
+    let reqwest_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .user_agent(user_agent)
         .build()
         .map_err(OAuthError::Network)?;
+    let http_client = ReqwestClient::from(reqwest_client);
 
     // 1. OIDC Discovery
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
 
     let client_secret = config.client_secret.as_deref();
+    let redirect_uri = config.redirect_uri.as_deref();
+
+    let callback_page: CallbackPageRenderer = config.callback_page.unwrap_or_else(|| {
+        callback_page_renderer(CallbackPageTemplate::default(), &config.issuer_url)
+    });
+    let callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync) = &*callback_page;
 
     // 2. Run the appropriate flow
     let tokens = match config.flow {
@@ -167,7 +240,9 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
+                callback_page,
             )
             .await?
         }
@@ -187,7 +262,9 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 &config.client_id,
                 client_secret,
                 &config.scopes,
+                redirect_uri,
                 &http_client,
+                callback_page,
             )
             .await
             {
@@ -241,7 +318,7 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
 /// `revocation_endpoint` and `device_authorization_endpoint` fields are
 /// deserialized from the discovery document in a single request.
 async fn discover_endpoints(
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
     issuer_url: &str,
 ) -> Result<DiscoveredEndpoints, OAuthError> {
     let oidc_issuer =
@@ -281,12 +358,28 @@ async fn auth_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
-    http_client: &reqwest::Client,
+    redirect_uri: Option<&str>,
+    http_client: &ReqwestClient,
+    callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync),
 ) -> Result<OAuthTokens, OAuthError> {
-    // Bind to a random port on localhost
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let local_addr = listener.local_addr()?;
-    let redirect_url = format!("http://127.0.0.1:{}", local_addr.port());
+    // If the caller pinned a redirect URI (because the IdP requires an
+    // exact match against what was registered), bind there. Otherwise
+    // pick a random localhost port and use that.
+    let (listener, redirect_url) = if let Some(uri) = redirect_uri {
+        let parsed = Url::parse(uri).map_err(OAuthError::UrlParse)?;
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| OAuthError::Authorization(format!("redirect URI has no host: {uri}")))?;
+        let port = parsed.port().ok_or_else(|| {
+            OAuthError::Authorization(format!("redirect URI has no explicit port: {uri}"))
+        })?;
+        let listener = TcpListener::bind(format!("{host}:{port}")).await?;
+        (listener, uri.to_string())
+    } else {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let local_addr = listener.local_addr()?;
+        (listener, format!("http://127.0.0.1:{}", local_addr.port()))
+    };
 
     let mut client = CoreClient::from_provider_metadata(
         endpoints.provider_metadata.clone(),
@@ -327,7 +420,7 @@ async fn auth_code_flow(
     eprintln!("Waiting for authentication in browser...");
     let callback = tokio::time::timeout(
         Duration::from_secs(300),
-        accept_redirect_callback(&listener),
+        accept_redirect_callback(&listener, callback_page),
     )
     .await
     .map_err(|_timeout| {
@@ -338,7 +431,12 @@ async fn auth_code_flow(
 
     // Verify CSRF state
     if callback.state != *csrf_token.secret() {
-        send_callback_response(&callback.stream, false, "CSRF state mismatch");
+        send_callback_response(
+            &callback.stream,
+            false,
+            "CSRF state mismatch",
+            callback_page,
+        );
         return Err(OAuthError::CsrfMismatch);
     }
 
@@ -351,12 +449,12 @@ async fn auth_code_flow(
         .await
     {
         Ok(response) => {
-            send_callback_response(&callback.stream, true, "");
+            send_callback_response(&callback.stream, true, "", callback_page);
             response
         }
         Err(e) => {
             let msg = e.to_string();
-            send_callback_response(&callback.stream, false, &msg);
+            send_callback_response(&callback.stream, false, &msg, callback_page);
             return Err(OAuthError::TokenExchange(msg));
         }
     };
@@ -385,7 +483,10 @@ async fn auth_code_flow(
 /// and returns them along with the stream. The caller is responsible for
 /// sending the browser response via [`send_callback_response`] after
 /// the token exchange completes.
-async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResult, OAuthError> {
+async fn accept_redirect_callback(
+    listener: &TcpListener,
+    callback_page: &(dyn Fn(bool, &str) -> String + Send + Sync),
+) -> Result<CallbackResult, OAuthError> {
     let (stream, _) = listener.accept().await?;
 
     // Convert to std TcpStream for synchronous I/O (simpler than async line
@@ -398,13 +499,28 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResu
     reader.read_line(&mut request_line)?;
 
     // Parse the GET request line: "GET /?code=...&state=... HTTP/1.1"
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .ok_or(OAuthError::InvalidCallback)?;
+    let Some(path) = request_line.split_whitespace().nth(1) else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
-    let callback_url = Url::parse(&format!("http://localhost{path}"))
-        .map_err(|_err| OAuthError::InvalidCallback)?;
+    let callback_url = match Url::parse(&format!("http://localhost{path}")) {
+        Ok(url) => url,
+        Err(_err) => {
+            send_callback_response(
+                &std_stream,
+                false,
+                "Invalid callback from identity provider",
+                callback_page,
+            );
+            return Err(OAuthError::InvalidCallback);
+        }
+    };
 
     // Check for an error response from the identity provider (RFC 6749 Section
     // 4.1.2.1)
@@ -420,21 +536,37 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResu
 
         let msg = description.unwrap_or(error);
 
-        send_callback_response(&std_stream, false, &msg);
+        send_callback_response(&std_stream, false, &msg, callback_page);
         return Err(OAuthError::Authorization(msg));
     }
 
-    let code = callback_url
+    let Some(code) = callback_url
         .query_pairs()
         .find(|(k, _)| k == "code")
         .map(|(_, v)| v.to_string())
-        .ok_or(OAuthError::InvalidCallback)?;
+    else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
-    let state = callback_url
+    let Some(state) = callback_url
         .query_pairs()
         .find(|(k, _)| k == "state")
         .map(|(_, v)| v.to_string())
-        .ok_or(OAuthError::InvalidCallback)?;
+    else {
+        send_callback_response(
+            &std_stream,
+            false,
+            "Invalid callback from identity provider",
+            callback_page,
+        );
+        return Err(OAuthError::InvalidCallback);
+    };
 
     Ok(CallbackResult {
         code,
@@ -444,7 +576,7 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResu
 }
 
 /// Escape a string for safe interpolation into HTML.
-fn html_escape(s: &str) -> String {
+pub fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -452,23 +584,20 @@ fn html_escape(s: &str) -> String {
         .replace('\'', "&#x27;")
 }
 
-/// Send an HTML response to the browser on the callback stream.
-fn send_callback_response(stream: &std::net::TcpStream, success: bool, detail: &str) {
-    let response_body = if success {
-        "<html><body><h1>Authentication successful!</h1>\
-            <p>You can close this window and return to the terminal.</p></body></html>"
-            .to_string()
-    } else {
-        let escaped = html_escape(detail);
-        format!(
-            "<html><body><h1>Authentication failed</h1><p>{escaped}</p>\
-                <p>Please return to the terminal and try again.</p></body></html>"
-        )
-    };
+/// Send an HTML response to the browser on the callback stream using the
+/// supplied page renderer.
+fn send_callback_response(
+    stream: &std::net::TcpStream,
+    success: bool,
+    detail: &str,
+    render: &(dyn Fn(bool, &str) -> String + Send + Sync),
+) {
+    let response_body = render(success, detail);
     let response = format!(
         "HTTP/1.1 200 OK\r\n\
-         Content-Type: text/html\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\
          Content-Length: {}\r\n\
+         Cache-Control: no-store\r\n\
          Connection: close\r\n\
          \r\n\
          {response_body}",
@@ -480,6 +609,145 @@ fn send_callback_response(stream: &std::net::TcpStream, success: bool, detail: &
         .and_then(|_| writer.flush());
 }
 
+fn callback_page_domain_from_issuer(issuer_url: &str) -> String {
+    Url::parse(issuer_url)
+        .ok()
+        .and_then(|url| url.host_str().map(ToString::to_string))
+        .unwrap_or_else(|| "prefix.dev".to_string())
+}
+
+/// Default HTML page shown in the browser after the OAuth redirect.
+///
+/// Callers can override this by setting [`OAuthConfig::callback_page`].
+/// The returned HTML is fully self-contained (inline CSS, inline SVG) so
+/// it works after the local callback server has shut down.
+///
+/// `detail` is treated as plain text and HTML-escaped before being
+/// interpolated, so it is safe to pass raw error messages from the
+/// identity provider.
+pub fn default_callback_page(success: bool, detail: &str) -> String {
+    default_callback_page_with_template(
+        success,
+        detail,
+        &CallbackPageTemplate::default(),
+        "prefix.dev",
+        DEFAULT_POWERED_BY,
+    )
+}
+
+/// Default OAuth callback page with caller-provided text.
+pub fn default_callback_page_with_template(
+    success: bool,
+    detail: &str,
+    template: &CallbackPageTemplate,
+    domain: &str,
+    default_powered_by: &str,
+) -> String {
+    const STYLES: &str = "\
+        :root{color-scheme:light dark;\
+        --bg:#f8fafc;--fg:#0f172a;--muted:#475569;\
+        --card:#ffffff;--border:#e2e8f0;\
+        --accent:#6366f1;--success:#10b981;--error:#ef4444;\
+        --success-bg:rgba(16,185,129,.12);--error-bg:rgba(239,68,68,.12);}\
+        @media (prefers-color-scheme:dark){:root{\
+        --bg:#0b1120;--fg:#f1f5f9;--muted:#94a3b8;\
+        --card:#111827;--border:#1f2937;\
+        --accent:#a5b4fc;}}\
+        *{box-sizing:border-box}\
+        html,body{margin:0;padding:0;height:100%}\
+        body{display:flex;align-items:center;justify-content:center;\
+        background:var(--bg);color:var(--fg);padding:24px;\
+        font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\
+        \"Helvetica Neue\",Arial,sans-serif;\
+        font-feature-settings:\"ss01\",\"cv11\";-webkit-font-smoothing:antialiased}\
+        .card{width:100%;max-width:440px;background:var(--card);\
+        border:1px solid var(--border);border-radius:16px;\
+        padding:40px 32px 28px;text-align:center;\
+        box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.08)}\
+        .icon{width:64px;height:64px;border-radius:50%;margin:0 auto 20px;\
+        display:flex;align-items:center;justify-content:center}\
+        .icon.success{background:var(--success-bg);color:var(--success)}\
+        .icon.error{background:var(--error-bg);color:var(--error)}\
+        h1{margin:0 0 8px;font-size:22px;font-weight:600;letter-spacing:-.01em}\
+        p{margin:0;color:var(--muted);font-size:15px;line-height:1.55}\
+        .detail{margin-top:16px;padding:12px 14px;\
+        background:var(--error-bg);border-radius:10px;\
+        color:var(--error);font-family:ui-monospace,SFMono-Regular,Menlo,\
+        Consolas,monospace;font-size:13px;text-align:left;\
+        word-break:break-word;white-space:pre-wrap}\
+        footer{margin-top:28px;padding-top:20px;border-top:1px solid var(--border);\
+        color:var(--muted);font-size:12px;letter-spacing:.02em}\
+        footer a{color:var(--accent);text-decoration:none;font-weight:500}\
+        footer a:hover{text-decoration:underline}";
+
+    const CHECK_SVG: &str = "<svg width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" \
+        fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" \
+        stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\
+        <polyline points=\"20 6 9 17 4 12\"/></svg>";
+
+    const CROSS_SVG: &str = "<svg width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" \
+        fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" \
+        stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\
+        <line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"/>\
+        <line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"/></svg>";
+
+    let application_name = html_escape(&template.application_name);
+    let domain = html_escape(domain);
+    let powered_by = if template.powered_by.is_empty() {
+        default_powered_by
+    } else {
+        &template.powered_by
+    };
+
+    let (title, kind, icon, heading, message, detail_block) = if success {
+        (
+            format!("Signed in to {application_name}"),
+            "success",
+            CHECK_SVG,
+            format!("{application_name} is signed in to {domain}"),
+            "Authentication completed. You can close this window and return to your terminal.",
+            String::new(),
+        )
+    } else {
+        let escaped = html_escape(detail);
+        let detail_block = if escaped.is_empty() {
+            String::new()
+        } else {
+            format!("<div class=\"detail\">{escaped}</div>")
+        };
+        (
+            format!("{application_name} sign-in failed"),
+            "error",
+            CROSS_SVG,
+            format!("{application_name} sign-in failed"),
+            "Authentication did not complete. Please return to your terminal and try again.",
+            detail_block,
+        )
+    };
+
+    format!(
+        "<!doctype html>\
+<html lang=\"en\">\
+<head>\
+<meta charset=\"utf-8\">\
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<meta name=\"robots\" content=\"noindex\">\
+<title>{title}</title>\
+<style>{STYLES}</style>\
+</head>\
+<body>\
+<main class=\"card\" role=\"status\" aria-live=\"polite\">\
+<div class=\"icon {kind}\">{icon}</div>\
+<h1>{heading}</h1>\
+<p>{message}</p>\
+{detail_block}\
+<footer>{powered_by}</footer>\
+</main>\
+</body>\
+</html>"
+    )
+}
+
 /// Device code flow for headless environments (RFC 8628).
 ///
 /// Uses the openidconnect crate's high-level API, which automatically
@@ -489,7 +757,7 @@ async fn device_code_flow(
     client_id: &str,
     client_secret: Option<&str>,
     scopes: &HashSet<String>,
-    http_client: &reqwest::Client,
+    http_client: &ReqwestClient,
 ) -> Result<OAuthTokens, OAuthError> {
     let device_auth_url = endpoints
         .device_authorization_endpoint
@@ -579,10 +847,10 @@ fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     if let Some(username) = claims.preferred_username() {
         return username.to_string();
     }
-    if let Some(name) = claims.name() {
-        if let Some(n) = name.get(None) {
-            return n.to_string();
-        }
+    if let Some(name) = claims.name()
+        && let Some(n) = name.get(None)
+    {
+        return n.to_string();
     }
     claims.subject().to_string()
 }
@@ -595,8 +863,20 @@ pub async fn revoke_tokens(
     access_token: &str,
     refresh_token: Option<&str>,
     client_id: &str,
+    user_agent: Option<&str>,
 ) {
-    let client = reqwest::Client::new();
+    let client = match reqwest::Client::builder()
+        .user_agent(user_agent.unwrap_or(DEFAULT_USER_AGENT))
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to build HTTP client for token revocation: {e}");
+            return;
+        }
+    };
 
     // Revoke refresh token first (higher priority)
     if let Some(refresh_token) = refresh_token {
@@ -634,5 +914,75 @@ pub async fn revoke_tokens(
         Err(e) => {
             tracing::warn!("Failed to revoke access token: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CallbackPageTemplate, DEFAULT_POWERED_BY, callback_page_domain_from_issuer,
+        default_callback_page, default_callback_page_with_template, html_escape,
+    };
+
+    #[test]
+    fn escapes_html_detail() {
+        assert_eq!(html_escape("<&>\"'"), "&lt;&amp;&gt;&quot;&#x27;");
+    }
+
+    #[test]
+    fn default_callback_page_escapes_error_detail() {
+        let page = default_callback_page(false, "<script>alert('x')</script>");
+
+        assert!(page.contains("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;"));
+        assert!(!page.contains("<script>alert"));
+    }
+
+    #[test]
+    fn default_callback_page_hides_empty_error_detail() {
+        let page = default_callback_page(false, "");
+
+        assert!(!page.contains("class=\"detail\""));
+    }
+
+    #[test]
+    fn default_callback_page_uses_template_text() {
+        let page = default_callback_page_with_template(
+            true,
+            "",
+            &CallbackPageTemplate {
+                application_name: "pixi".to_string(),
+                powered_by: "built by <strong>example</strong>".to_string(),
+            },
+            "example.com",
+            "Powered by example.com",
+        );
+
+        assert!(page.contains("pixi is signed in to example.com"));
+        assert!(page.contains("built by <strong>example</strong>"));
+    }
+
+    #[test]
+    fn callback_page_uses_issuer_domain() {
+        let domain = callback_page_domain_from_issuer("https://login.example.com/realms/prefix");
+
+        assert_eq!(domain, "login.example.com");
+    }
+
+    #[test]
+    fn empty_powered_by_uses_prefix_dev() {
+        let page = default_callback_page_with_template(
+            true,
+            "",
+            &CallbackPageTemplate {
+                application_name: "pixi".to_string(),
+                powered_by: String::new(),
+            },
+            "login.example.com",
+            DEFAULT_POWERED_BY,
+        );
+
+        assert!(page.contains("pixi is signed in to login.example.com"));
+        assert!(page.contains("https://prefix.dev"));
+        assert!(page.contains(">prefix.dev</a>"));
     }
 }

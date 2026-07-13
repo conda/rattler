@@ -2,10 +2,10 @@ use std::hash::BuildHasherDefault;
 
 use indexmap::IndexMap;
 use rattler_conda_types::{
-    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
+    MatchSpec, NamelessMatchSpec, PackageName, match_spec::package_name_matcher::PackageNameMatcher,
 };
 use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
+use serde_with::{DeserializeAs, DisplayFromStr, serde_as};
 
 pub(crate) struct MatchSpecMapOrVec;
 
@@ -30,8 +30,7 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
             MapOrVec::Map(m) => m
                 .into_iter()
                 .map(|(name, spec)| {
-                    MatchSpec::from_nameless(spec, Some(PackageNameMatcher::Exact(name)))
-                        .to_string()
+                    MatchSpec::from_nameless(spec, PackageNameMatcher::Exact(name)).to_string()
                 })
                 .collect(),
         })

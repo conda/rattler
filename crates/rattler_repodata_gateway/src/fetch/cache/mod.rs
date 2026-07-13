@@ -76,13 +76,17 @@ impl FromStr for RepoDataState {
 pub struct Expiring<T> {
     pub value: T,
 
-    // #[serde(with = "chrono::serde::ts_seconds")]
-    pub last_checked: chrono::DateTime<chrono::Utc>,
+    pub last_checked: jiff::Timestamp,
 }
 
 impl<T> Expiring<T> {
-    pub fn value(&self, expiration: chrono::Duration) -> Option<&T> {
-        if chrono::Utc::now().signed_duration_since(self.last_checked) >= expiration {
+    pub fn value(&self, expiration: jiff::Span) -> Option<&T> {
+        let now = jiff::Timestamp::now();
+        let expires_at = match self.last_checked.checked_add(expiration) {
+            Ok(t) => t,
+            Err(_) => return None,
+        };
+        if now >= expires_at {
             None
         } else {
             Some(&self.value)
@@ -136,7 +140,7 @@ fn serialize_blake2_hash<S: Serializer>(
 ) -> Result<S::Ok, S::Error> {
     match time.as_ref() {
         None => s.serialize_none(),
-        Some(hash) => format!("{hash:x}").serialize(s),
+        Some(hash) => hex::encode(hash).serialize(s),
     }
 }
 

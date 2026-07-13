@@ -1,4 +1,4 @@
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 /// Noarch packages are packages that are not architecture specific and
 /// therefore only have to be built once. Noarch packages are either generic or

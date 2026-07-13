@@ -6,7 +6,7 @@ If you want to go deeper though, any [open issue](https://github.com/conda/rattl
 Just let us know what you start on something.
 
 For questions, requests or a casual chat, we are very active on our discord server.
-You can [join our discord server via this link][chat-url].
+You can [join our discord server via this link](https://discord.gg/kKV8ZxyzY4).
 
 ## Development
 If you'd like to contribute code, then you may want to manage the build depends with a tool, we suggest pixi, but conda/mamba will also work.

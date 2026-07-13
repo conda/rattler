@@ -10,7 +10,7 @@ use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 use thiserror::Error;
 
-use super::{installer::Reporter, InstallDriver, Transaction};
+use super::{InstallDriver, Transaction, installer::Reporter};
 
 /// Error type for link script errors
 #[derive(Debug, thiserror::Error)]
@@ -118,7 +118,7 @@ pub fn run_link_scripts<'a>(
             let shell = if platform.is_windows() {
                 ShellEnum::CmdExe(CmdExe)
             } else {
-                ShellEnum::Bash(Bash)
+                ShellEnum::Bash(Bash::default())
             };
 
             tracing::info!(
@@ -265,12 +265,12 @@ mod tests {
     use crate::{
         get_repodata_record, get_test_data_dir,
         install::{
-            test_utils::execute_transaction, transaction, InstallDriver, InstallOptions,
-            TransactionOperation,
+            InstallDriver, InstallOptions, TransactionOperation, test_utils::execute_transaction,
+            transaction,
         },
         package_cache::PackageCache,
     };
-    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
+    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, prefix::Prefix};
     use rattler_networking::LazyClient;
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {

@@ -2,7 +2,7 @@ use rattler_conda_types::{ParseStrictness, VersionSpec};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::parse_strictness::JsParseStrictness;
-use crate::{version::JsVersion, JsResult};
+use crate::{JsResult, version::JsVersion};
 
 /// Represents a version specification in the conda ecosystem.
 ///

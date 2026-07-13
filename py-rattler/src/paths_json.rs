@@ -1,17 +1,24 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{
+    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
+    types::PyBytes,
+};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{
     FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
 };
 use rattler_package_streaming::seek::read_package_file;
+use url::Url;
 
-use crate::{error::PyRattlerError, utils::sha256_from_pybytes};
+use crate::{
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes,
+};
 
 /// A representation of the `paths.json` file found in package archives.
 ///
 /// The `paths.json` file contains information about every file included with the package.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathsJson {
@@ -81,6 +88,32 @@ impl PyPathsJson {
             .map_err(PyRattlerError::from)?)
     }
 
+    /// Fetches the file from a remote package URL.
+    #[staticmethod]
+    pub fn from_remote_url<'a>(
+        py: Python<'a>,
+        client: PyClientWithMiddleware,
+        url: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let url = Url::parse(&url).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
+        })?;
+
+        future_into_py(py, async move {
+            let paths_json =
+                rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url::<
+                    PathsJson,
+                >(client.into(), url)
+                .await;
+
+            Python::attach(|py| match paths_json {
+                Ok(r) => Ok(Some(Py::new(py, PyPathsJson::from(r))?.into_any())),
+                Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
+            })
+        })
+    }
+
     /// Returns the path to the file within the Conda archive.
     ///
     /// The path is relative to the root of the archive and include any necessary directories.
@@ -145,7 +178,7 @@ impl PyPathsJson {
 }
 
 /// A single entry in the `paths.json` file.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathsEntry {
@@ -273,7 +306,7 @@ impl PyPathsEntry {
 
 /// The path type of the path entry
 // TODO: Expose this properly later.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPathType {
@@ -334,7 +367,7 @@ impl PyPathType {
 
 /// Description off a placeholder text found in a file that must be replaced when installing the
 /// file into the prefix.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPlaceholder {
@@ -367,7 +400,7 @@ impl PyPrefixPlaceholder {
     }
 
     /// The type of the file, either binary or text. Depending on the type of file either text
-    /// replacement is performed or CString replacement.
+    /// replacement is performed or `CString` replacement.
     #[getter]
     pub fn file_mode(&self) -> PyFileMode {
         self.inner.file_mode.into()
@@ -394,7 +427,7 @@ impl PyPrefixPlaceholder {
 }
 
 /// The file mode of the entry
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyFileMode {

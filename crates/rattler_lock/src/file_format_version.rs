@@ -26,6 +26,9 @@ pub enum FileFormatVersion {
 
     /// fields are derived from the location and the `kind` is merged with the location.
     V6 = 6,
+
+    /// Allow for relative file paths in URLs.
+    V7 = 7,
 }
 
 impl Display for FileFormatVersion {
@@ -36,7 +39,7 @@ impl Display for FileFormatVersion {
 
 impl FileFormatVersion {
     /// The latest version this crate supports.
-    pub const LATEST: Self = FileFormatVersion::V6;
+    pub const LATEST: Self = FileFormatVersion::V7;
 
     /// Returns true if the pypi indexes should be present in the lock file if
     /// there are pypi packages present.
@@ -59,7 +62,7 @@ impl TryFrom<u64> for FileFormatVersion {
             0 => {
                 return Err(ParseCondaLockError::ParseError(serde_yaml::Error::custom(
                     "`version` field in lock file is not an integer",
-                )))
+                )));
             }
             1 => Self::V1,
             2 => Self::V2,
@@ -67,11 +70,12 @@ impl TryFrom<u64> for FileFormatVersion {
             4 => Self::V4,
             5 => Self::V5,
             6 => Self::V6,
+            7 => Self::V7,
             _ => {
                 return Err(ParseCondaLockError::IncompatibleVersion {
                     lock_file_version: value,
                     max_supported_version: FileFormatVersion::LATEST,
-                })
+                });
             }
         })
     }

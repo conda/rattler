@@ -1,0 +1,6 @@
+---
+source: crates/rattler_package_streaming/src/reqwest/fetch.rs
+expression: about_json
+---
+channels:
+  - "https://conda.anaconda.org/conda-forge/"

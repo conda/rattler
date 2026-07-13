@@ -1,0 +1,19 @@
+version: 7
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda_source: "my-partial-pkg[abcd1234] @ my-partial-pkg"
+packages:
+  - conda_source: "my-partial-pkg[abcd1234] @ my-partial-pkg"
+    depends:
+      - python >=3.10
+    run_exports:
+      strong:
+        - libfoo >=1.0,<2
+      weak:
+        - libbar >=2

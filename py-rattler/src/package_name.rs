@@ -8,7 +8,7 @@ use rattler_conda_types::PackageName;
 
 use crate::error::PyRattlerError;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone, Debug)]
 pub struct PyPackageName {

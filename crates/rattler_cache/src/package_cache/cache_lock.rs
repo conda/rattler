@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
 use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_digest::Sha256Hash;
@@ -290,7 +289,7 @@ impl CacheMetadataFile {
                 ));
             }
         }
-        Ok(Some(GenericArray::clone_from_slice(&buf)))
+        Ok(Some(Sha256Hash::from(buf)))
     }
 }
 
@@ -303,7 +302,7 @@ async fn warn_timeout_future(message: String) {
 
 #[cfg(test)]
 mod tests {
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, parse_digest_from_hex};
 
     use super::CacheMetadataFile;
 

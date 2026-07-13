@@ -1,6 +1,6 @@
 //! Tests for extras (optional dependencies) support
 
-use super::helpers::{run_solver_cases, PackageBuilder, SolverCase};
+use super::helpers::{PackageBuilder, SolverCase, run_solver_cases};
 use rattler_solve::SolverImpl;
 
 /// Test that extras pull in the correct optional dependencies

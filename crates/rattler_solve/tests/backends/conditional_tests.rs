@@ -1,5 +1,5 @@
 use super::helpers::package_builder::PackageBuilder;
-use super::helpers::solver_case::{run_solver_cases, SolverCase};
+use super::helpers::solver_case::{SolverCase, run_solver_cases};
 use super::*;
 
 pub(super) fn solve_conditional_dependencies<T: SolverImpl + Default>() {

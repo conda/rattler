@@ -1,6 +1,13 @@
 {
   "info": {
-    "subdir": "noarch"
+    "subdir": "noarch",
+    "repodata_revisions": {
+      "v3": {
+        "n_packages": 2,
+        "oldest": 1768249989851,
+        "newest": 1773851561010
+      }
+    }
   },
   "packages": {
     "six-1.8.0-py3_none_any_0.tar.bz2": {

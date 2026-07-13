@@ -171,7 +171,7 @@ async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_ch
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec('foo[when="__unix"]', experimental_conditionals=True)],
+        [MatchSpec('foo[when="__unix"]')],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
@@ -191,7 +191,7 @@ async def test_conditional_root_requirement_not_satisfied(gateway: Gateway, dumm
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec('foo[when="__win"]', experimental_conditionals=True)],
+        [MatchSpec('foo[when="__win"]')],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
@@ -210,7 +210,7 @@ async def test_conditional_root_requirement_with_logic(gateway: Gateway, dummy_c
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec('foo[when="__unix and __linux"]', experimental_conditionals=True)],
+        [MatchSpec('foo[when="__unix and __linux"]')],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[

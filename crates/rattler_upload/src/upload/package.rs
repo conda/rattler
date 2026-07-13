@@ -1,19 +1,16 @@
 use std::path::Path;
 
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    package::{AboutJson, IndexJson, PackageFile},
     PackageName, VersionWithSource as PackageVersion,
+    package::{AboutJson, IndexJson, PackageFile},
 };
-use rattler_digest::{compute_file_digest, Md5};
+use rattler_digest::{Md5, compute_file_digest};
 use sha2::Sha256;
 
 pub fn sha256_sum(package_file: &Path) -> Result<String, std::io::Error> {
-    Ok(format!(
-        "{:x}",
-        compute_file_digest::<Sha256>(&package_file)?
-    ))
+    Ok(hex::encode(compute_file_digest::<Sha256>(&package_file)?))
 }
 
 pub struct ExtractedPackage<'a> {
@@ -63,9 +60,13 @@ impl<'a> ExtractedPackage<'a> {
         sha256_sum(self.file)
     }
 
-    pub fn base64_md5(&self) -> Result<String, std::io::Error> {
+    pub fn md5_base64(&self) -> Result<String, std::io::Error> {
         compute_file_digest::<Md5>(&self.file)
             .map(|digest| general_purpose::STANDARD.encode(digest))
+    }
+
+    pub fn md5_hex(&self) -> Result<String, std::io::Error> {
+        compute_file_digest::<Md5>(&self.file).map(hex::encode)
     }
 
     pub fn filename(&self) -> Option<&str> {

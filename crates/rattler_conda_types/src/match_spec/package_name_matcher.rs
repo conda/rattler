@@ -18,12 +18,12 @@ pub enum PackageNameMatcher {
     /// For example, `*` matches any string, `foo*` matches any string starting
     /// with `foo`, `*bar` matches any string ending with `bar` and `foo*bar`
     /// matches any string starting with `foo` and ending with `bar`.
-    Glob(glob::Pattern),
+    Glob(Box<glob::Pattern>),
     /// Match the string by regex. A regex starts with a `^`, ends with a `$`
     /// and uses the regex syntax. For example, `^foo.*bar$` matches any
     /// string starting with `foo` and ending with `bar`. Note that the regex
     /// is anchored, so it must match the entire string.
-    Regex(fancy_regex::Regex),
+    Regex(Box<fancy_regex::Regex>),
 }
 
 impl Hash for PackageNameMatcher {
@@ -73,6 +73,15 @@ impl PackageNameMatcher {
         }
     }
 
+    /// Consumes self and returns the inner [`PackageName`] if this is an exact
+    /// match.
+    pub fn into_exact(self) -> Option<PackageName> {
+        match self {
+            PackageNameMatcher::Exact(name) => Some(name),
+            _ => None,
+        }
+    }
+
     /// Returns the inner glob pattern if this is a glob match.
     pub fn as_glob(&self) -> Option<&glob::Pattern> {
         match self {
@@ -90,6 +99,14 @@ impl PackageNameMatcher {
     }
 }
 
+impl Default for PackageNameMatcher {
+    fn default() -> Self {
+        PackageNameMatcher::Glob(Box::new(
+            glob::Pattern::new("*").expect("wildcard glob is always valid"),
+        ))
+    }
+}
+
 impl From<PackageName> for PackageNameMatcher {
     fn from(value: PackageName) -> Self {
         PackageNameMatcher::Exact(value)
@@ -98,22 +115,13 @@ impl From<PackageName> for PackageNameMatcher {
 
 impl From<glob::Pattern> for PackageNameMatcher {
     fn from(value: glob::Pattern) -> Self {
-        PackageNameMatcher::Glob(value)
+        PackageNameMatcher::Glob(Box::new(value))
     }
 }
 
 impl From<fancy_regex::Regex> for PackageNameMatcher {
     fn from(value: fancy_regex::Regex) -> Self {
-        PackageNameMatcher::Regex(value)
-    }
-}
-
-impl From<PackageNameMatcher> for Option<PackageName> {
-    fn from(value: PackageNameMatcher) -> Self {
-        match value {
-            PackageNameMatcher::Exact(s) => Some(s),
-            _ => None,
-        }
+        PackageNameMatcher::Regex(Box::new(value))
     }
 }
 
@@ -150,17 +158,17 @@ impl FromStr for PackageNameMatcher {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('^') && s.ends_with('$') {
-            Ok(PackageNameMatcher::Regex(
+            Ok(PackageNameMatcher::Regex(Box::new(
                 fancy_regex::Regex::new(s).map_err(|_err| PackageNameMatcherParseError::Regex {
                     regex: s.to_string(),
                 })?,
-            ))
+            )))
         } else if s.contains('*') {
-            Ok(PackageNameMatcher::Glob(glob::Pattern::new(s).map_err(
-                |_err| PackageNameMatcherParseError::Glob {
+            Ok(PackageNameMatcher::Glob(Box::new(
+                glob::Pattern::new(s).map_err(|_err| PackageNameMatcherParseError::Glob {
                     glob: s.to_string(),
-                },
-            )?))
+                })?,
+            )))
         } else {
             Ok(PackageNameMatcher::Exact(
                 PackageName::from_str(s).map_err(|e| {
@@ -209,14 +217,6 @@ impl<'de> Deserialize<'de> for PackageNameMatcher {
     }
 }
 
-/// Error when converting a [`PackageNameMatcher`] to a [`PackageName`]
-#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
-pub enum IntoPackageNameError {
-    /// The package name matcher is not an exact package name
-    #[error("not an exact package name")]
-    NotExact,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,11 +228,11 @@ mod tests {
             "foo".parse().unwrap()
         );
         assert_eq!(
-            PackageNameMatcher::Glob(glob::Pattern::new("foo*bar").unwrap()),
+            PackageNameMatcher::Glob(Box::new(glob::Pattern::new("foo*bar").unwrap())),
             "foo*bar".parse().unwrap()
         );
         assert_eq!(
-            PackageNameMatcher::Regex(fancy_regex::Regex::new("^foo.*$").unwrap()),
+            PackageNameMatcher::Regex(Box::new(fancy_regex::Regex::new("^foo.*$").unwrap())),
             "^foo.*$".parse().unwrap()
         );
     }

@@ -1,11 +1,9 @@
 use pyo3::{
-    pyclass, pymethods,
+    FromPyObject, Py, PyAny, PyResult, Python, pyclass, pymethods,
     types::{PyAnyMethods, PyDict, PyDictMethods, PyTypeMethods},
-    FromPyObject, Py, PyAny, PyResult, Python,
 };
 use rattler_networking::{
-    mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
-    OciMiddleware,
+    GCSMiddleware, MirrorMiddleware, mirror_middleware::Mirror, s3_middleware::S3Config,
 };
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
@@ -19,13 +17,14 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
+    Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
     S3(PyS3Middleware),
     AddHeaders(PyAddHeadersMiddleware),
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMirrorMiddleware {
@@ -65,7 +64,7 @@ impl From<PyMirrorMiddleware> for MirrorMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAuthenticationMiddleware {}
@@ -78,7 +77,22 @@ impl PyAuthenticationMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyRetryMiddleware {
+    pub(crate) max_retries: u32,
+}
+
+#[pymethods]
+impl PyRetryMiddleware {
+    #[new]
+    #[pyo3(signature = (max_retries=3))]
+    pub fn __init__(max_retries: u32) -> Self {
+        Self { max_retries }
+    }
+}
+
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyOciMiddleware {}
@@ -91,13 +105,7 @@ impl PyOciMiddleware {
     }
 }
 
-impl From<PyOciMiddleware> for OciMiddleware {
-    fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
-    }
-}
-
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyGCSMiddleware {}
@@ -112,12 +120,12 @@ impl PyGCSMiddleware {
 
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
-        GCSMiddleware
+        GCSMiddleware::default()
     }
 }
 
 #[derive(Clone)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyS3Config {
     // non-trivial enums are not supported by pyo3 as pyclasses
     pub(crate) custom: Option<PyS3ConfigCustom>,
@@ -166,7 +174,7 @@ impl From<PyS3Config> for S3Config {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyS3Middleware {
     pub(crate) s3_config: HashMap<String, PyS3Config>,
@@ -184,14 +192,14 @@ impl PyS3Middleware {
 ///
 /// The callback receives (host, path) and should return a dict of headers to add,
 /// or None to add no headers.
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyAddHeadersMiddleware {
     pub(crate) callback: Py<PyAny>,
 }
 
 impl Clone for PyAddHeadersMiddleware {
     fn clone(&self) -> Self {
-        Python::with_gil(|py| Self {
+        Python::attach(|py| Self {
             callback: self.callback.clone_ref(py),
         })
     }
@@ -242,7 +250,7 @@ impl Middleware for AddHeadersMiddleware {
 
         // Call the Python callback with host and path
         let callback = self.callback.clone();
-        let headers_to_add: Option<HashMap<String, String>> = Python::with_gil(
+        let headers_to_add: Option<HashMap<String, String>> = Python::attach(
             |py| -> reqwest_middleware::Result<Option<HashMap<String, String>>> {
                 let result = callback
                     .call1(py, (host.as_str(), path.as_str()))
@@ -258,7 +266,7 @@ impl Middleware for AddHeadersMiddleware {
                 }
 
                 // Try to extract as a dictionary
-                let dict = result.downcast_bound::<PyDict>(py).map_err(|_e| {
+                let dict = result.cast_bound::<PyDict>(py).map_err(|_e| {
                     let type_name = result
                         .bind(py)
                         .get_type()

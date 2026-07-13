@@ -1,4 +1,4 @@
-use known_folders::{get_known_folder_path, KnownFolder};
+use known_folders::{KnownFolder, get_known_folder_path};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;

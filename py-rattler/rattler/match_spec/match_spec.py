@@ -38,9 +38,9 @@ class MatchSpec:
 
     The rules for constructing a canonical string representation are:
 
-    1. `name` (i.e. "package name") is required, but its value can be '*'. Its
-    position is always outside the key-value brackets.
-    It can also be a glob pattern or a regex if `exact_names_only` is `False`.
+    1. `name` (i.e. "package name") is required. Its position is always outside the
+    key-value brackets. It can also be a glob pattern or a regex if `exact_names_only`
+    is `False`.
     2. If `version` is an exact version, it goes outside the key-value brackets and
     is prepended by `==`. If `version` is a "fuzzy" value (e.g. `1.11.*`), it goes
     outside the key-value brackets with the `.*` left off and is prepended by `=`.
@@ -86,17 +86,19 @@ class MatchSpec:
         spec: str,
         strict: bool = False,
         exact_names_only: bool = True,
-        experimental_extras: bool = False,
-        experimental_conditionals: bool = False,
+        extras: bool = True,
+        conditionals: bool = True,
+        flags: bool = True,
     ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
 
-        When `experimental_extras` is `True`, extras syntax is enabled (e.g., `pkg[extras=[foo,bar]]`).
-
-        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg[when="python >=3.6"]`).
+        When `extras` is `True`, extras syntax (`pkg[extras=[foo,bar]]`) is
+        allowed. When `conditionals` is `True`, conditionals syntax
+        (`pkg[when="python >=3.6"]`) is allowed. When `flags` is `True`, flags
+        syntax (`pkg[flags=[cuda]]`) is allowed.
 
         ```python
         >>> MatchSpec("pip >=24.0")
@@ -109,13 +111,18 @@ class MatchSpec:
         MatchSpec("foo*")
         >>> MatchSpec("^foo.*$", strict=True, exact_names_only=True) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        InvalidMatchSpecException: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
+        InvalidMatchSpecError: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
         """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(
-                spec, strict, exact_names_only, experimental_extras, experimental_conditionals
+                spec,
+                strict,
+                exact_names_only,
+                extras,
+                conditionals,
+                flags,
             )
         else:
             raise TypeError(
@@ -123,7 +130,7 @@ class MatchSpec:
             )
 
     @property
-    def name(self) -> Optional[PackageNameMatcher]:
+    def name(self) -> PackageNameMatcher:
         """
         The name of the package.
         """
@@ -236,7 +243,7 @@ class MatchSpec:
         MatchSpec("foo ==3.4")
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.PackageNameMatcherParseException
+        exceptions.PackageNameMatcherParseError
         >>>
         ```
         """

@@ -29,6 +29,9 @@ pub struct UrlSourceLocation {
 
     /// The sha256 hash of the archive
     pub sha256: Option<Sha256Hash>,
+
+    /// The git subdirectory of the package
+    pub subdirectory: Option<String>,
 }
 
 /// A specification of source from a git repository.

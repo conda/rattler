@@ -43,6 +43,10 @@ impl PackageFile for PathsJson {
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
         serde_json::from_str(str).map_err(Into::into)
     }
+
+    fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
+        serde_json::from_slice(slice).map_err(Into::into)
+    }
 }
 
 impl PathsJson {
@@ -291,10 +295,9 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        insta::assert_yaml_snapshot!(PathsJson::from_deprecated_package_directory(
-            package_dir.path()
-        )
-        .unwrap());
+        insta::assert_yaml_snapshot!(
+            PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Tests migrated to use the `SolverCase` helper for improved readability and consistency.
 
 use super::helpers::{PackageBuilder, SolverCase};
-use rattler_solve::SolverImpl;
+use rattler_solve::{ExcludeNewer, SolverImpl};
 
 /// Test that already-installed packages are favored when solving.
 pub(super) fn solve_favored<T: SolverImpl + Default>() {
@@ -81,13 +81,21 @@ pub(super) fn solve_exclude_newer<T: SolverImpl + Default>() {
         SolverCase::new("exclude_newer filters out packages newer than timestamp")
             .repository([foo_old, foo_new])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer(ExcludeNewer::from_datetime(
+                "2022-01-01T00:00:00Z"
+                    .parse()
+                    .expect("invalid timestamp format"),
+            ))
             .expect_present([("foo", "1.0")]),
         // When .conda is filtered by timestamp, fall back to .tar.bz2
         SolverCase::new("exclude_newer prefers .tar.bz2 when .conda is too new")
             .repository([foo_tarbz2.clone(), foo_conda, foo_newer_version])
             .specs(["foo"])
-            .exclude_newer("2022-01-01T00:00:00Z")
+            .exclude_newer(ExcludeNewer::from_datetime(
+                "2022-01-01T00:00:00Z"
+                    .parse()
+                    .expect("invalid timestamp format"),
+            ))
             .expect_present([foo_tarbz2]),
     ]);
 }
@@ -199,5 +207,61 @@ pub(super) fn resolvo_issue_188<T: SolverImpl + Default>() {
         .constraints(["dependent_package ==1.0.0"])
         // `dependent_package` was not requested and thus we expect it to be absent
         .expect_absent(["dependent_package"])
+        .run::<T>();
+}
+
+/// Test dependency override.
+pub(super) fn solve_dependency_override_basic<T: SolverImpl + Default>() {
+    let python_38 = PackageBuilder::new("python").version("3.8").build();
+    let python_310 = PackageBuilder::new("python").version("3.10").build();
+    let jupyterlab = PackageBuilder::new("jupyterlab")
+        .version("3.3.0")
+        .depends(["python >=3.7"])
+        .build();
+
+    SolverCase::new("override forces lower python version")
+        .repository([python_38, python_310, jupyterlab])
+        .specs(["jupyterlab"])
+        .dependency_overrides(vec![("jupyterlab 3.3.*", "python ==3.8")])
+        .expect_present([("jupyterlab", "3.3.0"), ("python", "3.8")])
+        .run::<T>();
+}
+
+/// Test override doesn't apply when package version doesn't match.
+pub(super) fn solve_dependency_override_no_match<T: SolverImpl + Default>() {
+    let python_38 = PackageBuilder::new("python").version("3.8").build();
+    let python_310 = PackageBuilder::new("python").version("3.10").build();
+    let jupyterlab = PackageBuilder::new("jupyterlab")
+        .version("4.0.0")
+        .depends(["python >=3.7"])
+        .build();
+
+    SolverCase::new("override does not apply when package doesn't match")
+        .repository([python_38, python_310, jupyterlab])
+        .specs(["jupyterlab"])
+        .dependency_overrides(vec![("jupyterlab 3.3.*", "python ==3.8")])
+        .expect_present([("jupyterlab", "4.0.0"), ("python", "3.10")])
+        .run::<T>();
+}
+
+/// Test multiple overrides on the same package.
+pub(super) fn solve_dependency_override_multiple<T: SolverImpl + Default>() {
+    let python_38 = PackageBuilder::new("python").version("3.8").build();
+    let python_310 = PackageBuilder::new("python").version("3.10").build();
+    let numpy_1 = PackageBuilder::new("numpy").version("1.20").build();
+    let numpy_2 = PackageBuilder::new("numpy").version("2.0").build();
+    let pkg = PackageBuilder::new("mypackage")
+        .version("1.0")
+        .depends(["python >=3.7", "numpy >=1.0"])
+        .build();
+
+    SolverCase::new("multiple overrides apply to same package")
+        .repository([python_38, python_310, numpy_1, numpy_2, pkg])
+        .specs(["mypackage"])
+        .dependency_overrides(vec![
+            ("mypackage", "python ==3.8"),
+            ("mypackage", "numpy ==1.20"),
+        ])
+        .expect_present([("mypackage", "1.0"), ("python", "3.8"), ("numpy", "1.20")])
         .run::<T>();
 }

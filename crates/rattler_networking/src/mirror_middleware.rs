@@ -76,6 +76,47 @@ impl MirrorMiddleware {
     pub fn keys(&self) -> &[(String, Url)] {
         &self.sorted_keys
     }
+
+    /// Create a new `MirrorMiddleware` from the `mirrors` map of the shared
+    /// rattler configuration (see [`rattler_config`]).
+    ///
+    /// Accepts a [`rattler_config::config::CommonConfig`]; a
+    /// `&ConfigBase<T>` of any extension coerces into it.
+    #[cfg(feature = "rattler_config")]
+    pub fn from_config(config: &rattler_config::config::CommonConfig) -> Self {
+        /// Mirror urls are used as prefixes; without a trailing slash the
+        /// last component would be truncated when joining relative paths.
+        fn with_trailing_slash(url: &Url) -> Url {
+            if url.path().ends_with('/') {
+                url.clone()
+            } else {
+                let mut url = url.clone();
+                url.set_path(&format!("{}/", url.path()));
+                url
+            }
+        }
+
+        Self::from_map(
+            config
+                .mirrors
+                .iter()
+                .map(|(url, mirrors)| {
+                    (
+                        with_trailing_slash(url),
+                        mirrors
+                            .iter()
+                            .map(|mirror| Mirror {
+                                url: with_trailing_slash(mirror),
+                                no_zstd: false,
+                                no_bz2: false,
+                                max_failures: None,
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    }
 }
 
 fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
@@ -118,7 +159,16 @@ impl Middleware for MirrorMiddleware {
                 };
 
                 let mirror = &selected_mirror.mirror;
-                let selected_url = mirror.url.join(url_rest).unwrap();
+                let selected_url = {
+                    let mut u = mirror.url.clone();
+                    let base_path = u.path().trim_end_matches('/');
+                    if url_rest.is_empty() {
+                        u.set_path(&format!("{base_path}/"));
+                    } else {
+                        u.set_path(&format!("{base_path}/{url_rest}"));
+                    }
+                    u
+                };
 
                 // Short-circuit if the mirror does not support the file type
                 if url_rest.ends_with(".json.zst") && mirror.no_zstd {
@@ -174,8 +224,8 @@ pub(crate) fn create_404_response(_url: &Url, _body: &str) -> Response {
 mod test {
     use std::{future::IntoFuture, net::SocketAddr};
 
-    use axum::{extract::State, http::StatusCode, routing::get, Router};
-    use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+    use axum::{Router, extract::State, http::StatusCode, routing::get};
+    use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
     use url::Url;
 
     use crate::MirrorMiddleware;
@@ -300,5 +350,70 @@ mod test {
             assert!(path.0.len() <= len);
             len = path.0.len();
         }
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_path_rewrite() {
+        // Start a server that serves at /channel/count
+        let state = String::from("mirror server");
+        let router = Router::new()
+            .route("/channel/count", get(count))
+            .with_state(state);
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, router.into_make_service()).into_future());
+
+        let mirror_url: Url = format!("http://{}:{}/channel", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
+
+        let mut mirror_map = std::collections::HashMap::new();
+
+        // Upstream key includes a path segment (e.g. conda-forge)
+        // Mirror URL also has a path segment (e.g. channel)
+        // The mirror path must fully replace the upstream path.
+        mirror_map.insert(
+            "https://prefix.dev/conda-forge".parse().unwrap(),
+            vec![mirror_setting(mirror_url)],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        // Request to upstream: https://prefix.dev/conda-forge/count
+        // Should be rewritten to: http://127.0.0.1:PORT/channel/count
+        let res = client
+            .get("https://prefix.dev/conda-forge/count")
+            .send()
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "status: {}", res.status());
+        let body = res.text().await.unwrap();
+        assert_eq!(body, "Hi from counter: mirror server");
+    }
+
+    #[cfg(feature = "rattler_config")]
+    #[test]
+    fn from_config_appends_trailing_slashes() {
+        let (config, _) = rattler_config::ConfigBase::<rattler_config::NoExtension>::from_toml_str(
+            r#"
+            [mirrors]
+            "https://conda.anaconda.org/conda-forge" = ["https://mirror.example.com/conda-forge"]
+            "#,
+        )
+        .unwrap();
+
+        let middleware = MirrorMiddleware::from_config(&config);
+        assert_eq!(
+            middleware.keys(),
+            [(
+                "https://conda.anaconda.org/conda-forge/".to_string(),
+                Url::parse("https://conda.anaconda.org/conda-forge/").unwrap()
+            )]
+        );
     }
 }

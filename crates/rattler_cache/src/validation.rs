@@ -16,9 +16,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use digest::Digest;
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
-use rattler_digest::Sha256;
+use rattler_digest::{HashingWriter, Sha256};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
@@ -121,7 +120,7 @@ pub fn validate_package_directory(
             match PathsJson::from_deprecated_package_directory(package_dir) {
                 Ok(paths) => paths,
                 Err(e) if e.kind() == ErrorKind::NotFound => {
-                    return Err(PackageValidationError::MetadataMissing)
+                    return Err(PackageValidationError::MetadataMissing);
                 }
                 Err(e) => return Err(PackageValidationError::ReadDeprecatedPathsJsonError(e)),
             }
@@ -229,15 +228,15 @@ fn validate_package_hard_link_entry(
     if let Some(expected_hash) = &entry.sha256 {
         // Determine the hash of the file on disk
         let mut file = BufReader::with_capacity(64 * 1024, file);
-        let mut hasher = Sha256::default();
-        std::io::copy(&mut file, &mut hasher)?;
-        let hash = hasher.finalize();
+        let mut writer = HashingWriter::<_, Sha256>::new(std::io::sink());
+        std::io::copy(&mut file, &mut writer)?;
+        let (_, hash) = writer.finalize();
 
         // Compare the two hashes
         if expected_hash != &hash {
             return Err(PackageEntryValidationError::HashMismatch(
-                format!("{expected_hash:x}"),
-                format!("{hash:x}"),
+                hex::encode(expected_hash),
+                hex::encode(hash),
             ));
         }
     }
@@ -293,8 +292,8 @@ mod test {
     use url::Url;
 
     use super::{
-        validate_package_directory, validate_package_directory_from_paths,
         PackageEntryValidationError, PackageValidationError, ValidationMode,
+        validate_package_directory, validate_package_directory_from_paths,
     };
 
     #[rstest]

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     PackageRecord, PackageUrl, RepoData, Shard,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 
 /// Represents a Conda repodata patch.
@@ -153,9 +153,9 @@ mod tracked_features {
 }
 
 /// Patches for packages stored under the `v3` top-level key.
-/// Mirrors [`ExperimentalV3Packages`] but with [`PackageRecordPatch`] values.
+/// Mirrors [`V3Packages`] but with [`PackageRecordPatch`] values.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
-pub struct ExperimentalV3PackagePatches {
+pub struct V3PackagePatches {
     /// Patches for v3 tar.bz2 package records
     #[serde(
         default,
@@ -173,7 +173,7 @@ pub struct ExperimentalV3PackagePatches {
     pub whl: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
 }
 
-impl ExperimentalV3PackagePatches {
+impl V3PackagePatches {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
         self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
@@ -201,12 +201,8 @@ pub struct PatchInstructions {
     pub conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 
     /// Patches for v3 packages
-    #[serde(
-        default,
-        rename = "v3",
-        skip_serializing_if = "ExperimentalV3PackagePatches::is_empty"
-    )]
-    pub experimental_v3: ExperimentalV3PackagePatches,
+    #[serde(default, skip_serializing_if = "V3PackagePatches::is_empty")]
+    pub v3: V3PackagePatches,
 }
 
 impl PackageRecord {
@@ -241,7 +237,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
-    v3: &mut super::ExperimentalV3Packages,
+    v3: &mut super::V3Packages,
     removed: &mut ahash::HashSet<DistArchiveIdentifier>,
     instructions: &PatchInstructions,
 ) {
@@ -263,43 +259,38 @@ pub fn apply_patches_impl(
     }
 
     // Apply patches to v3 packages
-    for (identifier, patch) in instructions.experimental_v3.tar_bz2.iter() {
+    for (identifier, patch) in instructions.v3.tar_bz2.iter() {
         if let Some(record) = v3.tar_bz2.get_mut(identifier) {
             record.apply_patch(patch);
         }
     }
-    for (identifier, patch) in instructions.experimental_v3.conda.iter() {
+    for (identifier, patch) in instructions.v3.conda.iter() {
         if let Some(record) = v3.conda.get_mut(identifier) {
             record.apply_patch(patch);
         }
     }
-    for (identifier, patch) in instructions.experimental_v3.whl.iter() {
+    for (identifier, patch) in instructions.v3.whl.iter() {
         if let Some(record) = v3.whl.get_mut(identifier) {
             record.package_record.apply_patch(patch);
         }
     }
 
-    // remove packages that have been removed
+    // Mark packages as removed. Note: we only add them to the `removed` set
+    // and do NOT remove them from the package maps. The `removed` key signals
+    // that a package has been yanked, but its metadata should remain available.
     for identifier in instructions.remove.iter() {
         match identifier.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
-                if packages.shift_remove_entry(identifier).is_some() {
-                    removed.insert(identifier.clone());
-                }
+                removed.insert(identifier.clone());
 
-                // also remove equivalent .conda package if it exists
+                // also mark equivalent .conda package as removed if it exists
                 let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
-                if conda_packages
-                    .shift_remove_entry(&conda_identifier)
-                    .is_some()
-                {
+                if conda_packages.contains_key(&conda_identifier) {
                     removed.insert(conda_identifier);
                 }
             }
             DistArchiveType::Conda(CondaArchiveType::Conda) => {
-                if conda_packages.shift_remove_entry(identifier).is_some() {
-                    removed.insert(identifier.clone());
-                }
+                removed.insert(identifier.clone());
             }
             DistArchiveType::Wheel(_) => {
                 // Wheel packages are stored in v3.whl; removal by
@@ -316,7 +307,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
-            &mut self.experimental_v3,
+            &mut self.v3,
             &mut self.removed,
             instructions,
         );
@@ -330,7 +321,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
-            &mut self.experimental_v3,
+            &mut self.v3,
             &mut self.removed,
             instructions,
         );

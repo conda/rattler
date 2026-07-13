@@ -1,5 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,16 +8,17 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, Bound, FromPyObject,
-    PyAny, PyErr, PyResult, Python,
+    Bound, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass, pymethods,
+    types::PyBytes,
 };
 use rattler_conda_types::{
+    Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
+    WhlPackageRecord,
     package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use url::Url;
 
 use crate::{
@@ -35,9 +36,9 @@ use crate::{
 /// It uses a `RecordInner` enum and (try_)as_{x}_record methods for this
 /// interface.
 ///
-/// PyO3 cannot expose tagged enums directly, to achieve this we use the
+/// `PyO3` cannot expose tagged enums directly, to achieve this we use the
 /// `PyRecord` wrapper pyclass on top of `RecordInner`.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyRecord {
@@ -49,6 +50,7 @@ pub enum RecordInner {
     Prefix(Arc<PrefixRecord>),
     RepoData(Arc<RepoDataRecord>),
     Package(Arc<PackageRecord>),
+    Whl(Arc<WhlPackageRecord>),
 }
 
 impl PyRecord {
@@ -67,6 +69,9 @@ impl PyRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
         }
     }
 
@@ -76,6 +81,9 @@ impl PyRecord {
             RecordInner::RepoData(r) => Ok(Arc::make_mut(r)),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
             )),
         }
     }
@@ -89,6 +97,9 @@ impl PyRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
+            )),
         }
     }
 
@@ -101,11 +112,32 @@ impl PyRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
+            )),
+        }
+    }
+
+    pub fn try_as_whl_package_record(&self) -> PyResult<&WhlPackageRecord> {
+        match &self.inner {
+            RecordInner::Whl(r) => Ok(r),
+            _ => Err(PyTypeError::new_err(
+                "Cannot use object as 'WhlPackageRecord'",
+            )),
+        }
+    }
+
+    pub fn try_as_whl_package_record_mut(&mut self) -> PyResult<&mut WhlPackageRecord> {
+        match &mut self.inner {
+            RecordInner::Whl(r) => Ok(Arc::make_mut(r)),
+            _ => Err(PyTypeError::new_err(
+                "Cannot use object as 'WhlPackageRecord'",
+            )),
         }
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyLink {
     #[pyo3(get, set)]
@@ -171,8 +203,9 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                experimental_extra_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
+                flags: Vec::new(),
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: None,
@@ -220,6 +253,24 @@ impl PyRecord {
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
                     .transpose()?
                     .map(Into::into),
+            })),
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (package_record, url))]
+    pub fn create_whl_record(package_record: PyRecord, url: &str) -> PyResult<Self> {
+        if !package_record.is_package_record() {
+            return Err(PyTypeError::new_err(
+                "package_record must be a PackageRecord",
+            ));
+        }
+        let package_record = package_record.as_package_record().clone();
+        let url: UrlOrPath = url.parse().map_err(PyRattlerError::from)?;
+        Ok(Self {
+            inner: RecordInner::Whl(Arc::new(WhlPackageRecord {
+                package_record,
+                url,
             })),
         })
     }
@@ -300,6 +351,12 @@ impl PyRecord {
         self.try_as_prefix_record().is_ok()
     }
 
+    /// Checks whether if the current record is a `WhlPackageRecord`.
+    #[getter]
+    pub fn is_whl_package_record(&self) -> bool {
+        self.try_as_whl_package_record().is_ok()
+    }
+
     /// Optionally the architecture the package supports.
     #[getter]
     pub fn arch(&self) -> Option<String> {
@@ -360,6 +417,25 @@ impl PyRecord {
         self.as_package_record_mut().depends = depends;
     }
 
+    /// Conditional or optional dependencies. Maps a condition name to the list
+    /// of dependency specifications required when that condition is active.
+    #[getter]
+    pub fn extra_depends(&self) -> std::collections::HashMap<String, Vec<String>> {
+        self.as_package_record()
+            .extra_depends
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_extra_depends(
+        &mut self,
+        extra_depends: std::collections::HashMap<String, Vec<String>>,
+    ) {
+        self.as_package_record_mut().extra_depends = extra_depends.into_iter().collect();
+    }
+
     /// Features are a deprecated way to specify different
     /// feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead,
@@ -373,6 +449,21 @@ impl PyRecord {
     #[setter]
     pub fn set_features(&mut self, features: Option<String>) {
         self.as_package_record_mut().features = features;
+    }
+
+    /// Plain string flags used to select package variants.
+    #[getter]
+    pub fn flags(&self) -> Vec<String> {
+        self.as_package_record()
+            .flags
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    #[setter]
+    pub fn set_flags(&mut self, flags: Vec<String>) {
+        self.as_package_record_mut().flags = flags.into_iter().map(Flag::new_unchecked).collect();
     }
 
     /// A deprecated md5 hash.
@@ -517,9 +608,9 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
+                jiff::Timestamp::from_millisecond(ts)
+                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;
@@ -531,7 +622,7 @@ impl PyRecord {
     /// Track features are nowadays only used to downweight packages
     /// (ie. give them less priority). To that effect, the number of track
     /// features is counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[getter]
     pub fn track_features(&self) -> Vec<String> {
         self.as_package_record().track_features.clone()
@@ -586,12 +677,22 @@ impl PyRecord {
     /// The canonical URL from where to get this package.
     #[getter]
     pub fn url(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.url.to_string())
+        match &self.inner {
+            RecordInner::Whl(r) => Ok(r.url.as_str().to_string()),
+            _ => Ok(self.try_as_repodata_record()?.url.to_string()),
+        }
     }
 
     #[setter]
     pub fn set_url(&mut self, url: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
+        match &mut self.inner {
+            RecordInner::Whl(r) => {
+                Arc::make_mut(r).url = url.parse().map_err(PyRattlerError::from)?;
+            }
+            _ => {
+                self.try_as_repodata_record_mut()?.url = url.parse().unwrap();
+            }
+        }
         Ok(())
     }
 
@@ -668,7 +769,7 @@ impl PyRecord {
 
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
-    /// Deprecated: Use requested_specs instead.
+    /// Deprecated: Use `requested_specs` instead.
     #[getter]
     #[allow(deprecated)]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
@@ -683,7 +784,7 @@ impl PyRecord {
     }
 
     /// Multiple specs that were used when this package was installed.
-    /// This field replaces the deprecated requested_spec field.
+    /// This field replaces the deprecated `requested_spec` field.
     #[getter]
     pub fn requested_specs(&self) -> PyResult<Vec<String>> {
         Ok(self.try_as_prefix_record()?.requested_specs.clone())
@@ -700,6 +801,7 @@ impl PyRecord {
             RecordInner::Prefix(r) => serde_json::to_string_pretty(r.as_ref()),
             RecordInner::RepoData(r) => serde_json::to_string_pretty(r.as_ref()),
             RecordInner::Package(r) => serde_json::to_string_pretty(r.as_ref()),
+            RecordInner::Whl(r) => serde_json::to_string_pretty(r.as_ref()),
         }
         .map_err(|e| PyValueError::new_err(format!("Failed to serialize record to JSON: {e}")))
     }
@@ -724,6 +826,9 @@ impl TryFrom<PyRecord> for PrefixRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'PrefixRecord'",
+            )),
         }
     }
 }
@@ -741,7 +846,7 @@ impl<'a> TryFrom<Bound<'a, PyAny>> for PyRecord {
             return Err(PyTypeError::new_err("'_record' is invalid"));
         }
 
-        PyRecord::extract_bound(&inner)
+        Ok(inner.extract::<PyRecord>()?)
     }
 }
 
@@ -770,6 +875,61 @@ impl TryFrom<PyRecord> for RepoDataRecord {
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+}
+
+/// Extracts the existing `Arc<RepoDataRecord>` out of a `PyRecord` without
+/// deep-cloning the underlying record. Use this on hot paths that just need
+/// to share the record across the Python/Rust boundary; falling through to
+/// `TryFrom<PyRecord> for RepoDataRecord` would `Arc::unwrap_or_clone` and
+/// then re-allocate a fresh Arc, which is exactly what the Arc wrapping is
+/// meant to avoid.
+impl TryFrom<PyRecord> for Arc<RepoDataRecord> {
+    type Error = PyErr;
+    fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
+        match value.inner {
+            RecordInner::RepoData(r) => Ok(r),
+            // PrefixRecord embeds RepoDataRecord by value, so we can't share
+            // its Arc — clone the embedded record into a new one.
+            RecordInner::Prefix(r) => Ok(Arc::new(r.repodata_record.clone())),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+            RecordInner::Whl(_) => Err(PyTypeError::new_err(
+                "cannot use object of type 'WhlPackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+}
+
+impl From<WhlPackageRecord> for PyRecord {
+    fn from(value: WhlPackageRecord) -> Self {
+        Self {
+            inner: RecordInner::Whl(Arc::new(value)),
+        }
+    }
+}
+
+impl From<Arc<WhlPackageRecord>> for PyRecord {
+    fn from(value: Arc<WhlPackageRecord>) -> Self {
+        Self {
+            inner: RecordInner::Whl(value),
+        }
+    }
+}
+
+impl TryFrom<PyRecord> for WhlPackageRecord {
+    type Error = PyErr;
+    fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
+        match value.inner {
+            RecordInner::Whl(r) => Ok(Arc::unwrap_or_clone(r)),
+            _ => Err(PyTypeError::new_err(
+                "cannot use object as 'WhlPackageRecord'",
+            )),
         }
     }
 }
@@ -794,6 +954,7 @@ impl AsRef<PackageRecord> for PyRecord {
             RecordInner::Prefix(r) => &r.repodata_record.package_record,
             RecordInner::RepoData(r) => &r.package_record,
             RecordInner::Package(r) => r,
+            RecordInner::Whl(r) => &r.package_record,
         }
     }
 }
@@ -804,13 +965,14 @@ impl AsMut<PackageRecord> for PyRecord {
             RecordInner::Prefix(r) => &mut Arc::make_mut(r).repodata_record.package_record,
             RecordInner::RepoData(r) => &mut Arc::make_mut(r).package_record,
             RecordInner::Package(r) => Arc::make_mut(r),
+            RecordInner::Whl(r) => &mut Arc::make_mut(r).package_record,
         }
     }
 }
 
 #[pymethods]
 impl PyRecord {
-    /// Parses a PrefixRecord from a file.
+    /// Parses a `PrefixRecord` from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(PrefixRecord::from_path(path)

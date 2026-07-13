@@ -1,12 +1,12 @@
 use crate::{error::PyRattlerError, version::PyVersion};
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{PyResult, pyclass, pymethods};
 use rattler_conda_types::{ParseStrictness, VersionSpec};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersionSpec {
@@ -27,7 +27,7 @@ impl From<PyVersionSpec> for VersionSpec {
 
 #[pymethods]
 impl PyVersionSpec {
-    /// Construct a new VersionSpec from a string with optional strict parsing.
+    /// Construct a new `VersionSpec` from a string with optional strict parsing.
     #[new]
     #[pyo3(signature = (spec, strict=false))]
     pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {

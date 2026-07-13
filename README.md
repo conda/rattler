@@ -34,10 +34,22 @@ Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler
 
 ## Showcase
 
-This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
+This repository also contains a binary that shows some of the capabilities of the library.
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
 ![Installing an environment](https://github.com/conda/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
+
+## Development: getting started
+
+To get started developing with Rattler, let's install an environment with `cowpy` and its dependencies.
+
+Clone the Rattler repository, and in your terminal, navigate to the root folder of the repository, and execute the following commands (in order):
+
+```bash
+git submodule update --init
+cargo run --bin rattler --release create cowpy
+cargo run --bin rattler --release run -p .prefix/ cowpy --random
+```
 
 ## Python and Javascript bindings
 
@@ -159,7 +171,8 @@ Rattler consists of several crates that provide different functionalities.
 * **rattler_shell**: code to activate an existing environment and run programs in it.
 * **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
 * **rattler_virtual_packages**: a crate to detect system capabilities.
-* **rattler_index**: create local conda channels from local packages.
+* **rattler_index**: create local conda channels from local packages. See the
+  [rattler_index README](crates/rattler_index/README.md) for channel options documentation.
 * **rattler**: functionality to create complete environments from scratch using the crates above.
 * **rattler-lock**: a library to create and parse lockfiles for conda environments.
 * **rattler-networking**: common functionality for networking, like authentication, mirroring and more.

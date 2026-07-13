@@ -1,10 +1,13 @@
 use simple_spawn_blocking::Cancelled;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     install::{
-        clobber_registry::ClobberError, driver::PostProcessingError, link_script::PrePostLinkError,
-        unlink::UnlinkError, InstallError, TransactionError,
+        InstallError, TransactionError,
+        clobber_registry::{ClobberError, ClobberedPath},
+        driver::PostProcessingError,
+        link_script::PrePostLinkError,
+        unlink::UnlinkError,
     },
     package_cache::PackageCacheError,
 };
@@ -19,6 +22,10 @@ pub enum InstallerError {
     /// Failed to construct a transaction
     #[error("failed to construct a transaction")]
     FailedToConstructTransaction(#[from] TransactionError),
+
+    /// A package's metadata could be used to escape the installation prefix.
+    #[error("refusing to install package with unsafe metadata: {0}")]
+    UnsafePackageRecord(#[source] rattler_conda_types::utils::InvalidPathComponentError),
 
     /// Failed to populate the cache with the package
     #[error("failed to fetch {0}")]
@@ -47,6 +54,10 @@ pub enum InstallerError {
     /// A clobbering error occurred
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
+
+    /// Clobbering was detected and the clobber mode is set to error.
+    #[error("{} file(s) are provided by multiple packages", .0.len())]
+    ClobberingDetected(HashMap<PathBuf, ClobberedPath>),
 
     /// The operation was cancelled
     #[error("the operation was cancelled")]
@@ -77,6 +88,9 @@ impl From<PostProcessingError> for InstallerError {
             PostProcessingError::ClobberError(err) => InstallerError::ClobberError(err),
             PostProcessingError::FailedToDetectInstalledPackages(err) => {
                 InstallerError::FailedToDetectInstalledPackages(err)
+            }
+            PostProcessingError::ClobberingDetected(paths) => {
+                InstallerError::ClobberingDetected(paths)
             }
         }
     }

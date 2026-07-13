@@ -63,12 +63,11 @@ pub fn get_required_packages(
         } else if transaction_type as u32 == ffi::SOLVER_TRANSACTION_INSTALL {
             // This might be a synthetic solvable for an extra
             // Extract the extra information from stored attributes
-            if let Some((pkg_id, name_id)) = extra_package_id.zip(extra_name_id) {
-                if let Some((pkg_name, extra_name)) =
+            if let Some((pkg_id, name_id)) = extra_package_id.zip(extra_name_id)
+                && let Some((pkg_name, extra_name)) =
                     extract_extra_from_solvable(pool, id, pkg_id, name_id)
-                {
-                    extras.entry(pkg_name).or_default().push(extra_name);
-                }
+            {
+                extras.entry(pkg_name).or_default().push(extra_name);
             }
         }
     }

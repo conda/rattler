@@ -49,11 +49,9 @@ pub enum GatewayError {
     #[error("the match spec '{0}' does not specify an exact name")]
     MatchSpecWithoutExactName(Box<MatchSpec>),
 
-    // todo: remove after https://github.com/conda/rattler/issues/2039
-    #[error("the match spec '{0}' does not have a package name")]
-    MatchSpecWithoutName(Box<MatchSpec>),
-
-    #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
+    #[error(
+        "the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'"
+    )]
     UrlRecordNameMismatch(String, String),
 
     #[error(transparent)]
@@ -64,6 +62,11 @@ pub enum GatewayError {
 
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
+
+    /// Raised in [`ChannelRelationsMode::Strict`](crate::gateway::ChannelRelationsMode::Strict)
+    /// when the declared CEP-42 relations are malformed.
+    #[error("malformed CEP-42 channel relations: {0}")]
+    ChannelRelationsError(String),
 }
 
 #[cfg(not(target_arch = "wasm32"))]

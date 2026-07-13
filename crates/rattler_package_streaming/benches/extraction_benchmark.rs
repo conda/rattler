@@ -211,8 +211,14 @@ fn save_results_to_file(all_results: &[BenchmarkResults], filename: &str) -> std
     let mut file = std::fs::File::create(filename)?;
 
     writeln!(file, "# Benchmark Results\n")?;
-    writeln!(file, "| Scenario | Concurrency | Total Time (ms) | Throughput (pkg/s) | Avg (ms) | Min (ms) | Max (ms) |")?;
-    writeln!(file, "|----------|-------------|-----------------|-------------------|----------|----------|----------|")?;
+    writeln!(
+        file,
+        "| Scenario | Concurrency | Total Time (ms) | Throughput (pkg/s) | Avg (ms) | Min (ms) | Max (ms) |"
+    )?;
+    writeln!(
+        file,
+        "|----------|-------------|-----------------|-------------------|----------|----------|----------|"
+    )?;
 
     for result in all_results {
         writeln!(

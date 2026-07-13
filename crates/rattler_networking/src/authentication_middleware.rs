@@ -5,24 +5,15 @@ use std::{
     sync::OnceLock,
 };
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
+    Authentication, AuthenticationStorage, authentication_storage::AuthenticationStorageError,
+    oauth_refresh,
 };
-
-/// Response from an OAuth token refresh request (standard `OAuth2` token
-/// response).
-#[derive(Deserialize)]
-struct TokenRefreshResponse {
-    access_token: String,
-    refresh_token: Option<String>,
-    expires_in: Option<i64>,
-}
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]
@@ -53,10 +44,20 @@ impl Middleware for AuthenticationMiddleware {
             Ok((url, auth_with_key)) => {
                 // If this is an OAuth token, attempt refresh if expired
                 let auth = match auth_with_key {
-                    Some((matched_key, oauth_auth @ Authentication::OAuth { .. })) => {
-                        self.maybe_refresh_oauth(oauth_auth, &matched_key).await
+                    Some((matched_key, auth)) => {
+                        let refresh_result = oauth_refresh::maybe_refresh_oauth(
+                            &self.auth_storage,
+                            auth,
+                            &matched_key,
+                        )
+                        .await;
+                        if let Some(failure) = refresh_result.failure() {
+                            tracing::warn!(
+                                "OAuth refresh for '{matched_key}' did not produce fresh credentials: {failure}"
+                            );
+                        }
+                        refresh_result.into_authentication()
                     }
-                    Some((_, auth)) => Some(auth),
                     None => None,
                 };
 
@@ -156,127 +157,6 @@ impl AuthenticationMiddleware {
             Ok(req)
         }
     }
-
-    /// Check if an OAuth token is expired and attempt to refresh it.
-    ///
-    /// Returns the (possibly refreshed) authentication. If refresh fails,
-    /// returns the original auth so the request proceeds with the existing
-    /// (possibly expired) token — the server will return 401 which is clearer
-    /// than a middleware error.
-    async fn maybe_refresh_oauth(
-        &self,
-        auth: Authentication,
-        matched_key: &str,
-    ) -> Option<Authentication> {
-        let Authentication::OAuth {
-            ref access_token,
-            ref refresh_token,
-            expires_at,
-            ref token_endpoint,
-            ref revocation_endpoint,
-            ref client_id,
-        } = auth
-        else {
-            return Some(auth);
-        };
-
-        // Check if token is expired (with 5 minute buffer for clock skew)
-        let is_expired = expires_at.is_some_and(|exp| {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64;
-            exp - now < 300 // 5 minute buffer
-        });
-
-        if !is_expired {
-            return Some(auth);
-        }
-
-        let Some(refresh_token_val) = refresh_token.as_deref() else {
-            tracing::warn!("OAuth token is expired but no refresh token is available");
-            return Some(auth);
-        };
-
-        tracing::debug!("OAuth token expired, attempting refresh");
-
-        let client = reqwest::Client::new();
-        let params = [
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token_val),
-            ("client_id", client_id),
-        ];
-
-        let response = match client
-            .post(token_endpoint.as_str())
-            .form(&params)
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(e) => {
-                tracing::warn!("Failed to refresh OAuth token: {e}");
-                return Some(auth);
-            }
-        };
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let hint = match response.json::<serde_json::Value>().await {
-                Ok(body) => {
-                    let error_code = body
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    if error_code == "invalid_grant" {
-                        "refresh token is expired or revoked — please re-authenticate".to_string()
-                    } else {
-                        format!("error code: {error_code}")
-                    }
-                }
-                Err(_) => format!("HTTP {status}"),
-            };
-            tracing::warn!("OAuth token refresh failed ({hint})");
-            return Some(auth);
-        }
-
-        let token_response: TokenRefreshResponse = match response.json().await {
-            Ok(body) => body,
-            Err(e) => {
-                tracing::warn!("Failed to read OAuth refresh response body: {e}");
-                return Some(auth);
-            }
-        };
-
-        let new_expires_at = token_response.expires_in.map(|secs| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64
-                + secs
-        });
-
-        let refreshed = Authentication::OAuth {
-            access_token: token_response.access_token,
-            refresh_token: token_response
-                .refresh_token
-                .or_else(|| refresh_token.clone()),
-            expires_at: new_expires_at,
-            token_endpoint: token_endpoint.clone(),
-            revocation_endpoint: revocation_endpoint.clone(),
-            client_id: client_id.clone(),
-        };
-
-        // Store the refreshed token back (best-effort)
-        if let Err(e) = self.auth_storage.store(matched_key, &refreshed) {
-            tracing::warn!("Failed to store refreshed OAuth token: {e}");
-        }
-
-        // Invalidate the cache entry for the old token
-        let _ = access_token;
-
-        Some(refreshed)
-    }
 }
 
 /// Returns the default auth storage directory used by rattler.
@@ -301,14 +181,25 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     #[cfg(feature = "keyring")]
     use anyhow::anyhow;
+    use axum::{
+        Json, Router,
+        extract::State,
+        http::{HeaderMap, StatusCode},
+        routing::post,
+    };
+    use futures::future::join_all;
+    use serde_json::json;
     use tempfile::tempdir;
 
     use super::*;
-    use crate::authentication_storage::backends::file::FileStorage;
+    use crate::authentication_storage::backends::{file::FileStorage, memory::MemoryStorage};
 
     #[cfg(feature = "keyring")]
     // Requests are only authenticated when executed, so we need to capture and
@@ -380,11 +271,6 @@ mod tests {
 
         let host = "conda.example.com";
 
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
-
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -434,11 +320,6 @@ mod tests {
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "bearer.example.com";
-
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
 
         let retrieved = storage.get(host);
 
@@ -495,11 +376,6 @@ mod tests {
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "basic.example.com";
-
-        // Make sure the keyring is empty
-        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_credential();
-        }
 
         let retrieved = storage.get(host);
 
@@ -586,6 +462,151 @@ mod tests {
                 assert_eq!(retrieved.1, None);
             }
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn concurrent_oauth_refresh_is_coalesced_by_authentication_middleware()
+    -> anyhow::Result<()> {
+        #[derive(Clone)]
+        struct TestState {
+            refresh_count: Arc<AtomicUsize>,
+            seen_authorization: Arc<Mutex<Vec<Option<String>>>>,
+        }
+
+        async fn token(State(state): State<TestState>) -> (StatusCode, Json<serde_json::Value>) {
+            state.refresh_count.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "access_token": "fresh-access-token",
+                    "refresh_token": "rotated-refresh-token",
+                    "expires_in": 3600,
+                })),
+            )
+        }
+
+        async fn repo(State(state): State<TestState>, headers: HeaderMap) -> &'static str {
+            let authorization = headers
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok())
+                .map(ToOwned::to_owned);
+            state.seen_authorization.lock().unwrap().push(authorization);
+            "ok"
+        }
+
+        let state = TestState {
+            refresh_count: Arc::new(AtomicUsize::new(0)),
+            seen_authorization: Arc::new(Mutex::new(Vec::new())),
+        };
+        let router = Router::new()
+            .route("/token", post(token))
+            .route("/repo", post(repo))
+            .with_state(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let host = "127.0.0.1";
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(
+            host,
+            &Authentication::OAuth {
+                access_token: "expired-access-token".to_string(),
+                refresh_token: Some("refresh-token".to_string()),
+                expires_at: Some(0),
+                token_endpoint: format!("http://{addr}/token"),
+                revocation_endpoint: None,
+                client_id: "client-id".to_string(),
+            },
+        )?;
+
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
+            .with(AuthenticationMiddleware::from_auth_storage(storage))
+            .build();
+        let repo_url = format!("http://{addr}/repo");
+
+        let responses = join_all((0..8).map(|_| client.post(&repo_url).send())).await;
+        for response in responses {
+            assert_eq!(response?.status(), StatusCode::OK);
+        }
+
+        assert_eq!(state.refresh_count.load(Ordering::SeqCst), 1);
+        let seen_authorization = state.seen_authorization.lock().unwrap();
+        assert_eq!(seen_authorization.len(), 8);
+        assert!(
+            seen_authorization
+                .iter()
+                .all(|auth| { auth.as_deref() == Some("Bearer fresh-access-token") })
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn expired_oauth_with_failed_refresh_sends_no_authorization_header() -> anyhow::Result<()>
+    {
+        #[derive(Clone)]
+        struct TestState {
+            seen_authorization: Arc<Mutex<Vec<Option<String>>>>,
+        }
+
+        // A rotating server that has already invalidated this refresh token.
+        async fn token() -> (StatusCode, Json<serde_json::Value>) {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "invalid_grant" })),
+            )
+        }
+
+        async fn repo(State(state): State<TestState>, headers: HeaderMap) -> &'static str {
+            let authorization = headers
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok())
+                .map(ToOwned::to_owned);
+            state.seen_authorization.lock().unwrap().push(authorization);
+            "ok"
+        }
+
+        let state = TestState {
+            seen_authorization: Arc::new(Mutex::new(Vec::new())),
+        };
+        let router = Router::new()
+            .route("/token", post(token))
+            .route("/repo", post(repo))
+            .with_state(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let host = "127.0.0.1";
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::new()));
+        storage.store(
+            host,
+            &Authentication::OAuth {
+                access_token: "expired-access-token".to_string(),
+                refresh_token: Some("refresh-token".to_string()),
+                expires_at: Some(0),
+                token_endpoint: format!("http://{addr}/token"),
+                revocation_endpoint: None,
+                client_id: "client-id".to_string(),
+            },
+        )?;
+
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
+            .with(AuthenticationMiddleware::from_auth_storage(storage))
+            .build();
+
+        let response = client.post(format!("http://{addr}/repo")).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Refresh failed and the access token is expired, so no expired bearer
+        // token should leak to the backend.
+        let seen_authorization = state.seen_authorization.lock().unwrap();
+        assert_eq!(seen_authorization.as_slice(), &[None]);
 
         Ok(())
     }

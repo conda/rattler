@@ -1,7 +1,15 @@
+import io
+
 import pytest
 from pathlib import Path
 from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
-from rattler.package_streaming import extract, download_and_extract
+from rattler.package_streaming import (
+    download_and_extract,
+    download_bytes,
+    download_to_path,
+    download_to_writer,
+    extract,
+)
 from rattler.networking.client import Client
 
 
@@ -18,6 +26,70 @@ def test_extract(tmpdir: Path) -> None:
     assert (dest / "info").exists()
     assert (dest / "info" / "index.json").exists()
     assert (dest / "info" / "paths.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_to_path(tmpdir: Path) -> None:
+    destination = Path(tmpdir) / "download" / "boltons.conda"
+    extract_dest = Path(tmpdir) / "download_extract"
+    client = Client.default_client()
+
+    await download_to_path(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+        destination,
+    )
+
+    assert destination.exists()
+    assert destination.stat().st_size > 0
+
+    extract(destination, extract_dest)
+
+    assert (extract_dest / "info").exists()
+    assert (extract_dest / "info" / "index.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_bytes(tmpdir: Path) -> None:
+    destination = Path(tmpdir) / "download_bytes.conda"
+    extract_dest = Path(tmpdir) / "download_bytes_extract"
+    client = Client.default_client()
+
+    bytes_data = await download_bytes(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+    )
+
+    assert bytes_data
+
+    destination.write_bytes(bytes_data)
+    extract(destination, extract_dest)
+
+    assert (extract_dest / "info").exists()
+    assert (extract_dest / "info" / "index.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_to_writer(tmpdir: Path) -> None:
+    destination = Path(tmpdir) / "download_to_writer.conda"
+    extract_dest = Path(tmpdir) / "download_to_writer_extract"
+    client = Client.default_client()
+    writer = io.BytesIO()
+
+    await download_to_writer(
+        client,
+        "https://repo.prefix.dev/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
+        writer,
+    )
+
+    bytes_data = writer.getvalue()
+    assert bytes_data
+
+    destination.write_bytes(bytes_data)
+    extract(destination, extract_dest)
+
+    assert (extract_dest / "info").exists()
+    assert (extract_dest / "info" / "index.json").exists()
 
 
 @pytest.mark.asyncio

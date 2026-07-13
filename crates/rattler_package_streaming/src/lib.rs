@@ -45,6 +45,10 @@ pub enum ExtractError {
     #[error("invalid zip archive: {0}")]
     ZipError(#[source] zip::result::ZipError),
 
+    #[cfg(feature = "reqwest")]
+    #[error("invalid zip archive (async): {0}")]
+    AsyncZipError(#[from] async_zip::error::ZipError),
+
     #[error("a component is missing from the Conda archive")]
     MissingComponent,
 
@@ -54,6 +58,10 @@ pub enum ExtractError {
     #[cfg(feature = "reqwest")]
     #[error(transparent)]
     ReqwestError(::reqwest_middleware::Error),
+
+    #[cfg(feature = "reqwest")]
+    #[error("an error occurred during a range request: {0}")]
+    AsyncHttpRangeReaderError(#[from] async_http_range_reader::AsyncHttpRangeReaderError),
 
     #[error("unsupported package archive format")]
     UnsupportedArchiveType,

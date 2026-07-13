@@ -3,7 +3,7 @@ use std::str::FromStr;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_futures::js_sys::JsString;
 
-use crate::{version::JsVersion, JsError};
+use crate::{JsError, version::JsVersion};
 
 /// Holds a version and the string it was created from. This is useful if you
 /// want to retain the original string the version was created from. This might

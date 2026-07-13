@@ -9,28 +9,33 @@ use std::{
     fmt, io,
     marker::PhantomData,
     path::Path,
+    sync::LazyLock,
 };
 
 use bytes::Bytes;
-use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url,
+    Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
+    RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
     package::{
         ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
         WheelArchiveType,
     },
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
-    UrlOrPath, WhlPackageRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
-    de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
+    de::{Error, MapAccess, Visitor},
 };
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
+
+/// Shared empty revisions, returned by accessors when none are advertised.
+pub(crate) fn empty_repodata_revisions() -> &'static RepodataRevisions {
+    static EMPTY: LazyLock<RepodataRevisions> = LazyLock::new(RepodataRevisions::new);
+    &EMPTY
+}
 
 /// Defines how different variants of packages are consolidated.
 #[derive(
@@ -143,6 +148,9 @@ impl SparseRepoData {
     ///
     /// The `patch_function` can be used to patch the package record after it
     /// has been parsed (e.g. to add `pip` to `python`).
+    ///
+    /// On Windows the file is opened with `FILE_SHARE_DELETE` so that another
+    /// process/thread can rename or delete the file while it is still mapped.
     #[cfg(any(unix, windows))]
     pub fn from_file(
         channel: Channel,
@@ -150,7 +158,18 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = fs::File::open(path.as_ref().to_owned())?;
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            const SHARE_ALL: u32 = 0x01 | 0x02 | 0x04; // FILE_SHARE_READ | WRITE | DELETE
+            std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(SHARE_ALL)
+                .open(path.as_ref())?
+        };
+        #[cfg(not(windows))]
+        let file = std::fs::File::from(fs_err::File::open(path.as_ref())?);
+
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInner::Memmapped(MemmappedSparseRepoDataInner::try_new(
@@ -174,7 +193,7 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let bytes = fs::read(path)?;
+        let bytes = fs_err::read(path)?;
         Ok(Self::from_bytes(
             channel,
             subdir,
@@ -219,21 +238,9 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let tar_bz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
-        let v3_tar = repo_data
-            .experimental_v3
-            .tar_bz2
-            .iter()
-            .map(select_package_name);
-        let v3_conda = repo_data
-            .experimental_v3
-            .conda
-            .iter()
-            .map(select_package_name);
-        let v3_whl = repo_data
-            .experimental_v3
-            .whl
-            .iter()
-            .map(select_package_name);
+        let v3_tar = repo_data.v3.tar_bz2.iter().map(select_package_name);
+        let v3_conda = repo_data.v3.conda.iter().map(select_package_name);
+        let v3_whl = repo_data.v3.whl.iter().map(select_package_name);
 
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
@@ -274,7 +281,7 @@ impl SparseRepoData {
                         .unwrap_or(filename.filename)
                 });
                 let v3_tar = repo_data
-                    .experimental_v3
+                    .v3
                     .tar_bz2
                     .iter()
                     .map(|(filename, _)| filename.filename);
@@ -285,14 +292,14 @@ impl SparseRepoData {
                         .unwrap_or(filename.filename)
                 });
                 let v3_conda = repo_data
-                    .experimental_v3
+                    .v3
                     .conda
                     .iter()
                     .map(|(filename, _)| filename.filename);
 
                 if package_format_selection == PackageFormatSelection::PreferCondaWithWhl {
                     let v3_whl = repo_data
-                        .experimental_v3
+                        .v3
                         .whl
                         .iter()
                         .map(|(filename, _)| filename.filename);
@@ -313,14 +320,14 @@ impl SparseRepoData {
             PackageFormatSelection::Both => {
                 repo_data.packages.len()
                     + repo_data.conda_packages.len()
-                    + repo_data.experimental_v3.tar_bz2.len()
-                    + repo_data.experimental_v3.conda.len()
+                    + repo_data.v3.tar_bz2.len()
+                    + repo_data.v3.conda.len()
             }
             PackageFormatSelection::OnlyTarBz2 => {
-                repo_data.packages.len() + repo_data.experimental_v3.tar_bz2.len()
+                repo_data.packages.len() + repo_data.v3.tar_bz2.len()
             }
             PackageFormatSelection::OnlyConda => {
-                repo_data.conda_packages.len() + repo_data.experimental_v3.conda.len()
+                repo_data.conda_packages.len() + repo_data.v3.conda.len()
             }
         }
     }
@@ -338,10 +345,10 @@ impl SparseRepoData {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
             // TODO: support glob/regex package names
             let mut parsed_records = parse_records(
-                package_name.and_then(Option::<PackageName>::from).as_ref(),
+                package_name.as_exact(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
-                &repo_data.experimental_v3,
+                &repo_data.v3,
                 variant_consolidation,
                 base_url,
                 &self.channel,
@@ -371,7 +378,7 @@ impl SparseRepoData {
             Some(package_name),
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_v3,
+            &repo_data.v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -392,7 +399,7 @@ impl SparseRepoData {
             None,
             &repo_data.packages,
             &repo_data.conda_packages,
-            &repo_data.experimental_v3,
+            &repo_data.v3,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -440,7 +447,7 @@ impl SparseRepoData {
                     Some(&next_package),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
-                    &repo_data_packages.experimental_v3,
+                    &repo_data_packages.v3,
                     variant_consolidation,
                     base_url,
                     &repo_data.channel,
@@ -471,6 +478,24 @@ impl SparseRepoData {
     pub fn subdir(&self) -> &str {
         &self.subdir
     }
+
+    /// Returns the repodata revisions advertised by this repodata file.
+    pub fn repodata_revisions(&self) -> &RepodataRevisions {
+        match &self.inner.borrow_repo_data().info {
+            Some(info) => &info.repodata_revisions,
+            None => empty_repodata_revisions(),
+        }
+    }
+
+    /// CEP-42 channel relations from `info.channel_relations`, if any.
+    pub fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.inner
+            .borrow_repo_data()
+            .info
+            .as_ref()?
+            .channel_relations
+            .as_ref()
+    }
 }
 
 /// A serde compatible struct that only sparsely parses a repodata.json file.
@@ -499,8 +524,8 @@ struct LazyRepoData<'i> {
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// Packages stored under the `v3` top-level key.
-    #[serde(borrow, default, rename = "v3")]
-    experimental_v3: LazyV3Packages<'i>,
+    #[serde(borrow, default)]
+    v3: LazyV3Packages<'i>,
 }
 
 /// Lazily parsed `v3` section of repodata containing sub-maps for each archive
@@ -1067,11 +1092,12 @@ mod test {
     use itertools::Itertools;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+        RepodataRevision,
     };
     use rstest::rstest;
 
     use super::{
-        load_repo_data_recursively, PackageFilename, PackageFormatSelection, SparseRepoData,
+        PackageFilename, PackageFormatSelection, SparseRepoData, load_repo_data_recursively,
     };
 
     fn test_dir() -> PathBuf {
@@ -1406,6 +1432,26 @@ mod test {
     }
 
     #[test]
+    fn test_repodata_revisions_from_file() {
+        // The channel advertises a `v3` revision in the CEP `vN`-keyed
+        // dictionary form; make sure we parse it back into the map.
+        let (channel, platform, path) = wheel_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let revisions = sparse.repodata_revisions();
+        assert_eq!(revisions.len(), 1);
+        let metadata = &revisions[&RepodataRevision::V3];
+        assert_eq!(metadata.n_packages, Some(2));
+        assert_eq!(
+            metadata.oldest.map(|ts| ts.timestamp_millis()),
+            Some(1768249989851)
+        );
+        assert_eq!(
+            metadata.newest.map(|ts| ts.timestamp_millis()),
+            Some(1773851561010)
+        );
+    }
+
+    #[test]
     fn test_query() {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
@@ -1436,7 +1482,7 @@ mod test {
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
             .load_matching_records(
-                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                vec![MatchSpec::from_str("cuda-version 12.5", ParseStrictness::Lenient).unwrap()],
                 PackageFormatSelection::default(),
             )
             .unwrap()

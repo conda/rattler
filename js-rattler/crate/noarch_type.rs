@@ -1,6 +1,6 @@
 use rattler_conda_types::{NoArchType, RawNoArchType};
 use serde::de::Error;
-use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
+use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 use wasm_bindgen_futures::{js_sys, js_sys::JsString};
 
 #[wasm_bindgen(typescript_custom_section)]

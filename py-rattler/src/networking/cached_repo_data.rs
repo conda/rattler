@@ -2,7 +2,7 @@ use pyo3::{pyclass, pymethods};
 use rattler_repodata_gateway::fetch::CachedRepoData;
 use std::sync::Arc;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyCachedRepoData {
@@ -26,7 +26,7 @@ impl From<CachedRepoData> for PyCachedRepoData {
 
 #[pymethods]
 impl PyCachedRepoData {
-    /// Returns a string representation of PyCachedRepoData.
+    /// Returns a string representation of `PyCachedRepoData`.
     pub fn as_str(&self) -> String {
         format!("{:?}", self.inner)
     }

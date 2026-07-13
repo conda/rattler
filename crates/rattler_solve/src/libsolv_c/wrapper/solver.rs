@@ -39,8 +39,10 @@ impl Solver<'_> {
     ///
     /// Safety: the caller must ensure the id is valid
     unsafe fn problem2str(&self, id: ffi::Id) -> &CStr {
-        let problem = ffi::solver_problem2str(self.raw_ptr(), id);
-        CStr::from_ptr(problem)
+        unsafe {
+            let problem = ffi::solver_problem2str(self.raw_ptr(), id);
+            CStr::from_ptr(problem)
+        }
     }
 
     /// Creates a string for each 'problem' that the solver still has which it encountered while

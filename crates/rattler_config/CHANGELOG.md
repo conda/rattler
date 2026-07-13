@@ -7,6 +7,145 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_config-v0.5.2...rattler_config-v0.6.0) - 2026-07-09
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
+### Added
+
+- A compatibility test catalog (`tests/compat.rs` + `test-data/compat/`) pinning down the configuration contract: parsing permutations (kebab-case, snake_case aliases, deprecated keys, typos), lossless/idempotent round-trips, a set/unset editing matrix over every key family, and merge semantics per key family. Extend the fixtures and `EDIT_MATRIX` when adding keys.
+- `ConfigBase::from_toml_str` parses a configuration and reports the keys that neither the common configuration nor the extension recognized, so tools can warn about typos — including keys of tool-specific extensions and deprecated keys inside known tables (e.g. `repodata-config.disable-jlap`).
+- `ConfigBase::load_from_default_locations` and the new `locations` module: shared config-file discovery (`/etc/<tool>/config.toml`, `$XDG_CONFIG_HOME/<tool>/config.toml`, `$<TOOL>_HOME` or `~/.<tool>/config.toml`) for a list of cooperating tools, e.g. `&["pixi", "rattler-build"]`.
+- `ConfigBase::set` is now implemented generically by round-tripping through TOML: every key — including extension keys — can be set/unset without any per-field code. Values are interpreted as JSON when possible and fall back to plain strings. Key segments containing dots can be quoted (`mirrors."https://conda.anaconda.org"`).
+- `ProxyConfig::from_env` reads the proxy configuration from the standard `HTTP(S)_PROXY`/`NO_PROXY` environment variables.
+- Top-level `allow-symbolic-links`, `allow-hard-links` and `allow-ref-links` keys (previously only modeled by the unwired `link_config` module, and matching pixi's flat schema).
+
+### Changed
+
+- **Breaking:** the common fields of `ConfigBase<T>` moved into the new `CommonConfig` struct (`config.common`). `ConfigBase` dereferences to `CommonConfig`, so field *access* (`config.default_channels`) keeps working; struct literals need updating.
+- **Breaking:** the `Config` trait was slimmed down: `get_extension_name` and `set` were removed, `validate`, `is_default` and `keys` have default implementations. A minimal extension now only implements `merge_config`. The `Eq` bound was relaxed to `PartialEq`.
+- **Breaking:** the extension type for "no extension" is the new `NoExtension` struct (default type parameter of `ConfigBase`); the `Config` impl for `()` was removed because a unit type cannot be deserialized from a TOML document.
+- **Breaking:** `ProxyConfig::default()` no longer reads proxy environment variables (this leaked machine state into serialized configs, e.g. when saving after `config set`); use `ProxyConfig::from_env()` and merge it explicitly.
+- **Breaking:** `ConfigBase::default().tls_no_verify` is now `None` instead of `Some(false)`, so "unset" is representable and later layers can distinguish it from an explicit `false`.
+- `ConfigBase::validate` now actually validates: it recurses into the nested sections (concurrency, proxy, index, …) and the extension. Previously it always returned `Ok(())`, so `load_from_files` never validated anything.
+- `ConfigBase::load_from_files` now records the source files in `loaded_from` and warns (via `tracing`) about unrecognized keys.
+- `Config::keys` now returns real dotted TOML key paths (e.g. `repodata-config.disable-bzip2` instead of the previous `repodata.default`), fixing the "supported keys" listing in error messages.
+
+### Fixed
+
+- `RepodataConfig::merge_config` merged in the wrong direction: repodata flags from an earlier configuration file could not be overridden by later files (e.g. a project config could not re-enable zstd disabled in the global config). It now follows the documented "`other` takes priority" contract like every other section.
+- `ProxyConfig::is_default` checked `https` twice and never `http`.
+- Removed the misleading `load_config` free function (it neither merged nor validated).
+- Removed the unwired `link_config` module in favor of the flat top-level keys.
+
+## [0.5.2](https://github.com/conda/rattler/compare/rattler_config-v0.5.1...rattler_config-v0.5.2) - 2026-06-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.5.1](https://github.com/conda/rattler/compare/rattler_config-v0.5.0...rattler_config-v0.5.1) - 2026-06-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_config-v0.4.1...rattler_config-v0.5.0) - 2026-06-02
+
+### Added
+
+- align rattler_config with pixi config fields ([#2439](https://github.com/conda/rattler/pull/2439))
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_config-v0.4.0...rattler_config-v0.4.1) - 2026-05-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_config-v0.3.13...rattler_config-v0.4.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.3.13](https://github.com/conda/rattler/compare/rattler_config-v0.3.12...rattler_config-v0.3.13) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [0.3.12](https://github.com/conda/rattler/compare/rattler_config-v0.3.11...rattler_config-v0.3.12) - 2026-05-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_config-v0.3.10...rattler_config-v0.3.11) - 2026-05-01
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_config-v0.3.9...rattler_config-v0.3.10) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.3.9](https://github.com/conda/rattler/compare/rattler_config-v0.3.8...rattler_config-v0.3.9) - 2026-04-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.8](https://github.com/conda/rattler/compare/rattler_config-v0.3.7...rattler_config-v0.3.8) - 2026-04-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_config-v0.3.6...rattler_config-v0.3.7) - 2026-04-07
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_config-v0.3.5...rattler_config-v0.3.6) - 2026-03-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_config-v0.3.4...rattler_config-v0.3.5) - 2026-03-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_config-v0.3.3...rattler_config-v0.3.4) - 2026-03-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_config-v0.3.2...rattler_config-v0.3.3) - 2026-03-16
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_config-v0.3.1...rattler_config-v0.3.2) - 2026-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.3.1](https://github.com/conda/rattler/compare/rattler_config-v0.3.0...rattler_config-v0.3.1) - 2026-02-20
 
 ### Other
