@@ -105,3 +105,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Update bindings lockfiles
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          PR: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          gh pr checkout "$(jq -r .number <<<"$PR")"
+          cargo update --manifest-path py-rattler/Cargo.toml --workspace
+          cargo update --manifest-path js-rattler/Cargo.toml --workspace
+          git add py-rattler/Cargo.lock js-rattler/Cargo.lock
+          git diff --cached --quiet || git commit -m "chore: update bindings lockfiles"
+          git push
