@@ -185,6 +185,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "arwen-codesign"
+version = "0.1.0"
+source = "git+https://github.com/wolfv/arwen?branch=claude%2Farwen-codesign-rattler-frrg3u#922ce8cf5ed5053bd53f7b6c818b26e82e711f1f"
+dependencies = [
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4919,6 +4929,7 @@ name = "rattler"
 version = "0.47.0"
 dependencies = [
  "anyhow",
+ "arwen-codesign",
  "assert_matches",
  "astral-reqwest-middleware",
  "axum",

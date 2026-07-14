@@ -28,6 +28,8 @@ ambient-id = { version = "0.0.11", default-features = false }
 anyhow = "1.0.98"
 apple-native-keyring-store = { version = "1.0.0", default-features = false }
 archspec = "0.2.0"
+# TODO: switch to the crates.io release once arwen-codesign >= 0.1.0 is published
+arwen-codesign = { git = "https://github.com/wolfv/arwen", branch = "claude/arwen-codesign-rattler-frrg3u" }
 assert_matches = "1.5.0"
 async-compression = { version = "0.4", features = [
   "gzip",

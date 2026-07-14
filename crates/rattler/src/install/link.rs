@@ -185,13 +185,8 @@ pub fn link_file(
         // Detect file type from the content
         let file_type = FileType::detect(source.as_ref());
 
-        // Open the destination file
-        let destination = BufWriter::with_capacity(
-            50 * 1024,
-            fs::File::create(&destination_path)
-                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
-        );
-        let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
+        let metadata = fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
         // string escaping. For instance if we replace the prefix in the following text
@@ -214,45 +209,76 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placeholders(
-            source.as_ref(),
-            &mut destination_writer,
-            placeholder,
-            &target_prefix,
-            &target_platform,
-            *file_mode,
-        )
-        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
-
-        let (mut file, current_hash) = destination_writer.finalize();
-
-        // We computed the hash of the file while writing and from the file we can also infer the
-        // size of it.
-        sha256 = Some(current_hash);
-        file_size = file.stream_position().ok();
-
-        // We no longer need the file.
-        drop(file);
-
-        let metadata = fs::symlink_metadata(&source_path)
-            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
-        // This is required for all macOS platforms because prefix replacement modifies the binary
-        // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
-            && target_platform.is_osx()
+        // Prefix replacement modifies binary content, which invalidates any existing code
+        // signature. The binary must be re-signed (with entitlements preserved) or macOS will
+        // refuse to run it. Signing is only needed when the placeholder actually occurs in the
+        // binary; otherwise the content (and thus the existing signature) stays intact.
+        let needs_resigning = target_platform.is_osx()
             && *file_mode == FileMode::Binary
-        {
-            // Did the binary actually change?
-            let mut content_changed = false;
-            if let Some(original_hash) = &path_json_entry.sha256 {
-                content_changed = original_hash != &current_hash;
-            }
+            && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing
+            && (has_executable_permissions(&metadata.permissions())
+                || file_type == Some(FileType::MachO))
+            && binary_content_will_change(source.as_ref(), placeholder, &target_prefix);
 
-            // If the binary changed it requires resigning.
-            if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
+        // Fast path: thin Mach-O binaries are patched, re-signed and hashed in a single
+        // streaming pass (one read of the source, one write of the destination).
+        let mut patched_and_signed = None;
+        if needs_resigning
+            && arwen_codesign::macho_kind(source.as_ref()).is_some_and(|kind| kind.is_thin())
+        {
+            match patch_and_sign_single_pass(
+                source.as_ref(),
+                &destination_path,
+                placeholder,
+                &target_prefix,
+                &target_platform,
+                *file_mode,
+            ) {
+                Ok((hash, size)) => patched_and_signed = Some((hash, Some(size))),
+                Err(err) => {
+                    tracing::warn!(
+                        "single-pass patch + sign of {} failed: {err}; retrying by signing after linking",
+                        destination_path.display()
+                    );
+                }
+            }
+        }
+
+        let (current_hash, current_size) = if let Some(result) = patched_and_signed {
+            result
+        } else {
+            // Open the destination file
+            let destination = BufWriter::with_capacity(
+                50 * 1024,
+                fs::File::create(&destination_path)
+                    .map_err(LinkFileError::FailedToOpenDestinationFile)?,
+            );
+            let mut destination_writer =
+                HashingWriter::<_, rattler_digest::Sha256>::new(destination);
+
+            // Replace the prefix placeholder in the file with the new placeholder
+            copy_and_replace_placeholders(
+                source.as_ref(),
+                &mut destination_writer,
+                placeholder,
+                &target_prefix,
+                &target_platform,
+                *file_mode,
+            )
+            .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+
+            let (mut file, mut current_hash) = destination_writer.finalize();
+
+            // We computed the hash of the file while writing and from the file we can also
+            // infer the size of it.
+            let mut current_size = file.stream_position().ok();
+
+            // We no longer need the file.
+            drop(file);
+
+            // (re)sign fat Mach-O binaries, binaries that could not be signed in a single
+            // pass, and other executables the way `codesign` would.
+            if needs_resigning {
                 match codesign(&destination_path) {
                     Ok(_) => {}
                     Err(e) => {
@@ -264,17 +290,20 @@ pub fn link_file(
 
                 // The file on disk changed from the original file so the hash and file size
                 // also became invalid. Let's recompute them.
-                sha256 = Some(
-                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
-                        .map_err(LinkFileError::FailedToComputeSha)?,
-                );
-                file_size = Some(
+                current_hash = rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                    .map_err(LinkFileError::FailedToComputeSha)?;
+                current_size = Some(
                     fs::symlink_metadata(&destination_path)
                         .map_err(LinkFileError::FailedToOpenDestinationFile)?
                         .len(),
                 );
             }
-        }
+
+            (current_hash, current_size)
+        };
+
+        sha256 = Some(current_hash);
+        file_size = current_size;
 
         // Copy file permissions and timestamps
         fs::set_permissions(&destination_path, metadata.permissions())
@@ -370,6 +399,65 @@ pub fn link_file(
         method: link_method,
         prefix_placeholder,
     }))
+}
+
+/// Returns true if replacing `placeholder` with `target_prefix` in a binary-mode file would
+/// actually modify its content.
+fn binary_content_will_change(source: &[u8], placeholder: &str, target_prefix: &str) -> bool {
+    placeholder != target_prefix && memchr::memmem::find(source, placeholder.as_bytes()).is_some()
+}
+
+/// Patch the prefix placeholder and ad-hoc re-sign a thin Mach-O binary in a single streaming
+/// pass: the patched bytes flow straight through the signer into the destination file while the
+/// SHA-256 of the final (signed) content is computed on the fly. This avoids the extra
+/// read+rewrite+rehash of the destination that signing after linking requires.
+///
+/// Returns the hash and size of the signed destination file.
+fn patch_and_sign_single_pass(
+    source: &[u8],
+    destination_path: &Path,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+) -> Result<(Sha256Hash, u64), std::io::Error> {
+    use arwen_codesign::{AdhocSignOptions, Entitlements, SignError, StreamingSigner};
+
+    let identifier = super::apple_codesign::signing_identifier(destination_path);
+
+    // The streaming signer cannot look back at the original signature, so extract the
+    // entitlements from the source binary up front (prefix replacement never touches the
+    // signature blob, and the signer discards it anyway).
+    let entitlements = arwen_codesign::extract_entitlements(source);
+    let options = AdhocSignOptions {
+        identifier: &identifier,
+        hardened_runtime: false,
+        entitlements: match &entitlements {
+            Some(entitlements) => Entitlements::Custom(entitlements),
+            None => Entitlements::None,
+        },
+        linker_signed: false,
+    };
+
+    let destination = BufWriter::with_capacity(50 * 1024, fs::File::create(destination_path)?);
+    let hashing_writer = HashingWriter::<_, Sha256>::new(destination);
+    let mut signer =
+        StreamingSigner::new(hashing_writer, &options).map_err(SignError::into_io_error)?;
+
+    copy_and_replace_placeholders(
+        source,
+        &mut signer,
+        prefix_placeholder,
+        target_prefix,
+        target_platform,
+        file_mode,
+    )?;
+
+    let hashing_writer = signer.finish().map_err(SignError::into_io_error)?;
+    let (mut writer, hash) = hashing_writer.finalize();
+    writer.flush()?;
+    let file_size = writer.stream_position()?;
+    Ok((hash, file_size))
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -1366,6 +1454,146 @@ mod test {
         // Test empty file
         let empty: [u8; 0] = [];
         assert_eq!(FileType::detect(&empty), None);
+    }
+
+    /// Helper for the macOS code signing tests: link a Mach-O fixture with a
+    /// prefix placeholder and return the linked file result plus destination
+    /// bytes. Signing happens in-process, so these tests run on any host.
+    #[cfg(unix)]
+    fn link_macho_fixture(
+        fixture: &str,
+        placeholder: &str,
+        target_prefix: &str,
+    ) -> (super::LinkedFile, Vec<u8>) {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/macho");
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::copy(test_data_dir.join(fixture), package_dir.join(fixture)).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from(fixture),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Binary,
+                placeholder: placeholder.to_string(),
+            }),
+            // Deliberately absent: signing must not depend on the recorded hash.
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from(fixture),
+            &package_dir,
+            &target_dir,
+            // The prefix string that gets patched into the binary is
+            // independent of the actual target directory; use a short one so
+            // it always fits the c-string placeholder.
+            target_prefix,
+            true,
+            true,
+            true,
+            Platform::OsxArm64,
+            AppleCodeSignBehavior::Fail,
+            filetime::FileTime::from_unix_time(2_000_000, 0),
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap()
+        .unwrap();
+
+        let bytes = fs::read(target_dir.path().join(fixture)).unwrap();
+        (result, bytes)
+    }
+
+    /// A thin Mach-O binary whose content changes during prefix replacement
+    /// must come out of `link_file` with a valid ad-hoc signature, and the
+    /// returned hash/size must describe the final (signed) file. This
+    /// exercises the single-pass patch+sign+hash path.
+    #[cfg(unix)]
+    #[test]
+    fn test_macho_binary_is_resigned_after_prefix_replacement() {
+        use rattler_digest::Sha256;
+
+        let placeholder = "/usr/lib/libSystem.B.dylib";
+        let (result, bytes) =
+            link_macho_fixture("test_exe_linker_signed", placeholder, "/opt/rattler");
+
+        assert_eq!(
+            result.method,
+            super::LinkMethod::Patched(rattler_conda_types::package::FileMode::Binary)
+        );
+
+        // The placeholder was replaced.
+        assert!(memchr::memmem::find(&bytes, placeholder.as_bytes()).is_none());
+        assert!(memchr::memmem::find(&bytes, b"/opt/rattler").is_some());
+
+        // The signature is valid and carries the file name as identifier.
+        let infos = arwen_codesign::verify(&bytes).expect("signature must verify");
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].identifier, "test_exe_linker_signed");
+
+        // The reported hash and size describe the signed file on disk.
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_bytes_digest::<Sha256>(&bytes)
+        );
+        assert_eq!(result.file_size, bytes.len() as u64);
+    }
+
+    /// If the placeholder does not occur in the binary, the content is
+    /// unchanged and the original (linker) signature must be left intact.
+    #[cfg(unix)]
+    #[test]
+    fn test_macho_binary_without_placeholder_is_not_resigned() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/macho");
+        let original = fs::read(test_data_dir.join("test_exe_linker_signed")).unwrap();
+
+        let (result, bytes) = link_macho_fixture(
+            "test_exe_linker_signed",
+            "/this/placeholder/does/not/occur",
+            "/opt/rattler",
+        );
+
+        assert_eq!(bytes, original, "content must be byte-identical");
+        assert!(arwen_codesign::is_linker_signed(&bytes));
+        assert_eq!(result.file_size, original.len() as u64);
+    }
+
+    /// Fat (universal) binaries take the sign-after-linking path; every
+    /// architecture slice must be re-signed.
+    #[cfg(unix)]
+    #[test]
+    fn test_fat_macho_binary_is_resigned() {
+        let placeholder = "/usr/lib/libSystem.B.dylib";
+        let (result, bytes) = link_macho_fixture("test_exe_fat", placeholder, "/opt/rattler");
+
+        assert!(memchr::memmem::find(&bytes, placeholder.as_bytes()).is_none());
+
+        let infos = arwen_codesign::verify(&bytes).expect("fat signature must verify");
+        assert!(infos.len() >= 2, "expected at least two slices");
+        for info in &infos {
+            assert_eq!(info.identifier, "test_exe_fat");
+        }
+
+        // The reported hash and size describe the signed file on disk.
+        assert_eq!(
+            result.sha256,
+            rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes)
+        );
+        assert_eq!(result.file_size, bytes.len() as u64);
     }
 
     #[test]
