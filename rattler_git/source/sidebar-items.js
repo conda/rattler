@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cache_digest"],"struct":["Fetch","GitSource"]};
+window.SIDEBAR_ITEMS = {"fn":["cache_digest","lfs_enabled_from_env"],"struct":["Fetch","GitSource"]};
