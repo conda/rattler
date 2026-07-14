@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/conda/rattler/compare/rattler_upload-v0.8.3...rattler_upload-v0.9.0) - 2026-07-14
+
+### Fixed
+
+- *(upload)* surface server response body in prefix.dev upload errors ([#2592](https://github.com/conda/rattler/pull/2592))
+
 ## [0.8.3](https://github.com/conda/rattler/compare/rattler_upload-v0.8.2...rattler_upload-v0.8.3) - 2026-07-09
 
 ### Fixed

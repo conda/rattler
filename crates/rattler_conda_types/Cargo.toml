@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**", "benches/**"]
 name = "rattler_conda_types"
-version = "0.48.0"
+version = "0.48.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
