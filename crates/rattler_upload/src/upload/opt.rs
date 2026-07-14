@@ -171,8 +171,11 @@ impl QuetzData {
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]
-/// Options for uploading to a Artifactory channel.
-/// Authentication is used from the keychain / auth-file.
+/// Options for uploading to an Artifactory channel.
+///
+/// Authentication can be supplied directly with a bearer token or with an Artifactory username
+/// and password. If no credentials are supplied, they are read from the keychain / auth-file. A
+/// token takes precedence when both authentication methods are supplied.
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
@@ -182,15 +185,15 @@ pub struct ArtifactoryOpts {
     #[arg(short, long = "channel", env = "ARTIFACTORY_CHANNEL")]
     pub channels: String,
 
-    /// Your Artifactory username
+    /// Your Artifactory username for HTTP Basic authentication. Requires a password.
     #[arg(long, env = "ARTIFACTORY_USERNAME")]
     pub username: Option<String>,
 
-    /// Your Artifactory password
+    /// Your Artifactory password for HTTP Basic authentication. Requires a username.
     #[arg(long, env = "ARTIFACTORY_PASSWORD")]
     pub password: Option<String>,
 
-    /// Your Artifactory token
+    /// Your Artifactory bearer token. Takes precedence over username/password authentication.
     #[arg(short, long, env = "ARTIFACTORY_TOKEN")]
     pub token: Option<String>,
 }
