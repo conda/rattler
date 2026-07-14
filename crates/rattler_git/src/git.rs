@@ -100,10 +100,31 @@ fn git_output(cmd: &mut Command) -> Result<std::process::Output, GitError> {
     Ok(output)
 }
 
+/// Controls how Git LFS is handled during checkout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LfsMode {
+    /// No opinion: leave `GIT_LFS_SKIP_SMUDGE` untouched so ambient git
+    /// configuration decides whether the smudge filter runs.
+    Auto,
+    /// Fetch LFS objects into the git database (`git lfs fetch`) and run the
+    /// smudge filter during checkout, so pointer files are materialised into
+    /// their real content.
+    Enabled,
+    /// Force-skip the smudge filter (`GIT_LFS_SKIP_SMUDGE=1`) so checkouts
+    /// contain pointer files only. Callers can materialise LFS content
+    /// themselves afterwards.
+    Disabled,
+}
+
 /// Value for `GIT_LFS_SKIP_SMUDGE`, or `None` to leave the var unset.
-/// `Some(true)` → "0" (run smudge), `Some(false)` → "1" (skip smudge).
-fn lfs_skip_smudge_env(lfs: Option<bool>) -> Option<&'static str> {
-    lfs.map(|on| if on { "0" } else { "1" })
+/// [`LfsMode::Enabled`] → "0" (run smudge), [`LfsMode::Disabled`] → "1"
+/// (skip smudge), [`LfsMode::Auto`] → `None` (leave the var untouched).
+fn lfs_skip_smudge_env(lfs: LfsMode) -> Option<&'static str> {
+    match lfs {
+        LfsMode::Auto => None,
+        LfsMode::Enabled => Some("0"),
+        LfsMode::Disabled => Some("1"),
+    }
 }
 
 /// Strategy when fetching refspecs for a [`GitReference`]
@@ -287,7 +308,7 @@ impl GitRemote {
         reference: &GitReference,
         locked_rev: Option<GitOid>,
         client: &LazyClient,
-        lfs: Option<bool>,
+        lfs: LfsMode,
     ) -> Result<(GitDatabase, GitOid), GitError> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
@@ -300,7 +321,7 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                let ready = (lfs == Some(true))
+                let ready = (lfs == LfsMode::Enabled)
                     .then(|| maybe_fetch_lfs(&mut db.repo, self.url.as_str(), rev))
                     .flatten();
                 return Ok((db.with_lfs_ready(ready), rev));
@@ -331,7 +352,7 @@ impl GitRemote {
             })?,
         };
 
-        let ready = (lfs == Some(true))
+        let ready = (lfs == LfsMode::Enabled)
             .then(|| maybe_fetch_lfs(&mut repo, self.url.as_str(), rev))
             .flatten();
 
@@ -366,16 +387,8 @@ pub struct CheckoutOptions {
     /// Whether to recursively initialize and update submodules.
     pub update_submodules: bool,
 
-    /// Git LFS handling, tri-state:
-    /// * `Some(true)`: fetch LFS objects into the database (`git lfs fetch`)
-    ///   and run the smudge filter during checkout so pointer files are
-    ///   materialised into real content.
-    /// * `Some(false)`: force-skip the smudge filter (`GIT_LFS_SKIP_SMUDGE=1`)
-    ///   so checkouts always contain pointer files. Callers can handle LFS
-    ///   themselves afterwards.
-    /// * `None`: no opinion — the `GIT_LFS_SKIP_SMUDGE` environment variable
-    ///   is left untouched so ambient git configuration applies.
-    pub lfs: Option<bool>,
+    /// How Git LFS is handled during checkout. See [`LfsMode`].
+    pub lfs: LfsMode,
 }
 
 impl Default for CheckoutOptions {
@@ -384,8 +397,8 @@ impl Default for CheckoutOptions {
             update_submodules: true,
             // Skipping the smudge filter is the safe default: the checkout's
             // origin points at the local database, which has no LFS objects
-            // unless `lfs == Some(true)` fetched them.
-            lfs: Some(false),
+            // unless `LfsMode::Enabled` fetched them.
+            lfs: LfsMode::Disabled,
         }
     }
 }

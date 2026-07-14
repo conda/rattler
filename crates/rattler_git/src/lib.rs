@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ::url::Url;
-pub use git::CheckoutOptions;
+pub use git::{CheckoutOptions, LfsMode};
 use git::{GitBinaryError, GitReference};
 use sha::{GitSha, OidParseError};
 

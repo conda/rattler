@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::Command;
 
 use rattler_git::LazyClient;
-use rattler_git::{GitUrl, sha::GitSha, source::GitSource};
+use rattler_git::{GitUrl, LfsMode, sha::GitSha, source::GitSource};
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
@@ -124,7 +124,7 @@ fn fixture_builds_with_lfs() {
     );
 }
 
-/// With `lfs == Some(false)`, `GitSource::fetch` force-skips the smudge
+/// With `LfsMode::Disabled`, `GitSource::fetch` force-skips the smudge
 /// filter and leaves LFS pointers in the checkout.
 #[test]
 fn fetch_without_lfs_leaves_pointer() {
@@ -136,7 +136,7 @@ fn fetch_without_lfs_leaves_pointer() {
 
     let git_url = GitUrl::try_from(repo.base_url.clone()).unwrap();
     let fetch = GitSource::new(git_url, panic_client(), cache.path())
-        .with_lfs(Some(false))
+        .with_lfs(LfsMode::Disabled)
         .fetch()
         .expect("fetch should succeed");
 
@@ -149,7 +149,7 @@ fn fetch_without_lfs_leaves_pointer() {
     );
 }
 
-/// With `lfs == Some(true)`, `GitSource::fetch` runs `git lfs fetch`,
+/// With `LfsMode::Enabled`, `GitSource::fetch` runs `git lfs fetch`,
 /// validates with `git lfs fsck`, and materialises pointer files into the
 /// real blob content during the subsequent `git reset --hard`.
 #[test]
@@ -163,7 +163,7 @@ fn fetch_with_lfs_materialises_blob() {
 
     let git_url = GitUrl::try_from(repo.base_url.clone()).unwrap();
     let fetch = GitSource::new(git_url, panic_client(), cache.path())
-        .with_lfs(Some(true))
+        .with_lfs(LfsMode::Enabled)
         .fetch()
         .expect("fetch should succeed");
 
@@ -203,7 +203,7 @@ fn cached_fetch_with_lfs_artifacts_is_ready() {
         let url = GitUrl::try_from(repo.base_url.clone())
             .unwrap()
             .with_precise(head);
-        GitSource::new(url, panic_client(), cache.path()).with_lfs(Some(true))
+        GitSource::new(url, panic_client(), cache.path()).with_lfs(LfsMode::Enabled)
     };
 
     // Warm the cache.

@@ -15,40 +15,42 @@ use tracing::instrument;
 use crate::{
     GitError, GitUrl, Reporter,
     credentials::GIT_STORE,
-    git::{CheckoutOptions, GitRemote},
+    git::{CheckoutOptions, GitRemote, LfsMode},
     resolver::RepositoryReference,
     sha::{GitOid, GitSha},
     url::RepositoryUrl,
 };
 
-/// Parses a tri-state LFS preference from the environment variable named
-/// `var_name`. Accepts `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off`
-/// (case-insensitive). Unset/empty → `None` (no opinion).
+/// Parses an [`LfsMode`] from the environment variable named `var_name`.
+/// Accepts `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off` (case-insensitive).
+/// Unset/empty → [`LfsMode::Auto`] (no opinion).
 ///
 /// Callers pick the variable name (e.g. pixi uses `PIXI_GIT_LFS`) and pass
 /// the result to [`CheckoutOptions::lfs`].
-pub fn lfs_enabled_from_env(var_name: &str) -> Option<bool> {
-    let raw = std::env::var(var_name).ok()?;
+pub fn lfs_enabled_from_env(var_name: &str) -> LfsMode {
+    let Ok(raw) = std::env::var(var_name) else {
+        return LfsMode::Auto;
+    };
     let value = raw.trim();
     if value.is_empty() {
-        return None;
+        return LfsMode::Auto;
     }
     if value == "0"
         || value.eq_ignore_ascii_case("false")
         || value.eq_ignore_ascii_case("no")
         || value.eq_ignore_ascii_case("off")
     {
-        return Some(false);
+        return LfsMode::Disabled;
     }
     if value == "1"
         || value.eq_ignore_ascii_case("true")
         || value.eq_ignore_ascii_case("yes")
         || value.eq_ignore_ascii_case("on")
     {
-        return Some(true);
+        return LfsMode::Enabled;
     }
     tracing::warn!("unrecognised value for {var_name}: {raw:?}; treating as enabled");
-    Some(true)
+    LfsMode::Enabled
 }
 
 /// A remote Git source that can be checked out locally.
@@ -95,10 +97,9 @@ impl GitSource {
         }
     }
 
-    /// Override the LFS preference. See [`CheckoutOptions::lfs`] for the
-    /// tri-state semantics.
+    /// Override the LFS preference. See [`LfsMode`] for the semantics.
     #[must_use]
-    pub fn with_lfs(mut self, lfs: Option<bool>) -> Self {
+    pub fn with_lfs(mut self, lfs: LfsMode) -> Self {
         self.checkout_options.lfs = lfs;
         self
     }
@@ -135,7 +136,7 @@ impl GitSource {
             Err(_) => None,
         };
 
-        let lfs_requested = self.checkout_options.lfs == Some(true);
+        let lfs_requested = self.checkout_options.lfs == LfsMode::Enabled;
         let (db, actual_rev, task) = match (self.git.precise, existing_db) {
             // Cache hit: the DB has the locked revision and, if LFS was
             // requested, its LFS objects validate. Skip the regular fetch.
@@ -296,36 +297,44 @@ mod tests {
     }
 
     #[test]
-    fn env_unset_is_none() {
+    fn env_unset_is_auto() {
         with_env(None, || {
-            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), None);
+            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), LfsMode::Auto);
         });
     }
 
     #[test]
-    fn env_empty_is_none() {
+    fn env_empty_is_auto() {
         with_env(Some(""), || {
-            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), None);
+            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), LfsMode::Auto);
         });
         with_env(Some("   "), || {
-            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), None);
+            assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), LfsMode::Auto);
         });
     }
 
     #[test]
-    fn env_truthy_is_some_true() {
+    fn env_truthy_is_enabled() {
         for v in ["1", "true", "TRUE", "yes", "YES", "on", "ON"] {
             with_env(Some(v), || {
-                assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), Some(true), "value={v}");
+                assert_eq!(
+                    lfs_enabled_from_env(TEST_LFS_ENV),
+                    LfsMode::Enabled,
+                    "value={v}"
+                );
             });
         }
     }
 
     #[test]
-    fn env_falsy_is_some_false() {
+    fn env_falsy_is_disabled() {
         for v in ["0", "false", "FALSE", "no", "NO", "off", "OFF"] {
             with_env(Some(v), || {
-                assert_eq!(lfs_enabled_from_env(TEST_LFS_ENV), Some(false), "value={v}");
+                assert_eq!(
+                    lfs_enabled_from_env(TEST_LFS_ENV),
+                    LfsMode::Disabled,
+                    "value={v}"
+                );
             });
         }
     }
