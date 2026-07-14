@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3](https://github.com/conda/rattler/compare/rattler_upload-v0.8.2...rattler_upload-v0.8.3) - 2026-07-09
+
+### Fixed
+
+- add missing opendal feature ([#2550](https://github.com/conda/rattler/pull/2550))
+
 ## [0.8.2](https://github.com/conda/rattler/compare/rattler_upload-v0.8.1...rattler_upload-v0.8.2) - 2026-06-26
 
 ### Other

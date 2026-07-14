@@ -1,7 +1,7 @@
 [package]
 exclude = ["tests/**", "**/snapshots/**"]
 name = "rattler_networking"
-version = "0.30.0"
+version = "0.30.1"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"

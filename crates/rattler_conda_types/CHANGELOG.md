@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.47.2...rattler_conda_types-v0.48.0) - 2026-07-09
+
+### Added
+
+- *(channel)* add non-panicking Channel::try_from_directory ([#2556](https://github.com/conda/rattler/pull/2556))
+
+### Fixed
+
+- accept quoted extras lists and enforce CEP 44 group names ([#2552](https://github.com/conda/rattler/pull/2552))
+- make shard creation deterministic ([#2553](https://github.com/conda/rattler/pull/2553))
+
 ## [0.47.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.47.1...rattler_conda_types-v0.47.2) - 2026-06-17
 
 ### Other

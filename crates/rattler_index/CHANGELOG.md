@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.8](https://github.com/conda/rattler/compare/rattler_index-v0.30.7...rattler_index-v0.30.8) - 2026-07-09
+
+### Fixed
+
+- make shard creation deterministic ([#2553](https://github.com/conda/rattler/pull/2553))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
 ## [0.30.7](https://github.com/conda/rattler/compare/rattler_index-v0.30.6...rattler_index-v0.30.7) - 2026-06-26
 
 ### Other

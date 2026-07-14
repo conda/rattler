@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.29.7...rattler_repodata_gateway-v0.30.0) - 2026-07-09
+
+### Added
+
+- *(channel)* add non-panicking Channel::try_from_directory ([#2556](https://github.com/conda/rattler/pull/2556))
+- support CEP-42 in gateway ([#2462](https://github.com/conda/rattler/pull/2462))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
 ### Added
 
 - `GatewayBuilder::with_config`/`set_config` (feature `rattler_config`) apply the shared rattler configuration (repodata source config and `concurrency.downloads`). `ChannelConfig` now also implements `From<&CommonConfig>`.
