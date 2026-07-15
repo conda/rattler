@@ -185,16 +185,16 @@ pub struct ArtifactoryOpts {
     #[arg(short, long = "channel", env = "ARTIFACTORY_CHANNEL")]
     pub channels: String,
 
-    /// Your Artifactory username for HTTP basic authentication. Requires a password.
-    #[arg(long, env = "ARTIFACTORY_USERNAME")]
+    /// Your Artifactory username for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_USERNAME", requires = "password")]
     pub username: Option<String>,
 
-    /// Your Artifactory password for HTTP basic authentication. Requires a username.
-    #[arg(long, env = "ARTIFACTORY_PASSWORD")]
+    /// Your Artifactory password for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_PASSWORD", requires = "username")]
     pub password: Option<String>,
 
-    /// Your Artifactory bearer token. Takes precedence over username/password authentication.
-    #[arg(short, long, env = "ARTIFACTORY_TOKEN")]
+    /// Your Artifactory token for bearer authentication.
+    #[arg(short, long, env = "ARTIFACTORY_TOKEN", conflicts_with_all = ["username", "password"])]
     pub token: Option<String>,
 }
 
@@ -204,12 +204,7 @@ pub enum ArtifactoryAuthentication {
     /// Authenticate with a bearer token.
     Token(String),
     /// Authenticate with HTTP basic authentication.
-    Basic {
-        /// The username to use for basic authentication.
-        username: String,
-        /// The password to use for basic authentication.
-        password: String,
-    },
+    Basic { username: String, password: String },
 }
 
 #[derive(Debug)]
@@ -224,38 +219,37 @@ impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let ArtifactoryOpts {
-            url,
-            channels,
-            username,
-            password,
-            token,
-        } = value;
+        let data = Self::new(value.url, value.channels);
 
-        match (username, password, token) {
-            (_, _, Some(token)) => Ok(Self::new(url, channels, Some(token))),
-            (Some(username), Some(password), None) => {
-                Ok(Self::new(url, channels, None).with_basic_auth(username, password))
-            }
-            (Some(_), None, None) => Err(miette::miette!(
-                "Artifactory username provided without a password"
-            )),
-            (None, Some(_), None) => Err(miette::miette!(
-                "Artifactory password provided without a username"
-            )),
-            (None, None, None) => Ok(Self::new(url, channels, None)),
+        if let Some(username) = value.username {
+            let password = value
+                .password
+                .expect("clap guarantees that password is present if username is present");
+            return Ok(data.with_basic_auth(username, password));
         }
+
+        if let Some(token) = value.token {
+            return Ok(data.with_bearer_auth(token));
+        }
+
+        Ok(data)
     }
 }
 
 impl ArtifactoryData {
-    /// Create a new instance of `ArtifactoryData`
-    pub fn new(url: Url, channels: String, token: Option<String>) -> Self {
+    /// Create a new and unauthenticated instance of `ArtifactoryData`
+    pub fn new(url: Url, channels: String) -> Self {
         Self {
             url: url.into(),
             channels,
-            authentication: token.map(ArtifactoryAuthentication::Token),
+            authentication: None,
         }
+    }
+
+    /// Use HTTP bearer authentication with the given token.
+    pub fn with_bearer_auth(mut self, token: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Token(token));
+        self
     }
 
     /// Use HTTP basic authentication with the given username and password.
