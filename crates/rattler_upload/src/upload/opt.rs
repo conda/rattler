@@ -174,8 +174,7 @@ impl QuetzData {
 /// Options for uploading to an Artifactory channel.
 ///
 /// Authentication can be supplied directly with a bearer token or with an Artifactory username
-/// and password. If no credentials are supplied, they are read from the keychain / auth-file. A
-/// token takes precedence when both authentication methods are supplied.
+/// and password. If no credentials are supplied, they are read from the keychain / auth-file.
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
