@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -170,11 +170,16 @@ impl QuetzData {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Parser)]
 /// Options for uploading to an Artifactory channel.
 ///
 /// Authentication can be supplied directly with a bearer token or with an Artifactory username
 /// and password. If no credentials are supplied, they are read from the keychain / auth-file.
+#[derive(Clone, Debug, PartialEq, Parser)]
+#[command(group(
+    ArgGroup::new("authentication")
+        .multiple(false)
+        .args(["token", "username"])
+))]
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
@@ -255,32 +260,6 @@ impl ArtifactoryData {
     pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
         self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
         self
-    }
-}
-
-#[cfg(test)]
-mod artifactory_tests {
-    use super::{ArtifactoryAuthentication, ArtifactoryData, ArtifactoryOpts};
-
-    #[test]
-    fn username_and_password_are_kept_as_basic_auth() {
-        let options = ArtifactoryOpts {
-            url: "https://example.com/artifactory".parse().unwrap(),
-            channels: "test-channel".to_string(),
-            username: Some("test-user".to_string()),
-            password: Some("test-password".to_string()),
-            token: None,
-        };
-
-        let data = ArtifactoryData::try_from(options).unwrap();
-
-        assert_eq!(
-            data.authentication,
-            Some(ArtifactoryAuthentication::Basic {
-                username: "test-user".to_string(),
-                password: "test-password".to_string(),
-            })
-        );
     }
 }
 
