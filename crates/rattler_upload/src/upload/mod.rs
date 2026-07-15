@@ -159,12 +159,12 @@ pub async fn upload_package_to_artifactory(
             )) => authentication,
             Ok((_, Some(_))) => {
                 return Err(miette::miette!(
-                    "Authentication information found in the keychain / auth file, but it was neither a bearer token nor HTTP Basic credentials"
+                    "Authentication information found in the keychain / auth file, but it was neither a bearer token nor HTTP basic credentials"
                 ));
             }
             Ok((_, None)) => {
                 return Err(miette::miette!(
-                    "No bearer token or HTTP Basic credentials were given or found in the keychain / auth file"
+                    "No bearer token or HTTP basic credentials were given or found in the keychain / auth file"
                 ));
             }
             Err(e) => {
