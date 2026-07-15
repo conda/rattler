@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Literal
+from typing import TYPE_CHECKING, Any, List, Optional, Literal
 from rattler.rattler import (
     PyPathsJson,
     PyPathsEntry,
@@ -609,13 +609,14 @@ class PrefixPlaceholder:
         return self._inner.placeholder
 
     @property
-    def offsets(self) -> Optional[list[int] | list[list[int]]]:
+    def offsets(self) -> Optional[list[dict[str, Any]]]:
         """
-        The byte offsets, from the beginning of the file, at which the placeholder occurs.
+        The placeholder's occurrences in the file, recorded per encoding.
 
-        Returns `None` when the field is absent, a `list[int]` for text-mode files, or a
-        `list[list[int]]` for binary-mode files (grouped by c-string). Occurrences inside the
-        shebang region (see `shebang_length`) are excluded.
+        Returns `None` when the field is absent, or a list of offset groups mirroring the JSON:
+        `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a `list[int]`
+        for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
+        Occurrences inside the shebang region (see `shebang_length`) are excluded.
 
         Examples
         --------
