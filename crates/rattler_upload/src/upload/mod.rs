@@ -506,7 +506,7 @@ mod test {
 
     async fn ok_with_basic(headers: axum::http::HeaderMap, _body: axum::body::Bytes) -> StatusCode {
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
-        // Base64 encoding of `test-user:test-password`, as required by HTTP Basic auth.
+        // Base64 encoding of `test-user:test-password`, as required by HTTP basic auth.
         assert_eq!(auth, "Basic dGVzdC11c2VyOnRlc3QtcGFzc3dvcmQ=");
         StatusCode::OK
     }

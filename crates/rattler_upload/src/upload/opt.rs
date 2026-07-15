@@ -185,11 +185,11 @@ pub struct ArtifactoryOpts {
     #[arg(short, long = "channel", env = "ARTIFACTORY_CHANNEL")]
     pub channels: String,
 
-    /// Your Artifactory username for HTTP Basic authentication. Requires a password.
+    /// Your Artifactory username for HTTP basic authentication. Requires a password.
     #[arg(long, env = "ARTIFACTORY_USERNAME")]
     pub username: Option<String>,
 
-    /// Your Artifactory password for HTTP Basic authentication. Requires a username.
+    /// Your Artifactory password for HTTP basic authentication. Requires a username.
     #[arg(long, env = "ARTIFACTORY_PASSWORD")]
     pub password: Option<String>,
 
@@ -203,7 +203,7 @@ pub struct ArtifactoryOpts {
 pub enum ArtifactoryAuthentication {
     /// Authenticate with a bearer token.
     Token(String),
-    /// Authenticate with HTTP Basic authentication.
+    /// Authenticate with HTTP basic authentication.
     Basic {
         /// The username to use for basic authentication.
         username: String,
@@ -258,7 +258,7 @@ impl ArtifactoryData {
         }
     }
 
-    /// Use HTTP Basic authentication with the given username and password.
+    /// Use HTTP basic authentication with the given username and password.
     pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
         self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
         self
