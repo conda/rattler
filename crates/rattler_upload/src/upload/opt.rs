@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser};
+use clap::Parser;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -175,11 +175,6 @@ impl QuetzData {
 /// Authentication can be supplied directly with a bearer token or with an Artifactory username
 /// and password. If no credentials are supplied, they are read from the keychain / auth-file.
 #[derive(Clone, Debug, PartialEq, Parser)]
-#[command(group(
-    ArgGroup::new("authentication")
-        .multiple(false)
-        .args(["token", "username"])
-))]
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
