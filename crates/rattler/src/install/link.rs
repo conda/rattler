@@ -4,7 +4,10 @@ use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::Platform;
-use rattler_conda_types::package::{FileMode, Offsets, PathType, PathsEntry, PrefixPlaceholder};
+use rattler_conda_types::package::{
+    FileMode, OffsetGroup, OffsetRanges, PathType, PathsEntry, PrefixPlaceholder,
+    select_utf8_offset_ranges,
+};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -739,13 +742,17 @@ impl OffsetReplaceError {
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
-/// `prefix_placeholder` text with the `target_prefix` text, using the offsets recorded in
+/// `prefix_placeholder` text with the `target_prefix` text, using the offset groups recorded in
 /// `paths.json` instead of searching the file contents.
 ///
-/// This switches to more specialized functions that handle the replacement of either
-/// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
-/// See both [`copy_and_replace_cstring_placeholder_offsets`] and
-/// [`copy_and_replace_textual_placeholder_offsets`].
+/// Per the CEP, an installer applies exactly the groups whose encodings its own search-based
+/// replacement covers. rattler's search-based replacement covers UTF-8 only, so the UTF-8 group's
+/// ranges (selected and structurally validated by [`select_utf8_offset_ranges`]) are spliced by
+/// [`copy_and_replace_textual_placeholder_offsets`] or
+/// [`copy_and_replace_cstring_placeholder_offsets`]; groups for the other defined encodings are
+/// skipped, since their occurrences would not have been replaced by the search either. Valid
+/// metadata without a UTF-8 group means there is nothing to splice: the file is copied through
+/// unchanged apart from the shebang handling of text files.
 ///
 /// `shebang_length` bounds the leading shebang region for text files and is ignored for binary
 /// files. Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the
@@ -758,39 +765,58 @@ pub fn copy_and_replace_placeholders_with_offsets(
     target_prefix: &str,
     target_platform: &Platform,
     file_mode: FileMode,
-    offsets: &Offsets,
+    offsets: &[OffsetGroup],
     shebang_length: Option<usize>,
 ) -> Result<(), OffsetReplaceError> {
-    match (file_mode, offsets) {
-        (FileMode::Text, Offsets::Text(offsets)) => {
+    let ranges = select_utf8_offset_ranges(offsets, file_mode, shebang_length.is_some())
+        .map_err(|err| OffsetReplaceError::inconsistent(err.to_string()))?;
+
+    match (file_mode, ranges) {
+        (FileMode::Text, None | Some(OffsetRanges::Text(_))) => {
+            // With no UTF-8 group, only the shebang region transforms (still
+            // validated against `shebang_length`); the body copies verbatim.
+            let body_offsets = match ranges {
+                Some(OffsetRanges::Text(offsets)) => offsets.as_slice(),
+                _ => &[],
+            };
             copy_and_replace_textual_placeholder_offsets(
                 source_bytes,
                 destination,
                 prefix_placeholder,
                 target_prefix,
                 target_platform,
-                offsets,
+                body_offsets,
                 shebang_length,
             )?;
         }
-        (FileMode::Binary, Offsets::Binary(groups)) => {
+        (FileMode::Binary, ranges) => {
             // conda does not replace the prefix in the binary files on windows
             // DLLs are loaded quite differently anyways (there is no rpath, for example).
-            if target_platform.is_windows() {
-                destination.write_all(source_bytes)?;
-            } else {
-                copy_and_replace_cstring_placeholder_offsets(
-                    source_bytes,
-                    destination,
-                    prefix_placeholder,
-                    target_prefix,
-                    groups,
-                )?;
+            match ranges {
+                Some(OffsetRanges::Binary(groups)) if !target_platform.is_windows() => {
+                    copy_and_replace_cstring_placeholder_offsets(
+                        source_bytes,
+                        destination,
+                        prefix_placeholder,
+                        target_prefix,
+                        groups,
+                    )?;
+                }
+                None | Some(OffsetRanges::Binary(_)) => {
+                    destination.write_all(source_bytes)?;
+                }
+                Some(OffsetRanges::Text(_)) => {
+                    // Unreachable: the shape is validated by `select_utf8_offset_ranges`.
+                    return Err(OffsetReplaceError::inconsistent(
+                        "ranges shape does not match file mode",
+                    ));
+                }
             }
         }
-        _ => {
+        (FileMode::Text, Some(OffsetRanges::Binary(_))) => {
+            // Unreachable: the shape is validated by `select_utf8_offset_ranges`.
             return Err(OffsetReplaceError::inconsistent(
-                "offsets shape does not match file mode",
+                "ranges shape does not match file mode",
             ));
         }
     }
@@ -1384,8 +1410,18 @@ mod test {
     use super::PYTHON_REGEX;
     use fs_err as fs;
     use rattler_conda_types::Platform;
+    use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges};
     use rstest::rstest;
     use std::io::Cursor;
+
+    /// Builds the UTF-8 offset group a CEP-conformant producer would emit.
+    fn utf8_group(ranges: OffsetRanges) -> OffsetGroup {
+        OffsetGroup {
+            encoding: OffsetEncoding::Utf8,
+            ranges,
+            has_unknown_members: false,
+        }
+    }
 
     /// Patched files must receive `modification_time` rather than preserving
     /// the source file's mtime. Without this, Python reuses stale .pyc files
@@ -2295,6 +2331,151 @@ mod test {
         let out = output.into_inner();
         assert_eq!(out, b"AAAA/opt\0\0\0\0\0\0\0\0");
         assert_eq!(out.len(), input.len(), "length must be preserved");
+    }
+
+    /// The dispatcher applies the UTF-8 group's ranges for a text file.
+    #[test]
+    fn test_offset_groups_text_utf8_group_applied() {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_placeholders_with_offsets(
+            b"Hello, cruel world!",
+            &mut output,
+            "cruel",
+            "fabulous",
+            &Platform::Linux64,
+            super::FileMode::Text,
+            &[utf8_group(OffsetRanges::Text(vec![7]))],
+            None,
+        )
+        .unwrap();
+        assert_eq!(output.into_inner(), b"Hello, fabulous world!");
+    }
+
+    /// CEP test vector 9: a binary file with occurrences under more than one
+    /// encoding. rattler's search-based replacement covers UTF-8 only, so the
+    /// UTF-8 group is spliced and the UTF-16-LE wide string is left untouched
+    /// — exactly as rattler's own search would leave it. The file length is
+    /// preserved either way.
+    #[test]
+    fn test_offset_groups_binary_multi_encoding_vector9() {
+        let placeholder = "/pfx";
+        let target = "/np";
+
+        // A UTF-8 c-string with the placeholder at offset 1 (NUL at 9),
+        // followed by a UTF-16-LE wide string with the placeholder at offset
+        // 10 (two-byte NUL terminator starting at 28), followed by a tail.
+        let wide: Vec<u8> = "/pfx/wide"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        let mut input = b"A/pfx/lib\0".to_vec();
+        assert_eq!(input.len(), 10);
+        input.extend_from_slice(&wide);
+        input.extend_from_slice(&[0, 0]);
+        input.extend_from_slice(b"tail");
+
+        let groups = [
+            OffsetGroup {
+                encoding: OffsetEncoding::Utf16Le,
+                ranges: OffsetRanges::Binary(vec![vec![10, 28]]),
+                has_unknown_members: false,
+            },
+            utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+        ];
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_placeholders_with_offsets(
+            &input,
+            &mut output,
+            placeholder,
+            target,
+            &Platform::Linux64,
+            super::FileMode::Binary,
+            &groups,
+            None,
+        )
+        .unwrap();
+
+        let out = output.into_inner();
+        assert_eq!(out.len(), input.len(), "length must be preserved");
+        // The UTF-8 c-string is patched, with padding restoring its length.
+        assert_eq!(&out[..10], b"A/np/lib\0\0");
+        // Everything from the wide string onwards is byte-identical.
+        assert_eq!(&out[10..], &input[10..], "wide string must be untouched");
+    }
+
+    /// Valid metadata whose only groups are wide-string encodings records no
+    /// UTF-8 occurrences: the file is copied through unchanged rather than
+    /// treated as inconsistent.
+    #[test]
+    fn test_offset_groups_without_utf8_group_copies_verbatim() {
+        let input = b"no utf-8 occurrences here";
+        for (file_mode, ranges) in [
+            (
+                super::FileMode::Binary,
+                OffsetRanges::Binary(vec![vec![10, 28]]),
+            ),
+            (super::FileMode::Text, OffsetRanges::Text(vec![10])),
+        ] {
+            let groups = [OffsetGroup {
+                encoding: OffsetEncoding::Utf16Le,
+                ranges,
+                has_unknown_members: false,
+            }];
+            let mut output = Cursor::new(Vec::new());
+            super::copy_and_replace_placeholders_with_offsets(
+                input,
+                &mut output,
+                "/pfx",
+                "/np",
+                &Platform::Linux64,
+                file_mode,
+                &groups,
+                None,
+            )
+            .unwrap();
+            assert_eq!(output.into_inner(), input, "mode {file_mode:?}");
+        }
+    }
+
+    /// Structurally invalid group lists — an unrecognized encoding, duplicate
+    /// encodings, or an empty list for a binary file — surface as inconsistent
+    /// metadata (with nothing written) so the installer falls back to the
+    /// search-based replacement.
+    #[rstest]
+    #[case::unknown_encoding(vec![OffsetGroup {
+        encoding: OffsetEncoding::Unknown(String::from("utf-64-xe")),
+        ranges: OffsetRanges::Binary(vec![vec![1, 9]]),
+        has_unknown_members: false,
+    }])]
+    #[case::duplicate_encoding(vec![
+        utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+        utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+    ])]
+    #[case::empty_list(vec![])]
+    fn test_offset_groups_invalid_is_inconsistent(#[case] groups: Vec<OffsetGroup>) {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_placeholders_with_offsets(
+            b"A/pfx/lib\0",
+            &mut output,
+            "/pfx",
+            "/np",
+            &Platform::Linux64,
+            super::FileMode::Binary,
+            &groups,
+            None,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "{result:?}"
+        );
+        assert!(
+            output.into_inner().is_empty(),
+            "nothing is written, so the fallback starts from a clean destination"
+        );
     }
 
     /// Offsets come from the (untrusted) `paths.json`. Malformed offsets must return a recoverable
