@@ -80,8 +80,13 @@ impl<T: VfsOps> OverlayFS<T> {
         env_hash: String,
         transport: String,
     ) -> Result<Self, String> {
-        let state = OverlayState::load(overlay_dir, env_hash, transport)
-            .map_err(|e| format!("failed to load overlay state: {e}"))?;
+        let state = OverlayState::load(
+            overlay_dir,
+            env_hash,
+            transport,
+            crate::OverlayMismatch::Error,
+        )
+        .map_err(|e| format!("failed to load overlay state: {e}"))?;
         Self::wrap(lower, state)
     }
 
@@ -2294,14 +2299,24 @@ mod tests {
         }
 
         // Try to load with hash B — should fail with EnvHashMismatch.
-        let err =
-            OverlayState::load(overlay_dir.clone(), "hash_b".into(), "test".into()).unwrap_err();
+        let err = OverlayState::load(
+            overlay_dir.clone(),
+            "hash_b".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap_err();
         assert!(matches!(err, OverlayError::EnvHashMismatch { .. }));
 
         // Wipe and reload — this is the create_overlay recovery path.
         std::fs::remove_dir_all(&overlay_dir).unwrap();
-        let state =
-            OverlayState::load(overlay_dir.clone(), "hash_b".into(), "test".into()).unwrap();
+        let state = OverlayState::load(
+            overlay_dir.clone(),
+            "hash_b".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         // wrap() consumes a fresh lower VFS — no double-construction needed.
         let ofs = OverlayFS::wrap(MockLowerFS, state).unwrap();
@@ -2330,7 +2345,13 @@ mod tests {
         }
 
         // Try to load as "nfs" — should refuse with TransportMismatch.
-        let err = OverlayState::load(overlay_dir.clone(), "hash".into(), "nfs".into()).unwrap_err();
+        let err = OverlayState::load(
+            overlay_dir.clone(),
+            "hash".into(),
+            "nfs".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap_err();
         assert!(matches!(err, OverlayError::TransportMismatch { .. }));
 
         // The overlay directory must still exist — no silent wipe.

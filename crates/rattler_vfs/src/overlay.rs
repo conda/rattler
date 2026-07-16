@@ -108,6 +108,23 @@ struct StateFile {
     opaque_dirs: Vec<PathBuf>,
 }
 
+/// Read the environment hash recorded in an overlay directory's state file,
+/// without taking the directory lock or creating anything.
+///
+/// Returns `None` when there is no overlay yet (a fresh directory) or the state
+/// file is missing/unreadable/unparseable/from an incompatible version. This is
+/// a cheap, side-effect-free probe for callers that want to detect an
+/// environment change *before* mounting — e.g. to warn the user that a
+/// persistent overlay will be reused for a different environment.
+pub fn recorded_env_hash(overlay_dir: &Path) -> Option<String> {
+    let content = fs::read_to_string(overlay_dir.join(STATE_FILENAME)).ok()?;
+    let state: StateFile = serde_json::from_str(&content).ok()?;
+    if state.version != STATE_VERSION {
+        return None;
+    }
+    Some(state.env_hash)
+}
+
 /// Persistent overlay state: whiteouts, environment identity, and transport type.
 ///
 /// Holds an exclusive file lock on `.rattler_vfs_state.lock` for its entire
@@ -185,9 +202,14 @@ impl OverlayState {
     /// Acquires the directory lock internally.  If you need to hold the lock
     /// across a wipe-and-retry cycle, use [`Self::acquire_lock`] +
     /// [`Self::load_with_lock`] instead.
-    pub fn load(dir: PathBuf, env_hash: String, transport: String) -> Result<Self, OverlayError> {
+    pub fn load(
+        dir: PathBuf,
+        env_hash: String,
+        transport: String,
+        on_mismatch: crate::OverlayMismatch,
+    ) -> Result<Self, OverlayError> {
         let lock = Self::acquire_lock(&dir)?;
-        Self::load_with_lock(dir, env_hash, transport, lock)
+        Self::load_with_lock(dir, env_hash, transport, on_mismatch, lock)
     }
 
     /// Load an existing overlay using a pre-acquired lock.
@@ -199,6 +221,7 @@ impl OverlayState {
         dir: PathBuf,
         env_hash: String,
         transport: String,
+        on_mismatch: crate::OverlayMismatch,
         lock: fs::File,
     ) -> Result<Self, OverlayError> {
         fs::create_dir_all(&dir)?;
@@ -215,11 +238,30 @@ impl OverlayState {
                 });
             }
             if state.env_hash != env_hash {
-                return Err(OverlayError::EnvHashMismatch {
-                    expected: env_hash,
-                    found: state.env_hash,
-                    lock,
-                });
+                match on_mismatch {
+                    crate::OverlayMismatch::Error => {
+                        return Err(OverlayError::EnvHashMismatch {
+                            expected: env_hash,
+                            found: state.env_hash,
+                            lock,
+                        });
+                    }
+                    crate::OverlayMismatch::Adopt => {
+                        // A library-level diagnostic only — surfacing this to the
+                        // user is the caller's responsibility (it knows the policy
+                        // name and where its output goes). Logged at debug so it
+                        // does not double up with the caller's own message.
+                        tracing::debug!(
+                            overlay = %dir.display(),
+                            recorded_env_hash = %state.env_hash,
+                            new_env_hash = %env_hash,
+                            "adopting overlay created for a different environment; \
+                             keeping its contents and updating the recorded hash",
+                        );
+                        // Fall through: keep the existing whiteouts/opaque dirs and
+                        // persist the new env hash on the flush below.
+                    }
+                }
             }
             if !state.transport.is_empty() && state.transport != transport {
                 return Err(OverlayError::TransportMismatch {
@@ -330,7 +372,13 @@ mod tests {
     fn test_load_creates_new_state() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
-        let state = OverlayState::load(dir.clone(), "hash123".into(), "test".into()).unwrap();
+        let state = OverlayState::load(
+            dir.clone(),
+            "hash123".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         assert!(state.whiteouts.is_empty());
         assert!(dir.join(STATE_FILENAME).exists());
@@ -347,11 +395,58 @@ mod tests {
         let dir = tmp.path().join("overlay");
 
         // Create with one hash
-        OverlayState::load(dir.clone(), "hash_a".into(), "test".into()).unwrap();
+        OverlayState::load(
+            dir.clone(),
+            "hash_a".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         // Try to load with different hash
-        let err = OverlayState::load(dir, "hash_b".into(), "test".into()).unwrap_err();
+        let err = OverlayState::load(
+            dir,
+            "hash_b".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap_err();
         assert!(matches!(err, OverlayError::EnvHashMismatch { .. }));
+    }
+
+    #[test]
+    fn test_load_adopts_on_mismatch() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("overlay");
+
+        // Create with one hash and record a whiteout.
+        {
+            let mut state = OverlayState::load(
+                dir.clone(),
+                "hash_a".into(),
+                "test".into(),
+                crate::OverlayMismatch::Error,
+            )
+            .unwrap();
+            state.add_whiteout(PathBuf::from("lib/foo.py")).unwrap();
+        }
+
+        // Loading with a different hash under the Adopt policy succeeds, keeps the
+        // existing whiteout, and persists the new hash on the next flush.
+        let mut state = OverlayState::load(
+            dir.clone(),
+            "hash_b".into(),
+            "test".into(),
+            crate::OverlayMismatch::Adopt,
+        )
+        .unwrap();
+        assert!(state.is_whiteout(Path::new("lib/foo.py")));
+
+        state.add_whiteout(PathBuf::from("lib/bar.py")).unwrap();
+        let content = fs::read_to_string(dir.join(STATE_FILENAME)).unwrap();
+        let parsed: StateFile = serde_json::from_str(&content).unwrap();
+        assert_eq!(parsed.env_hash, "hash_b");
+        assert_eq!(parsed.whiteouts.len(), 2);
     }
 
     #[test]
@@ -359,8 +454,20 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
 
-        OverlayState::load(dir.clone(), "hash_a".into(), "test".into()).unwrap();
-        let state = OverlayState::load(dir, "hash_a".into(), "test".into()).unwrap();
+        OverlayState::load(
+            dir.clone(),
+            "hash_a".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
+        let state = OverlayState::load(
+            dir,
+            "hash_a".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
         assert!(state.whiteouts.is_empty());
     }
 
@@ -368,7 +475,13 @@ mod tests {
     fn test_whiteout_add_remove() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
-        let mut state = OverlayState::load(dir, "hash".into(), "test".into()).unwrap();
+        let mut state = OverlayState::load(
+            dir,
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         let path = PathBuf::from("lib/foo.py");
         assert!(!state.is_whiteout(&path));
@@ -387,12 +500,24 @@ mod tests {
 
         // Add a whiteout
         {
-            let mut state = OverlayState::load(dir.clone(), "hash".into(), "test".into()).unwrap();
+            let mut state = OverlayState::load(
+                dir.clone(),
+                "hash".into(),
+                "test".into(),
+                crate::OverlayMismatch::Error,
+            )
+            .unwrap();
             state.add_whiteout(PathBuf::from("lib/deleted.py")).unwrap();
         }
 
         // Reload and verify
-        let state = OverlayState::load(dir, "hash".into(), "test".into()).unwrap();
+        let state = OverlayState::load(
+            dir,
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
         assert!(state.is_whiteout(Path::new("lib/deleted.py")));
     }
 
@@ -400,7 +525,13 @@ mod tests {
     fn test_upper_path() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
-        let state = OverlayState::load(dir.clone(), "hash".into(), "test".into()).unwrap();
+        let state = OverlayState::load(
+            dir.clone(),
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         assert_eq!(
             state.upper_path(Path::new("lib/foo.py")),
@@ -412,7 +543,13 @@ mod tests {
     fn test_has_upper() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
-        let state = OverlayState::load(dir.clone(), "hash".into(), "test".into()).unwrap();
+        let state = OverlayState::load(
+            dir.clone(),
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         assert!(!state.has_upper(Path::new("lib/foo.py")));
 
@@ -427,7 +564,13 @@ mod tests {
     fn test_flush_produces_valid_json() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("overlay");
-        let mut state = OverlayState::load(dir.clone(), "hash".into(), "test".into()).unwrap();
+        let mut state = OverlayState::load(
+            dir.clone(),
+            "hash".into(),
+            "test".into(),
+            crate::OverlayMismatch::Error,
+        )
+        .unwrap();
 
         state.add_whiteout(PathBuf::from("a/b.py")).unwrap();
         state.add_whiteout(PathBuf::from("c/d.py")).unwrap();
