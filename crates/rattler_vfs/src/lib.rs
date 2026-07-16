@@ -434,12 +434,28 @@ pub enum Mode {
     },
 }
 
+/// What to do when the persistent overlay was created for a different version
+/// of the environment (its recorded env hash no longer matches the one being
+/// mounted, e.g. after `pixi add`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OverlayMismatch {
+    /// Refuse to mount and return [`MountError::OverlayEnvHashMismatch`].
+    #[default]
+    Error,
+    /// Reuse the existing overlay on top of the new environment, updating its
+    /// recorded hash. Preserves overlay writes (e.g. `pip install` results)
+    /// across environment changes, at the small risk of a stale entry if the
+    /// change also modified a file that had been copied up.
+    Adopt,
+}
+
 /// Configuration for mounting a virtual environment.
 ///
 /// Marked `#[non_exhaustive]` so new fields can be added without a `SemVer`
 /// break. Construct via [`MountConfig::new_read_only`] or
 /// [`MountConfig::new_writable`], optionally chaining
-/// [`with_allow_other`](MountConfig::with_allow_other).
+/// [`with_allow_other`](MountConfig::with_allow_other) or
+/// [`with_overlay_mismatch`](MountConfig::with_overlay_mismatch).
 #[non_exhaustive]
 pub struct MountConfig {
     /// Directory where the virtual environment will appear.
@@ -459,6 +475,10 @@ pub struct MountConfig {
     /// Allow other users to access the mount. Only applies to FUSE; requires
     /// `user_allow_other` in `/etc/fuse.conf`. Most use cases don't need this.
     pub allow_other: bool,
+
+    /// What to do when the persistent overlay was created for a different
+    /// version of the environment. Defaults to [`OverlayMismatch::Error`].
+    pub overlay_mismatch: OverlayMismatch,
 }
 
 impl MountConfig {
@@ -470,6 +490,7 @@ impl MountConfig {
             transport,
             env_hash,
             allow_other: false,
+            overlay_mismatch: OverlayMismatch::Error,
         }
     }
 
@@ -492,6 +513,7 @@ impl MountConfig {
             transport,
             env_hash,
             allow_other: false,
+            overlay_mismatch: OverlayMismatch::Error,
         }
     }
 
@@ -512,12 +534,19 @@ impl MountConfig {
             transport,
             env_hash,
             allow_other: false,
+            overlay_mismatch: OverlayMismatch::Error,
         }
     }
 
     /// Allow other users to access the mount (FUSE only).
     pub fn with_allow_other(mut self, allow_other: bool) -> Self {
         self.allow_other = allow_other;
+        self
+    }
+
+    /// Set what to do when the overlay was created for a different environment.
+    pub fn with_overlay_mismatch(mut self, overlay_mismatch: OverlayMismatch) -> Self {
+        self.overlay_mismatch = overlay_mismatch;
         self
     }
 }
@@ -798,6 +827,7 @@ pub async fn mount(metadata: MetadataTree, config: &MountConfig) -> anyhow::Resu
                 config.mount_point.clone(),
                 config.env_hash.clone(),
                 "projfs".to_string(),
+                config.overlay_mismatch,
             ) {
                 Ok(_) => {} // hash matches or fresh overlay
                 Err(OverlayError::EnvHashMismatch {
@@ -994,7 +1024,13 @@ fn mount_fuse(vfs: VirtualFS, config: &MountConfig) -> anyhow::Result<fuser::Bac
         Mode::Writable {
             overlay_dir: Some(overlay_dir),
         } => {
-            let overlay = create_overlay(vfs, overlay_dir, &config.env_hash, "fuse")?;
+            let overlay = create_overlay(
+                vfs,
+                overlay_dir,
+                &config.env_hash,
+                "fuse",
+                config.overlay_mismatch,
+            )?;
             let adapter = FuseAdapter::new(overlay);
             Ok(fuser::spawn_mount2(
                 adapter,
@@ -1038,7 +1074,13 @@ async fn mount_nfs(
         Mode::Writable {
             overlay_dir: Some(overlay_dir),
         } => {
-            let overlay = create_overlay(vfs, overlay_dir, &config.env_hash, "nfs")?;
+            let overlay = create_overlay(
+                vfs,
+                overlay_dir,
+                &config.env_hash,
+                "nfs",
+                config.overlay_mismatch,
+            )?;
             NfsAdapter::new(overlay).serve(bind_port).await?
         }
         Mode::Writable { overlay_dir: None } => {
@@ -1146,6 +1188,7 @@ fn create_overlay(
     overlay_dir: &Path,
     env_hash: &str,
     transport: &str,
+    overlay_mismatch: OverlayMismatch,
 ) -> anyhow::Result<overlay_fs::OverlayFS<VirtualFS>> {
     use crate::overlay::{OverlayError, OverlayState};
 
@@ -1159,6 +1202,7 @@ fn create_overlay(
         overlay_dir.to_path_buf(),
         env_hash.to_string(),
         transport.to_string(),
+        overlay_mismatch,
         lock,
     ) {
         Ok(state) => state,
@@ -1182,6 +1226,7 @@ fn create_overlay(
                 overlay_dir.to_path_buf(),
                 env_hash.to_string(),
                 transport.to_string(),
+                overlay_mismatch,
                 lock,
             )
             .map_err(|e| anyhow::anyhow!("failed to recreate overlay state: {e}"))?
