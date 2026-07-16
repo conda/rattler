@@ -3,7 +3,9 @@ use memmap2::Mmap;
 #[cfg(target_os = "macos")]
 use rattler::install::link::copy_and_replace_placeholders_with_offsets;
 use rattler_conda_types::Platform;
-use rattler_conda_types::package::{FileMode, Offsets, PathType};
+use rattler_conda_types::package::{FileMode, OffsetRanges, PathType, select_utf8_offset_ranges};
+#[cfg(target_os = "macos")]
+use rattler_conda_types::package::{OffsetEncoding, OffsetGroup};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::{OsStr, OsString},
@@ -157,18 +159,45 @@ impl VirtualFS {
 
             // Build the replacement plan. Both modes prefer the offsets
             // recorded in paths.json — that metadata exists precisely so
-            // consumers don't have to scan file contents, and it is trusted
-            // as-is (the ranged reads are total, so a non-conformant producer
-            // yields wrong bytes for its own package, never a panic). Scanning
-            // remains as the fallback for pre-CEP packages.
+            // consumers don't have to scan file contents. Per the CEP, rattler
+            // applies exactly the groups its own search-based replacement
+            // covers (UTF-8 only): `Some(selection)` below is usable metadata
+            // (`selection = None` meaning there are validly no UTF-8
+            // occurrences to splice), while `None` sends the file down the
+            // scanning fallback — the field is absent (pre-CEP package) or
+            // structurally invalid/unrecognized. The selected ranges are then
+            // trusted as-is (the ranged reads are total, so a non-conformant
+            // producer yields wrong bytes for its own package, never a panic).
+            let recorded_ranges: Option<Option<&OffsetRanges>> = match &placeholder.offsets {
+                None => None,
+                Some(groups) => match select_utf8_offset_ranges(
+                    groups,
+                    placeholder.file_mode,
+                    placeholder.shebang_length.is_some(),
+                ) {
+                    Ok(selection) => Some(selection),
+                    Err(e) => {
+                        tracing::warn!(
+                            "{}: unusable offset metadata ({e}); falling back to scanning",
+                            cache_path.display()
+                        );
+                        None
+                    }
+                },
+            };
+
             let plan = match placeholder.file_mode {
                 FileMode::Text => {
                     // With recorded offsets, construction reads at most the
                     // shebang region (`shebang_length` bytes) — the one part
                     // of the transformation a bare offset list can't express.
-                    let recorded_plan = if let Some(Offsets::Text(body_offsets)) =
-                        &placeholder.offsets
-                    {
+                    let recorded_plan = if let Some(selection) = recorded_ranges {
+                        let body_offsets = match selection {
+                            Some(OffsetRanges::Text(offsets)) => offsets.clone(),
+                            // Validated by the selection: no UTF-8 occurrences
+                            // are recorded outside the shebang region.
+                            _ => Vec::new(),
+                        };
                         let region = match placeholder.shebang_length {
                             Some(len) if len > 0 => match read_leading_bytes(&cache_path, len) {
                                 Ok(region) => region,
@@ -185,7 +214,7 @@ impl VirtualFS {
                         };
                         let plan = crate::prefix_replacement::TextPlan::from_recorded(
                             &region,
-                            body_offsets.clone(),
+                            body_offsets,
                             &placeholder.placeholder,
                             &target_prefix,
                             &platform,
@@ -249,10 +278,13 @@ impl VirtualFS {
                     ReplacementPlan::Text(text_plan)
                 }
                 FileMode::Binary => {
-                    let groups = if let Some(Offsets::Binary(g)) = &placeholder.offsets {
-                        g.clone()
-                    } else {
-                        match fs::read(&cache_path) {
+                    let groups = match recorded_ranges {
+                        Some(Some(OffsetRanges::Binary(g))) => g.clone(),
+                        // Valid metadata with no UTF-8 group: nothing to
+                        // splice, and empty groups make the ranged reads serve
+                        // the bytes verbatim.
+                        Some(None) => Vec::new(),
+                        _ => match fs::read(&cache_path) {
                             Ok(source) => crate::prefix_replacement::collect_binary_offsets(
                                 &source, old_prefix,
                             ),
@@ -264,7 +296,7 @@ impl VirtualFS {
                                 );
                                 continue;
                             }
-                        }
+                        },
                     };
                     ReplacementPlan::Binary(groups)
                 }
@@ -484,9 +516,12 @@ impl VirtualFS {
                 // Codesign rehashes every page so it can't be done as a ranged
                 // operation. Materialize + resign once, cache for subsequent reads.
                 // The codesign module is compiled only on macOS — other targets
-                // fall through to `binary_ranged_read` directly.
+                // fall through to `binary_ranged_read` directly. With no
+                // occurrences to replace the bytes are served verbatim and the
+                // original signature stays valid, so the codesign path is
+                // skipped too.
                 #[cfg(target_os = "macos")]
-                if self.platform.is_osx() {
+                if self.platform.is_osx() && !groups.is_empty() {
                     // Fast path: serve from cache
                     if let Some(cached) = self.codesign_cache.lock().unwrap().get(&ino) {
                         let s = start.min(cached.len());
@@ -494,10 +529,16 @@ impl VirtualFS {
                         return Ok(cached[s..e].to_vec());
                     }
 
-                    // Slow path: materialize, resign, cache
+                    // Slow path: materialize, resign, cache. The plan already
+                    // holds the selected (or scanned) UTF-8 c-string groups, so
+                    // hand the dispatcher a synthesized UTF-8 offset group.
                     let target_prefix = self.mount_point.to_string_lossy();
                     let mut output = Vec::with_capacity(mmap.len());
-                    let binary_offsets = Offsets::Binary(groups.clone());
+                    let offset_groups = [OffsetGroup {
+                        encoding: OffsetEncoding::Utf8,
+                        ranges: OffsetRanges::Binary(groups.clone()),
+                        has_unknown_members: false,
+                    }];
 
                     let result = copy_and_replace_placeholders_with_offsets(
                         &mmap,
@@ -506,7 +547,7 @@ impl VirtualFS {
                         &target_prefix,
                         &self.platform,
                         placeholder.file_mode,
-                        &binary_offsets,
+                        &offset_groups,
                         placeholder.shebang_length,
                     );
 
