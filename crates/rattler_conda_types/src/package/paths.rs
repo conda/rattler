@@ -121,8 +121,8 @@ impl PathsJson {
                             prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
                                 file_mode: entry.file_mode,
                                 placeholder: (*entry.prefix).to_owned(),
-                                offsets: None,
-                                shebang_length: None,
+                                experimental_offsets: None,
+                                experimental_shebang_length: None,
                             }),
                             no_link: no_link.contains(&path),
                             sha256: None,
@@ -202,7 +202,7 @@ pub struct PrefixPlaceholder {
     /// [`select_utf8_offset_ranges`].
     ///
     /// Occurrences inside the shebang region (the first
-    /// [`Self::shebang_length`] bytes) are **excluded** — that region is
+    /// [`Self::experimental_shebang_length`] bytes) are **excluded** — that region is
     /// transformed by the installer's shebang rules rather than by plain
     /// splicing at recorded offsets — so every recorded value is greater than
     /// or equal to `shebang_length` when it is present. The list must not
@@ -215,18 +215,22 @@ pub struct PrefixPlaceholder {
     /// that case. A value that does not parse as offset groups (for example
     /// the flat lists written by pre-CEP drafts of this field) is also
     /// treated as absent rather than failing the whole `paths.json`.
+    /// **Experimental**: the Rust field is prefixed until
+    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized
+    /// and may change or disappear; the serialized form is `offsets`.
     #[serde(
+        rename = "offsets",
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_offset_groups"
     )]
-    pub offsets: Option<Vec<OffsetGroup>>,
+    pub experimental_offsets: Option<Vec<OffsetGroup>>,
 
     /// The length in bytes of the file's shebang region: the first line
     /// including its terminating newline, or the whole file size when the
     /// file contains no newline.
     ///
-    /// Present if and only if [`Self::offsets`] is present, `file_mode` is
+    /// Present if and only if [`Self::experimental_offsets`] is present, `file_mode` is
     /// [`FileMode::Text`], and the file starts with the bytes `#!` —
     /// regardless of whether the first line itself contains the placeholder,
     /// because installers collapse an over-long shebang even when it does not.
@@ -235,8 +239,15 @@ pub struct PrefixPlaceholder {
     /// the region an installer transforms under its shebang rules without
     /// rendering the whole file. `None` for binary-mode placeholders, text
     /// files that do not start with a shebang, or older packages.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub shebang_length: Option<usize>,
+    /// **Experimental**: the Rust field is prefixed until
+    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized
+    /// and may change or disappear; the serialized form is `shebang_length`.
+    #[serde(
+        rename = "shebang_length",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub experimental_shebang_length: Option<usize>,
 }
 
 /// A single entry in the `paths.json` file.
@@ -337,7 +348,7 @@ impl From<OffsetEncoding> for String {
     }
 }
 
-/// One offset group of [`PrefixPlaceholder::offsets`]: where the placeholder
+/// One offset group of [`PrefixPlaceholder::experimental_offsets`]: where the placeholder
 /// occurs in the file contents under one encoding.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct OffsetGroup {
@@ -394,7 +405,7 @@ impl<'de> Deserialize<'de> for OffsetGroup {
 ///   unterminated at end-of-file (`[[5, 39], [22, 30, 39]]`).
 ///
 /// Occurrences inside the shebang region (the first
-/// [`PrefixPlaceholder::shebang_length`] bytes) are excluded; the installer
+/// [`PrefixPlaceholder::experimental_shebang_length`] bytes) are excluded; the installer
 /// transforms that region under its own shebang rules.
 ///
 /// The shape is determined normatively by `file_mode`, not inferred from the
@@ -720,7 +731,7 @@ mod test {
         let prefix = paths_json.paths[0].prefix_placeholder.as_ref().unwrap();
         assert_eq!(prefix.file_mode, FileMode::Binary);
         assert_eq!(
-            prefix.offsets,
+            prefix.experimental_offsets,
             Some(vec![
                 OffsetGroup {
                     encoding: OffsetEncoding::Utf16Le,
@@ -736,9 +747,9 @@ mod test {
         );
         assert_eq!(
             select_utf8_offset_ranges(
-                prefix.offsets.as_deref().unwrap(),
+                prefix.experimental_offsets.as_deref().unwrap(),
                 prefix.file_mode,
-                prefix.shebang_length.is_some()
+                prefix.experimental_shebang_length.is_some()
             )
             .unwrap(),
             Some(&OffsetRanges::Binary(vec![
@@ -754,7 +765,7 @@ mod test {
         let text_prefix = paths_json.paths[2].prefix_placeholder.as_ref().unwrap();
         assert_eq!(text_prefix.file_mode, FileMode::Text);
         assert_eq!(
-            text_prefix.offsets,
+            text_prefix.experimental_offsets,
             Some(vec![OffsetGroup {
                 encoding: OffsetEncoding::Utf8,
                 ranges: OffsetRanges::Text(vec![10, 45]),
@@ -808,12 +819,12 @@ mod test {
                     prefix_placeholder: Some(PrefixPlaceholder {
                         file_mode: FileMode::Binary,
                         placeholder: "/opt/conda".to_string(),
-                        offsets: Some(vec![OffsetGroup {
+                        experimental_offsets: Some(vec![OffsetGroup {
                             encoding: OffsetEncoding::Utf8,
                             ranges: OffsetRanges::Binary(vec![vec![50, 200], vec![150, 200]]),
                             has_unknown_members: false,
                         }]),
-                        shebang_length: None,
+                        experimental_shebang_length: None,
                     }),
                     sha256: None,
                     size_in_bytes: Some(4096),
@@ -844,7 +855,7 @@ mod test {
                 .prefix_placeholder
                 .as_ref()
                 .unwrap()
-                .offsets,
+                .experimental_offsets,
             Some(vec![OffsetGroup {
                 encoding: OffsetEncoding::Utf8,
                 ranges: OffsetRanges::Binary(vec![vec![50, 200], vec![150, 200]]),
@@ -869,10 +880,10 @@ mod test {
         }"#;
         let entry: PathsEntry = serde_json::from_str(text_entry).unwrap();
         let placeholder = entry.prefix_placeholder.as_ref().unwrap();
-        assert_eq!(placeholder.shebang_length, Some(30));
+        assert_eq!(placeholder.experimental_shebang_length, Some(30));
         assert_eq!(
             select_utf8_offset_ranges(
-                placeholder.offsets.as_deref().unwrap(),
+                placeholder.experimental_offsets.as_deref().unwrap(),
                 FileMode::Text,
                 true
             )
@@ -896,7 +907,7 @@ mod test {
         let placeholder = entry.prefix_placeholder.as_ref().unwrap();
         assert_eq!(
             select_utf8_offset_ranges(
-                placeholder.offsets.as_deref().unwrap(),
+                placeholder.experimental_offsets.as_deref().unwrap(),
                 FileMode::Binary,
                 false
             )
@@ -925,7 +936,11 @@ mod test {
             );
             let entry: PathsEntry = serde_json::from_str(&entry).unwrap();
             assert_eq!(
-                entry.prefix_placeholder.as_ref().unwrap().offsets,
+                entry
+                    .prefix_placeholder
+                    .as_ref()
+                    .unwrap()
+                    .experimental_offsets,
                 None,
                 "old-format offsets {old_format} should deserialize as absent"
             );
@@ -1051,7 +1066,7 @@ mod test {
         assert!(paths_json.paths.iter().all(|p| {
             p.prefix_placeholder
                 .as_ref()
-                .is_none_or(|pp| pp.offsets.is_none())
+                .is_none_or(|pp| pp.experimental_offsets.is_none())
         }));
     }
 }
