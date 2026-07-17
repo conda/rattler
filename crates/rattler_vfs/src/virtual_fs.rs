@@ -168,23 +168,24 @@ impl VirtualFS {
             // structurally invalid/unrecognized. The selected ranges are then
             // trusted as-is (the ranged reads are total, so a non-conformant
             // producer yields wrong bytes for its own package, never a panic).
-            let recorded_ranges: Option<Option<&OffsetRanges>> = match &placeholder.offsets {
-                None => None,
-                Some(groups) => match select_utf8_offset_ranges(
-                    groups,
-                    placeholder.file_mode,
-                    placeholder.shebang_length.is_some(),
-                ) {
-                    Ok(selection) => Some(selection),
-                    Err(e) => {
-                        tracing::warn!(
-                            "{}: unusable offset metadata ({e}); falling back to scanning",
-                            cache_path.display()
-                        );
-                        None
-                    }
-                },
-            };
+            let recorded_ranges: Option<Option<&OffsetRanges>> =
+                match &placeholder.experimental_offsets {
+                    None => None,
+                    Some(groups) => match select_utf8_offset_ranges(
+                        groups,
+                        placeholder.file_mode,
+                        placeholder.experimental_shebang_length.is_some(),
+                    ) {
+                        Ok(selection) => Some(selection),
+                        Err(e) => {
+                            tracing::warn!(
+                                "{}: unusable offset metadata ({e}); falling back to scanning",
+                                cache_path.display()
+                            );
+                            None
+                        }
+                    },
+                };
 
             let plan = match placeholder.file_mode {
                 FileMode::Text => {
@@ -198,7 +199,7 @@ impl VirtualFS {
                             // are recorded outside the shebang region.
                             _ => Vec::new(),
                         };
-                        let region = match placeholder.shebang_length {
+                        let region = match placeholder.experimental_shebang_length {
                             Some(len) if len > 0 => match read_leading_bytes(&cache_path, len) {
                                 Ok(region) => region,
                                 Err(e) => {
@@ -548,7 +549,7 @@ impl VirtualFS {
                         &self.platform,
                         placeholder.file_mode,
                         &offset_groups,
-                        placeholder.shebang_length,
+                        placeholder.experimental_shebang_length,
                     );
 
                     if let Err(e) = result {
@@ -795,8 +796,8 @@ mod tests {
                     prefix_placeholder: Some(PrefixPlaceholder {
                         file_mode: FileMode::Text,
                         placeholder: "/old/prefix".to_string(),
-                        offsets: None,
-                        shebang_length: None,
+                        experimental_offsets: None,
+                        experimental_shebang_length: None,
                     }),
                     no_link: false,
                     sha256: None,
@@ -808,8 +809,8 @@ mod tests {
                     prefix_placeholder: Some(PrefixPlaceholder {
                         file_mode: FileMode::Text,
                         placeholder: "/old/prefix".to_string(),
-                        offsets: None,
-                        shebang_length: None,
+                        experimental_offsets: None,
+                        experimental_shebang_length: None,
                     }),
                     no_link: false,
                     sha256: None,
@@ -1238,8 +1239,8 @@ mod tests {
                 prefix_placeholder: Some(PrefixPlaceholder {
                     file_mode: FileMode::Text,
                     placeholder: "/old/prefix".to_string(),
-                    offsets: None,
-                    shebang_length: None,
+                    experimental_offsets: None,
+                    experimental_shebang_length: None,
                 }),
                 no_link: false,
                 sha256: None,
