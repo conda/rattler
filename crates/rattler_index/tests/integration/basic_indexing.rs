@@ -378,6 +378,95 @@ async fn test_index_repodata_revision_from_index_json() {
     assert_eq!(revision["newest"], 1710000000000i64);
 }
 
+/// Regression: a package rebuilt and republished under the same filename (new
+/// bytes) must be re-hashed on an incremental index. Keying only on filename
+/// left the previous build's sha256/size in repodata, so clients downloading the
+/// current blob hit a hash mismatch.
+#[tokio::test]
+async fn test_incremental_reindexes_replaced_package() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+    let package_name = "stale-demo-1.0.0-h123_0.tar.bz2";
+
+    // Build a tar.bz2 package with a payload of the given size and write it into
+    // the channel under a fixed filename, overwriting any previous build.
+    let build = |payload_len: usize| {
+        let build_dir = temp_dir.path().join(format!("build-{payload_len}"));
+        let info_dir = build_dir.join("info");
+        fs::create_dir_all(&info_dir).unwrap();
+        fs::write(
+            info_dir.join("index.json"),
+            r#"{"build":"h123_0","build_number":0,"name":"stale-demo","noarch":"generic","subdir":"noarch","timestamp":1710000000000,"version":"1.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(build_dir.join("payload.txt"), "x".repeat(payload_len)).unwrap();
+        let writer = File::create(subdir_path.join(package_name)).unwrap();
+        write_tar_bz2_package(
+            writer,
+            &build_dir,
+            &[info_dir.join("index.json"), build_dir.join("payload.txt")],
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
+    };
+
+    // Incremental index (force: false) — the path that carried the bug.
+    async fn index(channel: &Path) {
+        index_fs(IndexFsConfig {
+            channel: channel.into(),
+            target_platform: Some(Platform::NoArch),
+            repodata_patch: None,
+            write_zst: false,
+            write_shards: false,
+            repodata_revisions: Vec::new(),
+            package_revision_assignment: PackageRevisionAssignment::default(),
+            force: false,
+            max_parallel: 1,
+            multi_progress: None,
+        })
+        .await
+        .unwrap();
+    }
+
+    let recorded = |field: &str| -> Value {
+        let repodata: Value =
+            serde_json::from_reader(File::open(subdir_path.join("repodata.json")).unwrap())
+                .unwrap();
+        repodata
+            .pointer(&format!("/packages/{package_name}/{field}"))
+            .expect("package present in repodata")
+            .clone()
+    };
+
+    // Baseline: first build, indexed.
+    build(64);
+    index(temp_dir.path()).await;
+    let disk1 = fs::metadata(subdir_path.join(package_name)).unwrap().len();
+    assert_eq!(recorded("size").as_u64(), Some(disk1));
+    let sha1 = recorded("sha256");
+
+    // Rebuild under the same filename with very different bytes, then reindex
+    // incrementally.
+    build(65536);
+    index(temp_dir.path()).await;
+    let disk2 = fs::metadata(subdir_path.join(package_name)).unwrap().len();
+
+    assert_ne!(disk1, disk2, "test setup: rebuild must change the file size");
+    assert_eq!(
+        recorded("size").as_u64(),
+        Some(disk2),
+        "repodata size must match the rebuilt file"
+    );
+    assert_ne!(
+        recorded("sha256"),
+        sha1,
+        "repodata sha256 must reflect the rebuilt bytes"
+    );
+}
+
 #[tokio::test]
 async fn test_index_writes_channel_metadata() {
     let temp_dir = tempfile::tempdir().unwrap();

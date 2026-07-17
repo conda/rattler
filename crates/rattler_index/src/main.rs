@@ -1,22 +1,29 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "s3")]
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
+#[cfg(feature = "azure")]
+use rattler_azure::AzureCredentials;
 use rattler_conda_types::Platform;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
+#[cfg(feature = "s3")]
+use rattler_index::PreconditionChecks;
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
 };
+#[cfg(feature = "azure")]
+use rattler_index::{IndexAzureConfig, index_azure_with_channel_metadata};
 #[cfg(feature = "s3")]
-use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
+use rattler_index::{IndexS3Config, index_s3_with_channel_metadata};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
 use rattler_s3::S3Credentials;
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use url::Url;
 
 #[cfg(feature = "s3")]
@@ -27,6 +34,24 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
     } else {
         Err(format!(
             "Only S3 URLs of format s3://bucket/... can be used, not `{value}`"
+        ))
+    }
+}
+
+#[cfg(feature = "azure")]
+fn parse_azure_url(value: &str) -> Result<Url, String> {
+    let url: Url = Url::parse(value).map_err(|e| format!("`{value}` isn't a valid URL: {e}"))?;
+    // Require host + a container segment, e.g.
+    // https://<account>.blob.core.windows.net/<container>/<prefix>.
+    let has_container = url
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .is_some_and(|segment| !segment.is_empty());
+    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() && has_container {
+        Ok(url)
+    } else {
+        Err(format!(
+            "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
         ))
     }
 }
@@ -98,6 +123,18 @@ enum Commands {
 
         #[clap(flatten)]
         credentials: rattler_s3::clap::S3CredentialsOpts,
+    },
+
+    /// Index a channel stored in an Azure Blob container.
+    #[cfg(feature = "azure")]
+    Azblob {
+        /// The Azure Blob channel URL, e.g.
+        /// `https://<account>.blob.core.windows.net/<container>/<channel>`.
+        #[arg(value_parser = parse_azure_url)]
+        channel: Url,
+
+        #[clap(flatten)]
+        credentials: rattler_azure::clap::AzureCredentialsOpts,
     },
 }
 
@@ -208,6 +245,37 @@ async fn main() -> anyhow::Result<()> {
                     max_parallel,
                     multi_progress: Some(multi_progress),
                     precondition_checks,
+                },
+                channel_metadata,
+            )
+            .await
+        }
+        #[cfg(feature = "azure")]
+        Commands::Azblob {
+            channel,
+            credentials,
+        } => {
+            let target = channel.to_string();
+            let resolved = resolve_index_channel_config(&config, &target);
+            let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
+                effective_index_options(&resolved);
+            let channel_metadata = ChannelMetadata::from_index_config(&resolved);
+
+            let credentials = AzureCredentials::try_from(credentials)?;
+
+            index_azure_with_channel_metadata(
+                IndexAzureConfig {
+                    channel,
+                    credentials,
+                    target_platform: cli.target_platform,
+                    repodata_patch: cli.repodata_patch,
+                    write_zst,
+                    write_shards,
+                    repodata_revisions,
+                    package_revision_assignment,
+                    force: cli.force,
+                    max_parallel,
+                    multi_progress: Some(multi_progress),
                 },
                 channel_metadata,
             )
