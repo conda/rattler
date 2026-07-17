@@ -609,7 +609,7 @@ class PrefixPlaceholder:
         return self._inner.placeholder
 
     @property
-    def offsets(self) -> Optional[list[dict[str, Any]]]:
+    def experimental_offsets(self) -> Optional[list[dict[str, Any]]]:
         """
         The placeholder's occurrences in the file, recorded per encoding.
 
@@ -625,14 +625,14 @@ class PrefixPlaceholder:
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
-        >>> entry.prefix_placeholder.offsets
+        >>> entry.prefix_placeholder.experimental_offsets
         >>>
         ```
         """
-        return self._inner.offsets
+        return self._inner.experimental_offsets
 
     @property
-    def shebang_length(self) -> Optional[int]:
+    def experimental_shebang_length(self) -> Optional[int]:
         """
         The length in bytes of the file's shebang region (the first line including its trailing
         newline), or `None` when the file has no recorded shebang region.
@@ -644,11 +644,11 @@ class PrefixPlaceholder:
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
-        >>> entry.prefix_placeholder.shebang_length
+        >>> entry.prefix_placeholder.experimental_shebang_length
         >>>
         ```
         """
-        return self._inner.shebang_length
+        return self._inner.experimental_shebang_length
 
     @classmethod
     def _from_py_prefix_placeholder(cls, py_prefix_placeholder: PyPrefixPlaceholder) -> PrefixPlaceholder:

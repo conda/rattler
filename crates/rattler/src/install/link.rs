@@ -179,8 +179,8 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
-        offsets,
-        shebang_length,
+        experimental_offsets: offsets,
+        experimental_shebang_length: shebang_length,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -1457,8 +1457,8 @@ mod test {
             prefix_placeholder: Some(PrefixPlaceholder {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
-                offsets: None,
-                shebang_length: None,
+                experimental_offsets: None,
+                experimental_shebang_length: None,
             }),
             sha256: None,
             size_in_bytes: None,
