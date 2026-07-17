@@ -4,7 +4,6 @@
 //! file. The state file is written atomically (write-tmp → fsync → rename) on
 //! every mutation for crash safety.
 
-use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -169,7 +168,7 @@ impl OverlayState {
             .read(true)
             .write(true)
             .open(&lock_path)?;
-        if lock.try_lock_exclusive().is_err() {
+        if lock.try_lock().is_err() {
             tracing::warn!(
                 "overlay state lock at {} is held by another process; waiting up to 15s",
                 lock_path.display(),
@@ -179,7 +178,7 @@ impl OverlayState {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(200));
-                if lock.try_lock_exclusive().is_ok() {
+                if lock.try_lock().is_ok() {
                     break;
                 }
                 if std::time::Instant::now() >= deadline {
