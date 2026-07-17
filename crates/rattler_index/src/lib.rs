@@ -767,21 +767,26 @@ async fn index_subdir_inner(
             }
         };
 
-    // List all the packages in the subdirectory.
-    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
+    // List all the packages in the subdirectory, keeping each file's size. The
+    // listers populate content_length as part of the listing, so this needs no
+    // extra stat round-trips.
+    let uploaded_sizes: HashMap<DistArchiveIdentifier, u64> = op
         .list_with(&format!("{}/", subdir.as_str()))
         .await?
         .iter()
         .filter_map(|entry| {
-            if entry.metadata().mode().is_file() {
-                let filename = entry.name().to_string();
+            let meta = entry.metadata();
+            if meta.mode().is_file() {
                 // Check if the file is an archive package file.
-                DistArchiveIdentifier::try_from_filename(&filename)
+                DistArchiveIdentifier::try_from_filename(entry.name())
+                    .map(|id| (id, meta.content_length()))
             } else {
                 None
             }
         })
         .collect();
+    let uploaded_packages: HashSet<DistArchiveIdentifier> =
+        uploaded_sizes.keys().cloned().collect();
 
     tracing::debug!(
         "Found {} already uploaded packages in subdir {}.",
@@ -806,6 +811,37 @@ async fn index_subdir_inner(
     );
 
     for filename in &packages_to_delete {
+        registered_packages.remove(filename);
+    }
+
+    // Re-index packages whose file no longer matches the size recorded in the
+    // previous repodata. `.conda`/`.tar.bz2` archives aren't reproducible, so a
+    // package rebuilt and republished under the same filename has different
+    // bytes; without this the stale record's sha256/size are kept and clients
+    // hit a hash mismatch on download. Dropping the mismatched entry here moves
+    // it into `packages_to_add` below, which re-reads and re-hashes it.
+    //
+    // Size is the only signal available without re-reading every package: a
+    // rebuild that lands on the exact same byte count still slips through, and
+    // `--force` remains the way to rebuild repodata unconditionally.
+    let stale = registered_packages
+        .iter()
+        .filter(|(id, pkg)| match (uploaded_sizes.get(id), pkg.record.size) {
+            (Some(current), Some(recorded)) => *current != recorded,
+            (Some(_), None) => true, // no recorded size to trust
+            (None, _) => false,      // absent from the channel: handled above
+        })
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+
+    if !stale.is_empty() {
+        tracing::info!(
+            "Re-indexing {} packages in subdir {} whose blob size changed since the last index.",
+            stale.len(),
+            subdir
+        );
+    }
+    for filename in &stale {
         registered_packages.remove(filename);
     }
 
