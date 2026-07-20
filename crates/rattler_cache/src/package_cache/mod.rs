@@ -2,6 +2,7 @@
 //! [`PackageCache`].
 
 use std::{
+    collections::HashMap,
     error::Error,
     fmt::Debug,
     future::Future,
@@ -60,6 +61,103 @@ pub struct PackageCacheLayer {
     path: PathBuf,
     packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
     validation_mode: ValidationMode,
+}
+
+/// Reads the sha256 recorded for a cache entry, if there is one.
+///
+/// The metadata file layout is a `u64` revision followed by the 32-byte hash,
+/// written by [`cache_lock::CacheMetadataFile`]. It is read directly rather
+/// than through that type because an index is a point-in-time snapshot and
+/// does not need to coordinate with writers; a torn or missing read simply
+/// yields `None`, which makes the entry compare as "hash unknown".
+fn read_entry_sha256(layer_path: &Path, entry_name: &str) -> Option<Sha256Hash> {
+    const REVISION_LEN: usize = 8;
+    const SHA256_LEN: usize = 32;
+
+    let metadata_path = layer_path.join(format!("{entry_name}.lock"));
+    let bytes = fs_err::read(metadata_path).ok()?;
+    let hash = bytes.get(REVISION_LEN..REVISION_LEN + SHA256_LEN)?;
+    Sha256Hash::try_from(hash).ok()
+}
+
+/// A snapshot of the packages present in a [`PackageCache`] at the moment it
+/// was created.
+///
+/// Building the snapshot reads each layer directory once, which is far cheaper
+/// than probing packages one by one. In exchange the snapshot is fixed: a
+/// package added to the cache afterwards is not reported as present. Create a
+/// new snapshot when a current view is needed.
+///
+/// Presence means the package directory exists, not that its contents are
+/// complete or valid. An interrupted extraction leaves a directory behind that
+/// is reported as present and is only rejected by validation on use.
+#[derive(Debug, Clone)]
+pub struct CacheIndex {
+    /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
+    /// the sha256 recorded for that entry (absent when the entry predates
+    /// hash recording, or its metadata could not be read).
+    entries: HashMap<String, Option<Sha256Hash>>,
+    cache_origin: bool,
+}
+
+impl CacheIndex {
+    /// Returns whether a package fetched from `url` is present in the cache.
+    ///
+    /// The origin is applied here rather than by the caller so that the answer
+    /// always matches the way
+    /// [`PackageCache::get_or_fetch_from_url_with_retry`] stores packages. It
+    /// only affects caches built with [`PackageCache::with_cached_origin`].
+    pub fn contains_url(&self, pkg: impl Into<CacheKey>, url: &Url) -> bool {
+        let mut cache_key = pkg.into();
+        if self.cache_origin {
+            cache_key = cache_key.with_url(url.clone());
+        }
+        self.contains_key(&cache_key)
+    }
+
+    /// Returns whether a package fetched from `path` is present in the cache.
+    ///
+    /// The path counterpart of [`Self::contains_url`], matching the way
+    /// [`PackageCache::get_or_fetch_from_path`] stores packages.
+    pub fn contains_path(&self, pkg: impl Into<CacheKey>, path: &Path) -> bool {
+        let mut cache_key = pkg.into();
+        if self.cache_origin {
+            cache_key = cache_key.with_path(path);
+        }
+        self.contains_key(&cache_key)
+    }
+
+    fn contains_key(&self, cache_key: &CacheKey) -> bool {
+        let Ok(segment) = cache_key.to_path_segment() else {
+            return false;
+        };
+        let Some(cached_sha256) = self.entries.get(&segment) else {
+            return false;
+        };
+
+        // The directory name does not include the hash, so a package rebuilt
+        // under the same name, version and build string shares an entry with
+        // the one on disk. `get_or_fetch` re-downloads on a hash mismatch, so
+        // reporting such an entry as present would promise an install that
+        // still needs the network. Mirror that check here.
+        //
+        // A mismatch requires both hashes to be known, exactly as in
+        // `validate_package_common`.
+        match (cache_key.sha256(), cached_sha256) {
+            (Some(wanted), Some(cached)) => wanted == *cached,
+            _ => true,
+        }
+    }
+
+    /// Returns the number of packages in the snapshot.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns true if the snapshot contains no packages.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 /// A key that defines the actual location of the package in the cache.
@@ -337,6 +435,38 @@ impl PackageCache {
             inner: Arc::new(PackageCacheInner { layers }),
             cache_origin,
         }
+    }
+
+    /// Returns a snapshot of the packages currently present in the cache.
+    ///
+    /// All layers are scanned and merged into a single view. Layers that do
+    /// not exist on disk yet contribute nothing. See [`CacheIndex`] for what
+    /// the snapshot does and does not guarantee.
+    pub fn index(&self) -> std::io::Result<CacheIndex> {
+        let mut entries: HashMap<String, Option<Sha256Hash>> = HashMap::new();
+        for layer in &self.inner.layers {
+            let dir = match fs_err::read_dir(&layer.path) {
+                Ok(dir) => dir,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err),
+            };
+
+            for entry in dir {
+                let entry = entry?;
+                if entry.file_type()?.is_dir()
+                    && let Some(name) = entry.file_name().to_str()
+                {
+                    let sha256 = read_entry_sha256(&layer.path, name);
+                    // Layers are queried in order, so an earlier layer wins.
+                    entries.entry(name.to_owned()).or_insert(sha256);
+                }
+            }
+        }
+
+        Ok(CacheIndex {
+            entries,
+            cache_origin: self.cache_origin,
+        })
     }
 
     /// Returns a tuple containing two sets of layers:
@@ -1561,6 +1691,104 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(50)).await;
+    }
+
+    /// An index over a cache directory that does not exist yet is empty rather
+    /// than an error: a cache is allowed to be cold.
+    #[test]
+    fn test_cache_index_of_missing_directory_is_empty() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path().join("does-not-exist"));
+
+        assert!(cache.index().unwrap().is_empty());
+    }
+
+    /// Pins the agreement between the location the cache writes a package to
+    /// and the location the index reads it back from, and the snapshot
+    /// semantics of an index taken before the package arrived.
+    #[tokio::test]
+    async fn test_cache_index_reports_cached_packages() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let identifier = CondaArchiveIdentifier::try_from_path(&package_path).unwrap();
+
+        let before = cache.index().unwrap();
+        assert!(before.is_empty());
+        assert!(!before.contains_path(identifier.clone(), &package_path));
+
+        cache
+            .get_or_fetch_from_path(&package_path, None, None)
+            .await
+            .unwrap();
+
+        let after = cache.index().unwrap();
+        assert_eq!(after.len(), 1);
+        assert!(after.contains_path(identifier.clone(), &package_path));
+
+        // The earlier snapshot keeps describing the cache as it was.
+        assert!(!before.contains_path(identifier, &package_path));
+    }
+
+    /// A package sharing a cached entry's name, version and build string but
+    /// carrying a different hash is not the cached package. `get_or_fetch`
+    /// re-downloads it, so the index must not report it as present.
+    #[tokio::test]
+    async fn test_cache_index_rejects_hash_mismatch() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".to_string(),
+        );
+        record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
+
+        cache
+            .get_or_fetch_from_path(&package_path, Some(&record), None)
+            .await
+            .unwrap();
+
+        let index = cache.index().unwrap();
+
+        // The record as cached is found.
+        assert!(index.contains_path(&record, &package_path));
+
+        // The same name-version-build with a different hash is not, because
+        // installing it would still require a download.
+        let mut rebuilt = record.clone();
+        rebuilt.sha256 = Some(
+            parse_digest_from_hex::<rattler_digest::Sha256>(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )
+            .unwrap(),
+        );
+        assert_ne!(rebuilt.sha256, record.sha256);
+        assert!(
+            !index.contains_path(&rebuilt, &package_path),
+            "a differing sha256 must not be reported as cached"
+        );
+    }
+
+    /// With origin caching enabled the same package coming from a different
+    /// place is a different entry, and the index must agree with that.
+    #[tokio::test]
+    async fn test_cache_index_distinguishes_origins() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path()).with_cached_origin();
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let identifier = CondaArchiveIdentifier::try_from_path(&package_path).unwrap();
+
+        cache
+            .get_or_fetch_from_path(&package_path, None, None)
+            .await
+            .unwrap();
+
+        let index = cache.index().unwrap();
+        assert!(index.contains_path(identifier.clone(), &package_path));
+        assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
     }
 
     #[tokio::test]

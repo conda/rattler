@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, str::FromStr, time::Instant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    time::Instant,
+};
 
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
@@ -663,6 +667,8 @@ macro_rules! solver_backend_tests {
 mod libsolv_c {
     #![allow(unused_imports)] // For some reason windows thinks this is an unused import.
 
+    use std::collections::HashMap;
+
     use rattler_solve::{ChannelPriority, SolveStrategy};
 
     use super::{
@@ -736,6 +742,7 @@ mod libsolv_c {
                 exclude_newer: None,
                 strategy: SolveStrategy::default(),
                 dependency_overrides: Vec::new(),
+                excluded_candidates: HashMap::default(),
                 cancellation_token: None,
             })
             .unwrap()
@@ -786,6 +793,8 @@ mod libsolv_c {
 
 #[cfg(feature = "resolvo")]
 mod resolvo {
+    use std::collections::HashMap;
+
     use rattler_conda_types::{
         MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
         package::DistArchiveIdentifier,
@@ -868,6 +877,154 @@ mod resolvo {
 
         // We expect an error here. `bors` is pinned to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    /// Excluding the candidate the solver would otherwise pick makes it fall
+    /// back to the next one instead of failing.
+    #[test]
+    fn test_excluded_candidate_falls_back_to_next() {
+        let preferred = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|record| record.package_record.name.as_normalized() == "bors")
+        .expect("the solve should contain bors");
+
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                excluded_candidates: HashMap::from([(
+                    preferred.url.clone(),
+                    "not available locally".to_string(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        let chosen = result
+            .records
+            .iter()
+            .find(|record| record.package_record.name.as_normalized() == "bors")
+            .expect("the solve should still contain bors");
+
+        assert_ne!(chosen.url, preferred.url);
+        assert!(chosen.package_record.version < preferred.package_record.version);
+    }
+
+    /// When an exclusion is what makes a solve impossible, the reason the
+    /// caller gave is part of the error.
+    #[test]
+    fn test_excluded_candidate_reason_is_reported() {
+        let preferred = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|record| record.package_record.name.as_normalized() == "bors")
+        .expect("the solve should contain bors");
+
+        // Ask for exactly the version that was just excluded, so no other
+        // candidate can satisfy the request.
+        let spec = format!("bors =={}", preferred.package_record.version);
+        let err = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &[&spec],
+                excluded_candidates: HashMap::from([(
+                    preferred.url.clone(),
+                    "not available locally".to_string(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .expect_err("the only candidate was excluded");
+
+        assert!(
+            err.to_string().contains("not available locally"),
+            "the exclusion reason should be reported, got: {err}"
+        );
+    }
+
+    /// An excluded record must stay excluded even when the caller also passes
+    /// it as a locked (favored) package.
+    ///
+    /// Favored records are interned as their own solvables, so an exclusion
+    /// applied only to the repodata pass would miss them - and favoring means
+    /// the solver *prefers* them, so the excluded record would win.
+    #[test]
+    fn test_excluded_candidate_is_not_resurrected_by_favoring() {
+        let preferred = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|record| record.package_record.name.as_normalized() == "bors")
+        .expect("the solve should contain bors");
+
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                // The same record the caller favors is also excluded.
+                installed_packages: vec![preferred.clone()],
+                excluded_candidates: HashMap::from([(
+                    preferred.url.clone(),
+                    "not available locally".to_string(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        let chosen = result
+            .records
+            .iter()
+            .find(|record| record.package_record.name.as_normalized() == "bors")
+            .expect("the solve should still contain bors");
+
+        assert_ne!(
+            chosen.url, preferred.url,
+            "an excluded record must not be selected just because it was favored"
+        );
+    }
+
+    /// The `libsolv_c` backend cannot honour exclusions, so it must refuse the
+    /// task rather than quietly solve without them.
+    #[cfg(feature = "libsolv_c")]
+    #[test]
+    fn test_excluded_candidates_unsupported_by_libsolv_c() {
+        let err = solve::<rattler_solve::libsolv_c::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                excluded_candidates: HashMap::from([(
+                    Url::parse("https://example.com/noarch/bors-2.1-bla_1.tar.bz2").unwrap(),
+                    "not available locally".to_string(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .expect_err("libsolv_c should reject excluded candidates");
+
+        assert!(matches!(err, SolveError::UnsupportedOperations(_)), "{err}");
     }
 
     #[test]
@@ -1123,6 +1280,7 @@ struct SimpleSolveTask<'a> {
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
+    excluded_candidates: HashMap<Url, String>,
 }
 
 fn solve<T: SolverImpl + Default>(
@@ -1158,6 +1316,7 @@ fn solve<T: SolverImpl + Default>(
         pinned_packages: task.pinned_packages.iter().collect(),
         exclude_newer: task.exclude_newer.clone(),
         strategy: task.strategy,
+        excluded_candidates: task.excluded_candidates,
         ..SolverTask::from_iter(&repo_data)
     };
 
