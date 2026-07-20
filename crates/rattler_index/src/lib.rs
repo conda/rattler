@@ -18,6 +18,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use base64::Engine;
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{StreamExt, stream::FuturesUnordered};
@@ -771,26 +772,28 @@ async fn index_subdir_inner(
             }
         };
 
-    // List all the packages in the subdirectory, keeping each blob's size. Both
-    // the azblob and fs listers populate content_length for free (see their
-    // `with_content_length` calls), so this needs no extra round-trips.
-    let uploaded_sizes: HashMap<DistArchiveIdentifier, u64> = op
-        .list_with(&format!("{}/", subdir.as_str()))
-        .await?
+    let existing = op.list_with(&format!("{}/", subdir.as_str())).await?;
+    // get the md5 hashes of each uploaded .conda, storing an optional md5 hash and a archive size
+    // for each, so that we can later check if the contents has changed
+    let uploaded_hashes: HashMap<DistArchiveIdentifier, Option<&str>> = existing
         .iter()
         .filter_map(|entry| {
             let meta = entry.metadata();
             if meta.mode().is_file() {
                 // Check if the file is an archive package file.
                 DistArchiveIdentifier::try_from_filename(entry.name())
-                    .map(|id| (id, meta.content_length()))
+                    // opendal populates content_md5 from the backend's Content-MD5
+                    // header on list (verified for azure/azblob via the azure_md5_probe
+                    // test). md5 is documented best-effort, so backends that omit it
+                    // yield None here and those packages get re-indexed.
+                    .map(|id| (id, meta.content_md5()))
             } else {
                 None
             }
         })
         .collect();
     let uploaded_packages: HashSet<DistArchiveIdentifier> =
-        uploaded_sizes.keys().cloned().collect();
+        uploaded_hashes.keys().cloned().collect();
 
     tracing::debug!(
         "Found {} already uploaded packages in subdir {}.",
@@ -818,28 +821,35 @@ async fn index_subdir_inner(
         registered_packages.remove(filename);
     }
 
-    // Re-index packages whose blob no longer matches the size recorded in the
+    // Re-index packages whose file no longer matches the md5 recorded in the
     // previous repodata. `.conda`/`.tar.bz2` archives aren't reproducible, so a
     // package rebuilt and republished under the same filename has different
-    // bytes; without this, the stale record's sha256/size are kept and clients
+    // bytes; without this the stale record's sha256/size are kept and clients
     // hit a hash mismatch on download. Dropping the mismatched entry here moves
     // it into `packages_to_add` below, which re-reads and re-hashes it.
-    // ponytail: size only — a rebuild that lands on the exact same byte count
-    // slips through. Upgrade path: reindex with `--force`, or bump the build
-    // number per rebuild so filenames are genuinely immutable.
     let stale = registered_packages
         .iter()
-        .filter(|(id, pkg)| match (uploaded_sizes.get(id), pkg.record.size) {
-            (Some(current), Some(recorded)) => *current != recorded,
-            (Some(_), None) => true, // no recorded size to trust
-            (None, _) => false,      // absent from the channel: handled above
+        .filter(|(id, pkg)| {
+            // Not stale only if the backend's md5 matches the one in the previous
+            // repodata. opendal exposes content_md5 as the base64 Content-MD5 header
+            // (e.g. azure), so decode it to raw bytes before comparing to the record's
+            // 16-byte digest. Missing/undecodable md5 => treat as stale and re-index.
+            if let Some(Some(new_md5)) = uploaded_hashes.get(id)
+                && let Some(old_md5) = pkg.record.md5
+                && let Ok(new_md5) = base64::engine::general_purpose::STANDARD.decode(new_md5)
+                && old_md5.as_slice() == new_md5.as_slice()
+            {
+                false
+            } else {
+                true
+            }
         })
         .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
 
     if !stale.is_empty() {
-        tracing::info!(
-            "Re-indexing {} packages in subdir {} whose blob size changed since the last index.",
+        tracing::warn!(
+            "Re-indexing {} packages in subdir {} whose md5 changed since the last index.",
             stale.len(),
             subdir
         );

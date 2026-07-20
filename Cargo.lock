@@ -5216,6 +5216,7 @@ version = "0.30.9"
 dependencies = [
  "ahash",
  "anyhow",
+ "base64 0.22.1",
  "bytes",
  "clap",
  "clap-verbosity-flag",

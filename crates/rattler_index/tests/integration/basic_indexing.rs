@@ -454,7 +454,10 @@ async fn test_incremental_reindexes_replaced_package() {
     index(temp_dir.path()).await;
     let disk2 = fs::metadata(subdir_path.join(package_name)).unwrap().len();
 
-    assert_ne!(disk1, disk2, "test setup: rebuild must change the file size");
+    assert_ne!(
+        disk1, disk2,
+        "test setup: rebuild must change the file size"
+    );
     assert_eq!(
         recorded("size").as_u64(),
         Some(disk2),
