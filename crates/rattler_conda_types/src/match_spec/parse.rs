@@ -1882,6 +1882,22 @@ mod tests {
     }
 
     #[test]
+    fn test_build_only_matchspec_roundtrips() {
+        // Without a `*` placeholder the build slides into the version slot and misparses.
+        let spec = MatchSpec::from_str("foo[build=py39h123_0]", Strict).unwrap();
+        assert_eq!(spec.version, None);
+        assert!(spec.build.is_some());
+
+        let rendered = spec.to_string();
+        assert_eq!(rendered, "foo * py39h123_0");
+
+        for strictness in [ParseStrictness::Lenient, Strict] {
+            let reparsed = MatchSpec::from_str(&rendered, strictness).unwrap();
+            assert_eq!(reparsed.build, spec.build);
+        }
+    }
+
+    #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
             "bird_tool_utils_python =0.*,>=0.4.1",

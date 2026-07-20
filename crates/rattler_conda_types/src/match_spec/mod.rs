@@ -197,6 +197,8 @@ impl Display for MatchSpec {
 
         if let Some(version) = &self.version {
             write!(f, " {version}")?;
+        } else if self.build.is_some() {
+            write!(f, " *")?;
         }
 
         if let Some(build) = &self.build {
