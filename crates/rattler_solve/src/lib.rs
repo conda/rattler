@@ -435,12 +435,16 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// instead; excluding a record keeps it visible to error reporting, which
     /// is the whole point of using this rather than filtering up front.
     ///
+    /// The reason is shared rather than owned per entry, because callers
+    /// typically rule out thousands of records for the same handful of reasons.
+    ///
+    /// A record that is both excluded and pinned through `locked_packages`
+    /// makes the solve unsatisfiable, and a record that is excluded and
+    /// favored through `installed_packages` stays excluded: an exclusion is
+    /// never overruled by a preference.
+    ///
     /// Only the `resolvo` backend supports this. Other backends reject a task
     /// that sets it rather than silently solving without the restriction.
-    ///
-    /// The reason is an [`Arc<str>`] because a caller typically rules out many
-    /// records for the same handful of reasons, and cloning one per record
-    /// would allocate for every entry.
     pub excluded_candidates: HashMap<Url, Arc<str>>,
 
     /// An optional token that can be used to cancel an in-flight solve.

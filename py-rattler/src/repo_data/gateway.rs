@@ -407,15 +407,12 @@ impl PySourceConfig {
         sharded_enabled: bool,
         cache_action: Wrap<CacheAction>,
     ) -> Self {
-        // Spread the rest, so a new `SourceConfig` field does not break this
-        // binding; the ones not listed here are simply not exposed to Python.
         Self {
             inner: SourceConfig {
                 zstd_enabled,
                 bz2_enabled,
                 sharded_enabled,
                 cache_action: cache_action.0,
-                ..SourceConfig::default()
             },
         }
     }

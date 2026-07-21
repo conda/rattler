@@ -20,7 +20,7 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
+use rattler_conda_types::{PackageRecord, RepoDataRecord, package::CondaArchiveIdentifier};
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     LazyClient,
@@ -63,23 +63,6 @@ pub struct PackageCacheLayer {
     validation_mode: ValidationMode,
 }
 
-/// Reads the sha256 recorded for a cache entry, if there is one.
-///
-/// The metadata file layout is a `u64` revision followed by the 32-byte hash,
-/// written by [`cache_lock::CacheMetadataFile`]. It is read directly rather
-/// than through that type because an index is a point-in-time snapshot and
-/// does not need to coordinate with writers; a torn or missing read simply
-/// yields `None`, which makes the entry compare as "hash unknown".
-fn read_entry_sha256(layer_path: &Path, entry_name: &str) -> Option<Sha256Hash> {
-    const REVISION_LEN: usize = 8;
-    const SHA256_LEN: usize = 32;
-
-    let metadata_path = layer_path.join(format!("{entry_name}.lock"));
-    let bytes = fs_err::read(metadata_path).ok()?;
-    let hash = bytes.get(REVISION_LEN..REVISION_LEN + SHA256_LEN)?;
-    Sha256Hash::try_from(hash).ok()
-}
-
 /// A snapshot of the packages present in a [`PackageCache`] at the moment it
 /// was created.
 ///
@@ -101,6 +84,16 @@ pub struct CacheIndex {
 }
 
 impl CacheIndex {
+    /// Returns whether the package a [`RepoDataRecord`] describes is present
+    /// in the cache.
+    ///
+    /// Both halves of the query come from the record, so its hashes and its
+    /// origin cannot disagree - which is the failure mode of assembling the
+    /// two by hand with [`Self::contains_url`].
+    pub fn contains_record(&self, record: &RepoDataRecord) -> bool {
+        self.contains_url(&record.package_record, &record.url)
+    }
+
     /// Returns whether a package fetched from `url` is present in the cache.
     ///
     /// The origin is applied here rather than by the caller so that the answer
@@ -139,14 +132,8 @@ impl CacheIndex {
         // under the same name, version and build string shares an entry with
         // the one on disk. `get_or_fetch` re-downloads on a hash mismatch, so
         // reporting such an entry as present would promise an install that
-        // still needs the network. Mirror that check here.
-        //
-        // A mismatch requires both hashes to be known, exactly as in
-        // `validate_package_common`.
-        match (cache_key.sha256(), cached_sha256) {
-            (Some(wanted), Some(cached)) => wanted == *cached,
-            _ => true,
-        }
+        // still needs the network. Apply the very same rule here.
+        !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), cached_sha256.as_ref())
     }
 
     /// Returns the number of packages in the snapshot.
@@ -442,30 +429,54 @@ impl PackageCache {
     /// All layers are scanned and merged into a single view. Layers that do
     /// not exist on disk yet contribute nothing. See [`CacheIndex`] for what
     /// the snapshot does and does not guarantee.
-    pub fn index(&self) -> std::io::Result<CacheIndex> {
-        let mut entries: HashMap<String, Option<Sha256Hash>> = HashMap::new();
-        for layer in &self.inner.layers {
-            let dir = match fs_err::read_dir(&layer.path) {
-                Ok(dir) => dir,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(err) => return Err(err),
-            };
+    ///
+    /// The scan touches every entry in every layer, so on a warm cache this is
+    /// thousands of filesystem calls. It runs on a blocking thread to keep
+    /// them off the async runtime.
+    pub async fn index(&self) -> std::io::Result<CacheIndex> {
+        let layer_paths: Vec<PathBuf> = self
+            .inner
+            .layers
+            .iter()
+            .map(|layer| layer.path.clone())
+            .collect();
+        let cache_origin = self.cache_origin;
 
-            for entry in dir {
-                let entry = entry?;
-                if entry.file_type()?.is_dir()
-                    && let Some(name) = entry.file_name().to_str()
-                {
-                    let sha256 = read_entry_sha256(&layer.path, name);
-                    // Layers are queried in order, so an earlier layer wins.
-                    entries.entry(name.to_owned()).or_insert(sha256);
+        let scan = tokio::task::spawn_blocking(move || {
+            let mut entries: HashMap<String, Option<Sha256Hash>> = HashMap::new();
+            for layer_path in layer_paths {
+                let dir = match fs_err::read_dir(&layer_path) {
+                    Ok(dir) => dir,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err),
+                };
+
+                for entry in dir {
+                    let entry = entry?;
+                    if entry.file_type()?.is_dir()
+                        && let Some(name) = entry.file_name().to_str()
+                    {
+                        let sha256 = cache_lock::peek_sha256(&entry.path());
+                        // Layers are queried in order, so an earlier layer wins.
+                        entries.entry(name.to_owned()).or_insert(sha256);
+                    }
                 }
             }
-        }
+            Ok(entries)
+        })
+        .await;
+
+        let entries = match scan {
+            Ok(entries) => entries?,
+            Err(err) => match err.try_into_panic() {
+                Ok(panic) => std::panic::resume_unwind(panic),
+                Err(err) => return Err(std::io::Error::other(err)),
+            },
+        };
 
         Ok(CacheIndex {
             entries,
-            cache_origin: self.cache_origin,
+            cache_origin,
         })
     }
 
@@ -889,12 +900,7 @@ where
 {
     // Open the cache metadata file to read/write revision and hash information.
     // Concurrent access is coordinated via the global cache lock.
-    let lock_file_path = {
-        // Append the `.lock` extension to the cache path to create the lock file path.
-        let mut path_str = path.as_os_str().to_owned();
-        path_str.push(".lock");
-        PathBuf::from(path_str)
-    };
+    let lock_file_path = cache_lock::metadata_path(&path);
 
     // Ensure the directory containing the lock-file exists.
     if let Some(root_dir) = lock_file_path.parent() {
@@ -912,10 +918,7 @@ where
     let cache_revision = metadata.read_revision()?;
     let locked_sha256 = metadata.read_sha256()?;
 
-    let hash_mismatch = match (given_sha, &locked_sha256) {
-        (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
-        _ => false,
-    };
+    let hash_mismatch = cache_lock::sha256_mismatch(given_sha, locked_sha256.as_ref());
 
     let cache_dir_exists = path.is_dir();
     if cache_dir_exists && !hash_mismatch {
@@ -1129,7 +1132,7 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+    use rattler_conda_types::{PackageName, PackageRecord, RepoDataRecord, VersionWithSource};
     use rattler_digest::{
         Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
     };
@@ -1695,12 +1698,12 @@ mod test {
 
     /// An index over a cache directory that does not exist yet is empty rather
     /// than an error: a cache is allowed to be cold.
-    #[test]
-    fn test_cache_index_of_missing_directory_is_empty() {
+    #[tokio::test]
+    async fn test_cache_index_of_missing_directory_is_empty() {
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path().join("does-not-exist"));
 
-        assert!(cache.index().unwrap().is_empty());
+        assert!(cache.index().await.unwrap().is_empty());
     }
 
     /// Pins the agreement between the location the cache writes a package to
@@ -1713,7 +1716,7 @@ mod test {
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
         let identifier = CondaArchiveIdentifier::try_from_path(&package_path).unwrap();
 
-        let before = cache.index().unwrap();
+        let before = cache.index().await.unwrap();
         assert!(before.is_empty());
         assert!(!before.contains_path(identifier.clone(), &package_path));
 
@@ -1722,7 +1725,7 @@ mod test {
             .await
             .unwrap();
 
-        let after = cache.index().unwrap();
+        let after = cache.index().await.unwrap();
         assert_eq!(after.len(), 1);
         assert!(after.contains_path(identifier.clone(), &package_path));
 
@@ -1751,7 +1754,7 @@ mod test {
             .await
             .unwrap();
 
-        let index = cache.index().unwrap();
+        let index = cache.index().await.unwrap();
 
         // The record as cached is found.
         assert!(index.contains_path(&record, &package_path));
@@ -1772,6 +1775,43 @@ mod test {
         );
     }
 
+    /// A record cached from one place is reported as present for a record
+    /// naming another, as long as the package itself matches: a plain cache
+    /// does not key entries by origin, and `get_or_fetch` would serve exactly
+    /// this entry. The sha256 still has to agree.
+    #[tokio::test]
+    async fn test_cache_index_contains_record() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let mut package_record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".to_string(),
+        );
+        package_record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
+
+        let record = RepoDataRecord {
+            package_record: package_record.clone(),
+            url: Url::parse("https://example.com/noarch/clobber-python-0.1.0-cpython.conda")
+                .unwrap(),
+            channel: None,
+            identifier: CondaArchiveIdentifier::try_from_path(&package_path)
+                .unwrap()
+                .into(),
+        };
+
+        assert!(!cache.index().await.unwrap().contains_record(&record));
+
+        cache
+            .get_or_fetch_from_path(&package_path, Some(&package_record), None)
+            .await
+            .unwrap();
+
+        assert!(cache.index().await.unwrap().contains_record(&record));
+    }
+
     /// With origin caching enabled the same package coming from a different
     /// place is a different entry, and the index must agree with that.
     #[tokio::test]
@@ -1786,7 +1826,7 @@ mod test {
             .await
             .unwrap();
 
-        let index = cache.index().unwrap();
+        let index = cache.index().await.unwrap();
         assert!(index.contains_path(identifier.clone(), &package_path));
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
     }

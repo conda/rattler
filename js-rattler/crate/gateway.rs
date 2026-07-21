@@ -114,14 +114,11 @@ impl Default for JsSourceConfig {
 
 impl From<JsSourceConfig> for SourceConfig {
     fn from(value: JsSourceConfig) -> Self {
-        // Spread the rest, so a new `SourceConfig` field does not break this
-        // binding; the ones not listed here are simply not exposed to JS.
         Self {
             zstd_enabled: value.zstd_enabled,
             bz2_enabled: value.bz2_enabled,
             sharded_enabled: value.sharded_enabled,
             cache_action: CacheAction::default(),
-            ..SourceConfig::default()
         }
     }
 }

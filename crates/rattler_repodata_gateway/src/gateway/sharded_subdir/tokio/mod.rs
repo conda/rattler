@@ -33,24 +33,12 @@ use url::Url;
 pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
 
-/// How a [`ShardedSubdir`] may use its on-disk shard cache.
-#[derive(Debug, Clone, Copy)]
-pub struct ShardCachePolicy {
-    /// How fetching shards should interact with the cache.
-    pub action: CacheAction,
-
-    /// See [`crate::SourceConfig::missing_shards_are_empty`].
-    pub missing_shards_are_empty: bool,
-}
-
-impl ShardCachePolicy {
-    /// Whether shards may only be read from the cache, never downloaded.
-    fn is_cache_only(self) -> bool {
-        matches!(
-            self.action,
-            CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly
-        )
-    }
+/// Whether shards may only be read from the cache, never downloaded.
+fn is_cache_only(action: CacheAction) -> bool {
+    matches!(
+        action,
+        CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly
+    )
 }
 
 pub struct ShardedSubdir {
@@ -61,7 +49,7 @@ pub struct ShardedSubdir {
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
-    cache_policy: ShardCachePolicy,
+    cache_action: CacheAction,
 }
 
 impl ShardedSubdir {
@@ -70,7 +58,7 @@ impl ShardedSubdir {
         subdir: String,
         client: LazyClient,
         cache_dir: PathBuf,
-        cache_policy: ShardCachePolicy,
+        cache_action: CacheAction,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
@@ -86,7 +74,7 @@ impl ShardedSubdir {
             client.clone(),
             &index_base_url,
             &cache_dir,
-            cache_policy.action,
+            cache_action,
             concurrent_requests_semaphore.clone(),
             reporter,
         )
@@ -137,7 +125,7 @@ impl ShardedSubdir {
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
             sharded_repodata,
             cache_dir,
-            cache_policy,
+            cache_action,
             concurrent_requests_semaphore,
         })
     }
@@ -203,7 +191,7 @@ impl SubdirClient for ShardedSubdir {
             .join(format!("{}.msgpack", hex::encode(shard)));
 
         // Read the cached shard
-        if self.cache_policy.action != CacheAction::NoCache {
+        if self.cache_action != CacheAction::NoCache {
             match tokio_fs::read(&shard_cache_path).await {
                 Ok(cached_bytes) => {
                     // Decode the cached shard
@@ -222,18 +210,13 @@ impl SubdirClient for ShardedSubdir {
             }
         }
 
-        if self.cache_policy.is_cache_only() {
-            // The cache holds the packages earlier queries walked, so a shard
-            // that was never fetched means this query found nothing about the
-            // package, not that the subdir is broken. Callers opt in to that
-            // reading; see `SourceConfig::missing_shards_are_empty`.
-            if self.cache_policy.missing_shards_are_empty {
-                return Ok(PackageRecords::default());
-            }
-            return Err(GatewayError::CacheError(format!(
-                "the shard for package '{}' is not in the cache",
-                name.as_source()
-            )));
+        if is_cache_only(self.cache_action) {
+            // The cache holds exactly the packages earlier queries walked, so a
+            // shard that was never fetched means this query found nothing about
+            // the package, not that the subdir is broken. A missing shard
+            // *index* is a different matter and stays an error: without it
+            // nothing is known about the subdir at all.
+            return Ok(PackageRecords::default());
         }
 
         // Download the shard

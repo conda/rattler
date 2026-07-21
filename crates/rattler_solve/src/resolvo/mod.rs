@@ -340,6 +340,24 @@ impl<'a> CondaDependencyProvider<'a> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
+        // Applies the caller's exclusions to a solvable that was just interned,
+        // reporting whether the record is excluded.
+        //
+        // Every site that interns a record has to go through this. The same
+        // record is interned once from the repodata and again when it is
+        // favored or locked, so an exclusion missed at any one of them lets the
+        // record back into the solve through that other door.
+        let exclude_if_requested =
+            |candidates: &mut Candidates, solvable: SolvableId, url: &Url| -> bool {
+                let Some(reason) = excluded_candidates.get(url) else {
+                    return false;
+                };
+                candidates
+                    .excluded
+                    .push((solvable, pool.intern_string(&**reason)));
+                true
+            };
+
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
             let name = pool.intern_package_name(NameType::from(&virtual_package.name));
@@ -449,11 +467,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 // Exclusions the caller derived from outside the repodata, for
                 // example from what a local package cache holds.
-                if let Some(reason) = excluded_candidates.get(&record.url) {
-                    candidates
-                        .excluded
-                        .push((solvable_id, pool.intern_string(&**reason)));
-                }
+                exclude_if_requested(candidates, solvable_id, &record.url);
 
                 if let Some(config) = &exclude_newer
                     && config.is_excluded(
@@ -554,11 +568,9 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Add favored packages to the records.
         //
-        // These are interned as their own solvables rather than reusing the
-        // ones from the repodata above, so exclusions have to be applied here
-        // too. Skipping that would let an excluded record back in through the
-        // favored set - and be *preferred* by the solver, since that is what
-        // favoring means.
+        // An excluded record must not become the favored one: favoring means
+        // the solver *prefers* it, so that would turn the exclusion into the
+        // opposite of what the caller asked for.
         for &favored_record in favored_records {
             let name =
                 pool.intern_package_name(NameType::from(&favored_record.package_record.name));
@@ -566,11 +578,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
 
-            if let Some(reason) = excluded_candidates.get(&favored_record.url) {
-                candidates
-                    .excluded
-                    .push((solvable, pool.intern_string(&**reason)));
-            } else {
+            if !exclude_if_requested(candidates, solvable, &favored_record.url) {
                 candidates.favored = Some(solvable);
             }
         }
@@ -584,11 +592,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // A locked record that is excluded makes the solve unsatisfiable,
             // which is correct: the caller pinned a package it also said may
             // not be used, and the reason explains which constraint bit.
-            if let Some(reason) = excluded_candidates.get(&locked_record.url) {
-                candidates
-                    .excluded
-                    .push((solvable, pool.intern_string(&**reason)));
-            } else {
+            if !exclude_if_requested(candidates, solvable, &locked_record.url) {
                 candidates.locked = Some(solvable);
             }
         }
