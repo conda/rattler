@@ -28,6 +28,10 @@ use crate::upload::package::{ExtractedPackage, sha256_sum};
 pub(crate) mod test_utils;
 
 mod anaconda;
+#[cfg(feature = "azure")]
+mod azure;
+#[cfg(feature = "azure")]
+pub use azure::upload_package_to_azure;
 #[cfg(feature = "sigstore-sign")]
 pub mod attestation;
 mod cloudsmith;

@@ -5625,6 +5625,7 @@ dependencies = [
  "indicatif",
  "miette",
  "opendal",
+ "rattler_azure",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",

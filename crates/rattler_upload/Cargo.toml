@@ -29,6 +29,7 @@ native-tls = [
   "sigstore-sign?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
+azure = ["dep:rattler_azure", "dep:opendal", "opendal/services-azblob"]
 sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
 
 [package.metadata.docs.rs]
@@ -44,6 +45,7 @@ rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_solve = { workspace = true }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
+rattler_azure = { workspace = true, optional = true, features = ["clap"] }
 miette = { workspace = true, features = ["fancy"] }
 clap = { workspace = true, features = ["env"] }
 fs-err = { workspace = true, features = ["tokio"] }
