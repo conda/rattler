@@ -193,31 +193,27 @@ pub struct PrefixPlaceholder {
     /// The placeholder's occurrences in the file, recorded per encoding.
     ///
     /// Each [`OffsetGroup`] lists the byte positions at which the placeholder
-    /// occurs in the file contents as stored in the package (before any
-    /// replacement) under one encoding. Producers search all five defined
-    /// encodings before emitting the field; the absence of a group is a
-    /// statement that the file contains no occurrences under that encoding.
-    /// Installers apply exactly the groups whose encodings their own
-    /// search-based replacement covers — rattler's covers UTF-8 only, see
-    /// [`select_utf8_offset_ranges`].
+    /// occurs in the file contents as stored in the package, under one
+    /// encoding. The absence of a group means the file contains no
+    /// occurrences under that encoding. Installers apply exactly the groups
+    /// whose encodings their own search-based replacement covers; rattler's
+    /// covers UTF-8 only, see [`select_utf8_offset_ranges`].
     ///
     /// Occurrences inside the shebang region (the first
-    /// [`Self::experimental_shebang_length`] bytes) are **excluded** — that region is
-    /// transformed by the installer's shebang rules rather than by plain
-    /// splicing at recorded offsets — so every recorded value is greater than
-    /// or equal to `shebang_length` when it is present. The list must not
-    /// contain two groups with the same encoding, the ranges recorded across
-    /// all groups must not overlap, and groups SHOULD be serialized sorted by
-    /// encoding so equivalent metadata serializes identically.
+    /// [`Self::experimental_shebang_length`] bytes) are excluded, because
+    /// that region is transformed by the installer's shebang rules. The list
+    /// must not contain two groups with the same encoding and the ranges
+    /// recorded across all groups must not overlap.
     ///
-    /// `None` for older packages or packages whose publisher did not
-    /// populate the field — callers must scan the file themselves in
-    /// that case. A value that does not parse as offset groups (for example
-    /// the flat lists written by pre-CEP drafts of this field) is also
-    /// treated as absent rather than failing the whole `paths.json`.
+    /// `None` when the package does not carry the field; callers must scan
+    /// the file themselves in that case. A value that does not parse as
+    /// offset groups (for example the flat lists written by pre-CEP drafts of
+    /// this field) is also treated as absent rather than failing the whole
+    /// `paths.json`.
+    ///
     /// **Experimental**: the Rust field is prefixed until
-    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized
-    /// and may change or disappear; the serialized form is `offsets`.
+    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized;
+    /// the serialized form is `offsets`.
     #[serde(
         rename = "offsets",
         default,
@@ -230,18 +226,15 @@ pub struct PrefixPlaceholder {
     /// including its terminating newline, or the whole file size when the
     /// file contains no newline.
     ///
-    /// Present if and only if [`Self::experimental_offsets`] is present, `file_mode` is
-    /// [`FileMode::Text`], and the file starts with the bytes `#!` —
-    /// regardless of whether the first line itself contains the placeholder,
-    /// because installers collapse an over-long shebang even when it does not.
+    /// Present if and only if [`Self::experimental_offsets`] is present,
+    /// `file_mode` is [`FileMode::Text`], and the file starts with the bytes
+    /// `#!`, regardless of whether the first line contains the placeholder.
+    /// `None` for binary-mode placeholders, text files that do not start with
+    /// a shebang, or older packages.
     ///
-    /// Lets consumers compute the exact post-replacement file size and locate
-    /// the region an installer transforms under its shebang rules without
-    /// rendering the whole file. `None` for binary-mode placeholders, text
-    /// files that do not start with a shebang, or older packages.
     /// **Experimental**: the Rust field is prefixed until
-    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized
-    /// and may change or disappear; the serialized form is `shebang_length`.
+    /// [conda/ceps#179](https://github.com/conda/ceps/pull/179) is finalized;
+    /// the serialized form is `shebang_length`.
     #[serde(
         rename = "shebang_length",
         default,
@@ -291,13 +284,11 @@ pub struct PathsEntry {
 
 /// The encoding of one [`OffsetGroup`].
 ///
-/// The closed set of names mirrors the encodings replaced by existing
-/// installers: conda searches UTF-8 plus the UTF-16 and UTF-32 variants,
-/// while rattler and libmamba search UTF-8 only. A name outside this set
-/// deserializes as [`OffsetEncoding::Unknown`] rather than failing the whole
-/// `paths.json`: per the CEP an unknown encoding is indistinguishable from
-/// corrupt metadata, so consumers treat the offsets as unusable and fall back
-/// to searching the file contents.
+/// The CEP defines a closed set of names: the encodings replaced by existing
+/// installers. A name outside this set deserializes as
+/// [`OffsetEncoding::Unknown`] rather than failing the whole `paths.json`;
+/// [`select_utf8_offset_ranges`] rejects it so that consumers fall back to
+/// searching the file contents.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum OffsetEncoding {
@@ -356,20 +347,20 @@ pub struct OffsetGroup {
     pub encoding: OffsetEncoding,
 
     /// The byte offsets of the occurrences under [`Self::encoding`]. The
-    /// shape is determined normatively by `file_mode` (see [`OffsetRanges`])
-    /// and must not be empty: a group is present exactly when at least one
-    /// occurrence is listed in it.
+    /// shape is determined by `file_mode` (see [`OffsetRanges`]) and must not
+    /// be empty.
     pub ranges: OffsetRanges,
 
-    /// Whether the group carried members other than `encoding` and `ranges`.
+    /// The names of any members of the group other than `encoding` and
+    /// `ranges`.
     ///
     /// The CEP defines exactly those two keys today; a future CEP may add
-    /// more. Until a consumer implements such a CEP it cannot know whether an
-    /// extra member changes the meaning of the group, so the group must be
-    /// treated like corrupt metadata (fall back to searching). Unrecognized
-    /// members are not preserved on re-serialization.
+    /// more. An extra member may change the meaning of the group, so
+    /// [`select_utf8_offset_ranges`] rejects the metadata and consumers fall
+    /// back to searching. Unrecognized members are not preserved on
+    /// re-serialization.
     #[serde(skip)]
-    pub has_unknown_members: bool,
+    pub unknown_members: Vec<String>,
 }
 
 impl<'de> Deserialize<'de> for OffsetGroup {
@@ -389,7 +380,7 @@ impl<'de> Deserialize<'de> for OffsetGroup {
         Ok(OffsetGroup {
             encoding: raw.encoding,
             ranges: raw.ranges,
-            has_unknown_members: !raw.extra.is_empty(),
+            unknown_members: raw.extra.into_keys().collect(),
         })
     }
 }
@@ -398,19 +389,18 @@ impl<'de> Deserialize<'de> for OffsetGroup {
 ///
 /// The shape depends on the file mode:
 /// - **Text**: a flat list of byte positions (`[10, 45, 100]`).
-/// - **Binary**: grouped by c-string — each inner array lists the prefix
+/// - **Binary**: grouped by c-string. Each inner array lists the prefix
 ///   offsets followed by the position of the first byte of the NUL terminator
-///   (the encoding's zero code unit: one zero byte for UTF-8, two for UTF-16,
-///   four for UTF-32), or the file size when the final c-string is
-///   unterminated at end-of-file (`[[5, 39], [22, 30, 39]]`).
+///   (the encoding's zero code unit), or the file size when the final
+///   c-string is unterminated at end-of-file (`[[5, 39], [22, 30, 39]]`).
 ///
 /// Occurrences inside the shebang region (the first
-/// [`PrefixPlaceholder::experimental_shebang_length`] bytes) are excluded; the installer
-/// transforms that region under its own shebang rules.
+/// [`PrefixPlaceholder::experimental_shebang_length`] bytes) are excluded;
+/// the installer transforms that region under its own shebang rules.
 ///
-/// The shape is determined normatively by `file_mode`, not inferred from the
-/// JSON structure: an empty text list and an empty binary list are
-/// indistinguishable (and invalid — per the CEP, `ranges` must not be empty).
+/// The shape is determined by `file_mode`, not inferred from the JSON
+/// structure: an empty text list and an empty binary list are
+/// indistinguishable (and invalid, since `ranges` must not be empty).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(untagged)]
 pub enum OffsetRanges {
@@ -433,36 +423,64 @@ impl OffsetRanges {
     }
 }
 
-/// Error describing why recorded offset metadata cannot be used.
+/// Why recorded offset metadata cannot be used.
 ///
 /// Per the CEP, consumers that hit this SHOULD fall back to locating
 /// occurrences by searching the file contents (and MAY report a warning).
-#[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-pub struct InvalidOffsetsError(String);
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidOffsetsError {
+    /// The offsets list is empty, which is only valid for a text file whose
+    /// occurrences all lie inside the shebang region.
+    #[error("the offsets list is empty, which is only valid for a text file with a shebang_length")]
+    EmptyList,
 
-/// Select the UTF-8 offset group from `offsets`, validating the CEP's
-/// structural rules.
+    /// A group's encoding is not in the closed set defined by the CEP.
+    #[error("unrecognized encoding '{0}'")]
+    UnrecognizedEncoding(String),
+
+    /// A group has members beyond `encoding` and `ranges`.
+    #[error("the '{encoding}' group has unrecognized members: {}", members.join(", "))]
+    UnrecognizedMembers {
+        /// The group's encoding.
+        encoding: String,
+        /// The names of the unrecognized members.
+        members: Vec<String>,
+    },
+
+    /// Two groups share the same encoding.
+    #[error("duplicate '{0}' groups")]
+    DuplicateEncoding(String),
+
+    /// A group's ranges are empty.
+    #[error("the '{0}' group's ranges are empty")]
+    EmptyRanges(String),
+
+    /// A group's ranges have the text shape for a binary file or the binary
+    /// shape for a text file.
+    #[error("the shape of the '{0}' group's ranges does not match the file mode")]
+    RangesShapeMismatch(String),
+}
+
+/// Selects the UTF-8 offset group from `offsets`, validating the structural
+/// rules the CEP imposes on the list.
 ///
 /// Per the CEP, installers apply exactly the groups whose encodings their own
-/// search-based replacement covers. rattler's search-based replacement covers
-/// UTF-8 only, so this helper returns:
+/// search-based replacement covers. rattler's covers UTF-8 only, so this
+/// helper returns:
 ///
-/// - `Ok(Some(ranges))` — the UTF-8 group's ranges, to be spliced;
-/// - `Ok(None)` — the metadata is valid but records no UTF-8 occurrences
-///   (only wide-string groups, whose occurrences rattler's own search would
-///   not have replaced either, or — for a text file with a `shebang_length` —
-///   an empty list because every occurrence falls within the shebang region);
-/// - `Err(_)` — the metadata is structurally invalid or contains values a
-///   future CEP may have redefined; the caller falls back to searching.
+/// - `Ok(Some(ranges))`: the UTF-8 group's ranges, to be spliced;
+/// - `Ok(None)`: the metadata is valid but records no UTF-8 occurrences,
+///   either because only wide-string groups are present or because every
+///   occurrence falls within the shebang region;
+/// - `Err(_)`: the metadata is invalid and the caller should ignore it,
+///   locating occurrences by searching the file contents instead.
 ///
-/// Validated here: the list is non-empty (except for `file_mode: text`
-/// entries with a `shebang_length`), every group's encoding is recognized, no
-/// group carries unrecognized members, encodings are unique, and `ranges` are
-/// non-empty with a shape matching `file_mode`. Value-level consistency of
-/// the UTF-8 ranges with the actual file contents (ordering, bounds, the
-/// placeholder bytes being present) is checked by the replacement functions
-/// themselves.
+/// Checked here: the list is non-empty (except for `file_mode: text` entries
+/// with a `shebang_length`), every group's encoding is recognized and unique,
+/// no group carries unrecognized members, and `ranges` are non-empty with a
+/// shape matching `file_mode`. Consistency of the recorded values with the
+/// actual file contents (ordering, bounds, the placeholder bytes being
+/// present) is checked by the replacement functions in `rattler`.
 pub fn select_utf8_offset_ranges(
     offsets: &[OffsetGroup],
     file_mode: FileMode,
@@ -474,10 +492,7 @@ pub fn select_utf8_offset_ranges(
         return if file_mode == FileMode::Text && has_shebang_length {
             Ok(None)
         } else {
-            Err(InvalidOffsetsError(String::from(
-                "the offsets list is empty, which is only valid for a text file with a \
-                 shebang_length",
-            )))
+            Err(InvalidOffsetsError::EmptyList)
         };
     }
 
@@ -485,38 +500,33 @@ pub fn select_utf8_offset_ranges(
     let mut seen: Vec<&OffsetEncoding> = Vec::with_capacity(offsets.len());
     for group in offsets {
         if let OffsetEncoding::Unknown(name) = &group.encoding {
-            return Err(InvalidOffsetsError(format!(
-                "unrecognized encoding '{name}'"
-            )));
+            return Err(InvalidOffsetsError::UnrecognizedEncoding(name.clone()));
         }
-        if group.has_unknown_members {
-            return Err(InvalidOffsetsError(format!(
-                "the '{}' group has unrecognized members",
-                group.encoding.as_str()
-            )));
+        if !group.unknown_members.is_empty() {
+            return Err(InvalidOffsetsError::UnrecognizedMembers {
+                encoding: group.encoding.as_str().to_owned(),
+                members: group.unknown_members.clone(),
+            });
         }
         if seen.contains(&&group.encoding) {
-            return Err(InvalidOffsetsError(format!(
-                "duplicate '{}' groups",
-                group.encoding.as_str()
-            )));
+            return Err(InvalidOffsetsError::DuplicateEncoding(
+                group.encoding.as_str().to_owned(),
+            ));
         }
         seen.push(&group.encoding);
         if group.ranges.is_empty() {
-            return Err(InvalidOffsetsError(format!(
-                "the '{}' group's ranges are empty",
-                group.encoding.as_str()
-            )));
+            return Err(InvalidOffsetsError::EmptyRanges(
+                group.encoding.as_str().to_owned(),
+            ));
         }
         let shape_matches = matches!(
             (file_mode, &group.ranges),
             (FileMode::Text, OffsetRanges::Text(_)) | (FileMode::Binary, OffsetRanges::Binary(_))
         );
         if !shape_matches {
-            return Err(InvalidOffsetsError(format!(
-                "the shape of the '{}' group's ranges does not match the file mode",
-                group.encoding.as_str()
-            )));
+            return Err(InvalidOffsetsError::RangesShapeMismatch(
+                group.encoding.as_str().to_owned(),
+            ));
         }
         if group.encoding == OffsetEncoding::Utf8 {
             utf8_ranges = Some(&group.ranges);
@@ -528,7 +538,7 @@ pub fn select_utf8_offset_ranges(
 /// Deserializes `offsets` leniently: a value that does not parse as a list of
 /// [`OffsetGroup`]s (for example the flat `[10, 45]` / `[[64, 96]]` lists
 /// written by pre-CEP drafts of this field) yields `None` instead of failing
-/// the whole `paths.json`. The field is advisory — the search-based path
+/// the whole `paths.json`. The field is advisory; the search-based path
 /// handles the file correctly without it.
 fn deserialize_offset_groups<'de, D>(deserializer: D) -> Result<Option<Vec<OffsetGroup>>, D::Error>
 where
@@ -575,8 +585,8 @@ mod test {
     use crate::package::{PackageFile, PrefixPlaceholder};
 
     use super::{
-        FileMode, OffsetEncoding, OffsetGroup, OffsetRanges, PathBuf, PathType, PathsEntry,
-        PathsJson, select_utf8_offset_ranges,
+        FileMode, InvalidOffsetsError, OffsetEncoding, OffsetGroup, OffsetRanges, PathBuf,
+        PathType, PathsEntry, PathsJson, select_utf8_offset_ranges,
     };
 
     #[test]
@@ -736,12 +746,12 @@ mod test {
                 OffsetGroup {
                     encoding: OffsetEncoding::Utf16Le,
                     ranges: OffsetRanges::Binary(vec![vec![900, 1000]]),
-                    has_unknown_members: false,
+                    unknown_members: vec![],
                 },
                 OffsetGroup {
                     encoding: OffsetEncoding::Utf8,
                     ranges: OffsetRanges::Binary(vec![vec![100, 500], vec![200, 300, 800]]),
-                    has_unknown_members: false,
+                    unknown_members: vec![],
                 },
             ])
         );
@@ -750,12 +760,11 @@ mod test {
                 prefix.experimental_offsets.as_deref().unwrap(),
                 prefix.file_mode,
                 prefix.experimental_shebang_length.is_some()
-            )
-            .unwrap(),
-            Some(&OffsetRanges::Binary(vec![
+            ),
+            Ok(Some(&OffsetRanges::Binary(vec![
                 vec![100, 500],
                 vec![200, 300, 800]
-            ]))
+            ])))
         );
 
         // Second entry: no prefix placeholder
@@ -769,7 +778,7 @@ mod test {
             Some(vec![OffsetGroup {
                 encoding: OffsetEncoding::Utf8,
                 ranges: OffsetRanges::Text(vec![10, 45]),
-                has_unknown_members: false,
+                unknown_members: vec![],
             }])
         );
 
@@ -822,7 +831,7 @@ mod test {
                         experimental_offsets: Some(vec![OffsetGroup {
                             encoding: OffsetEncoding::Utf8,
                             ranges: OffsetRanges::Binary(vec![vec![50, 200], vec![150, 200]]),
-                            has_unknown_members: false,
+                            unknown_members: vec![],
                         }]),
                         experimental_shebang_length: None,
                     }),
@@ -859,7 +868,7 @@ mod test {
             Some(vec![OffsetGroup {
                 encoding: OffsetEncoding::Utf8,
                 ranges: OffsetRanges::Binary(vec![vec![50, 200], vec![150, 200]]),
-                has_unknown_members: false,
+                unknown_members: vec![],
             }])
         );
     }
@@ -886,9 +895,8 @@ mod test {
                 placeholder.experimental_offsets.as_deref().unwrap(),
                 FileMode::Text,
                 true
-            )
-            .unwrap(),
-            Some(&OffsetRanges::Text(vec![71]))
+            ),
+            Ok(Some(&OffsetRanges::Text(vec![71])))
         );
 
         let binary_entry = r#"{
@@ -910,12 +918,11 @@ mod test {
                 placeholder.experimental_offsets.as_deref().unwrap(),
                 FileMode::Binary,
                 false
-            )
-            .unwrap(),
-            Some(&OffsetRanges::Binary(vec![
+            ),
+            Ok(Some(&OffsetRanges::Binary(vec![
                 vec![64, 96],
                 vec![200, 240, 300]
-            ]))
+            ])))
         );
     }
 
@@ -958,19 +965,33 @@ mod test {
             groups[0].encoding,
             OffsetEncoding::Unknown(String::from("utf-64-xe"))
         );
-        assert!(select_utf8_offset_ranges(&groups, FileMode::Text, false).is_err());
+        assert_eq!(
+            select_utf8_offset_ranges(&groups, FileMode::Text, false),
+            Err(InvalidOffsetsError::UnrecognizedEncoding(String::from(
+                "utf-64-xe"
+            )))
+        );
     }
 
-    /// A group member beyond `encoding` and `ranges` parses but marks the
-    /// group, and selection rejects it: a future CEP may have changed the
-    /// group's meaning, so it must be treated like corrupt metadata.
+    /// A group member beyond `encoding` and `ranges` parses but is recorded,
+    /// and selection rejects it: a future CEP may have changed the group's
+    /// meaning, so it must be treated like corrupt metadata.
     #[test]
     pub fn test_unknown_group_member_is_rejected_by_selection() {
         let groups: Vec<OffsetGroup> =
             serde_json::from_str(r#"[{"encoding": "utf-8", "ranges": [10], "padding": "zero"}]"#)
                 .unwrap();
-        assert!(groups[0].has_unknown_members);
-        assert!(select_utf8_offset_ranges(&groups, FileMode::Text, false).is_err());
+        assert_eq!(groups[0].unknown_members, vec![String::from("padding")]);
+        let err = select_utf8_offset_ranges(&groups, FileMode::Text, false).unwrap_err();
+        assert_eq!(
+            err,
+            InvalidOffsetsError::UnrecognizedMembers {
+                encoding: String::from("utf-8"),
+                members: vec![String::from("padding")],
+            }
+        );
+        // The error names the offending members.
+        assert!(err.to_string().contains("padding"), "{err}");
     }
 
     #[test]
@@ -978,25 +999,24 @@ mod test {
         let utf8_text = OffsetGroup {
             encoding: OffsetEncoding::Utf8,
             ranges: OffsetRanges::Text(vec![10]),
-            has_unknown_members: false,
+            unknown_members: vec![],
         };
         let utf16_binary = OffsetGroup {
             encoding: OffsetEncoding::Utf16Le,
             ranges: OffsetRanges::Binary(vec![vec![384, 448]]),
-            has_unknown_members: false,
+            unknown_members: vec![],
         };
 
         // No utf-8 group is valid metadata with nothing to splice.
         assert_eq!(
-            select_utf8_offset_ranges(std::slice::from_ref(&utf16_binary), FileMode::Binary, false)
-                .unwrap(),
-            None
+            select_utf8_offset_ranges(std::slice::from_ref(&utf16_binary), FileMode::Binary, false),
+            Ok(None)
         );
 
         // An empty list is only valid for a text file with a shebang_length.
         assert_eq!(
-            select_utf8_offset_ranges(&[], FileMode::Text, true).unwrap(),
-            None
+            select_utf8_offset_ranges(&[], FileMode::Text, true),
+            Ok(None)
         );
         assert!(select_utf8_offset_ranges(&[], FileMode::Text, false).is_err());
         assert!(select_utf8_offset_ranges(&[], FileMode::Binary, false).is_err());
@@ -1017,7 +1037,7 @@ mod test {
                 &[OffsetGroup {
                     encoding: OffsetEncoding::Utf8,
                     ranges: OffsetRanges::Text(vec![]),
-                    has_unknown_members: false,
+                    unknown_members: vec![],
                 }],
                 FileMode::Text,
                 false
