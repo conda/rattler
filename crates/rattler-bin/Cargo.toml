@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.18"
+version = "0.2.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -33,7 +33,6 @@ rustls = [
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
-azure = ["rattler_networking/azure", "rattler_upload/azure"]
 oauth = ["rattler/oauth"]
 
 [dependencies]
@@ -49,7 +48,7 @@ indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
 miette = { workspace = true }
 once_cell = { workspace = true }
-rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
+rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_index = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false, features = [

@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _, ser::Error};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -254,6 +254,14 @@ pub(crate) fn sort_index_map_alphabetically<
         .iter()
         .collect::<BTreeMap<_, _>>()
         .serialize(serializer)
+}
+
+/// A helper function used to sort a set alphabetically when serializing.
+pub(crate) fn sort_set_alphabetically<K: Ord + Serialize, S: serde::Serializer>(
+    value: &ahash::HashSet<K>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value.iter().collect::<BTreeSet<_>>().serialize(serializer)
 }
 
 /// A helper to serialize and deserialize `track_features` in repodata. Track

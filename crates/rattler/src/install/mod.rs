@@ -29,6 +29,8 @@ mod installer;
 #[cfg(test)]
 mod test_utils;
 
+#[cfg(unix)]
+use std::sync::OnceLock;
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashMap, HashSet, binary_heap::PeekMut},
@@ -351,13 +353,9 @@ pub async fn link_package(
             None => can_create_hardlinks(target_dir, package_dir).right_future(),
         },
     );
-    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
-        match reflink_copy::check_reflink_support(package_dir, target_dir) {
-            Ok(reflink_copy::ReflinkSupport::Supported) => true,
-            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
-            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
-        }
-    });
+    let allow_ref_links = options
+        .allow_ref_links
+        .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
@@ -706,13 +704,9 @@ pub fn link_package_sync(
     } else {
         LinkType::Copy
     };
-    let mut allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
-        match reflink_copy::check_reflink_support(package_dir, target_dir) {
-            Ok(reflink_copy::ReflinkSupport::Supported) => true,
-            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
-            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
-        }
-    });
+    let mut allow_ref_links = options
+        .allow_ref_links
+        .unwrap_or_else(|| can_create_reflinks_sync(target_dir, package_dir, allow_hard_links));
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
@@ -1205,6 +1199,88 @@ fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 
+/// Returns true if it is possible to create reflinks (copy-on-write clones)
+/// from the package cache directory to the target directory.
+///
+/// [`reflink_copy::check_reflink_support`] only returns a definitive answer on
+/// Windows; on all other platforms it returns `Unknown`. Guessing wrong is
+/// expensive: every failed reflink attempt creates the destination file,
+/// issues the clone ioctl, and removes the destination again before falling
+/// back to a hard link or copy. To avoid paying that cost for every file we
+/// probe reflink support once per filesystem and cache the result for the
+/// lifetime of the process.
+fn can_create_reflinks_sync(target_dir: &Prefix, package_dir: &Path, fallback: bool) -> bool {
+    match reflink_copy::check_reflink_support(package_dir, target_dir.path()) {
+        Ok(reflink_copy::ReflinkSupport::Supported) => true,
+        Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
+        Ok(reflink_copy::ReflinkSupport::Unknown) => {
+            probe_reflink_support(target_dir.path(), package_dir, fallback)
+        }
+    }
+}
+
+/// Determines whether reflinks work between the two paths by performing a
+/// trial reflink in the target directory. The result is cached per device so
+/// the probe runs at most once per filesystem.
+#[cfg(unix)]
+fn probe_reflink_support(target_dir: &Path, package_dir: &Path, _fallback: bool) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    static REFLINK_SUPPORT_CACHE: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
+
+    let (Ok(target_meta), Ok(package_meta)) = (
+        std::fs::metadata(target_dir),
+        std::fs::metadata(package_dir),
+    ) else {
+        return false;
+    };
+
+    // Reflinks cannot cross filesystem boundaries.
+    if target_meta.dev() != package_meta.dev() {
+        return false;
+    }
+
+    let mut cache = REFLINK_SUPPORT_CACHE
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap();
+    if let Some(&supported) = cache.get(&target_meta.dev()) {
+        return supported;
+    }
+
+    // Probe by reflinking a small file inside a temporary directory in the
+    // target directory. Since the package directory resides on the same
+    // filesystem the result also holds for cache-to-prefix reflinks. The
+    // temporary directory is removed again when it goes out of scope, even if
+    // the probe fails halfway through.
+    let supported = tempfile::Builder::new()
+        .prefix(".refprobe-")
+        .tempdir_in(target_dir)
+        .is_ok_and(|probe_dir| {
+            let probe_src = probe_dir.path().join("src");
+            let probe_dst = probe_dir.path().join("dst");
+            std::fs::write(&probe_src, b"reflink probe").is_ok()
+                && reflink_copy::reflink(&probe_src, &probe_dst).is_ok()
+        });
+
+    if !supported {
+        tracing::debug!(
+            "filesystem of '{}' does not support reflinks, disabling reflink usage",
+            target_dir.display()
+        );
+    }
+
+    cache.insert(target_meta.dev(), supported);
+    supported
+}
+
+/// On platforms where we cannot cheaply identify the filesystem we keep the
+/// previous heuristic.
+#[cfg(not(unix))]
+fn probe_reflink_support(_target_dir: &Path, _package_dir: &Path, fallback: bool) -> bool {
+    fallback
+}
+
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
 async fn paths_have_same_filesystem(a: &Prefix, b: &Path) -> bool {
@@ -1350,6 +1426,7 @@ mod test {
                             package_info,
                             package_url.clone(),
                             client.clone(),
+                            None,
                             None,
                         )
                         .await

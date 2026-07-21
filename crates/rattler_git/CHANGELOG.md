@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_git-v0.1.3...rattler_git-v0.2.0) - 2026-07-14
+
+### Added
+
+- *(rattler_git)* unify git cache with pixi's implementation ([#2590](https://github.com/conda/rattler/pull/2590))
+
 ## [0.1.3](https://github.com/conda/rattler/compare/rattler_git-v0.1.2...rattler_git-v0.1.3) - 2026-05-13
 
 ### Other

@@ -235,6 +235,7 @@ impl Access for ETagMemoryBackend {
     type Writer = ETagMemoryWriter;
     type Lister = oio::HierarchyLister<ETagMemoryLister>;
     type Deleter = oio::OneShotDeleter<ETagMemoryDeleter>;
+    type Copier = ();
 
     fn info(&self) -> Arc<AccessorInfo> {
         let info = AccessorInfo::default();
@@ -329,8 +330,12 @@ impl Access for ETagMemoryBackend {
             (hooks.on_operation)(path, Operation::AfterRead).await;
         }
 
-        // Note: metadata is available via stat(), not through RpRead
-        Ok((RpRead::new(), Buffer::from(data)))
+        // opendal 0.57 requires RpRead to carry the object metadata.
+        let metadata = Metadata::new(EntryMode::FILE)
+            .with_etag(etag)
+            .with_last_modified(last_modified)
+            .with_content_length(data.len() as u64);
+        Ok((RpRead::new(metadata), Buffer::from(data)))
     }
 
     async fn write(&self, path: &str, args: OpWrite) -> Result<(RpWrite, Self::Writer)> {

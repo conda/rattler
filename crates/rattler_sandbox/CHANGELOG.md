@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.25](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.24...rattler_sandbox-v0.2.25) - 2026-07-14
+
+### Other
+
+- update dependencies ([#2589](https://github.com/conda/rattler/pull/2589))
+
+## [0.2.24](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.23...rattler_sandbox-v0.2.24) - 2026-07-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.2.23](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.22...rattler_sandbox-v0.2.23) - 2026-06-17
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.2.22](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.21...rattler_sandbox-v0.2.22) - 2026-06-09
 
 ### Other

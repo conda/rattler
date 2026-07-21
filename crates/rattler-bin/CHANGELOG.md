@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/conda/rattler/compare/rattler-bin-v0.2.3...rattler-bin-v0.2.4) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.3](https://github.com/conda/rattler/compare/rattler-bin-v0.2.2...rattler-bin-v0.2.3) - 2026-07-09
+
+### Added
+
+- support CEP-42 in gateway ([#2462](https://github.com/conda/rattler/pull/2462))
+
+## [0.2.2](https://github.com/conda/rattler/compare/rattler-bin-v0.2.1...rattler-bin-v0.2.2) - 2026-06-26
+
+### Added
+
+- add offline mode to rattler CLI ([#2537](https://github.com/conda/rattler/pull/2537))
+- add solve command and create platform option ([#2528](https://github.com/conda/rattler/pull/2528))
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler-bin-v0.2.0...rattler-bin-v0.2.1) - 2026-06-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler-bin-v0.1.18...rattler-bin-v0.2.0) - 2026-06-17
+
+### Added
+
+- [**breaking**] challenge-reactive AuthChallengeMiddleware with prefix.dev OIDC wiring ([#2504](https://github.com/conda/rattler/pull/2504))
+- improved logout experience ([#2457](https://github.com/conda/rattler/pull/2457))
+
 ## [0.1.18](https://github.com/conda/rattler/compare/rattler-bin-v0.1.17...rattler-bin-v0.1.18) - 2026-06-11
 
 ### Added

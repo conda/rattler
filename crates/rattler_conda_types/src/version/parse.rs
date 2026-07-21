@@ -134,11 +134,16 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
         // Parse an identifier. `dev` and `post` are only special when they make up the entire
         // non-numeric run; longer identifiers such as `devdev` remain plain strings.
         map(alpha1, |alpha: &'i str| {
-            let alpha = alpha.to_lowercase();
-            match alpha.as_str() {
-                "post" => Component::Post,
-                "dev" => Component::Dev,
-                _ => Component::Iden(alpha.into_boxed_str()),
+            // Match `post`/`dev` without allocating; only `Iden` needs an owned copy.
+            if alpha.eq_ignore_ascii_case("post") {
+                Component::Post
+            } else if alpha.eq_ignore_ascii_case("dev") {
+                Component::Dev
+            } else if alpha.bytes().all(|b| b.is_ascii_lowercase()) {
+                // Already lowercase: skip re-lowercasing.
+                Component::Iden(Box::from(alpha))
+            } else {
+                Component::Iden(alpha.to_lowercase().into_boxed_str())
             }
         }),
     ))

@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
-use tracing::warn;
 use url::Url;
 
 /// Newtype wrapper for the force overwrite flag.
@@ -124,8 +123,6 @@ pub enum ServerType {
     Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
-    #[cfg(feature = "azure")]
-    Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
 }
@@ -173,9 +170,11 @@ impl QuetzData {
     }
 }
 
+/// Options for uploading to an Artifactory channel.
+///
+/// Authentication can be supplied directly with a bearer token or with an Artifactory username
+/// and password. If no credentials are supplied, they are read from the keychain / auth-file.
 #[derive(Clone, Debug, PartialEq, Parser)]
-/// Options for uploading to a Artifactory channel.
-/// Authentication is used from the keychain / auth-file.
 pub struct ArtifactoryOpts {
     /// The URL to your Artifactory server
     #[arg(short, long, env = "ARTIFACTORY_SERVER_URL")]
@@ -185,17 +184,26 @@ pub struct ArtifactoryOpts {
     #[arg(short, long = "channel", env = "ARTIFACTORY_CHANNEL")]
     pub channels: String,
 
-    /// Your Artifactory username
-    #[arg(long, env = "ARTIFACTORY_USERNAME", hide = true)]
+    /// Your Artifactory username for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_USERNAME", requires = "password")]
     pub username: Option<String>,
 
-    /// Your Artifactory password
-    #[arg(long, env = "ARTIFACTORY_PASSWORD", hide = true)]
+    /// Your Artifactory password for HTTP basic authentication.
+    #[arg(long, env = "ARTIFACTORY_PASSWORD", requires = "username")]
     pub password: Option<String>,
 
-    /// Your Artifactory token
-    #[arg(short, long, env = "ARTIFACTORY_TOKEN")]
+    /// Your Artifactory token for bearer authentication.
+    #[arg(short, long, env = "ARTIFACTORY_TOKEN", conflicts_with_all = ["username", "password"])]
     pub token: Option<String>,
+}
+
+/// Authentication provided directly for an Artifactory upload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ArtifactoryAuthentication {
+    /// Authenticate with a bearer token.
+    Token(String),
+    /// Authenticate with HTTP basic authentication.
+    Basic { username: String, password: String },
 }
 
 #[derive(Debug)]
@@ -203,45 +211,50 @@ pub struct ArtifactoryOpts {
 pub struct ArtifactoryData {
     pub url: UrlWithTrailingSlash,
     pub channels: String,
-    pub token: Option<String>,
+    pub authentication: Option<ArtifactoryAuthentication>,
 }
 
 impl TryFrom<ArtifactoryOpts> for ArtifactoryData {
     type Error = miette::Error;
 
     fn try_from(value: ArtifactoryOpts) -> Result<Self, Self::Error> {
-        let token = match (value.username, value.password, value.token) {
-            (_, _, Some(token)) => Some(token),
-            (Some(_), Some(password), _) => {
-                warn!(
-                    "Using username and password for Artifactory authentication is deprecated, using password as token. Please use an API token instead."
-                );
-                Some(password)
-            }
-            (Some(_), None, _) => {
-                return Err(miette::miette!(
-                    "Artifactory username provided without a password"
-                ));
-            }
-            (None, Some(_), _) => {
-                return Err(miette::miette!(
-                    "Artifactory password provided without a username"
-                ));
-            }
-            _ => None,
-        };
-        Ok(Self::new(value.url, value.channels, token))
+        let data = Self::new(value.url, value.channels);
+
+        if let Some(username) = value.username {
+            let password = value
+                .password
+                .expect("clap guarantees that password is present if username is present");
+            return Ok(data.with_basic_auth(username, password));
+        }
+
+        if let Some(token) = value.token {
+            return Ok(data.with_bearer_auth(token));
+        }
+
+        Ok(data)
     }
 }
 
 impl ArtifactoryData {
-    /// Create a new instance of `ArtifactoryData`
-    pub fn new(url: Url, channels: String, token: Option<String>) -> Self {
+    /// Create a new and unauthenticated instance of `ArtifactoryData`
+    pub fn new(url: Url, channels: String) -> Self {
         Self {
             url: url.into(),
             channels,
-            token,
+            authentication: None,
         }
+    }
+
+    /// Use HTTP bearer authentication with the given token.
+    pub fn with_bearer_auth(mut self, token: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Token(token));
+        self
+    }
+
+    /// Use HTTP basic authentication with the given username and password.
+    pub fn with_basic_auth(mut self, username: String, password: String) -> Self {
+        self.authentication = Some(ArtifactoryAuthentication::Basic { username, password });
+        self
     }
 }
 
@@ -401,63 +414,6 @@ pub struct S3Opts {
     /// Replace files if it already exists.
     #[arg(long)]
     pub force: bool,
-}
-
-#[cfg(feature = "azure")]
-fn parse_az_url(value: &str) -> Result<Url, String> {
-    let url: Url =
-        Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
-    if url.scheme() == "az" && url.host_str().is_some() {
-        Ok(url)
-    } else {
-        Err(format!(
-            "Only Azure URLs of format az://container/... can be used, not `{value}`"
-        ))
-    }
-}
-
-/// Options for uploading to Azure Blob Storage.
-#[cfg(feature = "azure")]
-#[derive(Clone, Debug, PartialEq, Parser)]
-pub struct AzureOpts {
-    /// The channel URL in the Azure container, e.g.
-    /// `az://my-container/my-channel`.
-    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = parse_az_url)]
-    pub channel: Url,
-
-    /// The Azure Storage account name.
-    #[arg(long, env = "AZURE_STORAGE_ACCOUNT")]
-    pub account: String,
-
-    /// Optional endpoint override (sovereign clouds / Azurite).
-    #[arg(long, env = "AZURE_ENDPOINT_URL")]
-    pub endpoint_url: Option<Url>,
-
-    /// Replace files if they already exist.
-    #[arg(long)]
-    pub force: bool,
-}
-
-#[cfg(feature = "azure")]
-#[derive(Debug)]
-#[allow(missing_docs)]
-pub struct AzureData {
-    pub channel: UrlWithTrailingSlash,
-    pub account: String,
-    pub endpoint_url: Option<Url>,
-    pub force: bool,
-}
-
-#[cfg(feature = "azure")]
-impl From<AzureOpts> for AzureData {
-    fn from(value: AzureOpts) -> Self {
-        Self {
-            channel: value.channel.into(),
-            account: value.account,
-            endpoint_url: value.endpoint_url,
-            force: value.force,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -645,37 +601,5 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
-    }
-}
-
-#[cfg(all(test, feature = "azure"))]
-mod azure_opt_tests {
-    use super::*;
-
-    #[test]
-    fn parse_az_url_accepts_az_scheme() {
-        let url = parse_az_url("az://my-container/my-channel").unwrap();
-        assert_eq!(url.scheme(), "az");
-        assert_eq!(url.host_str(), Some("my-container"));
-    }
-
-    #[test]
-    fn parse_az_url_rejects_other_schemes() {
-        assert!(parse_az_url("s3://b/c").is_err());
-        assert!(parse_az_url("https://x/y").is_err());
-    }
-
-    #[test]
-    fn azure_data_from_opts_preserves_fields() {
-        let opts = AzureOpts {
-            channel: Url::parse("az://c/ch").unwrap(),
-            account: "acct".to_string(),
-            endpoint_url: None,
-            force: true,
-        };
-        let data = AzureData::from(opts);
-        assert_eq!(data.account, "acct");
-        assert!(data.force);
-        assert_eq!(data.channel.as_str(), "az://c/ch/");
     }
 }

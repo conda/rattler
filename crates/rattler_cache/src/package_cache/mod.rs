@@ -19,7 +19,7 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::package::CondaArchiveIdentifier;
+use rattler_conda_types::{PackageRecord, package::CondaArchiveIdentifier};
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     LazyClient,
@@ -419,9 +419,17 @@ impl PackageCache {
         url: Url,
         client: LazyClient,
         reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
-        self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
-            .await
+        self.get_or_fetch_from_url_with_retry(
+            pkg,
+            url,
+            client,
+            DoNotRetryPolicy,
+            reporter,
+            concurrent_requests_semaphore,
+        )
+        .await
     }
 
     /// Returns the directory that contains the specified package.
@@ -429,15 +437,25 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given path if the package could not be found in the
     /// cache.
+    ///
+    /// If a [`PackageRecord`] is provided, the cache key is derived from the
+    /// record, which includes its hashes. This ensures that packages that
+    /// share the same name, version and build string but have different
+    /// content do not collide in the cache. Otherwise, the cache key is
+    /// derived from the package filename only.
     pub async fn get_or_fetch_from_path(
         &self,
         path: &Path,
+        record: Option<&PackageRecord>,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = CondaArchiveIdentifier::try_from_path(&path_buf)
-            .unwrap()
-            .into();
+        let mut cache_key: CacheKey = match record {
+            Some(record) => record.into(),
+            None => CondaArchiveIdentifier::try_from_path(&path_buf)
+                .unwrap()
+                .into(),
+        };
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -468,6 +486,11 @@ impl PackageCache {
     /// uses the passed in `retry_policy` if, after the request has been sent
     /// and the response is successful, streaming of the package data fails
     /// and the whole request must be retried.
+    ///
+    /// The optional `concurrent_requests_semaphore` limits the number of
+    /// simultaneous downloads. A permit is acquired only when a download is
+    /// actually started (i.e. the package is not already cached), and is held
+    /// for the duration of the download and extraction.
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
@@ -476,6 +499,7 @@ impl PackageCache {
         client: LazyClient,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
@@ -493,7 +517,21 @@ impl PackageCache {
             let client = client.clone();
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
+            let concurrent_requests_semaphore = concurrent_requests_semaphore.clone();
             async move {
+                // Acquire a permit to limit the number of concurrent download
+                // and extraction operations. The permit is held until the
+                // closure returns and is released automatically when dropped.
+                let _permit = match concurrent_requests_semaphore {
+                    Some(semaphore) => Some(
+                        semaphore
+                            .acquire_owned()
+                            .await
+                            .expect("semaphore should not be closed"),
+                    ),
+                    None => None,
+                };
+
                 let mut current_try = 0;
                 // Retry until the retry policy says to stop
                 loop {
@@ -611,15 +649,25 @@ async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Antivirus scanners and the search indexer hold short-lived handles to
 /// freshly-extracted files, breaking `MoveFileEx`.
 /// See <https://github.com/prefix-dev/pixi/issues/5660>.
+///
+/// This deliberately uses `tokio::fs::rename` instead of the `fs_err` wrapper:
+/// `fs_err` wraps the OS error in a custom `io::Error` whose `raw_os_error()`
+/// returns `None` (and which exposes no `source()`), so the transient-error
+/// check below would never match and the rename would fail on the first
+/// attempt. The caller adds both paths to the error message, so no context is
+/// lost. See <https://github.com/prefix-dev/rattler-build/issues/2474>.
 #[cfg(windows)]
 async fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     use rattler_networking::retry_policies::ExponentialBackoff;
 
+    // Roughly 25s of total wait: AV scans of large freshly-extracted packages
+    // (e.g. python, openssl) can hold handles for well over the ~5s the
+    // previous 5x100ms..2s policy allowed.
     let retry_policy = ExponentialBackoff::builder()
-        .retry_bounds(Duration::from_millis(100), Duration::from_secs(2))
-        .build_with_max_retries(5);
+        .retry_bounds(Duration::from_millis(100), Duration::from_secs(5))
+        .build_with_max_retries(10);
     retry_io_on_transient(
-        || tokio_fs::rename(from, to),
+        || tokio::fs::rename(from, to),
         is_transient_rename_error,
         retry_policy,
     )
@@ -934,7 +982,10 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{Sha256, compute_bytes_digest, parse_digest_from_hex};
+    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+    use rattler_digest::{
+        Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
+    };
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
@@ -988,6 +1039,25 @@ mod test {
 
         let err = rename_with_retry(&from, &to).await.unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    /// Canary for the constraint documented on `rename_with_retry`: `fs_err`
+    /// wraps errors in a custom `io::Error` whose `raw_os_error()` is `None`,
+    /// so `is_transient_rename_error` never matches it and no retry happens
+    /// (see prefix-dev/rattler-build#2474). If this test starts failing,
+    /// `fs_err` began propagating the OS error code and `rename_with_retry`
+    /// could switch back to the wrapper for richer error messages.
+    #[tokio::test]
+    async fn test_fs_err_rename_error_loses_raw_os_error() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+        let to = dir.path().join("dst");
+
+        let std_err = tokio::fs::rename(&missing, &to).await.unwrap_err();
+        assert!(std_err.raw_os_error().is_some());
+
+        let wrapped_err = super::tokio_fs::rename(&missing, &to).await.unwrap_err();
+        assert_eq!(wrapped_err.raw_os_error(), None);
     }
 
     #[cfg(windows)]
@@ -1163,7 +1233,10 @@ mod test {
                     let release_request = release_request.clone();
                     let release_done = release_done.clone();
                     async move {
-                        let result = super::tokio_fs::rename(from, to).await;
+                        // Use the same rename op as `rename_with_retry`; the
+                        // fs_err wrapper would strip `raw_os_error()` and make
+                        // the transient check below never match.
+                        let result = tokio::fs::rename(from, to).await;
                         if result.is_err() && !signaled.swap(true, Ordering::SeqCst) {
                             release_request.add_permits(1);
                             let _ = release_done.acquire().await;
@@ -1171,7 +1244,7 @@ mod test {
                         result
                     }
                 },
-                |_| true,
+                super::is_transient_rename_error,
                 policy,
             )
             .await
@@ -1421,6 +1494,7 @@ mod test {
                 client.clone().into(),
                 DoNotRetryPolicy,
                 None,
+                None,
             )
             .await;
 
@@ -1438,7 +1512,14 @@ mod test {
 
         // The second one should fail after the 2nd try
         let result = cache
-            .get_or_fetch_from_url_with_retry(identifier, url, client.into(), retry_policy, None)
+            .get_or_fetch_from_url_with_retry(
+                identifier,
+                url,
+                client.into(),
+                retry_policy,
+                None,
+                None,
+            )
             .await;
 
         assert!(result.is_ok());
@@ -1476,7 +1557,7 @@ mod test {
 
         // Get the file to the cache
         let cache_a_lock = cache_a
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1484,7 +1565,7 @@ mod test {
 
         // Get the file to the cache
         let cache_b_lock = cache_b
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1500,7 +1581,7 @@ mod test {
 
         // Get the file to the cache
         let cache_c_lock = cache_c
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1521,7 +1602,7 @@ mod test {
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
 
         let cache_metadata_with_origin_hash = package_cache_with_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1529,7 +1610,7 @@ mod test {
         assert_eq!(file_name, "clobber-python-0.1.0-cpython");
 
         let cache_metadata_without_origin_hash = package_cache_without_origin_hash
-            .get_or_fetch_from_path(&package_path, None)
+            .get_or_fetch_from_path(&package_path, None, None)
             .await
             .unwrap();
 
@@ -1546,8 +1627,6 @@ mod test {
     // cache, otherwise the package escapes the cache root
     // (GHSA-h672-p7h7-97v9).
     async fn test_get_or_fetch_rejects_path_traversal_build_string() {
-        use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
-
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
@@ -1908,5 +1987,118 @@ mod test {
             should_run.load(Ordering::Relaxed),
             "fetch function should run again"
         );
+    }
+
+    #[tokio::test]
+    // Two local packages that share the same name, version and build string
+    // but have different content must not collide in the cache: the sha256
+    // from the record is part of the cache key, so a stale entry is
+    // re-extracted instead of being served for every later package.
+    async fn test_get_or_fetch_from_path_record_replaces_stale_package() {
+        let cpython_archive =
+            get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let pypy_archive = get_test_data_dir().join("clobber/clobber-python-0.1.0-pypy.conda");
+
+        // Both records claim the same name-version-build, so they map to the
+        // same cache directory, but each carries the sha256 of its archive.
+        let record_for = |archive: &Path| {
+            let mut record = PackageRecord::new(
+                PackageName::new_unchecked("clobber-python"),
+                "0.1.0".parse::<VersionWithSource>().unwrap(),
+                "cpython".to_string(),
+            );
+            record.sha256 = Some(compute_file_digest::<Sha256>(archive).unwrap());
+            record
+        };
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&cpython_archive, Some(&record_for(&cpython_archive)), None)
+            .await
+            .unwrap();
+        assert_eq!(cache_metadata.revision(), 1);
+        assert_eq!(
+            std::fs::read(cache_metadata.path().join("bin/python")).unwrap(),
+            b"cpython\n"
+        );
+        drop(cache_metadata);
+
+        // Fetching a different package with the same name-version-build must
+        // re-extract instead of serving the stale cpython content.
+        let pypy_record = record_for(&pypy_archive);
+        let cache_metadata = cache
+            .get_or_fetch_from_path(&pypy_archive, Some(&pypy_record), None)
+            .await
+            .unwrap();
+        assert_eq!(
+            cache_metadata.revision(),
+            2,
+            "expected the stale cache entry to be re-extracted"
+        );
+        assert_eq!(cache_metadata.sha256, pypy_record.sha256);
+        assert!(
+            !cache_metadata.path().join("bin/python").exists(),
+            "stale content from the previously cached package was served"
+        );
+
+        // The cache metadata stores the 8-byte revision plus the 32-byte
+        // sha256; without the sha the stale-entry check can never fire.
+        let lock_contents = std::fs::read(
+            packages_dir
+                .path()
+                .join("clobber-python-0.1.0-cpython.lock"),
+        )
+        .unwrap();
+        assert_eq!(lock_contents.len(), 40);
+        assert_eq!(&lock_contents[8..], pypy_record.sha256.unwrap().as_slice());
+    }
+
+    /// Verify that a fully-exhausted semaphore does not block a cache hit.
+    ///
+    /// The semaphore permit is only acquired inside the fetch closure, which is
+    /// never called when the package is already cached. So even with zero
+    /// available permits the call must return immediately.
+    #[tokio::test]
+    async fn test_semaphore_not_acquired_on_cache_hit() {
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        // Populate the cache from disk first.
+        cache
+            .get_or_fetch_from_path(&package_path, None, None)
+            .await
+            .unwrap();
+
+        // A semaphore with 0 permits — any attempt to acquire it would block
+        // forever.
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(0));
+
+        // A fake URL; it will never be contacted because the package is cached.
+        let url = Url::parse("https://example.com/clobber-python-0.1.0-cpython.conda").unwrap();
+        let identifier = CondaArchiveIdentifier::try_from_path(&package_path).unwrap();
+        let client = rattler_networking::LazyClient::default();
+
+        // This must complete without blocking even though the semaphore is empty.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            cache.get_or_fetch_from_url_with_retry(
+                identifier,
+                url,
+                client,
+                rattler_networking::retry_policies::DoNotRetryPolicy,
+                None,
+                Some(semaphore.clone()),
+            ),
+        )
+        .await
+        .expect("timed out — semaphore was incorrectly acquired on a cache hit");
+
+        assert!(result.is_ok(), "expected cache hit, got {result:?}");
+        // The semaphore should still have 0 permits — nothing was acquired.
+        assert_eq!(semaphore.available_permits(), 0);
     }
 }

@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**"]
 name = "rattler"
-version = "0.44.4"
+version = "0.47.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -13,10 +13,14 @@ readme.workspace = true
 
 [features]
 default = ['rustls']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
+native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
 oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
 cli-tools = ['dep:clap', 'oauth', 'dep:console']
+# Adds an interactive MultiSelect picker to `auth logout` when run without
+# arguments on a TTY. Pulls in `dialoguer`; opt-in so library/headless
+# consumers don't pay for it.
+auth-interactive = ['cli-tools', 'dep:dialoguer', 'tokio/signal']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]
@@ -43,6 +47,7 @@ once_cell = { workspace = true }
 parking_lot = { workspace = true }
 rattler_cache = { workspace = true }
 rattler_conda_types = { workspace = true }
+rattler_config = { workspace = true, optional = true, default-features = false }
 rattler_digest = { workspace = true }
 rattler_networking = { workspace = true }
 rattler_shell = { workspace = true }
@@ -63,6 +68,7 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
+dialoguer = { workspace = true, optional = true }
 open = { workspace = true, optional = true }
 openidconnect = { workspace = true, optional = true }
 oauth2-reqwest = { workspace = true, optional = true }
@@ -82,6 +88,6 @@ axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
-mockito = "1.0"
-tempfile = "3.0"
+mockito = "1"
+tempfile = { workspace = true }
 temp-env = { workspace = true }

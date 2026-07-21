@@ -81,18 +81,6 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             )
             .await
         }
-        #[cfg(feature = "azure")]
-        ServerType::Azure(azure_opts) => {
-            let data = upload::opt::AzureData::from(azure_opts);
-            upload::upload_package_to_azure(
-                url::Url::from(data.channel),
-                data.account,
-                data.endpoint_url,
-                &args.package_files,
-                data.force,
-            )
-            .await
-        }
         ServerType::CondaForge(conda_forge_opts) => {
             let conda_forge_data = CondaForgeData::from(conda_forge_opts);
             upload::conda_forge::upload_packages_to_conda_forge(

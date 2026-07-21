@@ -52,7 +52,7 @@ pub struct Opt {
     json: bool,
 }
 
-pub async fn search(opt: Opt) -> miette::Result<()> {
+pub async fn search(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
@@ -83,7 +83,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     );
 
     // Create HTTP client
-    let download_client = super::client::create_client_with_middleware()?;
+    let download_client = super::client::create_client_with_middleware(offline)?;
 
     // Create gateway
     let gateway = Gateway::builder()
@@ -91,6 +91,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: opt.sharded,
+                cache_action: super::client::repodata_cache_action(offline),
                 ..SourceConfig::default()
             },
             per_channel: HashMap::new(),

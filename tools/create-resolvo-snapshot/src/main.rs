@@ -2,9 +2,8 @@ use std::{collections::HashSet, io::BufWriter, path::Path};
 
 use clap::Parser;
 use itertools::Itertools;
-use rattler_conda_types::{Channel, ChannelConfig, Platform};
-use rattler_networking::LazyClient;
-use rattler_repodata_gateway::fetch::FetchRepoDataOptions;
+use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, Platform};
+use rattler_repodata_gateway::Gateway;
 use rattler_solve::{ChannelPriority, SolveStrategy};
 
 #[derive(Parser)]
@@ -33,42 +32,57 @@ async fn main() {
     )
     .unwrap();
 
-    // Fetch the repodata for all the subdirs.
+    // Determine the subdirs to query.
     let mut subdirs: HashSet<Platform> = HashSet::from_iter(args.subdir);
     if subdirs.is_empty() {
         subdirs.insert(Platform::current());
     }
     subdirs.insert(Platform::NoArch);
+    let platforms = subdirs.iter().copied().collect_vec();
 
-    let client = LazyClient::default();
-    let mut records = Vec::new();
-    for &subdir in &subdirs {
-        eprintln!("fetching repodata for {subdir:?}..");
-        let repodata = rattler_repodata_gateway::fetch::fetch_repo_data(
-            channel.platform_url(subdir),
-            client.clone(),
+    // Construct a gateway to fetch repodata. The gateway transparently handles
+    // sharded repodata which is required to capture channels like `conda-pypi`
+    // that do not expose a monolithic `repodata.json`.
+    let gateway = Gateway::builder()
+        .with_cache_dir(
             rattler_cache::default_cache_dir()
                 .unwrap()
                 .join(rattler_cache::REPODATA_CACHE_DIR),
-            FetchRepoDataOptions::default(),
-            None,
         )
+        .finish();
+
+    // Enumerate every package name available in the channel so we can pull in
+    // the complete set of records, not just those reachable from a single spec.
+    eprintln!("fetching package names..");
+    let names = gateway
+        .names(vec![channel.clone()], platforms.clone())
+        .await
+        .unwrap();
+    eprintln!("found {} package names", names.len());
+
+    // Query the repodata for all names. Providing every name guarantees that the
+    // resulting snapshot captures the entire channel.
+    eprintln!("fetching repodata..");
+    let specs = names.into_iter().map(MatchSpec::from).collect_vec();
+    let repodatas = gateway
+        .query(vec![channel.clone()], platforms, specs)
+        .recursive(false)
         .await
         .unwrap();
 
-        eprintln!("parsing repodata..");
-        let repodata = rattler_conda_types::RepoData::from_path(repodata.repo_data_json_path)
-            .unwrap()
-            .into_repo_data_records(&channel);
-
-        records.push(repodata);
-    }
+    let total_records: usize = repodatas
+        .iter()
+        .map(rattler_repodata_gateway::RepoData::len)
+        .sum();
+    eprintln!("fetched {total_records} records");
 
     // Create the dependency provider
     let provider = rattler_solve::resolvo::CondaDependencyProvider::new(
-        records
-            .iter()
-            .map(rattler_solve::resolvo::RepoData::from_iter),
+        repodatas.iter().map(|repo_data| {
+            repo_data
+                .iter()
+                .collect::<rattler_solve::resolvo::RepoData<'_>>()
+        }),
         &[],
         &[],
         &[],

@@ -164,7 +164,7 @@ jobs:
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
+          distro: ubuntu22.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update
@@ -212,7 +212,7 @@ jobs:
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
+          distro: ubuntu22.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update

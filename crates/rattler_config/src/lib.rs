@@ -1,12 +1,87 @@
+//! `rattler_config` is the shared configuration model of the rattler
+//! ecosystem: the same `config.toml` keys are understood by pixi,
+//! rattler-build, rattler-index and any other tool built on rattler.
+//!
+//! # Extending the configuration
+//!
+//! Tools plug their own keys into the shared model by defining an
+//! *extension* struct and using it as the type parameter of
+//! [`config::ConfigBase`]. Extension keys live at the top level of the same
+//! TOML document, next to the shared keys:
+//!
+//! ```rust
+//! use rattler_config::config::{Config, ConfigBase, MergeError};
+//! use serde::{Deserialize, Serialize};
+//!
+//! /// Keys that only make sense for *my* tool.
+//! #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+//! #[serde(rename_all = "kebab-case")]
+//! pub struct MyToolConfig {
+//!     #[serde(default, skip_serializing_if = "Option::is_none")]
+//!     pub fancy_output: Option<bool>,
+//! }
+//!
+//! impl Config for MyToolConfig {
+//!     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
+//!         Ok(Self {
+//!             fancy_output: other.fancy_output.or(self.fancy_output),
+//!         })
+//!     }
+//!
+//!     // `validate` and `keys` have sensible defaults, override as needed.
+//!     fn keys(&self) -> Vec<String> {
+//!         vec!["fancy-output".to_string()]
+//!     }
+//! }
+//!
+//! pub type MyConfig = ConfigBase<MyToolConfig>;
+//!
+//! let (config, unused_keys) = MyConfig::from_toml_str(
+//!     r#"
+//!     default-channels = ["conda-forge"]
+//!     fancy-output = true
+//!     definitely-a-typo = 1
+//!     "#,
+//! )
+//! .unwrap();
+//! assert_eq!(config.default_channels.as_ref().map(Vec::len), Some(1));
+//! assert_eq!(config.extensions.fancy_output, Some(true));
+//! assert!(unused_keys.contains("definitely-a-typo"));
+//! ```
+//!
+//! Extensions must not use `#[serde(deny_unknown_fields)]`: every extension
+//! is deserialized from the full configuration document and has to tolerate
+//! the shared keys (and the keys of sibling tools).
+//!
+//! # Loading
+//!
+//! [`config::ConfigBase::load_from_files`] merges a list of files in order
+//! (later files win) and validates the result.
+//! [`config::ConfigBase::load_from_default_locations`] does the same for the
+//! conventional locations described in [`locations`], which is how tools
+//! share one configuration: e.g. rattler-build can load
+//! `&["pixi", "rattler-build"]` to layer its own configuration on top of
+//! pixi's.
+//!
+//! # Editing
+//!
+//! With the `edit` feature (enabled by default), [`config::ConfigBase::set`]
+//! sets or unsets any key — including extension keys — by its dotted TOML
+//! path, and [`config::ConfigBase::save`] writes the configuration back to
+//! disk.
+
 pub mod config;
 #[cfg(feature = "edit")]
 pub mod edit;
+pub mod locations;
+
+pub use config::{CommonConfig, Config, ConfigBase, LoadError, MergeError, NoExtension};
 
 #[cfg(test)]
 mod tests {
     use crate::config::build::PackageFormatAndCompression;
     use crate::config::tls::TlsRootCerts;
-    use crate::config::{Config, ConfigBase, MergeError, ValidationError};
+    use crate::config::{CommonConfig, Config, ConfigBase, MergeError, ValidationError};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -29,10 +104,6 @@ mod tests {
     }
 
     impl Config for TestExtension {
-        fn get_extension_name(&self) -> String {
-            "test".to_string()
-        }
-
         fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
             Ok(Self {
                 custom_field: other.custom_field.clone().or(self.custom_field),
@@ -81,7 +152,7 @@ mod tests {
         let config = TestConfig::default();
         assert_eq!(config.default_channels, None);
         assert_eq!(config.authentication_override_file, None);
-        assert_eq!(config.tls_no_verify, Some(false));
+        assert_eq!(config.tls_no_verify, None);
         assert_eq!(config.tls_root_certs, None);
         assert!(config.mirrors.is_empty());
         assert!(config.s3_options.0.is_empty());
@@ -136,6 +207,24 @@ mod tests {
             )
             .unwrap();
         assert_eq!(config.mirrors.len(), 1);
+    }
+
+    #[test]
+    fn test_edit_extension_values() {
+        let mut config = TestConfig::default();
+
+        // Extension keys are editable without any extension-specific code.
+        config
+            .set("custom_field", Some("hello".to_string()))
+            .unwrap();
+        assert_eq!(config.extensions.custom_field, Some("hello".to_string()));
+
+        config.set("numeric_field", Some("42".to_string())).unwrap();
+        assert_eq!(config.extensions.numeric_field, Some(42));
+
+        // ... and can be unset again.
+        config.set("custom_field", None).unwrap();
+        assert_eq!(config.extensions.custom_field, None);
     }
 
     #[test]
@@ -271,16 +360,18 @@ mod tests {
         config
             .set("run-post-link-scripts", Some("insecure".to_string()))
             .unwrap();
-        // Note: The actual implementation would need to be checked for the exact enum value
         assert!(config.run_post_link_scripts.is_some());
     }
 
     #[test]
     fn test_config_merge() {
         let config1 = TestConfig {
-            default_channels: Some(vec!["conda-forge".parse().unwrap()]),
-            tls_no_verify: Some(false),
-            tls_root_certs: Some(TlsRootCerts::Webpki),
+            common: CommonConfig {
+                default_channels: Some(vec!["conda-forge".parse().unwrap()]),
+                tls_no_verify: Some(false),
+                tls_root_certs: Some(TlsRootCerts::Webpki),
+                ..Default::default()
+            },
             extensions: TestExtension {
                 custom_field: Some("original".to_string()),
                 numeric_field: Some(42),
@@ -290,9 +381,12 @@ mod tests {
         };
 
         let config2 = TestConfig {
-            default_channels: Some(vec!["bioconda".parse().unwrap()]),
-            authentication_override_file: Some(PathBuf::from("/new/auth")),
-            tls_root_certs: Some(TlsRootCerts::System),
+            common: CommonConfig {
+                default_channels: Some(vec!["bioconda".parse().unwrap()]),
+                authentication_override_file: Some(PathBuf::from("/new/auth")),
+                tls_root_certs: Some(TlsRootCerts::System),
+                ..Default::default()
+            },
             extensions: TestExtension {
                 custom_field: Some("updated".to_string()),
                 bool_field: Some(true),
@@ -325,6 +419,65 @@ mod tests {
         assert_eq!(merged.extensions.numeric_field, Some(42)); // from config1
         assert_eq!(merged.extensions.bool_field, Some(true)); // from config2
         assert_eq!(merged.extensions.array_field.len(), 2); // from config2
+    }
+
+    #[test]
+    fn test_from_toml_str_reports_unused_keys() {
+        let toml = r#"
+            default-channels = ["conda-forge"]
+            custom_field = "consumed by the extension"
+            definitely-a-typo = true
+
+            [concurrency]
+            solves = 3
+            bogus = 1
+
+            [repodata-config]
+            disable-bzip2 = true
+            disable-jlap = true
+        "#;
+
+        let (config, unused) = TestConfig::from_toml_str(toml).unwrap();
+
+        // Values consumed by either the common config or the extension.
+        assert_eq!(config.default_channels.as_ref().map(Vec::len), Some(1));
+        assert_eq!(
+            config.extensions.custom_field.as_deref(),
+            Some("consumed by the extension")
+        );
+        assert_eq!(config.concurrency.solves, 3);
+        assert_eq!(config.repodata_config.default.disable_bzip2, Some(true));
+
+        // Keys nobody understands are reported, at full depth.
+        assert!(unused.contains("definitely-a-typo"));
+        assert!(unused.contains("concurrency.bogus"));
+        assert!(unused.contains("repodata-config.disable-jlap"));
+
+        // Known keys are not reported.
+        assert!(!unused.iter().any(|k| k.starts_with("default-channels")));
+        assert!(!unused.contains("custom_field"));
+    }
+
+    #[test]
+    fn test_no_extension_reports_extension_keys_as_unused() {
+        let toml = r#"
+            default-channels = ["conda-forge"]
+            custom_field = "nobody consumes this"
+        "#;
+
+        let (_, unused) = ConfigBase::<crate::NoExtension>::from_toml_str(toml).unwrap();
+        assert!(unused.contains("custom_field"));
+    }
+
+    #[test]
+    fn test_validation_recurses_into_extension() {
+        let toml = "numeric_field = 101";
+        let (config, _) = TestConfig::from_toml_str(toml).unwrap();
+        assert!(config.validate().is_err());
+
+        let toml = "[concurrency]\nsolves = 0";
+        let (config, _) = TestConfig::from_toml_str(toml).unwrap();
+        assert!(config.validate().is_err());
     }
 
     #[test]
@@ -436,6 +589,7 @@ mod tests {
         );
         assert_eq!(loaded_config.tls_no_verify, Some(true));
         assert_eq!(loaded_config.concurrency.solves, 8);
+        assert_eq!(loaded_config.loaded_from, vec![config_path]);
     }
 
     #[test]
@@ -677,12 +831,19 @@ mod tests {
             crate::edit::ConfigEditError::UnknownKey { .. }
         ));
 
-        // Test invalid JSON for mirrors
+        // Unsetting an unknown key is also rejected
+        let result = config.set("unknown-key", None);
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::edit::ConfigEditError::UnknownKey { .. }
+        ));
+
+        // Test invalid value for mirrors (a map is required)
         let result = config.set("mirrors", Some("invalid json".to_string()));
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::edit::ConfigEditError::JsonParseError { .. }
+            crate::edit::ConfigEditError::InvalidValue { .. }
         ));
 
         // Test invalid boolean
@@ -690,7 +851,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::edit::ConfigEditError::BoolParseError { .. }
+            crate::edit::ConfigEditError::InvalidValue { .. }
         ));
 
         // Test invalid TLS root certificate selection
@@ -706,7 +867,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::edit::ConfigEditError::NumberParseError { .. }
+            crate::edit::ConfigEditError::InvalidValue { .. }
         ));
 
         // Test invalid URL
@@ -714,7 +875,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            crate::edit::ConfigEditError::UrlParseError { .. }
+            crate::edit::ConfigEditError::InvalidValue { .. }
         ));
     }
 
@@ -725,30 +886,38 @@ mod tests {
 
         // Verify that all expected key categories are present
         assert!(keys.iter().any(|k| k.starts_with("build.")));
-        assert!(keys.iter().any(|k| k.starts_with("repodata.")));
+        assert!(keys.iter().any(|k| k.starts_with("repodata-config.")));
         assert!(keys.iter().any(|k| k.starts_with("concurrency.")));
-        assert!(keys.iter().any(|k| k.starts_with("proxy.")));
-        assert!(keys.iter().any(|k| k.starts_with("test.")));
+        assert!(keys.iter().any(|k| k.starts_with("proxy-config.")));
+
+        // Extension keys are listed as well
+        assert!(keys.contains(&"custom_field".to_string()));
 
         // Verify core keys are present
-        assert!(keys.contains(&"default_channels".to_string()));
-        assert!(keys.contains(&"authentication_override_file".to_string()));
-        assert!(keys.contains(&"tls_no_verify".to_string()));
-        assert!(keys.contains(&"tls_root_certs".to_string()));
+        assert!(keys.contains(&"default-channels".to_string()));
+        assert!(keys.contains(&"authentication-override-file".to_string()));
+        assert!(keys.contains(&"tls-no-verify".to_string()));
+        assert!(keys.contains(&"tls-root-certs".to_string()));
         assert!(keys.contains(&"mirrors".to_string()));
     }
 
     #[test]
     fn test_merge_multiple_configs() {
         let base_config = TestConfig {
-            default_channels: Some(vec!["defaults".parse().unwrap()]),
-            tls_no_verify: Some(false),
+            common: CommonConfig {
+                default_channels: Some(vec!["defaults".parse().unwrap()]),
+                tls_no_verify: Some(false),
+                ..Default::default()
+            },
             ..Default::default()
         };
 
         let user_config = TestConfig {
-            default_channels: Some(vec!["conda-forge".parse().unwrap()]),
-            authentication_override_file: Some(PathBuf::from("/home/user/.conda-auth")),
+            common: CommonConfig {
+                default_channels: Some(vec!["conda-forge".parse().unwrap()]),
+                authentication_override_file: Some(PathBuf::from("/home/user/.conda-auth")),
+                ..Default::default()
+            },
             extensions: TestExtension {
                 custom_field: Some("user-value".to_string()),
                 ..Default::default()
@@ -757,9 +926,12 @@ mod tests {
         };
 
         let project_config = TestConfig {
-            concurrency: crate::config::concurrency::ConcurrencyConfig {
-                solves: 4,
-                downloads: 8,
+            common: CommonConfig {
+                concurrency: crate::config::concurrency::ConcurrencyConfig {
+                    solves: 4,
+                    downloads: 8,
+                },
+                ..Default::default()
             },
             extensions: TestExtension {
                 numeric_field: Some(50),

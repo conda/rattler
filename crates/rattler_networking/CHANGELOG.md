@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.2](https://github.com/conda/rattler/compare/rattler_networking-v0.30.1...rattler_networking-v0.30.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.30.1](https://github.com/conda/rattler/compare/rattler_networking-v0.30.0...rattler_networking-v0.30.1) - 2026-07-09
+
+### Fixed
+
+- make Windows keyring credential search use a valid regex ([#2564](https://github.com/conda/rattler/pull/2564))
+
+### Other
+
+- make the extension mechanism reliable and self-serving ([#2557](https://github.com/conda/rattler/pull/2557))
+
+### Added
+
+- `MirrorMiddleware::from_config`, `s3_middleware::compute_s3_config_from_config` and the new `proxy::proxies_from_config` helper (feature `rattler_config`) build middlewares / reqwest proxies directly from the shared rattler configuration (`CommonConfig`; any `&ConfigBase<T>` coerces into it).
+
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_networking-v0.29.0...rattler_networking-v0.30.0) - 2026-06-26
+
+### Added
+
+- add offline mode to rattler CLI ([#2537](https://github.com/conda/rattler/pull/2537))
+
+### Fixed
+
+- coalesce concurrent OAuth token refresh ([#2522](https://github.com/conda/rattler/pull/2522))
+
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_networking-v0.28.1...rattler_networking-v0.29.0) - 2026-06-17
+
+### Added
+
+- [**breaking**] challenge-reactive AuthChallengeMiddleware with prefix.dev OIDC wiring ([#2504](https://github.com/conda/rattler/pull/2504))
+- improved logout experience ([#2457](https://github.com/conda/rattler/pull/2457))
+
 ## [0.28.1](https://github.com/conda/rattler/compare/rattler_networking-v0.28.0...rattler_networking-v0.28.1) - 2026-06-09
 
 ### Other

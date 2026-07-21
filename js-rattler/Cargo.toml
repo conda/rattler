@@ -13,26 +13,26 @@ path = "crate/lib.rs"
 default = ["console_error_panic_hook"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde-wasm-bindgen = "0.6.5"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
 
-wasm-bindgen = "0.2.95"
-wasm-bindgen-futures = "0.4.50"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.7", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
 
 # `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
 # compared to the default allocator's ~10K. It is slower than the default
 # allocator, however.
 #
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
-wee_alloc = { version = "0.4.5", optional = true }
+wee_alloc = { version = "0.4", optional = true }
 
-thiserror = "2.0.12"
+thiserror = "2"
 
 hex = "0.4"
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
@@ -40,12 +40,12 @@ rattler_digest = { path = "../crates/rattler_digest" }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
 
-url = "2.5.4"
+url = "2"
 
 jiff = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
-reqwest = { version = "0.13.3", default-features = false, features = ["default-tls"] }
-reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5.1", default-features = false }
+reqwest = { version = "0.13", default-features = false, features = ["default-tls"] }
+reqwest-middleware = { package = "astral-reqwest-middleware", version = "0.5", default-features = false }
 
 # We have transient dependencies on getrandom 0.2 and 0.3 which need WASM features enabled.
 [dependencies.getrandom_v02]
@@ -64,7 +64,7 @@ version = "0.4"
 features = ["wasm_js"]
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.45"
+wasm-bindgen-test = "0.3"
 
 [profile.release]
 ## Tell `rustc` to optimize for small code size.

@@ -3,6 +3,7 @@
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
 use crate::repo_data::{ChannelRelations, RepodataRevisions, V3Packages};
+use crate::utils::serde::{sort_index_map_alphabetically, sort_set_alphabetically};
 use indexmap::IndexMap;
 use jiff::Timestamp;
 use rattler_digest::{Sha256, Sha256Hash, serde::SerializableHash};
@@ -64,6 +65,44 @@ pub struct ShardedSubdirInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{PackageName, Version};
+
+    /// Shards are content-addressed (stored under the hash of their bytes), so
+    /// serialization must not depend on the insertion order of the underlying
+    /// maps and sets — otherwise every producer run writes a fresh shard file
+    /// and orphans the previous one.
+    #[test]
+    fn test_shard_serialization_is_insertion_order_independent() {
+        let entry = |n: u64| {
+            let key =
+                DistArchiveIdentifier::try_from_filename(&format!("multi-1.0.0-h_{n}.tar.bz2"))
+                    .unwrap();
+            let record = PackageRecord::new(
+                PackageName::new_unchecked("multi"),
+                Version::major(1),
+                format!("h_{n}"),
+            );
+            (key, record)
+        };
+
+        let shard_with_order = |order: &mut dyn Iterator<Item = u64>| {
+            let mut shard = Shard::default();
+            for n in order {
+                let (key, record) = entry(n);
+                shard.conda_packages.insert(key.clone(), record.clone());
+                shard.packages.insert(key.clone(), record);
+                shard.removed.insert(key);
+            }
+            rmp_serde::to_vec_named(&shard).unwrap()
+        };
+
+        let ascending = shard_with_order(&mut (0..10));
+        let descending = shard_with_order(&mut (0..10).rev());
+        assert_eq!(
+            ascending, descending,
+            "shard bytes must be independent of insertion order"
+        );
+    }
 
     // See https://github.com/conda/ceps/blob/main/cep-0042.md
     #[test]
@@ -100,13 +139,22 @@ mod tests {
 }
 
 /// An individual shard that contains repodata for a single package name.
+///
+/// Shards are content-addressed by the hash of their serialized bytes, so all
+/// maps and sets are sorted during serialization to keep the output
+/// deterministic regardless of insertion order.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
+    #[serde(serialize_with = "sort_index_map_alphabetically")]
     pub packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// The records for all `.conda` packages
-    #[serde(rename = "packages.conda", default)]
+    #[serde(
+        rename = "packages.conda",
+        default,
+        serialize_with = "sort_index_map_alphabetically"
+    )]
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// Packages stored under the `v3` top-level key.
@@ -114,6 +162,6 @@ pub struct Shard {
     pub v3: V3Packages,
 
     /// The file names of all removed for this shard
-    #[serde(default)]
+    #[serde(default, serialize_with = "sort_set_alphabetically")]
     pub removed: ahash::HashSet<DistArchiveIdentifier>,
 }

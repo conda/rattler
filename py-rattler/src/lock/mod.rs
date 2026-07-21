@@ -62,7 +62,7 @@ enum LockFileState {
 ///
 /// Lock-files can store information for multiple platforms and for multiple
 /// environments.
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyLockFile {
     state: Mutex<LockFileState>,
 }
@@ -296,7 +296,7 @@ enum LockPlatformInner {
 ///
 /// This provides access to the platform name, the underlying conda subdir,
 /// and any virtual packages associated with the platform.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyLockPlatform {
     inner: LockPlatformInner,
@@ -424,7 +424,7 @@ impl PyLockPlatform {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyEnvironment {
     environment: OwnedEnvironment,
@@ -600,7 +600,7 @@ impl PyEnvironment {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyLockChannel {
@@ -641,7 +641,7 @@ impl PyLockChannel {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyLockedPackage {
@@ -788,7 +788,7 @@ impl PyLockedPackage {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPypiPackageData {
@@ -876,7 +876,7 @@ impl PyPypiPackageData {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPackageHashes {

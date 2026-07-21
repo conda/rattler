@@ -4,7 +4,10 @@ use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
-use rattler_solve::{ChannelPriority, resolvo::CondaDependencyProvider};
+use rattler_solve::{
+    ChannelPriority,
+    resolvo::{CondaDependencyProvider, NameType},
+};
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
@@ -42,7 +45,9 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                 )
                 .expect("failed to create dependency provider");
 
-                let name = dependency_provider.pool.intern_package_name(&package_name);
+                let name = dependency_provider
+                    .pool
+                    .intern_package_name(NameType::from(&package_name));
                 let version_set = dependency_provider
                     .pool
                     .intern_version_set(name, match_spec.into_nameless().1.into());
@@ -68,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .join("channels")
         .join("conda-forge");
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
-    let channel = Channel::from_directory(&channel_path);
+    let channel = Channel::try_from_directory(&channel_path).unwrap();
 
     let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");

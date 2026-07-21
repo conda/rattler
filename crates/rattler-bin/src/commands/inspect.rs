@@ -15,8 +15,8 @@ pub struct Opt {
     limit: usize,
 }
 
-pub async fn inspect(opt: Opt) -> miette::Result<()> {
-    let client = super::client::create_client_with_middleware()?;
+pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
+    let client = super::client::create_client_with_middleware(offline)?;
 
     let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
         .await

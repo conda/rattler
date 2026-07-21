@@ -159,11 +159,13 @@ pub async fn simple_solve(
         })
         .finish();
 
-    let repodata = gateway
+    let output = gateway
         .query(channels, platforms, specs.iter().cloned())
         .recursive(true)
         .execute()
         .await?;
+    crate::gateway::emit_gateway_warnings(output.warnings);
+    let repodata = output.repodata;
 
     // We need this to find depends for locked packages
     let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata

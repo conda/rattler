@@ -1,0 +1,20 @@
+[package]
+name = "rattler_azure"
+version = "0.1.0"
+description = "A crate to streamline interaction with Azure Blob storage for rattler"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+clap = { workspace = true, optional = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+serde = { workspace = true, optional = true }

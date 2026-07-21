@@ -1,29 +1,15 @@
-use std::convert::TryFrom;
-
 use nom::{
     IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_while},
     character::complete::{alpha1, digit1, multispace0, u32},
-    combinator::{all_consuming, cut, map, not, opt, recognize, value},
+    combinator::{cut, not, opt, recognize, value},
     error::{ContextError, ParseError, context},
-    multi::separated_list1,
     sequence::{delimited, preceded, terminated},
 };
-use nom_language::error::convert_error;
 use thiserror::Error;
 
-use crate::version_spec::{
-    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
-};
-
-/// A representation of an hierarchy of version constraints e.g.
-/// `1.3.4,>=5.0.1|(1.2.4,>=3.0.1)`.
-#[derive(Debug, Eq, PartialEq)]
-pub(super) enum VersionTree<'a> {
-    Term(&'a str),
-    Group(LogicalOperator, Vec<VersionTree<'a>>),
-}
+use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseVersionTreeError {
@@ -171,149 +157,13 @@ pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a
     .parse(input)
 }
 
-impl<'a> TryFrom<&'a str> for VersionTree<'a> {
-    type Error = ParseVersionTreeError;
-
-    fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        /// Parse a single term or a group surrounded by parenthesis.
-        fn parse_term<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            alt((
-                delimited(
-                    terminated(tag("("), multispace0),
-                    parse_or_group,
-                    preceded(multispace0, tag(")")),
-                ),
-                map(recognize_constraint, |constraint| {
-                    VersionTree::Term(constraint)
-                }),
-            ))
-            .parse(input)
-        }
-
-        /// Given multiple version tree components, flatten the structure as
-        /// much as possible.
-        fn flatten_group(operator: LogicalOperator, args: Vec<VersionTree<'_>>) -> VersionTree<'_> {
-            if args.len() == 1 {
-                args.into_iter().next().unwrap()
-            } else {
-                let mut result = Vec::new();
-                for term in args {
-                    match term {
-                        VersionTree::Group(op, mut others) if op == operator => {
-                            result.append(&mut others);
-                        }
-                        term => result.push(term),
-                    }
-                }
-
-                VersionTree::Group(operator, result)
-            }
-        }
-
-        /// Parses a group of version constraints separated by ,s
-        fn parse_and_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            let (rest, group) =
-                separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)
-                    .parse(input)?;
-            Ok((rest, flatten_group(LogicalOperator::And, group)))
-        }
-
-        /// Parses a group of version constraints
-        fn parse_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            let (rest, group) = separated_list1(
-                delimited(multispace0, tag("|"), multispace0),
-                parse_and_group,
-            )
-            .parse(input)?;
-            Ok((rest, flatten_group(LogicalOperator::Or, group)))
-        }
-
-        // First try with a cheap error type that doesn't allocate on every
-        // failed alt() branch. Only reparse with VerboseError on failure to
-        // produce a nice error message.
-        match all_consuming(parse_or_group::<nom::error::Error<&str>>).parse(input) {
-            Ok((_, tree)) => Ok(tree),
-            Err(_) => {
-                match all_consuming(parse_or_group::<nom_language::error::VerboseError<&str>>)
-                    .parse(input)
-                {
-                    Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
-                        Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
-                    }
-                    _ => Err(ParseVersionTreeError::ParseError(
-                        "unknown parse error".to_string(),
-                    )),
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
-    use super::{LogicalOperator, VersionTree, parse_operator, recognize_version};
+    use super::{parse_operator, recognize_version};
     use crate::version_spec::{
         EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
         version_tree::{parse_version_epoch, recognize_constraint},
     };
-
-    #[test]
-    fn test_treeify() {
-        use LogicalOperator::{And, Or};
-        use VersionTree::{Group, Term};
-
-        assert_eq!(VersionTree::try_from("1.2.3").unwrap(), Term("1.2.3"));
-
-        assert_eq!(
-            VersionTree::try_from("1.2.3,(4.5.6),<=7.8.9").unwrap(),
-            Group(And, vec![Term("1.2.3"), Term("4.5.6"), Term("<=7.8.9")])
-        );
-        assert_eq!(
-            VersionTree::try_from("((1.2.3)|(4.5.6))|<=7.8.9").unwrap(),
-            Group(Or, vec![Term("1.2.3"), Term("4.5.6"), Term("<=7.8.9")])
-        );
-
-        assert_eq!(
-            VersionTree::try_from("1.2.3,4.5.6|<=7.8.9").unwrap(),
-            Group(
-                Or,
-                vec![
-                    Group(And, vec![Term("1.2.3"), Term("4.5.6")]),
-                    Term("<=7.8.9")
-                ]
-            )
-        );
-
-        assert_eq!(VersionTree::try_from("((((1.5))))").unwrap(), Term("1.5"));
-
-        assert_eq!(
-            VersionTree::try_from("((1.5|((1.6|1.7), 1.8), 1.9 |2.0))|2.1").unwrap(),
-            Group(
-                Or,
-                vec![
-                    Term("1.5"),
-                    Group(
-                        And,
-                        vec![
-                            Group(Or, vec![Term("1.6"), Term("1.7")]),
-                            Term("1.8"),
-                            Term("1.9")
-                        ]
-                    ),
-                    Term("2.0"),
-                    Term("2.1")
-                ]
-            )
-        );
-    }
 
     #[test]
     fn test_parse_operator() {
@@ -486,10 +336,5 @@ mod tests {
             recognize_constraint::<Err<'_>>(">=3.8.*,<3.9"),
             Ok((",<3.9", ">=3.8.*"))
         );
-    }
-
-    #[test]
-    fn issue_204() {
-        assert!(VersionTree::try_from(">=3.8<3.9").is_err());
     }
 }

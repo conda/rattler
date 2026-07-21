@@ -1,41 +1,35 @@
 //! Trusted publishing (via OIDC).
 //!
+//! Owns the OIDC exchange with the server's mint endpoint and provides
+//! [`TrustedPublishingFlow`] and [`PrefixAuthAmbientFlow`] for
+//! [`crate::challenge_middleware`].
+//!
 //! The flow:
 //! 1. Ask `ambient-id` for an OIDC ID token with the configured `audience`
-//!    claim. It owns CI-provider detection and returns `None` when no
-//!    supported provider is present.
-//! 2. Exchange that ID token at the server's mint endpoint for a short-lived
-//!    bearer token usable against the server (read or write, depending on
-//!    server policy).
+//!    claim (`None` outside supported CI providers).
+//! 2. Exchange it at the server's mint endpoint for a short-lived bearer
+//!    token.
 
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::sync::Arc;
 
-use base64::{
-    Engine as _,
-    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
-};
 use reqwest::StatusCode;
-use reqwest_middleware::{ClientWithMiddleware, Middleware, Next};
-use serde::{Deserialize, Serialize};
+use reqwest_middleware::ClientWithMiddleware;
+use serde::Serialize;
 use thiserror::Error;
 use url::Url;
 
-/// Refresh minted JWT tokens before they expire to avoid sending a token that
-/// becomes invalid while a request is in flight.
-const TOKEN_REFRESH_MARGIN: Duration = Duration::from_secs(60);
+use crate::challenge_middleware::{AuthFlow, AuthFlowError, BearerToken, Challenge};
+
+/// Default path of the prefix.dev-convention mint endpoint.
+const DEFAULT_MINT_PATH: &str = "/api/oidc/mint_token";
 
 /// Knobs for the trusted-publishing flow. Use
-/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults, or
-/// construct directly to point at a different server.
+/// [`for_prefix_dev`](Self::for_prefix_dev) for the prefix.dev defaults.
 ///
-/// On GitLab CI, the OIDC ID token must be populated by the runner under an
-/// env var whose name is derived from [`audience`](Self::audience) by
-/// `ambient-id` (uppercasing the audience and replacing non-alphanumeric
-/// characters with `_`, then suffixing `_ID_TOKEN`). For audience
-/// `prefix.dev`, that resolves to `PREFIX_DEV_ID_TOKEN` — set this via the
+/// On GitLab CI the runner must populate the OIDC ID token under an env
+/// var that `ambient-id` derives from [`audience`](Self::audience)
+/// (uppercased, non-alphanumerics to `_`, suffixed `_ID_TOKEN`; audience
+/// `prefix.dev` resolves to `PREFIX_DEV_ID_TOKEN`). Set it via the
 /// `id_tokens` block in `.gitlab-ci.yml`.
 #[derive(Debug, Clone)]
 pub struct TrustedPublishingOptions {
@@ -43,8 +37,11 @@ pub struct TrustedPublishingOptions {
     /// this against the trusted-publisher configuration before minting a
     /// token.
     pub audience: String,
-    /// Path on the server (joined onto `server_url`) where the ID token is
-    /// exchanged for a bearer token.
+    /// Path on the server where the ID token is exchanged for a bearer token.
+    ///
+    /// Joined onto challenged URLs with [`Url::join`]; it must start with
+    /// `/` or it would resolve relative to the challenged URL's path.
+    /// [`TrustedPublishingFlow::new`] normalizes a missing leading slash.
     pub mint_path: String,
 }
 
@@ -54,7 +51,39 @@ impl TrustedPublishingOptions {
     pub fn for_prefix_dev() -> Self {
         Self {
             audience: "prefix.dev".to_string(),
-            mint_path: "/api/oidc/mint_token".to_string(),
+            mint_path: DEFAULT_MINT_PATH.to_string(),
+        }
+    }
+
+    /// Options for a server following the prefix.dev convention: the OIDC
+    /// audience is the server's host name (scoping each ID token to the
+    /// server it is sent to) and tokens are minted at
+    /// `/api/oidc/mint_token`.
+    ///
+    /// Returns `None` when `server` has no host. Does not validate scheme
+    /// or host; callers handling ambient CI credentials must enforce
+    /// `https` and an allow-list themselves. The audience is the
+    /// URL-normalized host: lowercased, punycode, no port.
+    pub fn for_host(server: &Url) -> Option<Self> {
+        Some(Self {
+            audience: server.host_str()?.to_string(),
+            mint_path: DEFAULT_MINT_PATH.to_string(),
+        })
+    }
+
+    /// Like [`Self::for_host`], except prefix.dev deployments
+    /// (`prefix.dev` and `*.prefix.dev`) get the shared audience
+    /// `prefix.dev`, which is what they validate GitHub OIDC tokens
+    /// against; tokens are still minted at the deployment's own host.
+    ///
+    /// Returns `None` when `server` has no host. The [`Self::for_host`]
+    /// caveats apply.
+    pub fn for_server(server: &Url) -> Option<Self> {
+        let host = server.host_str()?;
+        if host == "prefix.dev" || host.ends_with(".prefix.dev") {
+            Some(Self::for_prefix_dev())
+        } else {
+            Self::for_host(server)
         }
     }
 }
@@ -64,7 +93,7 @@ pub enum TrustedPublishResult {
     /// We didn't check for trusted publishing (no CI provider detected).
     Skipped,
     /// We checked for trusted publishing and got a token.
-    Configured(TrustedPublishingToken),
+    Configured(BearerToken),
     /// We checked for optional trusted publishing, but it didn't succeed.
     Ignored(TrustedPublishingError),
 }
@@ -91,62 +120,14 @@ pub enum TrustedPublishingError {
     OidcToken(#[from] ambient_id::Error),
 }
 
-/// A short-lived bearer token minted by the server. The inner string is
-/// `Deserialize`-friendly (the mint endpoint returns the raw token as a JSON
-/// string body) and `Clone` so the same token can be shared across middleware
-/// and stored in auth state.
-#[derive(Clone, Deserialize)]
-#[serde(transparent)]
-pub struct TrustedPublishingToken(String);
-
-impl TrustedPublishingToken {
-    /// Wrap an already-minted token (mostly for tests).
-    pub fn new(token: String) -> Self {
-        Self(token)
-    }
-
-    /// The raw bearer token. Treat as sensitive; don't log it.
-    pub fn secret(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for TrustedPublishingToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("TrustedPublishingToken")
-            .field(&"<redacted>")
-            .finish()
-    }
-}
+/// Deprecated alias kept for backwards compatibility.
+#[deprecated(note = "use `rattler_networking::BearerToken` instead")]
+pub type TrustedPublishingToken = BearerToken;
 
 /// The body sent to the server's mint endpoint.
 #[derive(Serialize)]
 struct MintTokenRequest {
     token: String,
-}
-
-#[derive(Deserialize)]
-struct JwtClaims {
-    exp: Option<u64>,
-}
-
-fn jwt_expiration(token: &str) -> Option<SystemTime> {
-    let mut parts = token.split('.');
-    let _header = parts.next()?;
-    let payload = parts.next()?;
-    let _signature = parts.next()?;
-    if parts.next().is_some() {
-        return None;
-    }
-
-    let payload = URL_SAFE_NO_PAD
-        .decode(payload)
-        .or_else(|_| URL_SAFE.decode(payload))
-        .ok()?;
-    let claims: JwtClaims = serde_json::from_slice(&payload).ok()?;
-    claims
-        .exp
-        .and_then(|exp| UNIX_EPOCH.checked_add(Duration::from_secs(exp)))
 }
 
 /// If applicable, attempt to obtain a bearer token via trusted publishing.
@@ -179,7 +160,7 @@ pub async fn get_token(
     client: &ClientWithMiddleware,
     server_url: &Url,
     options: &TrustedPublishingOptions,
-) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
+) -> Result<Option<BearerToken>, TrustedPublishingError> {
     let detector = ambient_id::Detector::new_with_client(client.clone());
     let Some(oidc_token) = detector.detect(&options.audience).await? else {
         return Ok(None);
@@ -197,7 +178,7 @@ async fn get_publish_token(
     server_url: &Url,
     client: &ClientWithMiddleware,
     options: &TrustedPublishingOptions,
-) -> Result<TrustedPublishingToken, TrustedPublishingError> {
+) -> Result<BearerToken, TrustedPublishingError> {
     let mint_token_url = server_url.join(&options.mint_path)?;
     tracing::info!("Querying the trusted publishing token from {mint_token_url}");
     let mint_token_payload = MintTokenRequest {
@@ -218,9 +199,7 @@ async fn get_publish_token(
         .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
 
     if status.is_success() {
-        Ok(TrustedPublishingToken(
-            String::from_utf8_lossy(&body).to_string(),
-        ))
+        Ok(BearerToken::new(String::from_utf8_lossy(&body).to_string()))
     } else {
         Err(TrustedPublishingError::MintToken(
             status,
@@ -229,185 +208,331 @@ async fn get_publish_token(
     }
 }
 
-/// `reqwest` middleware that injects a [`TrustedPublishingToken`] as a
-/// `Bearer` `Authorization` header for requests targeting a specific channel.
+/// [`AuthFlow`] backed by trusted publishing (CI OIDC).
 ///
-/// Layered alongside [`crate::AuthenticationMiddleware`]: it only sets the
-/// header when no `Authorization` is already present and only when the
-/// request URL's host and path prefix match the configured channel. This
-/// keeps the minted token scoped to the channel it was issued for, instead
-/// of leaking it to unrelated channels (which may share a host, e.g.
-/// `https://prefix.dev/my-channel/` vs `https://prefix.dev/other-channel/`).
-#[derive(Clone, Debug)]
-pub struct TrustedPublishingMiddleware {
-    channel_url: Url,
-    state: TrustedPublishingState,
+/// Responds only to `Bearer` challenges: asks `ambient-id` for an OIDC ID
+/// token (`Ok(None)` outside supported CI providers) and exchanges it at
+/// the challenged host's mint endpoint.
+///
+/// `client` is used only for the mint exchange; it must not itself layer
+/// in [`crate::AuthChallengeMiddleware`] or the mint call will recurse.
+///
+/// # Security
+///
+/// `acquire_token` sends the CI provider's OIDC ID token (a live
+/// credential) to `url`'s origin **without any origin validation of its
+/// own**. Never register this flow directly in the unscoped
+/// [`crate::AuthChallengeMiddleware`]; wrap it in an origin gate such as
+/// [`PrefixAuthAmbientFlow`], or only drive it with URLs of a single
+/// trusted host.
+#[derive(Debug, Clone)]
+pub struct TrustedPublishingFlow {
+    options: TrustedPublishingOptions,
+    client: ClientWithMiddleware,
 }
 
-#[derive(Clone, Debug)]
-enum TrustedPublishingState {
-    /// Caller supplied an already-minted token.
-    Token(TrustedPublishingToken),
-    /// Token will be minted on the first matching request.
-    Lazy {
-        server_url: Url,
-        options: TrustedPublishingOptions,
-        client: ClientWithMiddleware,
-        cache: Arc<Mutex<TrustedPublishingCache>>,
-    },
-}
-
-#[derive(Debug, Default)]
-enum TrustedPublishingCache {
-    #[default]
-    Empty,
-    Disabled,
-    Token(CachedTrustedPublishingToken),
-}
-
-#[derive(Clone, Debug)]
-struct CachedTrustedPublishingToken {
-    token: TrustedPublishingToken,
-    expires_at: Option<SystemTime>,
-}
-
-impl CachedTrustedPublishingToken {
-    fn new(token: TrustedPublishingToken) -> Self {
-        let expires_at = jwt_expiration(token.secret());
-        Self { token, expires_at }
-    }
-
-    fn is_fresh(&self, now: SystemTime) -> bool {
-        self.expires_at
-            .is_none_or(|expires_at| now + TOKEN_REFRESH_MARGIN < expires_at)
-    }
-}
-
-impl TrustedPublishingMiddleware {
-    /// Create a middleware that will mint a token lazily on the first
-    /// matching request using `options`. `client` is used only for the OIDC
-    /// mint exchange; it must not itself layer in `TrustedPublishingMiddleware`
-    /// or the mint call will recurse.
-    pub fn new(
-        server_url: Url,
-        options: TrustedPublishingOptions,
-        client: ClientWithMiddleware,
-    ) -> Self {
-        let channel_url = normalize_channel_url(&server_url);
-        Self {
-            channel_url,
-            state: TrustedPublishingState::Lazy {
-                server_url,
-                options,
-                client,
-                cache: Arc::new(Mutex::new(TrustedPublishingCache::Empty)),
-            },
+impl TrustedPublishingFlow {
+    /// Create a flow with custom [`TrustedPublishingOptions`]. A missing
+    /// leading `/` on [`TrustedPublishingOptions::mint_path`] is normalized.
+    pub fn new(mut options: TrustedPublishingOptions, client: ClientWithMiddleware) -> Self {
+        if !options.mint_path.starts_with('/') {
+            options.mint_path.insert(0, '/');
         }
+        Self { options, client }
     }
 
-    /// Create a middleware that injects an already-minted `token` on
-    /// requests whose URL host and path prefix match `server_url`.
-    pub fn with_token(server_url: &Url, token: TrustedPublishingToken) -> Self {
-        Self {
-            channel_url: normalize_channel_url(server_url),
-            state: TrustedPublishingState::Token(token),
-        }
+    /// Create a flow preconfigured for prefix.dev.
+    pub fn for_prefix_dev(client: ClientWithMiddleware) -> Self {
+        Self::new(TrustedPublishingOptions::for_prefix_dev(), client)
     }
-
-    /// Resolve the token to inject, performing (and caching) the OIDC
-    /// exchange on demand for the `Lazy` variant.
-    async fn token(&self) -> Option<TrustedPublishingToken> {
-        match &self.state {
-            TrustedPublishingState::Token(token) => Some(token.clone()),
-            TrustedPublishingState::Lazy {
-                server_url,
-                options,
-                client,
-                cache,
-            } => {
-                {
-                    let cache = cache.lock().expect("trusted publishing cache poisoned");
-                    match &*cache {
-                        TrustedPublishingCache::Token(token)
-                            if token.is_fresh(SystemTime::now()) =>
-                        {
-                            return Some(token.token.clone());
-                        }
-                        TrustedPublishingCache::Disabled => return None,
-                        TrustedPublishingCache::Empty | TrustedPublishingCache::Token(_) => {}
-                    }
-                }
-
-                let token = match check_trusted_publishing(client, server_url, options).await {
-                    TrustedPublishResult::Configured(token) => Some(token),
-                    TrustedPublishResult::Skipped => {
-                        tracing::debug!(
-                            "TrustedPublishingMiddleware: no CI provider detected, skipping OIDC token exchange"
-                        );
-                        None
-                    }
-                    TrustedPublishResult::Ignored(err) => {
-                        tracing::warn!(
-                            "TrustedPublishingMiddleware: trusted publishing failed: {err}"
-                        );
-                        None
-                    }
-                };
-
-                let mut cache = cache.lock().expect("trusted publishing cache poisoned");
-                if let Some(token) = token {
-                    let token = CachedTrustedPublishingToken::new(token);
-                    let result = token.token.clone();
-                    *cache = TrustedPublishingCache::Token(token);
-                    Some(result)
-                } else {
-                    *cache = TrustedPublishingCache::Disabled;
-                    None
-                }
-            }
-        }
-    }
-}
-
-/// Normalize a channel URL so its path always ends with `/`. This avoids a
-/// prefix-collision bug where `/my-channel` would also match `/my-channel-evil`.
-fn normalize_channel_url(url: &Url) -> Url {
-    let mut url = url.clone();
-    if !url.path().ends_with('/') {
-        let new_path = format!("{}/", url.path());
-        url.set_path(&new_path);
-    }
-    url
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-impl Middleware for TrustedPublishingMiddleware {
-    async fn handle(
+impl AuthFlow for TrustedPublishingFlow {
+    async fn acquire_token(
         &self,
-        mut req: reqwest::Request,
-        extensions: &mut http::Extensions,
-        next: Next<'_>,
-    ) -> reqwest_middleware::Result<reqwest::Response> {
-        if req.headers().get(reqwest::header::AUTHORIZATION).is_none()
-            && req.url().host_str() == self.channel_url.host_str()
-            && req.url().path().starts_with(self.channel_url.path())
-            && let Some(token) = self.token().await
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Result<Option<BearerToken>, AuthFlowError> {
+        if !challenges
+            .iter()
+            .any(|challenge| challenge.scheme.eq_ignore_ascii_case("bearer"))
         {
-            let bearer_auth = format!("Bearer {}", token.secret());
-            let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
-                .map_err(reqwest_middleware::Error::middleware)?;
-            header_value.set_sensitive(true);
-            req.headers_mut()
-                .insert(reqwest::header::AUTHORIZATION, header_value);
+            return Ok(None);
         }
-        next.run(req, extensions).await
+        get_token(&self.client, url, &self.options)
+            .await
+            .map_err(AuthFlowError::new)
+    }
+}
+
+/// Returns `true` for `prefix.dev` and any true subdomain (`*.prefix.dev`).
+/// Lookalikes (`evil-prefix.dev`, `prefix.dev.evil.com`) and trailing-dot
+/// hosts (`beta.prefix.dev.`, preserved as-is by [`Url`]) fail closed.
+fn is_prefix_dev_host(host: &str) -> bool {
+    host == "prefix.dev" || host.ends_with(".prefix.dev")
+}
+
+/// Origin-gated [`AuthFlow`] for the prefix.dev family, safe to register
+/// in an unscoped [`crate::AuthChallengeMiddleware`]; the default flow
+/// behind [`crate::AuthChallengeMiddleware::default`].
+///
+/// Delegates to an inner flow (by default [`TrustedPublishingFlow`] with
+/// [`TrustedPublishingOptions::for_prefix_dev`]) only for `https` URLs on
+/// `prefix.dev` or a true subdomain. The gate keys on the request URL
+/// alone; server-controlled challenge params such as `realm` cannot open
+/// it. Outside CI the inner flow reports "not applicable".
+#[derive(Debug, Clone)]
+pub struct PrefixAuthAmbientFlow {
+    inner: Arc<dyn AuthFlow>,
+}
+
+impl PrefixAuthAmbientFlow {
+    /// Create the flow with `client` used for the mint exchange. The client
+    /// must not itself layer in [`crate::AuthChallengeMiddleware`] or the
+    /// mint call will recurse.
+    pub fn new(client: ClientWithMiddleware) -> Self {
+        Self::wrapping(Arc::new(TrustedPublishingFlow::for_prefix_dev(client)))
+    }
+
+    /// Apply the prefix.dev origin gate to an arbitrary `inner` flow:
+    /// `inner` is only consulted for `https` URLs on the prefix.dev family.
+    pub fn wrapping(inner: Arc<dyn AuthFlow>) -> Self {
+        Self { inner }
+    }
+}
+
+impl Default for PrefixAuthAmbientFlow {
+    /// The flow with a plain (middleware-free) HTTP client for the mint
+    /// exchange.
+    fn default() -> Self {
+        Self::new(reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build())
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+impl AuthFlow for PrefixAuthAmbientFlow {
+    async fn acquire_token(
+        &self,
+        url: &Url,
+        challenges: &[Challenge],
+    ) -> Result<Option<BearerToken>, AuthFlowError> {
+        if url.scheme() != "https" || !url.host_str().is_some_and(is_prefix_dev_host) {
+            return Ok(None);
+        }
+        self.inner.acquire_token(url, challenges).await
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
+    use crate::challenge_middleware::{AuthFlow, Challenge};
+
+    fn bearer_challenge() -> Vec<Challenge> {
+        vec![Challenge {
+            scheme: "Bearer".to_string(),
+            params: HashMap::new(),
+        }]
+    }
+
+    fn plain_client() -> reqwest_middleware::ClientWithMiddleware {
+        reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build()
+    }
+
+    #[tokio::test]
+    async fn flow_ignores_non_bearer_challenges() {
+        let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+        let challenges = vec![Challenge {
+            scheme: "Basic".to_string(),
+            params: HashMap::new(),
+        }];
+        let result = flow
+            .acquire_token(
+                &Url::parse("https://prefix.dev/channel/repodata.json").unwrap(),
+                &challenges,
+            )
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn flow_mints_token_via_gitlab_env() {
+        use axum::{Json, routing::post};
+
+        // Mint endpoint: verifies it receives the CI-provided OIDC token and
+        // returns the minted bearer token as the raw response body.
+        let router = axum::Router::new().route(
+            "/api/oidc/mint_token",
+            post(|Json(body): Json<serde_json::Value>| async move {
+                assert_eq!(body["token"], "fake.oidc.token");
+                "pfx-jwt.minted"
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        // Force the GitLab detector: GITLAB_CI on, every other provider off.
+        // (rattler's own CI runs on GitHub Actions, so GITHUB_ACTIONS must be
+        // explicitly unset.)
+        let token = temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+                flow.acquire_token(
+                    &server_url.join("/channel/repodata.json").unwrap(),
+                    &bearer_challenge(),
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            token.expect("expected a minted token").secret(),
+            "pfx-jwt.minted"
+        );
+    }
+
+    #[tokio::test]
+    async fn mint_path_without_leading_slash_is_normalized() {
+        use axum::routing::post;
+
+        // Mint endpoint at the absolute path /api/x. Without normalization,
+        // a relative mint_path of "api/x" would resolve against the
+        // challenged URL's path (/channel/api/x) and miss this route.
+        let router = axum::Router::new().route("/api/x", post(|| async { "pfx-jwt.minted" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        let token = temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                let flow = TrustedPublishingFlow::new(
+                    TrustedPublishingOptions {
+                        audience: "prefix.dev".to_string(),
+                        mint_path: "api/x".to_string(),
+                    },
+                    plain_client(),
+                );
+                flow.acquire_token(
+                    &server_url.join("/channel/repodata.json").unwrap(),
+                    &bearer_challenge(),
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            token.expect("expected a minted token").secret(),
+            "pfx-jwt.minted"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_with_trusted_publishing_flow_end_to_end() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        use axum::{
+            Json,
+            http::StatusCode,
+            response::IntoResponse,
+            routing::{get, post},
+        };
+
+        use crate::AuthChallengeMiddleware;
+
+        // One server hosting both the protected resource and the mint
+        // endpoint, like a real prefix.dev instance.
+        let mints = Arc::new(AtomicUsize::new(0));
+        let mints_in_handler = mints.clone();
+        let router = axum::Router::new()
+            .route(
+                "/channel/repodata.json",
+                get(|headers: axum::http::HeaderMap| async move {
+                    match headers.get("authorization").and_then(|v| v.to_str().ok()) {
+                        Some("Bearer pfx-jwt.minted") => (StatusCode::OK, "ok").into_response(),
+                        _ => (
+                            StatusCode::UNAUTHORIZED,
+                            [("www-authenticate", r#"Bearer realm="test""#)],
+                            "unauthorized",
+                        )
+                            .into_response(),
+                    }
+                }),
+            )
+            .route(
+                "/api/oidc/mint_token",
+                post(move |Json(body): Json<serde_json::Value>| {
+                    let mints = mints_in_handler.clone();
+                    async move {
+                        assert_eq!(body["token"], "fake.oidc.token");
+                        mints.fetch_add(1, Ordering::SeqCst);
+                        "pfx-jwt.minted"
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
+
+        temp_env::async_with_vars(
+            [
+                ("GITLAB_CI", Some("true")),
+                ("PREFIX_DEV_ID_TOKEN", Some("fake.oidc.token")),
+                ("GITHUB_ACTIONS", None),
+                ("BUILDKITE", None),
+                ("CIRCLECI", None),
+            ],
+            async {
+                // The mint client must not itself carry the challenge
+                // middleware (it would recurse), so it stays plain.
+                let flow = TrustedPublishingFlow::for_prefix_dev(plain_client());
+                let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+                    .with_arc(std::sync::Arc::new(AuthChallengeMiddleware::new(vec![
+                        std::sync::Arc::new(flow),
+                    ])))
+                    .build();
+                let url = server_url.join("/channel/repodata.json").unwrap();
+
+                // First request: challenge -> OIDC detect -> mint -> replay.
+                assert_eq!(client.get(url.clone()).send().await.unwrap().status(), 200);
+                // Second request: cached token, no second mint.
+                assert_eq!(client.get(url).send().await.unwrap().status(), 200);
+            },
+        )
+        .await;
+
+        assert_eq!(mints.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn for_prefix_dev_matches_prefix_dev() {
@@ -417,230 +542,133 @@ mod tests {
     }
 
     #[test]
-    fn token_debug_is_redacted() {
-        let token = TrustedPublishingToken::new("supersecret".to_string());
-        let formatted = format!("{token:?}");
-        assert!(!formatted.contains("supersecret"));
-        assert!(formatted.contains("redacted"));
-    }
+    fn for_host_derives_audience_from_host() {
+        let options = TrustedPublishingOptions::for_host(
+            &Url::parse("https://beta.prefix.dev/some-channel/noarch/repodata.json").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(options.audience, "beta.prefix.dev");
+        assert_eq!(options.mint_path, "/api/oidc/mint_token");
 
-    fn unsigned_jwt_with_exp(exp: u64) -> String {
-        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none","typ":"JWT"}"#);
-        let payload = URL_SAFE_NO_PAD.encode(format!(r#"{{"exp":{exp}}}"#));
-        format!("{header}.{payload}.")
-    }
-
-    #[test]
-    fn jwt_expiration_reads_exp_claim() {
-        let token = unsigned_jwt_with_exp(1_700_000_000);
+        let prod =
+            TrustedPublishingOptions::for_host(&Url::parse("https://prefix.dev").unwrap()).unwrap();
         assert_eq!(
-            jwt_expiration(&token),
-            UNIX_EPOCH.checked_add(Duration::from_secs(1_700_000_000))
+            prod.audience,
+            TrustedPublishingOptions::for_prefix_dev().audience
         );
-    }
-
-    #[test]
-    fn cached_jwt_is_stale_inside_refresh_margin() {
-        let token = TrustedPublishingToken::new(unsigned_jwt_with_exp(1_700_000_000));
-        let cached = CachedTrustedPublishingToken::new(token);
-        let now = UNIX_EPOCH + Duration::from_secs(1_700_000_000 - 30);
-        assert!(!cached.is_fresh(now));
-    }
-
-    #[tokio::test]
-    async fn middleware_injects_bearer_for_matching_host() {
-        use reqwest_middleware::ClientBuilder;
-        use std::sync::Arc;
-
-        let server = axum::Router::new().route(
-            "/check",
-            axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                headers
-                    .get("authorization")
-                    .map(|v| v.to_str().unwrap().to_string())
-                    .unwrap_or_default()
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
-
-        let server_url = Url::parse(&format!("http://{addr}")).unwrap();
-        let token = TrustedPublishingToken::new("abc123".to_string());
-        let middleware = TrustedPublishingMiddleware::with_token(&server_url, token);
-
-        let client = ClientBuilder::new(reqwest::Client::new())
-            .with_arc(Arc::new(middleware))
-            .build();
-
-        let body = client
-            .get(server_url.join("/check").unwrap())
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "Bearer abc123");
-    }
-
-    #[tokio::test]
-    async fn middleware_skips_same_host_different_channel() {
-        use reqwest_middleware::ClientBuilder;
-        use std::sync::Arc;
-
-        let server = axum::Router::new()
-            .route(
-                "/my-channel/check",
-                axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                    if headers.contains_key("authorization") {
-                        "has-auth".to_string()
-                    } else {
-                        "no-auth".to_string()
-                    }
-                }),
-            )
-            .route(
-                "/other-channel/check",
-                axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                    if headers.contains_key("authorization") {
-                        "has-auth".to_string()
-                    } else {
-                        "no-auth".to_string()
-                    }
-                }),
-            )
-            .route(
-                "/my-channel-evil/check",
-                axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                    if headers.contains_key("authorization") {
-                        "has-auth".to_string()
-                    } else {
-                        "no-auth".to_string()
-                    }
-                }),
-            )
-            .route(
-                "/my-channel/subdir/check",
-                axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                    if headers.contains_key("authorization") {
-                        "has-auth".to_string()
-                    } else {
-                        "no-auth".to_string()
-                    }
-                }),
-            );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
-
-        // Middleware scoped to /my-channel/ on the test host.
-        let channel_url = Url::parse(&format!("http://{addr}/my-channel/")).unwrap();
-        let token = TrustedPublishingToken::new("abc123".to_string());
-        let middleware = TrustedPublishingMiddleware::with_token(&channel_url, token);
-
-        let client = ClientBuilder::new(reqwest::Client::new())
-            .with_arc(Arc::new(middleware))
-            .build();
-
-        // Same host, different channel: token must NOT be injected.
-        let body = client
-            .get(format!("http://{addr}/other-channel/check"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "no-auth");
-
-        // Prefix collision: /my-channel-evil must NOT match /my-channel/.
-        let body = client
-            .get(format!("http://{addr}/my-channel-evil/check"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "no-auth");
-
-        // Same channel: token IS injected.
-        let body = client
-            .get(format!("http://{addr}/my-channel/check"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "has-auth");
-
-        // Sub-path under the same channel: token IS injected.
-        let body = client
-            .get(format!("http://{addr}/my-channel/subdir/check"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "has-auth");
-    }
-
-    #[test]
-    fn normalize_channel_url_adds_trailing_slash() {
-        let with_path = Url::parse("https://prefix.dev/my-channel").unwrap();
-        assert_eq!(normalize_channel_url(&with_path).path(), "/my-channel/");
-
-        let already_trailing = Url::parse("https://prefix.dev/my-channel/").unwrap();
         assert_eq!(
-            normalize_channel_url(&already_trailing).path(),
-            "/my-channel/"
+            prod.mint_path,
+            TrustedPublishingOptions::for_prefix_dev().mint_path
         );
+    }
 
-        // The url crate normalizes a host-only URL to path "/".
-        let host_only = Url::parse("https://prefix.dev").unwrap();
-        assert_eq!(host_only.path(), "/");
-        assert_eq!(normalize_channel_url(&host_only).path(), "/");
+    #[test]
+    fn for_host_returns_none_without_host() {
+        // data: URLs have no host component
+        let url = Url::parse("data:text/plain,hello").unwrap();
+        assert!(TrustedPublishingOptions::for_host(&url).is_none());
+    }
+
+    #[test]
+    fn for_host_normalizes_case_and_drops_default_port() {
+        let options = TrustedPublishingOptions::for_host(
+            &Url::parse("https://Beta.PREFIX.dev:443/some-channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(options.audience, "beta.prefix.dev");
+    }
+
+    #[test]
+    fn for_server_uses_shared_audience_for_prefix_dev_family() {
+        // prefix.dev deployments share the audience "prefix.dev"
+        let beta = TrustedPublishingOptions::for_server(
+            &Url::parse("https://beta.prefix.dev/some-channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(beta.audience, "prefix.dev");
+
+        let prod = TrustedPublishingOptions::for_server(&Url::parse("https://prefix.dev").unwrap())
+            .unwrap();
+        assert_eq!(prod.audience, "prefix.dev");
+
+        // hosts outside the family keep the host-derived audience
+        let other = TrustedPublishingOptions::for_server(
+            &Url::parse("https://conda.example.com/channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(other.audience, "conda.example.com");
+
+        // ...and lookalike hosts are not part of the family
+        let evil = TrustedPublishingOptions::for_server(
+            &Url::parse("https://evil-prefix.dev/channel").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(evil.audience, "evil-prefix.dev");
+    }
+
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use crate::challenge_middleware::{AuthFlowError, BearerToken};
+
+    /// Inner flow recording invocations; stands in for the trusted-publishing
+    /// delegate so the gate can be observed without any network traffic.
+    #[derive(Debug)]
+    struct SpyFlow {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl AuthFlow for SpyFlow {
+        async fn acquire_token(
+            &self,
+            _url: &Url,
+            _challenges: &[Challenge],
+        ) -> Result<Option<BearerToken>, AuthFlowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Some(BearerToken::new("spy-token".to_string())))
+        }
     }
 
     #[tokio::test]
-    async fn middleware_skips_non_matching_host() {
-        use reqwest_middleware::ClientBuilder;
-        use std::sync::Arc;
+    async fn ambient_flow_delegates_for_prefix_dev_family_hosts() {
+        let spy = Arc::new(SpyFlow {
+            calls: AtomicUsize::new(0),
+        });
+        let flow = PrefixAuthAmbientFlow::wrapping(spy.clone());
+        for host in ["prefix.dev", "beta.prefix.dev", "staging.beta.prefix.dev"] {
+            let url = Url::parse(&format!("https://{host}/channel/repodata.json")).unwrap();
+            let token = flow.acquire_token(&url, &bearer_challenge()).await.unwrap();
+            assert!(token.is_some(), "{host} should pass the trust gate");
+        }
+        assert_eq!(spy.calls.load(Ordering::SeqCst), 3);
+    }
 
-        let server = axum::Router::new().route(
-            "/check",
-            axum::routing::get(|headers: axum::http::HeaderMap| async move {
-                if headers.contains_key("authorization") {
-                    "has-auth".to_string()
-                } else {
-                    "no-auth".to_string()
-                }
-            }),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
-
-        // Middleware is configured for a different host than the one we hit.
-        let other_url = Url::parse("https://example.invalid").unwrap();
-        let token = TrustedPublishingToken::new("abc123".to_string());
-        let middleware = TrustedPublishingMiddleware::with_token(&other_url, token);
-
-        let client = ClientBuilder::new(reqwest::Client::new())
-            .with_arc(Arc::new(middleware))
-            .build();
-
-        let body = client
-            .get(format!("http://{addr}/check"))
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        assert_eq!(body, "no-auth");
+    #[tokio::test]
+    async fn ambient_flow_never_delegates_for_untrusted_origins() {
+        let spy = Arc::new(SpyFlow {
+            calls: AtomicUsize::new(0),
+        });
+        let flow = PrefixAuthAmbientFlow::wrapping(spy.clone());
+        // The gate must key on the request URL alone: a server-controlled
+        // realm claiming "prefix.dev" must not open it.
+        let challenges = vec![Challenge {
+            scheme: "Bearer".to_string(),
+            params: HashMap::from([("realm".to_string(), "prefix.dev".to_string())]),
+        }];
+        for url in [
+            "https://evil-prefix.dev/channel/repodata.json",
+            "https://prefix.dev.evil.com/channel/repodata.json",
+            "https://conda.anaconda.org/conda-forge/noarch/repodata.json",
+            "http://prefix.dev/channel/repodata.json", // https only
+            "https://beta.prefix.dev./channel/repodata.json", // trailing dot fails closed
+        ] {
+            let url = Url::parse(url).unwrap();
+            let token = flow.acquire_token(&url, &challenges).await.unwrap();
+            assert!(token.is_none(), "{url} must be rejected by the trust gate");
+        }
+        assert_eq!(spy.calls.load(Ordering::SeqCst), 0);
     }
 }

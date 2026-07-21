@@ -63,10 +63,20 @@ fn search_spec(store_key: &str) -> HashMap<String, String> {
 
 #[cfg(target_os = "windows")]
 fn search_spec(store_key: &str) -> HashMap<String, String> {
-    // `\Q...\E` quotes the store_key as a literal so any future caller using a
-    // custom (possibly regex-meaningful) store key still gets the expected
-    // entries back.
-    HashMap::from([("pattern".to_string(), format!(r"\.\Q{store_key}\E\z"))])
+    HashMap::from([("pattern".to_string(), windows_search_pattern(store_key))])
+}
+
+/// The regex handed to the Windows store's `pattern` search filter, matching
+/// every credential target this storage writes (`{host}.{store_key}`).
+///
+/// The store compiles it with the Rust `regex` crate, so the store key must be
+/// escaped with [`regex::escape`] — PCRE-style `\Q...\E` quoting is rejected as
+/// an invalid pattern, which silently empties `list()`/`list_keys()` and broke
+/// `auth logout` on Windows. Compiled (and tested) on every platform so a bad
+/// pattern fails CI everywhere, not just on Windows.
+#[cfg(any(target_os = "windows", test))]
+fn windows_search_pattern(store_key: &str) -> String {
+    format!(r"\.{}\z", regex::escape(store_key))
 }
 
 #[cfg(not(any(
@@ -243,6 +253,34 @@ impl StorageBackend for KeyringAuthenticationStorage {
         Ok(results)
     }
 
+    /// Enumerate stored hosts without reading their passwords. On macOS this
+    /// avoids one keychain ACL prompt per entry — important for callers like
+    /// the `auth logout` interactive picker that only need host metadata to
+    /// build their UI.
+    fn list_keys(&self) -> Result<Vec<String>, AuthenticationStorageError> {
+        let store = credential_store()?;
+        let spec = search_spec(&self.store_key);
+        let spec_refs: HashMap<&str, &str> =
+            spec.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+
+        let entries = store
+            .search(&spec_refs)
+            .map_err(KeyringAuthenticationStorageError::from)?;
+
+        let mut hosts = Vec::new();
+        for entry in entries {
+            let Some((service, account)) = entry.get_specifiers() else {
+                continue;
+            };
+            if service != self.store_key {
+                continue;
+            }
+            hosts.push(account);
+        }
+        hosts.sort();
+        Ok(hosts)
+    }
+
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let entry = self.entry(host)?;
 
@@ -252,5 +290,213 @@ impl StorageBackend for KeyringAuthenticationStorage {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use keyring_core::api::{CredentialApi, CredentialStoreApi};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    /// Shared state of [`CountingStore`]: the stored secrets plus a counter
+    /// of how often a secret was actually read.
+    #[derive(Debug, Default)]
+    struct StoreState {
+        secrets: Mutex<HashMap<(String, String), Vec<u8>>>,
+        secret_reads: AtomicUsize,
+    }
+
+    /// In-memory keyring-core store that counts secret reads. Used to assert
+    /// that key enumeration never touches stored secrets — on macOS every
+    /// secret read of a foreign-owned item triggers a keychain ACL prompt,
+    /// so a regression here means one prompt per stored credential.
+    #[derive(Debug, Default)]
+    struct CountingStore {
+        state: Arc<StoreState>,
+    }
+
+    #[derive(Debug)]
+    struct CountingCred {
+        state: Arc<StoreState>,
+        service: String,
+        account: String,
+    }
+
+    impl CountingCred {
+        fn key(&self) -> (String, String) {
+            (self.service.clone(), self.account.clone())
+        }
+    }
+
+    impl CredentialApi for CountingCred {
+        fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .insert(self.key(), secret.to_vec());
+            Ok(())
+        }
+
+        fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
+            self.state.secret_reads.fetch_add(1, Ordering::SeqCst);
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&self.key())
+                .cloned()
+                .ok_or(keyring_core::Error::NoEntry)
+        }
+
+        fn delete_credential(&self) -> keyring_core::Result<()> {
+            self.state
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&self.key())
+                .map(|_| ())
+                .ok_or(keyring_core::Error::NoEntry)
+        }
+
+        fn get_credential(
+            &self,
+        ) -> keyring_core::Result<Option<Arc<keyring_core::api::Credential>>> {
+            Ok(None)
+        }
+
+        fn get_specifiers(&self) -> Option<(String, String)> {
+            Some((self.service.clone(), self.account.clone()))
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    impl CountingStore {
+        fn entry(&self, service: &str, account: &str) -> Entry {
+            Entry::new_with_credential(Arc::new(CountingCred {
+                state: self.state.clone(),
+                service: service.to_string(),
+                account: account.to_string(),
+            }))
+        }
+    }
+
+    impl CredentialStoreApi for CountingStore {
+        fn vendor(&self) -> String {
+            "rattler-test".to_string()
+        }
+
+        fn id(&self) -> String {
+            "counting-store".to_string()
+        }
+
+        fn build(
+            &self,
+            service: &str,
+            user: &str,
+            _modifiers: Option<&HashMap<&str, &str>>,
+        ) -> keyring_core::Result<Entry> {
+            Ok(self.entry(service, user))
+        }
+
+        fn search(&self, spec: &HashMap<&str, &str>) -> keyring_core::Result<Vec<Entry>> {
+            // Honor the `service` filter (used on macOS/Linux); for any other
+            // spec (e.g. Windows' `pattern`) return everything and rely on
+            // the caller's defensive service check.
+            let service_filter = spec.get("service").map(ToString::to_string);
+            let entries = self
+                .state
+                .secrets
+                .lock()
+                .unwrap()
+                .keys()
+                .filter(|(service, _)| {
+                    service_filter
+                        .as_ref()
+                        .is_none_or(|filter| service == filter)
+                })
+                .map(|(service, account)| self.entry(service, account))
+                .collect();
+            Ok(entries)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    /// The Windows store compiles the search pattern with the Rust `regex`
+    /// crate. An invalid pattern (like the `\Q...\E` quoting this used to
+    /// emit) makes every `search()` fail, which empties `list()`/`list_keys()`
+    /// and made `auth logout` report "No stored credentials found" for
+    /// credentials that were right there in the Windows Credential Manager.
+    #[test]
+    fn windows_search_pattern_is_a_valid_regex_matching_target_names() {
+        let pattern = windows_search_pattern("rattler");
+        let re = regex::Regex::new(&pattern).expect("search pattern must compile");
+
+        // Targets are written as `{host}.{store_key}`.
+        assert!(re.is_match("*.example.org.rattler"));
+        assert!(re.is_match("repo.prefix.dev.rattler"));
+        // The store key must terminate the target...
+        assert!(!re.is_match("*.example.org.rattler-build"));
+        // ...and be preceded by a delimiter, not embedded in another word.
+        assert!(!re.is_match("rattler.example.org"));
+
+        // Regex metacharacters in a custom store key are matched literally.
+        let pattern = windows_search_pattern("my+key");
+        let re = regex::Regex::new(&pattern).expect("search pattern must compile");
+        assert!(re.is_match("example.org.my+key"));
+        assert!(!re.is_match("example.org.myyykey"));
+    }
+
+    /// The whole point of `list_keys` is to enumerate hosts without reading
+    /// secrets (each read of a foreign-owned item prompts on macOS). Guard
+    /// against a regression to the `list()` fallback, which reads every one.
+    #[test]
+    fn list_keys_does_not_read_secrets() {
+        // The default store is process-global. This must stay the only test
+        // in this binary that installs one: it keeps the real OS keyring out
+        // of every test (configure_default_store never overrides an existing
+        // store) and avoids races between concurrent installers.
+        let store = Arc::new(CountingStore::default());
+        keyring_core::set_default_store(store.clone());
+
+        let backend = KeyringAuthenticationStorage::from_key("rattler-test-list-keys");
+        backend
+            .store(
+                "a.example.com",
+                &Authentication::BearerToken("token-a".into()),
+            )
+            .unwrap();
+        backend
+            .store(
+                "b.example.com",
+                &Authentication::BearerToken("token-b".into()),
+            )
+            .unwrap();
+
+        let keys = backend.list_keys().unwrap();
+        assert_eq!(
+            keys,
+            vec!["a.example.com".to_string(), "b.example.com".to_string()]
+        );
+        assert_eq!(
+            store.state.secret_reads.load(Ordering::SeqCst),
+            0,
+            "listing keys must not read stored secrets"
+        );
+
+        // Sanity-check that the counter counts: a credential lookup reads once.
+        let auth = backend.get("a.example.com").unwrap();
+        assert_eq!(auth, Some(Authentication::BearerToken("token-a".into())));
+        assert_eq!(store.state.secret_reads.load(Ordering::SeqCst), 1);
     }
 }

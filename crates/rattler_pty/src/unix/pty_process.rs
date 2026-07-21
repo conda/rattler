@@ -24,7 +24,7 @@ use tokio::{
     time::{Duration, Instant, sleep},
 };
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::pty::ptsname_r;
 
 #[cfg(target_os = "netbsd")]
@@ -71,6 +71,24 @@ fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
                 Ok(res)
             }
             _ => Err(nix::Error::last()),
+        }
+    }
+}
+
+#[cfg(target_os = "openbsd")]
+/// OpenBSD has neither `nix::pty::ptsname_r` nor `libc::ptsname_r` — only the
+/// POSIX `ptsname(3)`, which returns a pointer into a static buffer and is
+/// not thread-safe. Safe here because `PtyProcess::new` calls this once,
+/// synchronously, before forking.
+fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
+    use std::ffi::CStr;
+
+    unsafe {
+        let ptr = libc::ptsname(fd.as_raw_fd());
+        if ptr.is_null() {
+            Err(nix::Error::last())
+        } else {
+            Ok(CStr::from_ptr(ptr).to_string_lossy().into_owned())
         }
     }
 }

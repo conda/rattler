@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.2.2](https://github.com/conda/rattler/compare/rattler_solve-v7.2.1...rattler_solve-v7.2.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [7.2.1](https://github.com/conda/rattler/compare/rattler_solve-v7.2.0...rattler_solve-v7.2.1) - 2026-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [7.2.0](https://github.com/conda/rattler/compare/rattler_solve-v7.1.4...rattler_solve-v7.2.0) - 2026-06-17
+
+### Added
+
+- update resolvo to 0.11.1 and use gateway for snapshot tool ([#2520](https://github.com/conda/rattler/pull/2520))
+
+## [7.1.4](https://github.com/conda/rattler/compare/rattler_solve-v7.1.3...rattler_solve-v7.1.4) - 2026-06-17
+
+### Other
+
+- avoid parsing matchspecs when checking dependency overrides ([#2506](https://github.com/conda/rattler/pull/2506))
+
 ## [7.1.3](https://github.com/conda/rattler/compare/rattler_solve-v7.1.2...rattler_solve-v7.1.3) - 2026-06-09
 
 ### Fixed

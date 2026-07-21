@@ -2,9 +2,11 @@ use nom::{
     IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::char,
-    combinator::opt,
+    character::complete::{char, multispace0},
+    combinator::{all_consuming, map, opt},
     error::{ErrorKind, ParseError},
+    multi::separated_list1,
+    sequence::{delimited, preceded, terminated},
 };
 use thiserror::Error;
 
@@ -12,10 +14,11 @@ use crate::{
     ParseStrictness, ParseVersionError, ParseVersionErrorKind,
     version::parse::version_parser,
     version_spec::{
-        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
-        constraint::Constraint,
+        EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+        VersionSpec, constraint::Constraint,
     },
 };
+use ParseStrictness::{Lenient, Strict};
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 enum ParseVersionOperatorError<'i> {
@@ -29,11 +32,10 @@ enum ParseVersionOperatorError<'i> {
 /// recognized or not found.
 fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError<'_>> {
     // Take anything that looks like an operator.
-    let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
-        |_err: nom::Err<nom::error::Error<&str>>| {
+    let (rest, operator_str) = take_while1(|c| matches!(c, '=' | '!' | '<' | '>' | '~'))(input)
+        .map_err(|_err: nom::Err<nom::error::Error<&str>>| {
             nom::Err::Error(ParseVersionOperatorError::ExpectedOperator)
-        },
-    )?;
+        })?;
 
     let op = match operator_str {
         "==" => VersionOperators::Exact(EqualityOperator::Equals),
@@ -132,8 +134,6 @@ fn any_constraint_parser(
 fn logical_constraint_parser(
     strictness: ParseStrictness,
 ) -> impl FnMut(&str) -> IResult<&str, Constraint, ParseConstraintError> {
-    use ParseStrictness::{Lenient, Strict};
-
     move |input: &str| {
         // Parse the optional preceding operator
         let (input, op) = match operator_parser(input) {
@@ -154,7 +154,7 @@ fn logical_constraint_parser(
         // Any error means no characters were detected that belong to the
         // version.
         let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
-            c.is_alphanumeric() || "!-_.*+".contains(c)
+            c.is_alphanumeric() || matches!(c, '!' | '-' | '_' | '.' | '*' | '+')
         })(input)
         .map_err(|_err| {
             nom::Err::Error(ParseConstraintError::InvalidVersion(ParseVersionError {
@@ -337,6 +337,78 @@ pub fn constraint_parser(
     }
 }
 
+/// Collapses a group, flattening nested groups of the same operator. A lone
+/// element is returned directly so single constraints don't allocate a group.
+fn flatten_version_specs(operator: LogicalOperator, args: Vec<VersionSpec>) -> VersionSpec {
+    if args.len() == 1 {
+        args.into_iter().next().unwrap()
+    } else {
+        let mut result = Vec::with_capacity(args.len());
+        for spec in args {
+            match spec {
+                VersionSpec::Group(op, others) if op == operator => result.extend(others),
+                spec => result.push(spec),
+            }
+        }
+        VersionSpec::Group(operator, result)
+    }
+}
+
+/// Parses a single term: either a parenthesized group or a constraint parsed
+/// directly into a [`VersionSpec`].
+fn version_spec_term(
+    strictness: ParseStrictness,
+    input: &str,
+) -> IResult<&str, VersionSpec, ParseConstraintError> {
+    alt((
+        delimited(
+            terminated(char('('), multispace0),
+            move |i| version_spec_or_group(strictness, i),
+            preceded(multispace0, char(')')),
+        ),
+        // `*` (and the legacy `*.*`) is always `Any`, even in strict mode.
+        map(terminated(char('*'), opt(tag(".*"))), |_| VersionSpec::Any),
+        map(constraint_parser(strictness), VersionSpec::from),
+    ))
+    .parse(input)
+}
+
+/// Parses one or more terms separated by `,` into an `And` group.
+fn version_spec_and_group(
+    strictness: ParseStrictness,
+    input: &str,
+) -> IResult<&str, VersionSpec, ParseConstraintError> {
+    let (rest, group) = separated_list1(delimited(multispace0, char(','), multispace0), move |i| {
+        version_spec_term(strictness, i)
+    })
+    .parse(input)?;
+    Ok((rest, flatten_version_specs(LogicalOperator::And, group)))
+}
+
+/// Parses one or more `And` groups separated by `|` into an `Or` group.
+fn version_spec_or_group(
+    strictness: ParseStrictness,
+    input: &str,
+) -> IResult<&str, VersionSpec, ParseConstraintError> {
+    let (rest, group) = separated_list1(delimited(multispace0, char('|'), multispace0), move |i| {
+        version_spec_and_group(strictness, i)
+    })
+    .parse(input)?;
+    Ok((rest, flatten_version_specs(LogicalOperator::Or, group)))
+}
+
+/// Parses a [`VersionSpec`], building it directly without an intermediate tree.
+pub(crate) fn version_spec_parser(
+    input: &str,
+    strictness: ParseStrictness,
+) -> Result<VersionSpec, ParseConstraintError> {
+    match all_consuming(move |i| version_spec_or_group(strictness, i)).parse(input) {
+        Ok((_, spec)) => Ok(spec),
+        Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(e),
+        Err(_) => unreachable!("not streaming, so no other error possible"),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
@@ -346,7 +418,7 @@ mod test {
     use rstest::rstest;
 
     use super::*;
-    use crate::{ParseStrictness::*, Version, VersionSpec};
+    use crate::{Version, VersionSpec};
 
     #[test]
     fn test_operator_parser() {

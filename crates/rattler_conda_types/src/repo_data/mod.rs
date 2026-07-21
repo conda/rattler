@@ -36,6 +36,7 @@ use crate::{
         TimestampMs, UrlWithTrailingSlash,
         serde::{
             DeserializeFromStrUnchecked, sort_index_map_alphabetically, sort_map_alphabetically,
+            sort_set_alphabetically,
         },
     },
 };
@@ -1071,13 +1072,6 @@ impl PackageRecord {
             run_exports: None,
         })
     }
-}
-
-fn sort_set_alphabetically<K: Ord + Serialize, S: serde::Serializer>(
-    value: &ahash::HashSet<K>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    value.iter().collect::<BTreeSet<_>>().serialize(serializer)
 }
 
 #[cfg(test)]

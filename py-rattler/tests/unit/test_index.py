@@ -34,7 +34,8 @@ def package_directory(tmp_path, package_file_ruff: Path, package_file_pytweening
 async def test_index(package_directory):
     await index_fs(package_directory)
 
-    assert set(os.listdir(package_directory)) == {"noarch", "win-64"}
+    # `.tmp` is the atomic-write staging dir created in the channel root; ignore it.
+    assert {name for name in os.listdir(package_directory) if name != ".tmp"} == {"noarch", "win-64"}
     assert "repodata.json" in os.listdir(package_directory / "win-64")
     with open(package_directory / "win-64/repodata.json") as f:
         assert "ruff-0.0.171-py310h298983d_0" in f.read()

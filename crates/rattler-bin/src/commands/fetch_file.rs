@@ -17,10 +17,10 @@ pub struct Opt {
     path: String,
 }
 
-pub async fn fetch_file(opt: Opt) -> miette::Result<()> {
+pub async fn fetch_file(opt: Opt, offline: bool) -> miette::Result<()> {
     let Opt { url, path } = opt;
 
-    let client = super::client::create_client_with_middleware()?;
+    let client = super::client::create_client_with_middleware(offline)?;
 
     let target_path = Path::new(&path);
 

@@ -5,7 +5,7 @@ use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseM
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNamelessMatchSpec {
