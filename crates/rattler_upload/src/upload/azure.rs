@@ -11,20 +11,27 @@ use url::Url;
 
 use crate::upload::package::ExtractedPackage;
 
-/// Size of a single chunk handed to the writer. Azure Blob storage expects data
-/// to be uploaded in reasonably sized blocks; we buffer into 10 MiB chunks.
+/// Size of a single block handed to the writer. Azure Blob block uploads keep
+/// the number of blocks low with larger blocks; we use 10 MiB.
 const DESIRED_CHUNK_SIZE: usize = 1024 * 1024 * 10;
+
+/// Number of blocks of a single package that are uploaded concurrently.
+const PART_CONCURRENCY: usize = 4;
 
 /// Number of packages that are uploaded concurrently.
 const PACKAGE_CONCURRENCY: usize = 4;
 
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
-/// The channel URL is expected to be of the form
+/// The channel URL must be of the form
 /// `https://<account>.blob.core.windows.net/<container>/<prefix>`; the account
 /// name, endpoint, container, and root prefix are all derived from it (see
-/// [`azblob_config`]). The [`AzureCredentials`] supply only the account key or
-/// SAS token.
+/// [`azblob_config`]). Because the account is derived from the host, upload
+/// requires this dotted `<account>.blob...` form and does not support
+/// path-style or emulator (Azurite) endpoints. (The fetch middleware, by
+/// contrast, does support custom endpoints — including Azurite — via
+/// `azure-options.<container>.endpoint-url`.) The [`AzureCredentials`] supply
+/// only the account key or SAS token.
 pub async fn upload_package_to_azure(
     channel: Url,
     credentials: AzureCredentials,
@@ -89,12 +96,17 @@ async fn upload_single_package(
     // Rewind the file to the beginning.
     file.rewind().await.into_diagnostic()?;
 
-    // Construct a writer for the package. `if_not_exists(!force)` maps to an
-    // `If-None-Match: *` precondition so an existing blob is not silently
-    // overwritten unless `--force` was passed.
+    // Construct a writer for the package. Setting `chunk` and `concurrent`
+    // enables opendal's concurrent block upload: data is buffered into
+    // `DESIRED_CHUNK_SIZE` blocks and up to `PART_CONCURRENCY` blocks are
+    // uploaded in parallel. `if_not_exists(!force)` maps to an `If-None-Match: *`
+    // precondition so an existing blob is not silently overwritten unless
+    // `--force` was passed. (opendal's azblob backend does not support setting
+    // `content_disposition` on write, so it is not set here.)
     let mut writer = match op
         .writer_with(&key)
-        .content_disposition(&format!("attachment; filename={filename}"))
+        .chunk(DESIRED_CHUNK_SIZE)
+        .concurrent(PART_CONCURRENCY)
         .if_not_exists(!force)
         .user_metadata([
             (String::from("package-sha256"), hex::encode(sha256hash)),
@@ -114,10 +126,9 @@ async fn upload_single_package(
         }
     };
 
-    // Stream the file to the writer in `DESIRED_CHUNK_SIZE` chunks. We do this in
-    // a more complex way than a plain `io::copy` because the underlying storage
-    // provider expects to receive the data in specifically sized chunks. The code
-    // below guarantees chunks of equal size except for maybe the last chunk.
+    // Stream the file to the writer in `DESIRED_CHUNK_SIZE` chunks. opendal takes
+    // care of buffering these into correctly sized blocks and uploading them
+    // concurrently.
     let mut remaining_size = size as usize;
     while remaining_size > 0 {
         // Allocate memory for this chunk.
@@ -131,7 +142,8 @@ async fn upload_single_package(
         let bytes_read = file.read_exact(&mut chunk[..]).await.into_diagnostic()?;
         debug_assert_eq!(bytes_read, chunk.len());
 
-        // Hand the chunk to the writer.
+        // Hand the chunk to the writer. With concurrent writes enabled this returns
+        // as soon as the chunk is queued rather than fully uploaded.
         writer.write(chunk.freeze()).await.into_diagnostic()?;
 
         // Update the number of remaining bytes.
@@ -183,8 +195,8 @@ fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Resul
         .ok_or_else(|| miette::miette!("No container in Azure blob URL"))?;
     let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
 
-    // Preserve a non-default port so custom endpoints (e.g. the Azurite
-    // emulator on :10000) work; real Azure uses the scheme default (443).
+    // Preserve a non-default port if one is present; real Azure uses the scheme
+    // default (443).
     let authority = match channel.port() {
         Some(port) => format!("{host}:{port}"),
         None => host.to_string(),

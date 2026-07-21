@@ -17,11 +17,14 @@ impl AzureOptionsMap {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct AzureOptions {
-    /// Storage account name → host `{account}.blob.core.windows.net`.
+    /// Storage account name. When `endpoint-url` is not set, the endpoint is
+    /// derived from it as `https://{account}.blob.core.windows.net`.
     pub account: String,
 
-    /// Optional full endpoint override for sovereign clouds / Azurite.
-    /// Defaults to `https://{account}.blob.core.windows.net`.
+    /// Optional full endpoint override for sovereign clouds / custom endpoints
+    /// (e.g. Azurite). When set, this is used verbatim as the endpoint and
+    /// `account` is then only used to construct the default endpoint when this
+    /// is absent — i.e. it has no effect on addressing while an override is set.
     pub endpoint_url: Option<Url>,
 }
 

@@ -1622,8 +1622,8 @@ fn azblob_config(
         .ok_or_else(|| anyhow::anyhow!("No container in Azure blob URL"))?;
     let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
 
-    // Preserve a non-default port so custom endpoints (e.g. the Azurite
-    // emulator on :10000) work; real Azure uses the scheme default (443).
+    // Preserve a non-default port if one is present; real Azure uses the scheme
+    // default (443).
     let authority = match channel.port() {
         Some(port) => format!("{host}:{port}"),
         None => host.to_string(),

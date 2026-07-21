@@ -41,13 +41,19 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 #[cfg(feature = "azure")]
 fn parse_azure_url(value: &str) -> Result<Url, String> {
     let url: Url = Url::parse(value).map_err(|e| format!("`{value}` isn't a valid URL: {e}"))?;
-    // Require host + a container segment, e.g.
-    // https://<account>.blob.core.windows.net/<container>/<prefix>.
+    // Require an `<account>.blob.<suffix>` host and a container segment, e.g.
+    // https://<account>.blob.core.windows.net/<container>/<prefix>. The index
+    // path derives the storage account from the host, so it must be a dotted
+    // domain (real Azure and sovereign clouds always are). IP literals and
+    // single-label hosts (localhost, the Azurite emulator) are rejected here
+    // because no account can be derived from them.
+    let has_dotted_domain =
+        matches!(url.host(), Some(url::Host::Domain(host)) if host.contains('.'));
     let has_container = url
         .path_segments()
         .and_then(|mut segments| segments.next())
         .is_some_and(|segment| !segment.is_empty());
-    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() && has_container {
+    if matches!(url.scheme(), "http" | "https") && has_dotted_domain && has_container {
         Ok(url)
     } else {
         Err(format!(

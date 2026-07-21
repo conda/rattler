@@ -16,18 +16,22 @@ const X_MS_VERSION: &str = "2021-12-02";
 
 /// Per-container addressing configuration for the Azure middleware.
 ///
-/// This mirrors [`crate::s3_middleware::S3Config`] in spirit: it holds only the
-/// information needed to *address* a container (account name and an optional
-/// endpoint override). Credentials are resolved separately at request time via
-/// reqsign's [`DefaultCredentialProvider`], so they are deliberately kept out
-/// of this struct.
+/// Like [`crate::s3_middleware::S3Config`] this is an enum, so exactly one of
+/// the two addressing modes is representable: either a storage account (from
+/// which the default endpoint is derived) or a full endpoint override. It holds
+/// only the information needed to *address* a container; credentials are
+/// resolved separately at request time via reqsign's
+/// [`DefaultCredentialProvider`], so they are kept out of this type.
+///
+/// Unlike `S3Config`, there is no default-provider fallback: a container that is
+/// not present in the middleware's config map is an error at request time.
 #[derive(Clone, Debug)]
-pub struct AzureConfig {
-    /// Storage account name → host `{account}.blob.core.windows.net`.
-    pub account: String,
-    /// Optional full endpoint override for sovereign clouds / Azurite.
-    /// Defaults to `https://{account}.blob.core.windows.net`.
-    pub endpoint_url: Option<Url>,
+pub enum AzureConfig {
+    /// Address the container via `https://{account}.blob.core.windows.net`.
+    Account(String),
+    /// Address the container via a full endpoint override (sovereign clouds /
+    /// custom endpoints such as Azurite).
+    Endpoint(Url),
 }
 
 #[cfg(feature = "rattler_config")]
@@ -42,10 +46,8 @@ where
         .map(|(k, v)| {
             (
                 k,
-                AzureConfig {
-                    account: v.account,
-                    endpoint_url: v.endpoint_url,
-                },
+                v.endpoint_url
+                    .map_or_else(|| AzureConfig::Account(v.account), AzureConfig::Endpoint),
             )
         })
         .collect()
@@ -67,20 +69,26 @@ pub fn compute_azure_config_from_config(
         .map(|(container, options)| {
             (
                 container.clone(),
-                AzureConfig {
-                    account: options.account.clone(),
-                    endpoint_url: options.endpoint_url.clone(),
-                },
+                options.endpoint_url.clone().map_or_else(
+                    || AzureConfig::Account(options.account.clone()),
+                    AzureConfig::Endpoint,
+                ),
             )
         })
         .collect()
 }
 
 /// Middleware that rewrites `az://{container}/{path}` URLs to HTTPS Azure Blob
-/// Storage URLs and signs them via reqsign's Azure `DefaultCredentialProvider`.
+/// Storage URLs and signs them.
+///
+/// Credentials are resolved by reqsign's [`DefaultCredentialProvider`] chain, in
+/// its usual order: environment variables, then workload/managed identity, then
+/// the Azure CLI (`az login`). rattler's [`crate::AuthenticationStorage`] is not
+/// consulted for Azure — there is no `Authentication` Azure variant — so
+/// per-host credentials configured there do not apply to `az://` requests.
 #[derive(Clone)]
 pub struct AzureMiddleware {
-    /// Container name -> addressing options (account, optional endpoint).
+    /// Container name -> addressing config (account or full endpoint override).
     config: HashMap<String, AzureConfig>,
     /// reqsign signer; caches the resolved credential internally.
     signer: Signer<Credential>,
@@ -100,23 +108,25 @@ impl AzureMiddleware {
         Self { config, signer }
     }
 
-    /// Resolve the HTTPS base host for a container from config.
-    /// Returns the endpoint origin, e.g. `https://acct.blob.core.windows.net`.
+    /// Resolve the endpoint base URL for a container from config.
+    ///
+    /// For an [`AzureConfig::Account`] this is the endpoint origin
+    /// `https://{account}.blob.core.windows.net`. For an
+    /// [`AzureConfig::Endpoint`] the configured override is returned verbatim,
+    /// which may carry a path component (e.g. Azurite endpoints).
     fn endpoint_for(&self, container: &str) -> MiddlewareResult<Url> {
-        let options = self.config.get(container).ok_or_else(|| {
+        let config = self.config.get(container).ok_or_else(|| {
             reqwest_middleware::Error::Middleware(anyhow::anyhow!(
                 "no azure-options configured for container '{container}'"
             ))
         })?;
-        let endpoint = match &options.endpoint_url {
-            Some(url) => url.clone(),
-            None => Url::parse(&format!(
-                "https://{}.blob.core.windows.net",
-                options.account
-            ))
-            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::anyhow!(e)))?,
-        };
-        Ok(endpoint)
+        match config {
+            AzureConfig::Endpoint(url) => Ok(url.clone()),
+            AzureConfig::Account(account) => {
+                Url::parse(&format!("https://{account}.blob.core.windows.net"))
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::anyhow!(e)))
+            }
+        }
     }
 
     /// Rewrite an `az://{container}/{path}` URL to its HTTPS equivalent.
@@ -127,11 +137,18 @@ impl AzureMiddleware {
             ))
         })?;
         let endpoint = self.endpoint_for(container)?;
+        let query = az_url.query().map(|q| format!("?{q}")).unwrap_or_default();
+        let fragment = az_url
+            .fragment()
+            .map(|f| format!("#{f}"))
+            .unwrap_or_default();
         let new_url = format!(
-            "{}/{}{}",
+            "{}/{}{}{}{}",
             endpoint.as_str().trim_end_matches('/'),
             container,
-            az_url.path()
+            az_url.path(),
+            query,
+            fragment
         );
         Url::parse(&new_url).map_err(|e| {
             reqwest_middleware::Error::Middleware(anyhow::anyhow!(
@@ -202,9 +219,9 @@ mod tests {
     use super::*;
 
     fn opts(account: &str, endpoint: Option<&str>) -> AzureConfig {
-        AzureConfig {
-            account: account.to_string(),
-            endpoint_url: endpoint.map(|e| Url::parse(e).unwrap()),
+        match endpoint {
+            Some(e) => AzureConfig::Endpoint(Url::parse(e).unwrap()),
+            None => AzureConfig::Account(account.to_string()),
         }
     }
 
