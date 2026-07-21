@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     str::FromStr,
+    sync::Arc,
     time::Instant,
 };
 
@@ -902,7 +903,7 @@ mod resolvo {
                 specs: &["bors"],
                 excluded_candidates: HashMap::from([(
                     preferred.url.clone(),
-                    "not available locally".to_string(),
+                    "not available locally".into(),
                 )]),
                 ..SimpleSolveTask::default()
             },
@@ -945,7 +946,7 @@ mod resolvo {
                 specs: &[&spec],
                 excluded_candidates: HashMap::from([(
                     preferred.url.clone(),
-                    "not available locally".to_string(),
+                    "not available locally".into(),
                 )]),
                 ..SimpleSolveTask::default()
             },
@@ -987,7 +988,7 @@ mod resolvo {
                 installed_packages: vec![preferred.clone()],
                 excluded_candidates: HashMap::from([(
                     preferred.url.clone(),
-                    "not available locally".to_string(),
+                    "not available locally".into(),
                 )]),
                 ..SimpleSolveTask::default()
             },
@@ -1017,7 +1018,7 @@ mod resolvo {
                 specs: &["bors"],
                 excluded_candidates: HashMap::from([(
                     Url::parse("https://example.com/noarch/bors-2.1-bla_1.tar.bz2").unwrap(),
-                    "not available locally".to_string(),
+                    "not available locally".into(),
                 )]),
                 ..SimpleSolveTask::default()
             },
@@ -1280,7 +1281,7 @@ struct SimpleSolveTask<'a> {
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<ExcludeNewer>,
     strategy: SolveStrategy,
-    excluded_candidates: HashMap<Url, String>,
+    excluded_candidates: HashMap<Url, Arc<str>>,
 }
 
 fn solve<T: SolverImpl + Default>(

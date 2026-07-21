@@ -6,6 +6,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     marker::PhantomData,
+    sync::Arc,
 };
 
 use conda_sorting::SolvableSorter;
@@ -334,7 +335,7 @@ impl<'a> CondaDependencyProvider<'a> {
         exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
-        excluded_candidates: &HashMap<Url, String>,
+        excluded_candidates: &HashMap<Url, Arc<str>>,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -451,7 +452,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 if let Some(reason) = excluded_candidates.get(&record.url) {
                     candidates
                         .excluded
-                        .push((solvable_id, pool.intern_string(reason.clone())));
+                        .push((solvable_id, pool.intern_string(&**reason)));
                 }
 
                 if let Some(config) = &exclude_newer
@@ -568,7 +569,7 @@ impl<'a> CondaDependencyProvider<'a> {
             if let Some(reason) = excluded_candidates.get(&favored_record.url) {
                 candidates
                     .excluded
-                    .push((solvable, pool.intern_string(reason.clone())));
+                    .push((solvable, pool.intern_string(&**reason)));
             } else {
                 candidates.favored = Some(solvable);
             }
@@ -586,7 +587,7 @@ impl<'a> CondaDependencyProvider<'a> {
             if let Some(reason) = excluded_candidates.get(&locked_record.url) {
                 candidates
                     .excluded
-                    .push((solvable, pool.intern_string(reason.clone())));
+                    .push((solvable, pool.intern_string(&**reason)));
             } else {
                 candidates.locked = Some(solvable);
             }

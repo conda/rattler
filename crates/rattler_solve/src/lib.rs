@@ -437,7 +437,11 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     ///
     /// Only the `resolvo` backend supports this. Other backends reject a task
     /// that sets it rather than silently solving without the restriction.
-    pub excluded_candidates: HashMap<Url, String>,
+    ///
+    /// The reason is an [`Arc<str>`] because a caller typically rules out many
+    /// records for the same handful of reasons, and cloning one per record
+    /// would allocate for every entry.
+    pub excluded_candidates: HashMap<Url, Arc<str>>,
 
     /// An optional token that can be used to cancel an in-flight solve.
     ///
