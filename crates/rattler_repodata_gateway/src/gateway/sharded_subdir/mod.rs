@@ -479,6 +479,37 @@ mod tests {
         .expect("the index comes from the cache")
     }
 
+    /// A cache-only build with no index cached must report
+    /// [`GatewayError::ShardedIndexNotCached`] and nothing else: that is the
+    /// variant `SubdirBuilder` matches on to fall back to `repodata.json`,
+    /// which may well be cached even when the sharded index is not.
+    #[tokio::test]
+    async fn uncached_index_is_reported_as_such_in_cache_only_mode() {
+        let server = MockShardedServer::new(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let err = ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::ForceCacheOnly,
+                missing_shards_are_empty: true,
+            },
+            None,
+            None,
+        )
+        .await
+        .err()
+        .expect("nothing is cached, and the index may not be fetched");
+
+        assert!(
+            matches!(err, GatewayError::ShardedIndexNotCached(_)),
+            "expected ShardedIndexNotCached, got: {err}"
+        );
+    }
+
     #[tokio::test]
     async fn cold_shard_is_an_error_by_default() {
         let server = MockShardedServer::new(MockShardResponse::Empty).await;

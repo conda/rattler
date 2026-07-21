@@ -6,6 +6,7 @@ use std::{
 use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
 use rattler_redaction::Redact;
 use thiserror::Error;
+use url::Url;
 
 use crate::{
     fetch,
@@ -59,6 +60,13 @@ pub enum GatewayError {
 
     #[error("{0}")]
     CacheError(String),
+
+    /// No usable sharded index for a subdir while the gateway may only read
+    /// from the cache. Callers fall back to `repodata.json` for the subdir
+    /// rather than failing: the sharded index is one way to read a channel,
+    /// not the channel itself.
+    #[error("no sharded repodata index is cached for {0}")]
+    ShardedIndexNotCached(Url),
 
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
