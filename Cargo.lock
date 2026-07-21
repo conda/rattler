@@ -5366,6 +5366,11 @@ dependencies = [
  "netrc-rs",
  "rattler_config",
  "regex",
+ "reqsign-azure-storage",
+ "reqsign-command-execute-tokio",
+ "reqsign-core",
+ "reqsign-file-read-tokio",
+ "reqsign-http-send-reqwest",
  "reqwest",
  "retry-policies",
  "rstest",
@@ -5824,6 +5829,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqsign-command-execute-tokio"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecf28fcf0aef694448cb235d393fbec7b5543d25050eacc0ccc2118596618c52"
+dependencies = [
+ "reqsign-core",
+ "tokio",
+]
+
+[[package]]
 name = "reqsign-core"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5857,6 +5872,22 @@ dependencies = [
  "anyhow",
  "reqsign-core",
  "tokio",
+]
+
+[[package]]
+name = "reqsign-http-send-reqwest"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90b4509b12b73289cdeed349ba494553404e33782abc09bc0ae4e09f741807cb"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-channel",
+ "http 1.4.2",
+ "http-body-util",
+ "reqsign-core",
+ "reqwest",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
