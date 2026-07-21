@@ -123,6 +123,8 @@ pub enum ServerType {
     Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
+    #[cfg(feature = "azure")]
+    Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
 }
@@ -410,6 +412,45 @@ pub struct S3Opts {
 
     #[clap(flatten)]
     pub credentials: rattler_s3::clap::S3CredentialsOpts,
+
+    /// Replace files if it already exists.
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[cfg(feature = "azure")]
+fn parse_azure_url(value: &str) -> Result<Url, String> {
+    let url: Url =
+        Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
+    // Require host + a container segment, e.g.
+    // https://<account>.blob.core.windows.net/<container>/<prefix>.
+    let has_container = url
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .is_some_and(|segment| !segment.is_empty());
+    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() && has_container {
+        Ok(url)
+    } else {
+        Err(format!(
+            "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
+        ))
+    }
+}
+
+/// Options for uploading to Azure Blob Storage.
+///
+/// Authentication is supplied with either an account key or a shared access
+/// signature (SAS) token; the two are mutually exclusive.
+#[cfg(feature = "azure")]
+#[derive(Clone, Debug, PartialEq, Parser)]
+pub struct AzureOpts {
+    /// The channel URL in the Azure Blob container to upload the package to,
+    /// e.g., `https://myaccount.blob.core.windows.net/my-container/my-channel`
+    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = parse_azure_url)]
+    pub channel: Url,
+
+    #[clap(flatten)]
+    pub credentials: rattler_azure::clap::AzureCredentialsOpts,
 
     /// Replace files if it already exists.
     #[arg(long)]
