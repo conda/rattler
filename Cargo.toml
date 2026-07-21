@@ -91,6 +91,11 @@ google-cloud-auth = { version = "1", default-features = false, features = [
 aws-config = { version = "1", default-features = false }
 aws-sdk-s3 = { version = "1", default-features = false }
 aws-smithy-http-client = { version = "1", default-features = false }
+reqsign-core = "3.0.1"
+reqsign-azure-storage = "3.0.1"
+reqsign-command-execute-tokio = "3.0.1"
+reqsign-file-read-tokio = "3.0.1"
+reqsign-http-send-reqwest = "4.0.1"
 aws-credential-types = { version = "1", default-features = false }
 hashbrown = "0.17"
 hex = "0.4"
