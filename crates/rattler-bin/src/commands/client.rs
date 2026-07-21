@@ -57,6 +57,11 @@ pub fn create_client_with_middleware(
     ));
     #[cfg(feature = "gcs")]
     let client = client.with(rattler_networking::GCSMiddleware::default());
+    // Empty map like S3 above — rattler-bin loads no rattler_config, so there are
+    // no per-container azure-options to plumb. Real consumers (e.g. pixi) build the
+    // map via rattler_networking::compute_azure_config_from_config.
+    #[cfg(feature = "azure")]
+    let client = client.with(rattler_networking::AzureMiddleware::new(HashMap::new()));
 
     Ok(client.build())
 }
