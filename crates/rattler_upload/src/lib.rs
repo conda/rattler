@@ -83,12 +83,11 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         #[cfg(feature = "azure")]
         ServerType::Azure(azure_opts) => {
-            let credentials =
-                rattler_azure::AzureCredentials::try_from(azure_opts.credentials).map_err(|err| {
-                    miette::miette!(
-                        "{err}. Provide either --account-key or --sas-token (or the corresponding environment variables)."
-                    )
-                })?;
+            let (account, container) = upload::azure_account_and_container(&azure_opts.channel)?;
+            let credentials = azure_opts
+                .credentials
+                .resolve(&account, &container, upload::AZURE_UPLOAD_SAS_PERMISSIONS)
+                .into_diagnostic()?;
             upload::upload_package_to_azure(
                 azure_opts.channel,
                 credentials,

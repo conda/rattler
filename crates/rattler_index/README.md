@@ -24,17 +24,35 @@ rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 Index an Azure Blob Storage channel:
 
 ```shell
-rattler-index --config ./rattler-config.toml azure \
-    --channel az://my-container/my-channel \
-    --account my-storage-account \
-    [--endpoint-url https://my-storage-account.blob.core.windows.net]
+rattler-index --config ./rattler-config.toml azblob \
+    https://my-storage-account.blob.core.windows.net/my-container/my-channel \
+    --azure-cli
 ```
 
-Azure channels need no secrets on the command line. For local development run
-`az login`; in CI, authentication is resolved through reqsign's
-`DefaultCredentialProvider` chain, which covers managed identity, workload
-identity, and service-principal environment variables. The `--endpoint-url`
-flag is only needed for sovereign clouds or a local Azurite emulator.
+Indexing writes to the container through opendal, which only accepts a storage
+account key or a shared access signature (SAS) token — it cannot use an `az
+login` AAD bearer token directly. Supply one of:
+
+- `--azure-cli`: mint a short-lived user-delegation SAS from the current `az
+  login` session automatically. Requires the Azure CLI (`az`) on `PATH` and a
+  prior `az login`. The minted SAS is scoped to the target container, granted
+  only the permissions indexing needs, and expires after 30 minutes (a SAS
+  cannot be individually revoked, so it is kept short-lived on purpose).
+- `--account-key` / `AZURE_STORAGE_KEY`: a storage account key.
+- `--sas-token` / `AZURE_STORAGE_SAS_TOKEN`: a SAS token you supply yourself.
+
+To mint a SAS manually instead of using `--azure-cli` (for example, to reuse it
+across several commands), generate one from your `az login` session and pass it
+via `--sas-token`:
+
+```shell
+export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
+    --account-name my-storage-account --name my-container \
+    --permissions rwlc --expiry 2026-01-01T00:00Z \
+    --auth-mode login --as-user --https-only -o tsv)
+rattler-index --config ./rattler-config.toml azblob \
+    https://my-storage-account.blob.core.windows.net/my-container/my-channel
+```
 
 The `--config` flag points at the same TOML configuration file used by pixi. It
 configures S3 and Azure credentials, concurrency, and per-channel index options

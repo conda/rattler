@@ -21,6 +21,29 @@ const PART_CONCURRENCY: usize = 4;
 /// Number of packages that are uploaded concurrently.
 const PACKAGE_CONCURRENCY: usize = 4;
 
+/// SAS permissions requested when minting a user-delegation SAS for uploads.
+/// Uploading only needs to create and write blobs (`c` + `w`).
+pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "cw";
+
+/// Derive the storage account name and container from an Azure Blob channel URL
+/// of the form `https://<account>.blob.core.windows.net/<container>/<prefix>`.
+pub(crate) fn azure_account_and_container(channel: &Url) -> miette::Result<(String, String)> {
+    let host = channel
+        .host_str()
+        .ok_or_else(|| miette::miette!("No host in Azure blob URL"))?;
+    let account_name = host
+        .split('.')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| miette::miette!("Could not derive account name from Azure blob URL"))?;
+    let container = channel
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| miette::miette!("No container in Azure blob URL"))?;
+    Ok((account_name.to_string(), container.to_string()))
+}
+
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
 /// The channel URL must be of the form
@@ -177,26 +200,20 @@ async fn upload_single_package(
 /// the URL (`https://<account>.blob.core.windows.net/<container>/<prefix>`); the
 /// credentials supply only the account key or SAS token.
 fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Result<AzblobConfig> {
-    let host = channel
-        .host_str()
-        .ok_or_else(|| miette::miette!("No host in Azure blob URL"))?;
-    let account_name = host
-        .split('.')
-        .next()
-        .filter(|name| !name.is_empty())
-        .ok_or_else(|| miette::miette!("Could not derive account name from Azure blob URL"))?;
+    let (account_name, container) = azure_account_and_container(channel)?;
 
     let mut segments = channel
         .path_segments()
         .ok_or_else(|| miette::miette!("No path in Azure blob URL"))?;
-    let container = segments
-        .next()
-        .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| miette::miette!("No container in Azure blob URL"))?;
+    // Skip the container segment; the remainder is the root prefix.
+    segments.next();
     let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
 
     // Preserve a non-default port if one is present; real Azure uses the scheme
     // default (443).
+    let host = channel
+        .host_str()
+        .ok_or_else(|| miette::miette!("No host in Azure blob URL"))?;
     let authority = match channel.port() {
         Some(port) => format!("{host}:{port}"),
         None => host.to_string(),
@@ -209,8 +226,8 @@ fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Resul
 
     Ok(AzblobConfig {
         endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
-        account_name: Some(account_name.to_string()),
-        container: container.to_string(),
+        account_name: Some(account_name),
+        container,
         root: Some(root),
         account_key,
         sas_token,

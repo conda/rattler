@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-#[cfg(feature = "azure")]
-use rattler_azure::AzureCredentials;
 use rattler_conda_types::Platform;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
@@ -60,6 +58,32 @@ fn parse_azure_url(value: &str) -> Result<Url, String> {
             "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
         ))
     }
+}
+
+/// SAS permissions requested when minting a user-delegation SAS for indexing.
+/// Indexing does a read-modify-write of repodata and lists/reads packages, so it
+/// needs read, write, list, and create (`r` + `w` + `l` + `c`).
+#[cfg(feature = "azure")]
+const AZURE_INDEX_SAS_PERMISSIONS: &str = "rwlc";
+
+/// Derive the storage account name and container from an Azure Blob channel URL
+/// of the form `https://<account>.blob.core.windows.net/<container>/<prefix>`.
+#[cfg(feature = "azure")]
+fn azure_account_and_container(channel: &Url) -> anyhow::Result<(String, String)> {
+    let host = channel
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("No host in Azure blob URL"))?;
+    let account_name = host
+        .split('.')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("Could not derive account name from Azure blob URL"))?;
+    let container = channel
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("No container in Azure blob URL"))?;
+    Ok((account_name.to_string(), container.to_string()))
 }
 
 /// The `rattler-index` CLI.
@@ -267,7 +291,9 @@ async fn main() -> anyhow::Result<()> {
                 effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
-            let credentials = AzureCredentials::try_from(credentials)?;
+            let (account, container) = azure_account_and_container(&channel)?;
+            let credentials =
+                credentials.resolve(&account, &container, AZURE_INDEX_SAS_PERMISSIONS)?;
 
             index_azure_with_channel_metadata(
                 IndexAzureConfig {

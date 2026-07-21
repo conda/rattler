@@ -5050,6 +5050,7 @@ name = "rattler_azure"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "jiff",
  "serde",
  "thiserror 2.0.18",
  "url",
