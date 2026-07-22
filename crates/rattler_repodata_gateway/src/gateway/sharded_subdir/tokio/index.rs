@@ -264,6 +264,29 @@ pub async fn fetch_index(
                         return Err(create_subdir_not_found_error(channel_base_url));
                     }
 
+                    // A `304 Not Modified` means the cached shard index is
+                    // still valid, so serve it directly. Servers that omit
+                    // `Cache-Control` on the shard index (e.g. Azure Blob
+                    // Storage) leave the cached policy with no freshness
+                    // lifetime, so every request revalidates and answers with
+                    // 304; without this guard the 304 falls through to
+                    // `from_response`, which rejects it as an unexpected status.
+                    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+                        match read_shard_index_from_reader(&mut cache_reader).await {
+                            Ok(shard_index) => {
+                                tracing::debug!("shard index revalidated (304 Not Modified)");
+                                if let Some((reporter, index)) = download_reporter {
+                                    reporter.on_download_complete(response.url(), index);
+                                }
+                                return Ok(shard_index);
+                            }
+                            Err(e) => {
+                                // Cache unreadable; fall through to a fresh fetch.
+                                tracing::warn!("the cached shard index has been corrupted: {e}");
+                            }
+                        }
+                    }
+
                     match cache_header.policy.after_response(
                         &state_request,
                         &response,
