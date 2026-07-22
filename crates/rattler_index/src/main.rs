@@ -66,26 +66,6 @@ fn parse_azure_url(value: &str) -> Result<Url, String> {
 #[cfg(feature = "azure")]
 const AZURE_INDEX_SAS_PERMISSIONS: &str = "rwlc";
 
-/// Derive the storage account name and container from an Azure Blob channel URL
-/// of the form `https://<account>.blob.core.windows.net/<container>/<prefix>`.
-#[cfg(feature = "azure")]
-fn azure_account_and_container(channel: &Url) -> anyhow::Result<(String, String)> {
-    let host = channel
-        .host_str()
-        .ok_or_else(|| anyhow::anyhow!("No host in Azure blob URL"))?;
-    let account_name = host
-        .split('.')
-        .next()
-        .filter(|name| !name.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Could not derive account name from Azure blob URL"))?;
-    let container = channel
-        .path_segments()
-        .and_then(|mut segments| segments.next())
-        .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("No container in Azure blob URL"))?;
-    Ok((account_name.to_string(), container.to_string()))
-}
-
 /// The `rattler-index` CLI.
 #[derive(Parser)]
 #[command(name = "rattler-index", version, about, long_about = None)]
@@ -291,9 +271,9 @@ async fn main() -> anyhow::Result<()> {
                 effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
-            let (account, container) = azure_account_and_container(&channel)?;
-            let credentials =
-                credentials.resolve(&account, &container, AZURE_INDEX_SAS_PERMISSIONS)?;
+            let credentials = credentials.resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
+                Ok(rattler_azure::account_and_container(&channel)?)
+            })?;
 
             index_azure_with_channel_metadata(
                 IndexAzureConfig {

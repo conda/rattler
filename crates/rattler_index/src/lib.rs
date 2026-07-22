@@ -1604,22 +1604,17 @@ fn azblob_config(
     credentials: &AzureCredentials,
     channel: &Url,
 ) -> Result<AzblobConfig, anyhow::Error> {
+    let (account_name, container) = rattler_azure::account_and_container(channel)?;
+
     let host = channel
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("No host in Azure blob URL"))?;
-    let account_name = host
-        .split('.')
-        .next()
-        .filter(|name| !name.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Could not derive account name from Azure blob URL"))?;
 
     let mut segments = channel
         .path_segments()
         .ok_or_else(|| anyhow::anyhow!("No path in Azure blob URL"))?;
-    let container = segments
-        .next()
-        .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("No container in Azure blob URL"))?;
+    // Skip the container segment; the remainder is the root prefix.
+    segments.next();
     let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
 
     // Preserve a non-default port if one is present; real Azure uses the scheme
@@ -1631,13 +1626,16 @@ fn azblob_config(
 
     let (account_key, sas_token) = match credentials {
         AzureCredentials::AccountKey(key) => (Some(key.clone()), None),
-        AzureCredentials::SasToken(token) => (None, Some(token.clone())),
+        AzureCredentials::SasToken(token) => (
+            None,
+            Some(rattler_azure::normalize_sas_token(token).to_string()),
+        ),
     };
 
     Ok(AzblobConfig {
         endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
-        account_name: Some(account_name.to_string()),
-        container: container.to_string(),
+        account_name: Some(account_name),
+        container,
         root: Some(root),
         account_key,
         sas_token,

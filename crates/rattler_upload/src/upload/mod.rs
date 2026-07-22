@@ -31,9 +31,9 @@ mod anaconda;
 #[cfg(feature = "azure")]
 mod azure;
 #[cfg(feature = "azure")]
-pub use azure::upload_package_to_azure;
+pub(crate) use azure::AZURE_UPLOAD_SAS_PERMISSIONS;
 #[cfg(feature = "azure")]
-pub(crate) use azure::{AZURE_UPLOAD_SAS_PERMISSIONS, azure_account_and_container};
+pub use azure::upload_package_to_azure;
 #[cfg(feature = "sigstore-sign")]
 pub mod attestation;
 mod cloudsmith;

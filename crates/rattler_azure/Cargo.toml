@@ -11,10 +11,9 @@ readme.workspace = true
 
 [features]
 default = []
-# Minting a short-lived user-delegation SAS by shelling out to the Azure CLI.
-azure-cli-sas = ["dep:jiff"]
-# CLI credential options; resolving them may mint a SAS via the Azure CLI.
-clap = ["dep:clap", "azure-cli-sas"]
+# CLI credential options; resolving them may mint a short-lived user-delegation
+# SAS by shelling out to the Azure CLI (which needs `jiff` for the expiry).
+clap = ["dep:clap", "dep:jiff"]
 # Serialize/deserialize support for the credential types.
 serde = ["dep:serde", "serde/derive"]
 

@@ -83,13 +83,15 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         #[cfg(feature = "azure")]
         ServerType::Azure(azure_opts) => {
-            let (account, container) = upload::azure_account_and_container(&azure_opts.channel)?;
+            let channel = azure_opts.channel;
             let credentials = azure_opts
                 .credentials
-                .resolve(&account, &container, upload::AZURE_UPLOAD_SAS_PERMISSIONS)
+                .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, || {
+                    Ok(rattler_azure::account_and_container(&channel)?)
+                })
                 .into_diagnostic()?;
             upload::upload_package_to_azure(
-                azure_opts.channel,
+                channel,
                 credentials,
                 &args.package_files,
                 azure_opts.force,
