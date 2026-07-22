@@ -119,7 +119,7 @@ class Platform(metaclass=PlatformSingleton):
         >>> next(Platform.all())
         Platform(noarch)
         >>> len(list(Platform.all()))
-        25
+        32
         >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())
