@@ -1438,6 +1438,82 @@ fn channel_priority_disabled() {
     );
 }
 
+#[test]
+fn channel_priority_flexible_prefers_first_channel() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
+        "pytorch-cpu",
+        "https://conda.anaconda.org/conda-forge/",
+        repodata,
+        ChannelPriority::Flexible,
+    );
+}
+
+#[test]
+fn channel_priority_flexible_falls_back() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        ChannelPriority::Flexible,
+    );
+}
+
+#[test]
+fn channel_priority_flexible_in_memory() {
+    let channel_a = vec![
+        PackageBuilder::new("numpy")
+            .version("1.5.0")
+            .channel("channel-a")
+            .build(),
+    ];
+    let channel_b = vec![
+        PackageBuilder::new("numpy")
+            .version("1.6.0")
+            .channel("channel-b")
+            .build(),
+    ];
+
+    let solve = |priority| -> (String, String) {
+        let task = SolverTask {
+            specs: vec![MatchSpec::from_str("numpy", ParseStrictness::Lenient).unwrap()],
+            channel_priority: priority,
+            ..SolverTask::from_iter([&channel_a, &channel_b])
+        };
+        let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
+        let numpy = records
+            .iter()
+            .find(|r| r.package_record.name.as_normalized() == "numpy")
+            .expect("numpy should be in the solution");
+        (
+            numpy.package_record.version.to_string(),
+            numpy.channel.clone().unwrap(),
+        )
+    };
+
+    assert_eq!(
+        solve(ChannelPriority::Flexible),
+        ("1.5.0".to_string(), "channel-a".to_string()),
+    );
+
+    assert_eq!(
+        solve(ChannelPriority::Disabled),
+        ("1.6.0".to_string(), "channel-b".to_string()),
+    );
+
+    assert_eq!(
+        solve(ChannelPriority::Strict),
+        ("1.5.0".to_string(), "channel-a".to_string()),
+    );
+}
+
 #[cfg(feature = "libsolv_c")]
 #[test]
 #[should_panic(

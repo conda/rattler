@@ -11,7 +11,7 @@ use resolvo::{
 };
 
 use super::{NameType, SolverMatchSpec, SolverPackageRecord};
-use crate::resolvo::CondaDependencyProvider;
+use crate::{ChannelPriority, resolvo::CondaDependencyProvider};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -49,6 +49,16 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         let solvable = pool.resolve_solvable(id);
 
         &solvable.record
+    }
+
+    /// Returns the channel-priority rank of a solvable. A lower rank indicates a
+    /// higher-priority channel. Records without a channel (and virtual packages
+    /// / extras) rank last.
+    fn channel_rank(&self, id: SolvableId) -> u32 {
+        match self.solvable_record(id) {
+            SolverPackageRecord::Record(rec) => self.solver.provider().channel_rank(&rec.channel),
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => u32::MAX,
+        }
     }
 
     /// Reference to the pool
@@ -92,6 +102,18 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             (false, true) => return Ordering::Less,
             _ => {}
         };
+
+        // Under flexible channel priority, prefer candidates from
+        // higher-priority channels (lower rank) before comparing versions. This
+        // makes the solver exhaust a higher-priority channel's versions before
+        // falling back to a lower-priority channel, while still leaving the
+        // lower-priority channels available as a fallback.
+        if self.solver.provider().channel_priority == ChannelPriority::Flexible {
+            match self.channel_rank(a).cmp(&self.channel_rank(b)) {
+                Ordering::Equal => {}
+                ordering => return ordering,
+            }
+        }
 
         // Otherwise, select the variant with the highest version
         match (self.strategy, a_record.version().cmp(&b_record.version())) {
