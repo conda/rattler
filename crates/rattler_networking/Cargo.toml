@@ -23,7 +23,6 @@ azure = [
     "dep:reqsign-command-execute-tokio",
     "dep:reqsign-file-read-tokio",
     "dep:reqsign-http-send-reqwest",
-    "rattler_config",
     "tokio",
 ]
 system-integration = ["keyring", "netrc-rs", "dirs"]

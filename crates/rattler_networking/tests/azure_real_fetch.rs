@@ -13,13 +13,13 @@
 //! AZURE_TEST_PATH=noarch/repodata.json \
 //! cargo test -p rattler_networking --features azure --test azure_real_fetch -- --ignored --nocapture
 //! ```
+//!
+//! Set `AZURE_TEST_HOST` to target a sovereign cloud or emulator directly
+//! (overrides the default `{account}.blob.core.windows.net` host).
 #![cfg(feature = "azure")]
 
-use std::collections::HashMap;
-
-use rattler_networking::{AzureMiddleware, azure_middleware::AzureConfig};
+use rattler_networking::AzureMiddleware;
 use reqwest_middleware::ClientBuilder;
-use url::Url;
 
 #[tokio::test]
 #[ignore = "requires az login and AZURE_TEST_* env vars pointing at a real account"]
@@ -28,24 +28,16 @@ async fn azure_middleware_fetches_real_repodata() {
     let container = std::env::var("AZURE_TEST_CONTAINER").expect("AZURE_TEST_CONTAINER");
     let path =
         std::env::var("AZURE_TEST_PATH").unwrap_or_else(|_| "noarch/repodata.json".to_string());
-
-    // An explicit endpoint override addresses sovereign clouds / emulators; the
-    // default (account form) targets `https://{account}.blob.core.windows.net`.
-    let azure_config = match std::env::var("AZURE_TEST_ENDPOINT").ok() {
-        Some(endpoint) => {
-            AzureConfig::Endpoint(Url::parse(&endpoint).expect("invalid AZURE_TEST_ENDPOINT"))
-        }
-        None => AzureConfig::Account(account),
-    };
-
-    let mut config = HashMap::new();
-    config.insert(container.clone(), azure_config);
+    let host = std::env::var("AZURE_TEST_HOST")
+        .unwrap_or_else(|_| format!("{account}.blob.core.windows.net"));
 
     let client = ClientBuilder::new(reqwest::Client::new())
-        .with(AzureMiddleware::new(config))
+        .with(AzureMiddleware::new())
         .build();
 
-    let url = format!("az://{container}/{path}");
+    // The `az://` host carries the full blob endpoint — same form used in a
+    // channel URL, e.g. `az://stgrcondachannel.blob.core.windows.net/general`.
+    let url = format!("az://{host}/{container}/{path}");
     println!("fetching {url}");
     let resp = client
         .get(&url)
