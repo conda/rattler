@@ -65,23 +65,22 @@ When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 ## Remote storage credentials
 
 S3 endpoint and region settings live under `[s3-options.<bucket>]`, keyed by
-bucket name. Azure Blob Storage uses the analogous `[azure-options.<container>]`
-block, keyed by container name. Each Azure entry records the storage account and
-an optional endpoint override (no secrets are stored — credentials are resolved
-at runtime through `az login` locally or the `DefaultCredentialProvider` chain
-in CI):
+bucket name:
 
 ```toml
 [s3-options.my-bucket]
 endpoint-url = "https://my-bucket.s3.amazonaws.com"
 region = "eu-central-1"
 force-path-style = false
-
-[azure-options.my-container]
-account = "my-storage-account"
-# Optional; defaults to https://{account}.blob.core.windows.net
-endpoint-url = "https://my-storage-account.blob.core.windows.net"
 ```
+
+Azure Blob Storage needs no such block: the storage account and blob endpoint
+are read directly from the channel URL
+(`https://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
+container, and endpoint (including sovereign clouds) are fully determined by the
+URL you pass. Credentials are never stored in the config — they are resolved at
+runtime from `--account-key` / `--sas-token`, an `az login` session
+(`--azure-cli`), or the `DefaultCredentialProvider` chain.
 
 ## Per-channel index configuration
 
