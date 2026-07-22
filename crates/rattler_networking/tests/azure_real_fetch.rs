@@ -32,7 +32,7 @@ async fn azure_middleware_fetches_real_repodata() {
         .unwrap_or_else(|_| format!("{account}.blob.core.windows.net"));
 
     let client = ClientBuilder::new(reqwest::Client::new())
-        .with(AzureMiddleware::new())
+        .with(AzureMiddleware::new(reqwest::Client::new()))
         .build();
 
     // The `az://` host carries the full blob endpoint — same form used in a
