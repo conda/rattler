@@ -40,24 +40,19 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 fn parse_azure_url(value: &str) -> Result<Url, String> {
     let url: Url = Url::parse(value).map_err(|e| format!("`{value}` isn't a valid URL: {e}"))?;
     // Require an `<account>.blob.<suffix>` host and a container segment, e.g.
-    // https://<account>.blob.core.windows.net/<container>/<prefix>. The index
-    // path derives the storage account from the host, so it must be a dotted
-    // domain (real Azure and sovereign clouds always are). IP literals and
-    // single-label hosts (localhost, the Azurite emulator) are rejected here
-    // because no account can be derived from them.
-    let has_dotted_domain =
-        matches!(url.host(), Some(url::Host::Domain(host)) if host.contains('.'));
-    let has_container = url
-        .path_segments()
-        .and_then(|mut segments| segments.next())
-        .is_some_and(|segment| !segment.is_empty());
-    if matches!(url.scheme(), "http" | "https") && has_dotted_domain && has_container {
-        Ok(url)
-    } else {
-        Err(format!(
+    // https://<account>.blob.core.windows.net/<container>/<prefix>. The account
+    // and container are derived exactly as the index path derives them, via
+    // `rattler_azure::account_and_container`, which rejects IP literals and
+    // single-label hosts (localhost, the Azurite emulator) and container-less
+    // URLs.
+    if !matches!(url.scheme(), "http" | "https")
+        || rattler_azure::account_and_container(&url).is_err()
+    {
+        return Err(format!(
             "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
-        ))
+        ));
     }
+    Ok(url)
 }
 
 /// SAS permissions requested when minting a user-delegation SAS for indexing.
