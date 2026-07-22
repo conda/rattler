@@ -32,10 +32,9 @@ pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "cw";
 /// name, endpoint, container, and root prefix are all derived from it (see
 /// [`azblob_config`]). Because the account is derived from the host, upload
 /// requires this dotted `<account>.blob...` form and does not support
-/// path-style or emulator (Azurite) endpoints. (The fetch middleware, by
-/// contrast, does support custom endpoints — including Azurite — via
-/// `azure-options.<container>.endpoint-url`.) The [`AzureCredentials`] supply
-/// only the account key or SAS token.
+/// path-style or emulator (Azurite) endpoints. The full blob host lives in the
+/// channel URL itself, so no separate account/endpoint configuration is needed.
+/// The [`AzureCredentials`] supply only the account key or SAS token.
 pub async fn upload_package_to_azure(
     channel: Url,
     credentials: AzureCredentials,
@@ -43,7 +42,6 @@ pub async fn upload_package_to_azure(
     force: bool,
 ) -> miette::Result<()> {
     let config = azblob_config(&credentials, &channel)?;
-    let container = config.container.clone();
 
     let builder = config.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();
@@ -54,8 +52,7 @@ pub async fn upload_package_to_azure(
         .map(|package_file| {
             let op = op.clone();
             let channel = &channel;
-            let container = container.as_str();
-            async move { upload_single_package(&op, channel, container, package_file, force).await }
+            async move { upload_single_package(&op, channel, package_file, force).await }
         })
         .buffer_unordered(PACKAGE_CONCURRENCY)
         .collect::<Vec<_>>()
@@ -70,7 +67,6 @@ pub async fn upload_package_to_azure(
 async fn upload_single_package(
     op: &Operator,
     channel: &Url,
-    container: &str,
     package_file: &Path,
     force: bool,
 ) -> miette::Result<()> {
@@ -82,6 +78,15 @@ async fn upload_single_package(
         .filename()
         .ok_or_else(|| miette::miette!("Failed to get filename"))?;
     let key = format!("{subdir}/{filename}");
+
+    // The blob's on-the-wire address, used only for diagnostics. `channel.path()`
+    // already carries `/<container>/<prefix>`, so the full `az://` URL is the host
+    // followed by that path and the key; do not prepend the container again.
+    let blob_url = format!(
+        "az://{}{}/{key}",
+        channel.host_str().unwrap_or_default(),
+        channel.path()
+    );
 
     // Compute the hash of the package by streaming its content.
     let file = tokio::io::BufReader::new(
@@ -119,10 +124,7 @@ async fn upload_single_package(
         .await
     {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
-            miette::bail!(
-                "Package az://{container}{}/{key} already exists. Use --force to overwrite.",
-                channel.path().to_string()
-            );
+            miette::bail!("Package {blob_url} already exists. Use --force to overwrite.");
         }
         Ok(writer) => writer,
         Err(e) => {
@@ -138,8 +140,8 @@ async fn upload_single_package(
         // Allocate memory for this chunk.
         let chunk_size = remaining_size.min(DESIRED_CHUNK_SIZE);
         let mut chunk = BytesMut::with_capacity(chunk_size);
-        // SAFE: because we do not care about the bytes that are currently in the buffer
-        unsafe { chunk.set_len(chunk_size) };
+        // Zero-fill up to `chunk_size`; `read_exact` below overwrites every byte.
+        chunk.resize(chunk_size, 0);
 
         // Fill the chunk with data. This reads exactly the number of bytes we want. No
         // more, no less.
@@ -156,16 +158,10 @@ async fn upload_single_package(
 
     match writer.close().await {
         Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
-            miette::bail!(
-                "Package az://{container}{}/{key} already exists. Use --force to overwrite.",
-                channel.path().to_string()
-            );
+            miette::bail!("Package {blob_url} already exists. Use --force to overwrite.");
         }
         Ok(_) => {
-            tracing::info!(
-                "Uploaded package to az://{container}{}/{key}",
-                channel.path().to_string()
-            );
+            tracing::info!("Uploaded package to {blob_url}");
         }
         Err(e) => {
             return Err(e).into_diagnostic();
@@ -181,15 +177,26 @@ async fn upload_single_package(
 /// the URL (`https://<account>.blob.core.windows.net/<container>/<prefix>`); the
 /// credentials supply only the account key or SAS token.
 fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Result<AzblobConfig> {
-    let (account_name, container) =
-        rattler_azure::account_and_container(channel).into_diagnostic()?;
+    let rattler_azure::AzureCoordinates {
+        account: account_name,
+        container,
+    } = rattler_azure::account_and_container(channel).into_diagnostic()?;
 
     let mut segments = channel
         .path_segments()
         .ok_or_else(|| miette::miette!("No path in Azure blob URL"))?;
-    // Skip the container segment; the remainder is the root prefix.
+    // Skip the container segment; the remainder is the root prefix. Percent-decode
+    // each segment before joining: `path_segments()` yields still-encoded segments,
+    // and opendal percent-encodes the root again, so passing them through verbatim
+    // would double-encode prefixes containing spaces or `+`.
     segments.next();
-    let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
+    let root = format!(
+        "/{}",
+        segments
+            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    );
 
     // Preserve a non-default port if one is present; real Azure uses the scheme
     // default (443).

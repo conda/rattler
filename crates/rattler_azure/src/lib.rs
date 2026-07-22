@@ -10,8 +10,10 @@ use url::Url;
 /// account name, endpoint, and container are not stored here: they are fully
 /// determined by the channel URL (`https://<account>.blob.core.windows.net/<container>/...`)
 /// and derived by the consumer.
+///
+/// The type deliberately has no `Serialize`/`Deserialize`: it holds raw account
+/// keys and SAS tokens, so serialization would risk leaking secrets to disk.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AzureCredentials {
     /// A shared storage account key.
     AccountKey(String),
@@ -53,13 +55,26 @@ pub enum AzureUrlError {
     NoContainer,
 }
 
+/// The storage account and container an Azure Blob channel URL resolves to.
+///
+/// A named pair rather than a bare `(String, String)` so the two cannot be
+/// silently transposed at a call site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AzureCoordinates {
+    /// The storage account name (first label of the host).
+    pub account: String,
+
+    /// The blob container name (first path segment).
+    pub container: String,
+}
+
 /// Derive the storage account name and container from an Azure Blob channel URL
 /// of the form `https://<account>.blob.core.windows.net/<container>/<prefix>`.
 ///
 /// The account name is the first label of the host, so the host must be a dotted
 /// domain; IP-literal and single-label hosts (e.g. `localhost` or the Azurite
 /// emulator) are rejected because no account can be derived from them.
-pub fn account_and_container(url: &Url) -> Result<(String, String), AzureUrlError> {
+pub fn account_and_container(url: &Url) -> Result<AzureCoordinates, AzureUrlError> {
     let host = url.host_str().ok_or(AzureUrlError::NoHost)?;
     if !matches!(url.host(), Some(url::Host::Domain(domain)) if domain.contains('.')) {
         return Err(AzureUrlError::InvalidHost(host.to_string()));
@@ -74,7 +89,10 @@ pub fn account_and_container(url: &Url) -> Result<(String, String), AzureUrlErro
         .and_then(|mut segments| segments.next())
         .filter(|segment| !segment.is_empty())
         .ok_or(AzureUrlError::NoContainer)?;
-    Ok((account.to_string(), container.to_string()))
+    Ok(AzureCoordinates {
+        account: account.to_string(),
+        container: container.to_string(),
+    })
 }
 
 /// Errors that can occur while minting a user-delegation SAS via the Azure CLI.

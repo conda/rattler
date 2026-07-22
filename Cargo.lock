@@ -5051,7 +5051,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "jiff",
- "serde",
  "thiserror 2.0.18",
  "url",
 ]
@@ -5229,6 +5228,7 @@ dependencies = [
  "indicatif",
  "jiff",
  "opendal",
+ "percent-encoding",
  "rattler_azure",
  "rattler_conda_types",
  "rattler_config",
@@ -5631,6 +5631,7 @@ dependencies = [
  "indicatif",
  "miette",
  "opendal",
+ "percent-encoding",
  "rattler_azure",
  "rattler_conda_types",
  "rattler_config",

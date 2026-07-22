@@ -1604,7 +1604,10 @@ fn azblob_config(
     credentials: &AzureCredentials,
     channel: &Url,
 ) -> Result<AzblobConfig, anyhow::Error> {
-    let (account_name, container) = rattler_azure::account_and_container(channel)?;
+    let rattler_azure::AzureCoordinates {
+        account: account_name,
+        container,
+    } = rattler_azure::account_and_container(channel)?;
 
     let host = channel
         .host_str()
@@ -1613,9 +1616,18 @@ fn azblob_config(
     let mut segments = channel
         .path_segments()
         .ok_or_else(|| anyhow::anyhow!("No path in Azure blob URL"))?;
-    // Skip the container segment; the remainder is the root prefix.
+    // Skip the container segment; the remainder is the root prefix. Percent-decode
+    // each segment before joining: `path_segments()` yields still-encoded segments,
+    // and opendal percent-encodes the root again, so passing them through verbatim
+    // would double-encode prefixes containing spaces or `+`.
     segments.next();
-    let root = format!("/{}", segments.collect::<Vec<_>>().join("/"));
+    let root = format!(
+        "/{}",
+        segments
+            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    );
 
     // Preserve a non-default port if one is present; real Azure uses the scheme
     // default (443).

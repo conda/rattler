@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use clap::Parser;
 
-use crate::{AzureCliSasError, AzureCredentials, AzureUrlError, mint_user_delegation_sas};
+use crate::{
+    AzureCliSasError, AzureCoordinates, AzureCredentials, AzureUrlError, mint_user_delegation_sas,
+};
 
 /// Default lifetime, in minutes, of a SAS minted from an `az login` session.
 ///
@@ -10,6 +12,13 @@ use crate::{AzureCliSasError, AzureCredentials, AzureUrlError, mint_user_delegat
 /// so a short lifetime keeps the blast radius small if one leaks. Thirty minutes
 /// comfortably covers a typical index or upload run.
 const DEFAULT_AZURE_CLI_SAS_TTL_MINUTES: u64 = 30;
+
+/// Upper bound, in minutes, accepted for `--azure-cli-sas-ttl-minutes`.
+///
+/// A SAS is meant to be short-lived; one week is already generous. Capping the
+/// value at the clap layer also keeps `minutes * 60` well clear of overflowing
+/// the [`Duration`] arithmetic in [`AzureCredentialsOpts::source`].
+const MAX_AZURE_CLI_SAS_TTL_MINUTES: u64 = 7 * 24 * 60;
 
 /// Errors that can occur while resolving [`AzureCredentialsOpts`] into
 /// [`AzureCredentials`].
@@ -63,13 +72,13 @@ impl AzureAuthSource {
     pub fn resolve(
         self,
         permissions: &str,
-        cli_context: impl FnOnce() -> Result<(String, String), AzureCredentialsError>,
+        cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
     ) -> Result<AzureCredentials, AzureCredentialsError> {
         match self {
             AzureAuthSource::AccountKey(key) => Ok(AzureCredentials::AccountKey(key)),
             AzureAuthSource::SasToken(token) => Ok(AzureCredentials::SasToken(token)),
             AzureAuthSource::AzureCli { ttl } => {
-                let (account, container) = cli_context()?;
+                let AzureCoordinates { account, container } = cli_context()?;
                 let token = mint_user_delegation_sas(&account, &container, permissions, ttl)?;
                 Ok(AzureCredentials::SasToken(token))
             }
@@ -87,7 +96,16 @@ impl AzureAuthSource {
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct AzureCredentialsOpts {
     /// The Azure Storage account key.
-    #[arg(long, env = "AZURE_STORAGE_KEY", help_heading = "Azure Credentials")]
+    ///
+    /// Mutually exclusive with `--sas-token`: supplying both is a usage error
+    /// rather than silently discarding one. `--azure-cli` layers on top of both
+    /// (see [`AzureCredentialsOpts::source`]).
+    #[arg(
+        long,
+        env = "AZURE_STORAGE_KEY",
+        conflicts_with = "sas_token",
+        help_heading = "Azure Credentials"
+    )]
     pub account_key: Option<String>,
 
     /// A shared access signature (SAS) token, with or without a leading `?`.
@@ -116,6 +134,7 @@ pub struct AzureCredentialsOpts {
     #[arg(
         long,
         default_value_t = DEFAULT_AZURE_CLI_SAS_TTL_MINUTES,
+        value_parser = clap::value_parser!(u64).range(1..=MAX_AZURE_CLI_SAS_TTL_MINUTES),
         help_heading = "Azure Credentials"
     )]
     pub azure_cli_sas_ttl_minutes: u64,
@@ -137,7 +156,7 @@ impl AzureCredentialsOpts {
     pub fn source(&self) -> Result<AzureAuthSource, AzureCredentialsError> {
         if self.azure_cli {
             Ok(AzureAuthSource::AzureCli {
-                ttl: Duration::from_secs(self.azure_cli_sas_ttl_minutes * 60),
+                ttl: Duration::from_secs(self.azure_cli_sas_ttl_minutes.saturating_mul(60)),
             })
         } else if let Some(sas_token) = &self.sas_token {
             Ok(AzureAuthSource::SasToken(sas_token.clone()))
@@ -156,7 +175,7 @@ impl AzureCredentialsOpts {
     pub fn resolve(
         self,
         permissions: &str,
-        cli_context: impl FnOnce() -> Result<(String, String), AzureCredentialsError>,
+        cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
     ) -> Result<AzureCredentials, AzureCredentialsError> {
         self.source()?.resolve(permissions, cli_context)
     }
@@ -180,7 +199,7 @@ mod tests {
     }
 
     /// `cli_context` must not be invoked for the account-key/SAS-token paths.
-    fn unreachable_context() -> Result<(String, String), AzureCredentialsError> {
+    fn unreachable_context() -> Result<AzureCoordinates, AzureCredentialsError> {
         panic!("cli_context should not be called for non-azure-cli sources");
     }
 
@@ -262,6 +281,51 @@ mod tests {
         assert_eq!(
             default.creds.azure_cli_sas_ttl_minutes,
             DEFAULT_AZURE_CLI_SAS_TTL_MINUTES
+        );
+    }
+
+    /// `--account-key` and `--sas-token` are mutually exclusive: passing both is
+    /// a clap error rather than silently discarding one.
+    #[test]
+    fn account_key_and_sas_token_conflict() {
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Cli {
+            #[command(flatten)]
+            creds: AzureCredentialsOpts,
+        }
+
+        let err = Cli::try_parse_from(["test", "--account-key", "k", "--sas-token", "sv=..."])
+            .map(|_| ())
+            .expect_err("passing both --account-key and --sas-token must be rejected");
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    /// A zero TTL is rejected, and the maximum is capped so `minutes * 60`
+    /// cannot overflow.
+    #[test]
+    fn ttl_range_is_enforced() {
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct Cli {
+            #[command(flatten)]
+            creds: AzureCredentialsOpts,
+        }
+
+        assert!(
+            Cli::try_parse_from(["test", "--azure-cli", "--azure-cli-sas-ttl-minutes", "0"])
+                .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "test",
+                "--azure-cli",
+                "--azure-cli-sas-ttl-minutes",
+                &(MAX_AZURE_CLI_SAS_TTL_MINUTES + 1).to_string(),
+            ])
+            .is_err()
         );
     }
 }
