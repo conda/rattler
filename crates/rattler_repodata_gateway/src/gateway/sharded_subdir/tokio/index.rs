@@ -29,6 +29,39 @@ use tokio::{
 };
 use url::Url;
 
+/// `Cache-Control` synthesized for a shard index served without one.
+///
+/// Azure Blob Storage sends no `Cache-Control` on the shard index, so the
+/// derived [`CachePolicy`] has a zero freshness lifetime and every fetch issues
+/// a conditional revalidation round-trip forever. Granting a small `max-age`
+/// (60 seconds) lets repeated fetches inside the window be served straight from
+/// the local cache; once it lapses the retained validators (`ETag` /
+/// `Last-Modified`) still drive a cheap revalidation. Responses that carry their
+/// own `Cache-Control` are used verbatim, so an origin's explicit freshness
+/// policy is never weakened.
+const SHARD_INDEX_SYNTHETIC_CACHE_CONTROL: &str = "max-age=60";
+
+/// Build a [`CachePolicy`] for a shard-index response.
+///
+/// Responses that already carry a `Cache-Control` header are used as-is.
+/// Responses without one (notably Azure Blob Storage) are given a small
+/// synthetic `max-age` so freshness accumulates instead of forcing a
+/// revalidation on every fetch. Validators are preserved either way.
+fn shard_index_cache_policy(request: &SimpleRequest, response: &Response) -> CachePolicy {
+    if response.headers().contains_key(http::header::CACHE_CONTROL) {
+        return CachePolicy::new(request, response);
+    }
+
+    let mut synthetic = http::Response::new(());
+    *synthetic.status_mut() = response.status();
+    *synthetic.headers_mut() = response.headers().clone();
+    synthetic.headers_mut().insert(
+        http::header::CACHE_CONTROL,
+        http::HeaderValue::from_static(SHARD_INDEX_SYNTHETIC_CACHE_CONTROL),
+    );
+    CachePolicy::new(request, &synthetic)
+}
+
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
     GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
@@ -268,17 +301,36 @@ pub async fn fetch_index(
                     // still valid, so serve it directly. Servers that omit
                     // `Cache-Control` on the shard index (e.g. Azure Blob
                     // Storage) leave the cached policy with no freshness
-                    // lifetime, so every request revalidates and answers with
-                    // 304; without this guard the 304 falls through to
+                    // lifetime, so without this guard the 304 falls through to
                     // `from_response`, which rejects it as an unexpected status.
+                    //
+                    // Persist a refreshed policy from this revalidation so the
+                    // next fetch is a local cache hit rather than yet another
+                    // conditional round-trip: `shard_index_cache_policy`
+                    // synthesizes a small `max-age` for the Cache-Control-less
+                    // Azure case, so freshness accumulates.
                     if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                        match read_shard_index_from_reader(&mut cache_reader).await {
-                            Ok(shard_index) => {
+                        match read_cached_body(&mut cache_reader).await {
+                            Ok(body) => {
                                 tracing::debug!("shard index revalidated (304 Not Modified)");
+                                let refreshed =
+                                    shard_index_cache_policy(&canonical_request, &response);
+                                let mut guard = cache_reader.into_inner();
+                                if let Err(e) = write_shard_index_cache(
+                                    guard.inner_mut(),
+                                    refreshed,
+                                    Bytes::from(body.clone()),
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "failed to persist refreshed shard index cache policy: {e}"
+                                    );
+                                }
                                 if let Some((reporter, index)) = download_reporter {
                                     reporter.on_download_complete(response.url(), index);
                                 }
-                                return Ok(shard_index);
+                                return parse_shard_index(body).await;
                             }
                             Err(e) => {
                                 // Cache unreadable; fall through to a fresh fetch.
@@ -314,9 +366,13 @@ pub async fn fetch_index(
                                 }
                             }
                         }
-                        AfterResponse::Modified(policy, _) => {
+                        AfterResponse::Modified(_, _) => {
                             // Close the old file so we can create a new one.
                             tracing::debug!("shard index cache has become stale");
+                            // Synthesize freshness for a Cache-Control-less
+                            // response so the re-cached index does not revalidate
+                            // on every subsequent fetch.
+                            let policy = shard_index_cache_policy(&canonical_request, &response);
                             return from_response(
                                 cache_reader.into_inner(),
                                 &cache_path,
@@ -403,7 +459,7 @@ pub async fn fetch_index(
         return Err(create_subdir_not_found_error(channel_base_url));
     }
 
-    let policy = CachePolicy::new(&canonical_request, &response);
+    let policy = shard_index_cache_policy(&canonical_request, &response);
     from_response(
         cache_reader.into_inner(),
         &cache_path,
@@ -483,24 +539,34 @@ async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> st
     .await
 }
 
-/// Read the shard index from a reader and deserialize it.
-pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
+/// Read the remaining bytes (the cached shard-index body) from a reader.
+async fn read_cached_body<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
-) -> Result<ShardedRepodata, GatewayError> {
-    // Read the file to memory
+) -> Result<Vec<u8>, GatewayError> {
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
+    Ok(bytes)
+}
 
-    // Deserialize the bytes
+/// Deserialize a shard index from raw `msgpack` bytes.
+async fn parse_shard_index(bytes: Vec<u8>) -> Result<ShardedRepodata, GatewayError> {
     run_blocking_task(move || {
         rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
             .map_err(|e| GatewayError::IoError("failed to parse shard index".to_string(), e))
     })
     .await
+}
+
+/// Read the shard index from a reader and deserialize it.
+pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+) -> Result<ShardedRepodata, GatewayError> {
+    let bytes = read_cached_body(reader).await?;
+    parse_shard_index(bytes).await
 }
 
 /// Cache information stored at the start of the cache file.
