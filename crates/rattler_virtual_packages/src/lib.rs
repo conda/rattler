@@ -878,10 +878,10 @@ impl Archspec {
             Platform::OsxArm64 => "m1",
 
             // iOS and Android arm64/aarch64 devices are all 64-bit ARM.
-            Platform::IosArm64 | Platform::IosArm64Simulator | Platform::AndroidAarch64 => {
+            Platform::IosArm64 | Platform::IosSimulatorArm64 | Platform::AndroidAarch64 => {
                 "aarch64"
             }
-            Platform::Ios64Simulator | Platform::Android64 => "x86_64",
+            Platform::IosSimulator64 | Platform::Android64 => "x86_64",
             Platform::Android32 => "x86",
             // 32-bit ARM (armeabi-v7a) is not modelled by archspec.
             Platform::AndroidArmV7a => return None,
@@ -992,7 +992,7 @@ impl EnvOverride for Osx {
 /// The version encodes the *minimum* supported iOS version (the min-OS-version
 /// axis of a `PyPI` wheel tag such as `ios_13_0_arm64_iphoneos`). The arch and the
 /// device/simulator distinction are encoded in the subdir (e.g. `ios-arm64`,
-/// `ios-arm64-simulator`) instead, so version compatibility falls out of the
+/// `iossimulator-arm64`) instead, so version compatibility falls out of the
 /// normal solver just like `__osx` and `__glibc`.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Ios {
@@ -1342,7 +1342,7 @@ mod test {
             ..Default::default()
         };
         let ios_packages =
-            VirtualPackages::detect_for_platform(Platform::IosArm64Simulator, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, &overrides).unwrap();
         let ios = ios_packages
             .into_generic_virtual_packages()
             .find(|pkg| pkg.name.as_normalized() == "__ios")

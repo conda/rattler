@@ -40,8 +40,8 @@ pub enum Platform {
     OsxArm64,
 
     IosArm64,
-    IosArm64Simulator,
-    Ios64Simulator,
+    IosSimulatorArm64,
+    IosSimulator64,
 
     AndroidAarch64,
     AndroidArmV7a,
@@ -275,7 +275,7 @@ impl Platform {
     pub const fn is_ios(self) -> bool {
         matches!(
             self,
-            Platform::IosArm64 | Platform::IosArm64Simulator | Platform::Ios64Simulator
+            Platform::IosArm64 | Platform::IosSimulatorArm64 | Platform::IosSimulator64
         )
     }
 
@@ -308,9 +308,8 @@ impl Platform {
             | Platform::LinuxRiscv64 => Some("linux"),
             Platform::FreeBsd32 | Platform::FreeBsd64 | Platform::FreeBsdArm64 => Some("freebsd"),
             Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
-            Platform::IosArm64 | Platform::IosArm64Simulator | Platform::Ios64Simulator => {
-                Some("ios")
-            }
+            Platform::IosArm64 => Some("ios"),
+            Platform::IosSimulatorArm64 | Platform::IosSimulator64 => Some("iossimulator"),
             Platform::AndroidAarch64
             | Platform::AndroidArmV7a
             | Platform::Android64
@@ -365,8 +364,8 @@ impl FromStr for Platform {
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
             "ios-arm64" => Platform::IosArm64,
-            "ios-arm64-simulator" => Platform::IosArm64Simulator,
-            "ios-64-simulator" => Platform::Ios64Simulator,
+            "iossimulator-arm64" => Platform::IosSimulatorArm64,
+            "iossimulator-64" => Platform::IosSimulator64,
             "android-aarch64" => Platform::AndroidAarch64,
             "android-armv7a" => Platform::AndroidArmV7a,
             "android-64" => Platform::Android64,
@@ -408,8 +407,8 @@ impl From<Platform> for &'static str {
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::IosArm64 => "ios-arm64",
-            Platform::IosArm64Simulator => "ios-arm64-simulator",
-            Platform::Ios64Simulator => "ios-64-simulator",
+            Platform::IosSimulatorArm64 => "iossimulator-arm64",
+            Platform::IosSimulator64 => "iossimulator-64",
             Platform::AndroidAarch64 => "android-aarch64",
             Platform::AndroidArmV7a => "android-armv7a",
             Platform::Android64 => "android-64",
@@ -449,14 +448,14 @@ impl Platform {
             | Platform::Win64
             | Platform::Osx64
             | Platform::FreeBsd64
-            | Platform::Ios64Simulator
+            | Platform::IosSimulator64
             | Platform::Android64 => Some(Arch::X86_64),
             Platform::LinuxAarch64 | Platform::AndroidAarch64 => Some(Arch::Aarch64),
             Platform::WinArm64
             | Platform::OsxArm64
             | Platform::FreeBsdArm64
             | Platform::IosArm64
-            | Platform::IosArm64Simulator => Some(Arch::Arm64),
+            | Platform::IosSimulatorArm64 => Some(Arch::Arm64),
             Platform::AndroidArmV7a => Some(Arch::ArmV7a),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
             Platform::ZosZ => Some(Arch::Z),
@@ -631,12 +630,12 @@ mod tests {
         assert_eq!("zos-z".parse::<Platform>().unwrap(), Platform::ZosZ);
         assert_eq!("ios-arm64".parse::<Platform>().unwrap(), Platform::IosArm64);
         assert_eq!(
-            "ios-arm64-simulator".parse::<Platform>().unwrap(),
-            Platform::IosArm64Simulator
+            "iossimulator-arm64".parse::<Platform>().unwrap(),
+            Platform::IosSimulatorArm64
         );
         assert_eq!(
-            "ios-64-simulator".parse::<Platform>().unwrap(),
-            Platform::Ios64Simulator
+            "iossimulator-64".parse::<Platform>().unwrap(),
+            Platform::IosSimulator64
         );
         assert_eq!(
             "android-aarch64".parse::<Platform>().unwrap(),
@@ -661,8 +660,8 @@ mod tests {
         // iOS and Android round-trip through their subdir strings.
         for subdir in [
             "ios-arm64",
-            "ios-arm64-simulator",
-            "ios-64-simulator",
+            "iossimulator-arm64",
+            "iossimulator-64",
             "android-aarch64",
             "android-armv7a",
             "android-64",
@@ -676,8 +675,8 @@ mod tests {
         // convention, x86_64/x86 are spelled `-64`/`-32` in the subdir but
         // still report the underlying arch.
         assert_eq!(Platform::IosArm64.arch(), Some(Arch::Arm64));
-        assert_eq!(Platform::IosArm64Simulator.arch(), Some(Arch::Arm64));
-        assert_eq!(Platform::Ios64Simulator.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::IosSimulatorArm64.arch(), Some(Arch::Arm64));
+        assert_eq!(Platform::IosSimulator64.arch(), Some(Arch::X86_64));
         assert_eq!(Platform::AndroidAarch64.arch(), Some(Arch::Aarch64));
         assert_eq!(Platform::AndroidArmV7a.arch(), Some(Arch::ArmV7a));
         assert_eq!(Platform::Android64.arch(), Some(Arch::X86_64));
@@ -689,6 +688,13 @@ mod tests {
         assert!(Platform::IosArm64.is_unix());
         assert!(!Platform::IosArm64.is_osx());
         assert_eq!(Platform::IosArm64.only_platform(), Some("ios"));
+        // Simulators are still iOS, but carry their own single-dash subdir
+        // prefix so tools that split the subdir on `-` keep working.
+        assert!(Platform::IosSimulatorArm64.is_ios());
+        assert_eq!(
+            Platform::IosSimulatorArm64.only_platform(),
+            Some("iossimulator")
+        );
 
         assert!(Platform::AndroidAarch64.is_android());
         assert!(Platform::AndroidAarch64.is_unix());
