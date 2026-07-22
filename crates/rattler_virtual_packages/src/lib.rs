@@ -175,6 +175,12 @@ pub enum VirtualPackage {
     /// Available when running on `OSX`
     Osx(Osx),
 
+    /// Available when targeting `iOS`
+    Ios(Ios),
+
+    /// Available when targeting `Android`
+    Android(Android),
+
     /// Available `LibC` family and version
     LibC(LibC),
 
@@ -203,6 +209,12 @@ pub struct VirtualPackages {
     /// Available when running on `OSX`
     pub osx: Option<Osx>,
 
+    /// Available when targeting `iOS`
+    pub ios: Option<Ios>,
+
+    /// Available when targeting `Android`
+    pub android: Option<Android>,
+
     /// Available `LibC` family and version
     pub libc: Option<LibC>,
 
@@ -224,6 +236,8 @@ impl VirtualPackages {
             unix,
             linux,
             osx,
+            ios,
+            android,
             libc,
             cuda,
             cuda_arch,
@@ -235,6 +249,8 @@ impl VirtualPackages {
             unix.then_some(VirtualPackage::Unix),
             linux.map(VirtualPackage::Linux),
             osx.map(VirtualPackage::Osx),
+            ios.map(VirtualPackage::Ios),
+            android.map(VirtualPackage::Android),
             libc.map(VirtualPackage::LibC),
             cuda.map(VirtualPackage::Cuda),
             cuda_arch.map(VirtualPackage::CudaArch),
@@ -265,6 +281,8 @@ impl VirtualPackages {
             unix: Platform::current().is_unix(),
             linux: Linux::detect(overrides.linux.as_ref())?,
             osx: Osx::detect(overrides.osx.as_ref())?,
+            ios: Ios::detect(overrides.ios.as_ref())?,
+            android: Android::detect(overrides.android.as_ref())?,
             libc: LibC::detect(overrides.libc.as_ref())?,
             cuda,
             cuda_arch,
@@ -288,6 +306,8 @@ impl VirtualPackages {
     /// - **Windows** (`__win`): No version specified
     /// - **Linux** (`__linux`): Version 0
     /// - **OSX** (`__osx`): Version 0
+    /// - **iOS** (`__ios`): Version 0 (minimum supported iOS version)
+    /// - **Android** (`__android`): Version 0 (minimum supported API level)
     /// - **`LibC`** (`__glibc`): `glibc` with version 0 (only for Linux platforms)
     /// - **CUDA** (`__cuda`): Not included (None)
     /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
@@ -331,6 +351,28 @@ impl VirtualPackages {
                 None
             };
 
+            let ios = if platform.is_ios() {
+                // Check override first, fall back to version 0
+                virtual_packages.ios.or_else(|| {
+                    Some(Ios {
+                        version: Version::major(0),
+                    })
+                })
+            } else {
+                None
+            };
+
+            let android = if platform.is_android() {
+                // Check override first, fall back to version 0
+                virtual_packages.android.or_else(|| {
+                    Some(Android {
+                        version: Version::major(0),
+                    })
+                })
+            } else {
+                None
+            };
+
             let libc = if platform.is_linux() {
                 // Check override first, fall back to glibc 0
                 virtual_packages.libc.or_else(|| {
@@ -356,6 +398,8 @@ impl VirtualPackages {
                 unix: platform.is_unix(),
                 linux,
                 osx,
+                ios,
+                android,
                 libc,
                 cuda: virtual_packages.cuda,
                 cuda_arch: virtual_packages.cuda_arch,
@@ -376,6 +420,8 @@ impl From<VirtualPackage> for GenericVirtualPackage {
             VirtualPackage::Win(windows) => windows.into(),
             VirtualPackage::Linux(linux) => linux.into(),
             VirtualPackage::Osx(osx) => osx.into(),
+            VirtualPackage::Ios(ios) => ios.into(),
+            VirtualPackage::Android(android) => android.into(),
             VirtualPackage::LibC(libc) => libc.into(),
             VirtualPackage::Cuda(cuda) => cuda.into(),
             VirtualPackage::CudaArch(cuda_arch) => cuda_arch.into(),
@@ -441,6 +487,10 @@ pub struct VirtualPackageOverrides {
     pub win: Option<Override>,
     /// The override for the osx virtual package
     pub osx: Option<Override>,
+    /// The override for the ios virtual package
+    pub ios: Option<Override>,
+    /// The override for the android virtual package
+    pub android: Option<Override>,
     /// The override for the linux virtual package
     pub linux: Option<Override>,
     /// The override for the libc virtual package
@@ -460,6 +510,8 @@ impl VirtualPackageOverrides {
         Self {
             win: Some(ov.clone()),
             osx: Some(ov.clone()),
+            ios: Some(ov.clone()),
+            android: Some(ov.clone()),
             linux: Some(ov.clone()),
             libc: Some(ov.clone()),
             cuda: Some(ov.clone()),
@@ -825,6 +877,15 @@ impl Archspec {
             // The first every Apple Silicon Macs are based on m1.
             Platform::OsxArm64 => "m1",
 
+            // iOS and Android arm64/aarch64 devices are all 64-bit ARM.
+            Platform::IosArm64 | Platform::IosArm64Simulator | Platform::AndroidAarch64 => {
+                "aarch64"
+            }
+            Platform::Ios64Simulator | Platform::Android64 => "x86_64",
+            Platform::Android32 => "x86",
+            // 32-bit ARM (armeabi-v7a) is not modelled by archspec.
+            Platform::AndroidArmV7a => return None,
+
             // Otherwise, we assume that the architecture is unknown.
             _ => return None,
         };
@@ -924,6 +985,126 @@ impl EnvOverride for Osx {
         Ok(Self::current()?)
     }
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_OSX";
+}
+
+/// iOS virtual package description.
+///
+/// The version encodes the *minimum* supported iOS version (the min-OS-version
+/// axis of a `PyPI` wheel tag such as `ios_13_0_arm64_iphoneos`). The arch and the
+/// device/simulator distinction are encoded in the subdir (e.g. `ios-arm64`,
+/// `ios-arm64-simulator`) instead, so version compatibility falls out of the
+/// normal solver just like `__osx` and `__glibc`.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct Ios {
+    /// The minimum supported iOS version.
+    pub version: Version,
+}
+
+impl Ios {
+    /// Returns the iOS version of the current platform.
+    ///
+    /// rattler does not run on iOS as a build host, so this always returns
+    /// `None`. The `__ios` virtual package is instead produced when
+    /// cross-compiling to an `ios-*` subdir (see
+    /// [`VirtualPackages::detect_for_platform`]) or via the
+    /// `CONDA_OVERRIDE_IOS` environment variable.
+    pub fn current() -> Option<Self> {
+        None
+    }
+}
+
+impl From<Ios> for GenericVirtualPackage {
+    fn from(ios: Ios) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__ios"),
+            version: ios.version,
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<Ios> for VirtualPackage {
+    fn from(ios: Ios) -> Self {
+        VirtualPackage::Ios(ios)
+    }
+}
+
+impl From<Version> for Ios {
+    fn from(version: Version) -> Self {
+        Self { version }
+    }
+}
+
+impl EnvOverride for Ios {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
+    }
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_IOS";
+}
+
+/// Android virtual package description.
+///
+/// The version encodes the *minimum* supported Android API level (the API-level
+/// axis of a `PyPI` wheel tag such as `android_21_arm64_v8a`). The ABI is encoded
+/// in the subdir (e.g. `android-aarch64`, `android-armv7a`) instead, so version
+/// compatibility falls out of the normal solver just like `__osx` and
+/// `__glibc`.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct Android {
+    /// The minimum supported Android API level, encoded as a version.
+    pub version: Version,
+}
+
+impl Android {
+    /// Returns the Android API level of the current platform.
+    ///
+    /// rattler does not run on Android as a build host, so this always returns
+    /// `None`. The `__android` virtual package is instead produced when
+    /// cross-compiling to an `android-*` subdir (see
+    /// [`VirtualPackages::detect_for_platform`]) or via the
+    /// `CONDA_OVERRIDE_ANDROID` environment variable.
+    pub fn current() -> Option<Self> {
+        None
+    }
+}
+
+impl From<Android> for GenericVirtualPackage {
+    fn from(android: Android) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__android"),
+            version: android.version,
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<Android> for VirtualPackage {
+    fn from(android: Android) -> Self {
+        VirtualPackage::Android(android)
+    }
+}
+
+impl From<Version> for Android {
+    fn from(version: Version) -> Self {
+        Self { version }
+    }
+}
+
+impl EnvOverride for Android {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
+        Ok(Self {
+            version: Version::from_str(env_var_value)?,
+        })
+    }
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_ANDROID";
 }
 
 /// Windows virtual package description
@@ -1136,6 +1317,65 @@ mod test {
         assert!(win_names.contains(&"__win".to_string()));
         assert!(!win_names.contains(&"__unix".to_string()));
         assert!(win_names.contains(&"__archspec".to_string()));
+    }
+
+    #[test]
+    fn test_ios_android_virtual_packages() {
+        // Cross-compiling to an ios-* subdir yields __ios (falling back to
+        // version 0) plus __unix, but not __osx.
+        let ios_packages = VirtualPackages::detect_for_platform(
+            Platform::IosArm64,
+            &VirtualPackageOverrides::default(),
+        )
+        .unwrap();
+        let ios_names: Vec<String> = ios_packages
+            .into_generic_virtual_packages()
+            .map(|pkg| pkg.name.as_normalized().to_string())
+            .collect();
+        assert!(ios_names.contains(&"__ios".to_string()));
+        assert!(ios_names.contains(&"__unix".to_string()));
+        assert!(!ios_names.contains(&"__osx".to_string()));
+
+        // The __ios version can be overridden (mirrors CONDA_OVERRIDE_OSX).
+        let overrides = VirtualPackageOverrides {
+            ios: Some(Override::String("15.0".to_string())),
+            ..Default::default()
+        };
+        let ios_packages =
+            VirtualPackages::detect_for_platform(Platform::IosArm64Simulator, &overrides).unwrap();
+        let ios = ios_packages
+            .into_generic_virtual_packages()
+            .find(|pkg| pkg.name.as_normalized() == "__ios")
+            .expect("__ios should be present");
+        assert_eq!(ios.version, Version::from_str("15.0").unwrap());
+
+        // Cross-compiling to an android-* subdir yields __android plus __unix,
+        // but not __linux.
+        let android_packages = VirtualPackages::detect_for_platform(
+            Platform::AndroidAarch64,
+            &VirtualPackageOverrides::default(),
+        )
+        .unwrap();
+        let android_names: Vec<String> = android_packages
+            .into_generic_virtual_packages()
+            .map(|pkg| pkg.name.as_normalized().to_string())
+            .collect();
+        assert!(android_names.contains(&"__android".to_string()));
+        assert!(android_names.contains(&"__unix".to_string()));
+        assert!(!android_names.contains(&"__linux".to_string()));
+
+        // The __android version (API level) can be overridden.
+        let overrides = VirtualPackageOverrides {
+            android: Some(Override::String("21".to_string())),
+            ..Default::default()
+        };
+        let android_packages =
+            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, &overrides).unwrap();
+        let android = android_packages
+            .into_generic_virtual_packages()
+            .find(|pkg| pkg.name.as_normalized() == "__android")
+            .expect("__android should be present");
+        assert_eq!(android.version, Version::from_str("21").unwrap());
     }
 
     #[test]

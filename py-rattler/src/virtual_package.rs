@@ -102,6 +102,22 @@ impl PyVirtualPackageOverrides {
         self.inner.osx = value.map(Into::into);
     }
     #[getter]
+    pub fn get_ios(&self) -> Option<PyOverride> {
+        self.inner.ios.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_ios(&mut self, value: Option<PyOverride>) {
+        self.inner.ios = value.map(Into::into);
+    }
+    #[getter]
+    pub fn get_android(&self) -> Option<PyOverride> {
+        self.inner.android.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_android(&mut self, value: Option<PyOverride>) {
+        self.inner.android = value.map(Into::into);
+    }
+    #[getter]
     pub fn get_cuda(&self) -> Option<PyOverride> {
         self.inner.cuda.clone().map(Into::into)
     }
