@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use reqsign_azure_storage::{Credential, DefaultCredentialProvider, RequestSigner};
 use reqsign_command_execute_tokio::TokioCommandExecute;
-use reqsign_core::{Context, ErrorKind, OsEnv, ProvideCredential, Signer};
+use reqsign_core::{Context, OsEnv, ProvideCredential, Signer};
 use reqsign_file_read_tokio::TokioFileRead;
 use reqsign_http_send_reqwest::ReqwestHttpSend;
 use reqwest::{Client, Request, Response};
@@ -22,6 +22,17 @@ const X_MS_VERSION: &str = "2021-12-02";
 ///
 /// A persisted `az login` session (a profile on disk) counts as a source too;
 /// see [`azure_cli_session_present`].
+///
+/// This result gates whether credentials are resolved at all: when it is
+/// `false`, [`AzureMiddleware::sign`] sends the request unsigned *without*
+/// probing, so anonymous public-container reads do not block on the
+/// managed-identity / IMDS timeout. The tradeoff is that a *bare* system-assigned
+/// managed identity — one reached only via the IMDS endpoint with no
+/// `IDENTITY_ENDPOINT` / `MSI_ENDPOINT` / federated-token env var set — is not
+/// detected here, so its requests go unsigned. App Service, Functions, Cloud
+/// Shell and AKS workload identity all set one of those env vars and are
+/// unaffected; a bare `IaaS` VM identity must export `MSI_ENDPOINT` (or supply an
+/// explicit credential) to be used.
 fn azure_credential_source_present() -> bool {
     // Explicit Shared Key or SAS token.
     if std::env::var_os("AZURE_STORAGE_ACCOUNT_KEY").is_some()
@@ -100,7 +111,7 @@ fn azure_cli_session_present() -> bool {
 /// zero ambient credentials. When a credential source *is* configured
 /// (see [`azure_credential_source_present`]) but signing fails, that is a
 /// **hard error** — reqsign collapses "no credential" and "broken credential"
-/// into the same [`ErrorKind::CredentialInvalid`], so a broken credential must
+/// into the same [`reqsign_core::ErrorKind::CredentialInvalid`], so a broken credential must
 /// not be silently downgraded to an anonymous request.
 #[derive(Clone)]
 pub struct AzureMiddleware {
@@ -178,17 +189,22 @@ impl AzureMiddleware {
 
     /// Sign a reqwest `Request` in place using reqsign.
     ///
-    /// Two cases short-circuit without touching the request:
+    /// Two cases short-circuit without invoking reqsign at all:
     /// - The URL already carries an explicit SAS (`?...&sig=...`). Signing would
     ///   add an `Authorization` header that Azure prefers over the SAS, silently
     ///   overriding the caller's explicit token.
-    /// - No credential source is configured. reqsign surfaces this as
-    ///   [`ErrorKind::CredentialInvalid`]; the request is then sent unsigned so
-    ///   public/anonymous containers stay reachable.
+    /// - No credential source was detected (`credential_source_present` is
+    ///   `false`). The request is sent unsigned so public/anonymous containers
+    ///   stay reachable — and crucially, credential *resolution* is skipped
+    ///   entirely. Otherwise reqsign would probe the managed-identity / IMDS
+    ///   endpoint and block until it times out (~30s on a machine with no
+    ///   metadata service) before we could fall back, making every anonymous
+    ///   public-channel read pay that timeout.
     ///
-    /// If a credential source *is* configured but signing still fails with
-    /// [`ErrorKind::CredentialInvalid`] (a broken key/token, not an absent one),
-    /// the error is propagated rather than downgraded to an unsigned request.
+    /// If a credential source *is* configured but signing fails with
+    /// [`reqsign_core::ErrorKind::CredentialInvalid`] (a broken key/token, not
+    /// an absent one), the error is propagated rather than downgraded to an
+    /// unsigned request.
     async fn sign(&self, req: &mut Request) -> MiddlewareResult<()> {
         if Self::has_sas_token(req.url()) {
             return Ok(());
@@ -197,6 +213,15 @@ impl AzureMiddleware {
         if !req.headers().contains_key("x-ms-version") {
             req.headers_mut()
                 .insert("x-ms-version", http::HeaderValue::from_static(X_MS_VERSION));
+        }
+
+        // No credential source detected: send unsigned without probing. See the
+        // doc comment above — probing here would block on the IMDS timeout.
+        if !self.credential_source_present {
+            tracing::debug!(
+                "no Azure credential source detected; sending `az://` request unsigned"
+            );
+            return Ok(());
         }
 
         let mut builder = http::Request::builder()
@@ -212,22 +237,14 @@ impl AzureMiddleware {
         })?;
         let (mut parts, ()) = http_req.into_parts();
 
-        match self.signer.sign(&mut parts, None).await {
-            Ok(()) => {}
-            // reqsign reports both "no credential configured" and "credential is
-            // broken" as `CredentialInvalid`. Only fall back to unsigned when no
-            // credential source was detected; otherwise a broken credential must
-            // surface as a hard error instead of silently going anonymous.
-            Err(e)
-                if e.kind() == ErrorKind::CredentialInvalid && !self.credential_source_present =>
-            {
-                tracing::debug!(
-                    "no Azure credential source detected; sending `az://` request unsigned"
-                );
-                return Ok(());
-            }
-            Err(e) => return Err(reqwest_middleware::Error::Middleware(anyhow::anyhow!(e))),
-        }
+        // A credential source is present (the absent case short-circuited to
+        // unsigned above). reqsign reports a broken key/token as
+        // `CredentialInvalid`; that must surface as a hard error rather than
+        // silently going anonymous, so any signing failure is propagated.
+        self.signer
+            .sign(&mut parts, None)
+            .await
+            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::anyhow!(e)))?;
 
         *req.headers_mut() = parts.headers;
         let signed_url = Url::parse(&parts.uri.to_string()).map_err(|e| {
@@ -418,6 +435,50 @@ mod tests {
         assert!(!AzureMiddleware::has_userinfo(
             &Url::parse("az://acct.blob.core.windows.net/c/x.json").unwrap()
         ));
+    }
+
+    /// With no credential source detected, `sign` must NOT invoke the credential
+    /// provider at all — resolution is skipped so anonymous reads don't block on
+    /// the IMDS timeout. Uses a provider that flips a flag if it is ever asked.
+    #[tokio::test]
+    async fn skips_credential_resolution_when_no_source() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        #[derive(Debug)]
+        struct RecordingProvider(Arc<AtomicBool>);
+        impl ProvideCredential for RecordingProvider {
+            type Credential = Credential;
+            async fn provide_credential(
+                &self,
+                _ctx: &Context,
+            ) -> reqsign_core::Result<Option<Credential>> {
+                self.0.store(true, Ordering::SeqCst);
+                Ok(None)
+            }
+        }
+
+        let probed = Arc::new(AtomicBool::new(false));
+        let middleware = AzureMiddleware::with_credential_provider(
+            Client::new(),
+            RecordingProvider(probed.clone()),
+            false,
+        );
+        let mut req = Client::new()
+            .get("https://acct.blob.core.windows.net/pub/noarch/repodata.json")
+            .build()
+            .unwrap();
+
+        middleware.sign(&mut req).await.unwrap();
+
+        assert!(
+            !probed.load(Ordering::SeqCst),
+            "credential provider must not be probed when no source is detected"
+        );
+        assert!(
+            req.headers().get(http::header::AUTHORIZATION).is_none(),
+            "unsigned request must not carry an Authorization header"
+        );
     }
 
     /// A persisted `az login` profile counts as a credential source (so a
