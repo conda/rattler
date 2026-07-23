@@ -14,7 +14,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls", "s3", "sigstore-sign"]
+default = ["rustls", "s3", "azure", "sigstore-sign"]
 rustls = [
   "reqwest/rustls",
   "rattler_networking/rustls",
@@ -28,7 +28,7 @@ native-tls = [
   "rattler_package_streaming/native-tls",
   "sigstore-sign?/native-tls",
 ]
-s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
+s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal", "opendal/services-s3"]
 azure = ["dep:rattler_azure", "dep:opendal", "opendal/services-azblob", "dep:percent-encoding"]
 sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
 
@@ -52,7 +52,6 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, optional = true, default-features = false, features = [
-  "services-s3",
   "executors-tokio",
 ] }
 reqwest-retry = { workspace = true }
@@ -84,3 +83,6 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 axum = { workspace = true }
+opendal = { workspace = true, default-features = false, features = [
+  "services-memory",
+] }

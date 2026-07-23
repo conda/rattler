@@ -88,22 +88,40 @@ async fn upload_single_package(
         channel.path()
     );
 
-    // Compute the hash of the package by streaming its content.
-    let file = tokio::io::BufReader::new(
-        fs_err::tokio::File::open(package_file)
-            .await
-            .into_diagnostic()?,
-    );
-    let sha256_reader = HashingReader::<_, Sha256>::new(file);
-    let mut md5_reader = HashingReader::<_, Md5>::new(sha256_reader);
-    let size = tokio::io::copy(&mut md5_reader, &mut tokio::io::sink())
-        .await
-        .into_diagnostic()?;
-    let (sha256_reader, md5hash) = md5_reader.finalize();
-    let (mut file, sha256hash) = sha256_reader.finalize();
+    // Guard against overwriting an existing blob when `--force` was not passed.
+    // opendal 0.57 only honours `if_not_exists` on the single-shot Put Blob path,
+    // never the multi-block Put Block List path used for packages larger than a
+    // single block, so the writer-level `if_not_exists(!force)` below silently
+    // does nothing for large uploads. An explicit `stat` closes that gap at all
+    // sizes. The residual stat->write TOCTOU (another writer could create the
+    // blob between this check and `close`) is acceptable: it is strictly better
+    // than today's silent clobber, and the writer-level `if_not_exists` still
+    // guards the small-file and racing-writer cases.
+    if !force {
+        match op.stat(&key).await {
+            Ok(_) => {
+                miette::bail!("Package {blob_url} already exists. Use --force to overwrite.");
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+            Err(e) => return Err(e).into_diagnostic(),
+        }
+    }
 
-    // Rewind the file to the beginning.
-    file.rewind().await.into_diagnostic()?;
+    let (mut file, size, sha256_hex, md5_hex) = package_digests(package_file).await?;
+
+    // opendal 0.57 attaches `user_metadata` only on the single-shot Put Blob path
+    // (used when the whole package fits in one `DESIRED_CHUNK_SIZE` write), not on
+    // the multi-block Put Block List path taken by larger packages. There is no
+    // post-write set-metadata operation on the azblob backend to compensate, so
+    // packages above `DESIRED_CHUNK_SIZE` land without `package-sha256` /
+    // `package-md5`. Warn so the missing metadata is not silent.
+    if size as usize > DESIRED_CHUNK_SIZE {
+        tracing::warn!(
+            "Package {blob_url} is larger than {DESIRED_CHUNK_SIZE} bytes and is uploaded via \
+             Azure's multi-block path, which opendal 0.57 does not attach blob metadata to; \
+             package-sha256/package-md5 will be missing on this blob."
+        );
+    }
 
     // Construct a writer for the package. Setting `chunk` and `concurrent`
     // enables opendal's concurrent block upload: data is buffered into
@@ -118,8 +136,8 @@ async fn upload_single_package(
         .concurrent(PART_CONCURRENCY)
         .if_not_exists(!force)
         .user_metadata([
-            (String::from("package-sha256"), hex::encode(sha256hash)),
-            (String::from("package-md5"), hex::encode(md5hash)),
+            (String::from("package-sha256"), sha256_hex),
+            (String::from("package-md5"), md5_hex),
         ])
         .await
     {
@@ -169,6 +187,38 @@ async fn upload_single_package(
     }
 
     Ok(())
+}
+
+/// Streams `package_file` once to compute its sha256 and md5 digests.
+///
+/// Returns the file handle rewound to the start, the total size in bytes, and
+/// the hex-encoded sha256 and md5 digests (in that order) that are attached as
+/// blob metadata.
+async fn package_digests(
+    package_file: &Path,
+) -> miette::Result<(
+    tokio::io::BufReader<fs_err::tokio::File>,
+    u64,
+    String,
+    String,
+)> {
+    let file = tokio::io::BufReader::new(
+        fs_err::tokio::File::open(package_file)
+            .await
+            .into_diagnostic()?,
+    );
+    let sha256_reader = HashingReader::<_, Sha256>::new(file);
+    let mut md5_reader = HashingReader::<_, Md5>::new(sha256_reader);
+    let size = tokio::io::copy(&mut md5_reader, &mut tokio::io::sink())
+        .await
+        .into_diagnostic()?;
+    let (sha256_reader, md5hash) = md5_reader.finalize();
+    let (mut file, sha256hash) = sha256_reader.finalize();
+
+    // Rewind the file to the beginning.
+    file.rewind().await.into_diagnostic()?;
+
+    Ok((file, size, hex::encode(sha256hash), hex::encode(md5hash)))
 }
 
 /// Build an opendal [`AzblobConfig`] from a channel URL and credentials.
@@ -225,4 +275,94 @@ fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Resul
         sas_token,
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod test {
+    use opendal::{Operator, services::Memory};
+    use rattler_digest::{Md5, compute_file_digest};
+    use url::Url;
+
+    use super::{package_digests, upload_single_package};
+    use crate::upload::package::ExtractedPackage;
+    use crate::upload::test_utils::test_package_path;
+
+    fn memory_operator() -> Operator {
+        Operator::new(Memory::default()).unwrap().finish()
+    }
+
+    fn test_channel() -> Url {
+        Url::parse("https://account.blob.core.windows.net/container/prefix").unwrap()
+    }
+
+    fn package_key() -> String {
+        let path = test_package_path();
+        let package = ExtractedPackage::from_package_file(&path).unwrap();
+        format!(
+            "{}/{}",
+            package.subdir().unwrap(),
+            package.filename().unwrap()
+        )
+    }
+
+    /// C2: without `--force`, uploading over an existing blob must error rather
+    /// than silently overwrite it, at all package sizes. This exercises the
+    /// explicit pre-write `stat` guard that backstops opendal's
+    /// `if_not_exists`, which is dropped on the multi-block upload path.
+    #[tokio::test]
+    async fn test_existing_blob_without_force_errors() {
+        let op = memory_operator();
+        let channel = test_channel();
+        let package = test_package_path();
+
+        // Seed the target blob so the next upload finds it already present.
+        upload_single_package(&op, &channel, &package, true)
+            .await
+            .expect("initial force upload should succeed");
+
+        let err = upload_single_package(&op, &channel, &package, false)
+            .await
+            .expect_err("upload over an existing blob without --force must fail");
+        assert!(
+            err.to_string().contains("already exists"),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// A non-forced upload into an empty container succeeds.
+    #[tokio::test]
+    async fn test_upload_into_empty_container_succeeds() {
+        let op = memory_operator();
+        upload_single_package(&op, &test_channel(), &test_package_path(), false)
+            .await
+            .expect("upload into an empty container should succeed");
+
+        let meta = op.stat(&package_key()).await.unwrap();
+        let expected_size = std::fs::metadata(test_package_path()).unwrap().len();
+        assert_eq!(meta.content_length(), expected_size);
+    }
+
+    /// H1: the sha256/md5 attached as blob metadata are the canonical digests of
+    /// the package. This guards the values and encoding fed into
+    /// `user_metadata`.
+    ///
+    /// Note: the in-memory opendal service does not persist `user_metadata`, and
+    /// Azure's multi-block path drops it entirely (see `upload_single_package`),
+    /// so asserting the metadata is actually present on the stored blob requires
+    /// an Azurite-backed integration test that this crate does not yet have.
+    #[tokio::test]
+    async fn test_package_digests_match_canonical_hashes() {
+        let package = test_package_path();
+        let (_file, size, sha256_hex, md5_hex) = package_digests(&package).await.unwrap();
+
+        assert_eq!(size, std::fs::metadata(&package).unwrap().len());
+        assert_eq!(
+            sha256_hex,
+            crate::upload::package::sha256_sum(&package).unwrap()
+        );
+        assert_eq!(
+            md5_hex,
+            hex::encode(compute_file_digest::<Md5>(&package).unwrap())
+        );
+    }
 }
