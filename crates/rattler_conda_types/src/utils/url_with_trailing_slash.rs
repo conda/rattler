@@ -1,3 +1,7 @@
+//! This module provides utilities for handling and normalizing URLs
+//! that are required to end with a trailing slash. It ensures consistency
+//! in URL formatting for downstream processing or matching logic.
+
 use std::{
     fmt::{Display, Formatter},
     ops::Deref,
@@ -11,7 +15,7 @@ use url::Url;
 /// A URL that always has a trailing slash. A trailing slash in a URL has
 /// significance but users often forget to add it. This type is used to
 /// normalize the use of the URL.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct UrlWithTrailingSlash(Url);
 

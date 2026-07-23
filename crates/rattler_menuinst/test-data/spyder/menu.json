@@ -50,6 +50,10 @@
                     "CFBundleName": "Spyder 6",
                     "CFBundleIdentifier": "org.spyder-ide.Spyder-6-.prefix",
                     "CFBundleVersion": "6.0.2",
+                    "info_plist_extra": {
+                        "NSRequiresAquaSystemAppearance": "NO",
+                        "NSHighResolutionCapable": true
+                    },
                     "CFBundleDocumentTypes": [
                         {
                             "CFBundleTypeName": "text document",

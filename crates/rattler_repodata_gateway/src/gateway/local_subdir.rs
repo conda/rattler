@@ -1,11 +1,15 @@
 use std::{path::Path, sync::Arc};
 
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
+use rattler_conda_types::{Channel, ChannelRelations, PackageName, RepodataRevisions};
 
 use crate::{
-    gateway::{error::SubdirNotFoundError, subdir::SubdirClient, GatewayError},
-    sparse::SparseRepoData,
     Reporter,
+    gateway::{
+        GatewayError,
+        error::SubdirNotFoundError,
+        subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
+    },
+    sparse::{PackageFormatSelection, SparseRepoData},
 };
 
 /// A client that can be used to fetch repodata for a specific subdirectory from
@@ -69,12 +73,21 @@ impl SubdirClient for LocalSubdirClient {
         &self,
         name: &PackageName,
         _reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<PackageRecords, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
 
-        let load_records = move || match sparse_repodata.load_records(&name) {
-            Ok(records) => Ok(records.into()),
+        let load_records = move || match sparse_repodata
+            .load_records(&name, PackageFormatSelection::PreferConda)
+        {
+            Ok(records) => {
+                let (unique_base_deps, unique_extra_deps) = extract_unique_deps_split(&records);
+                Ok(PackageRecords {
+                    records: records.into_iter().map(Arc::new).collect(),
+                    unique_base_deps,
+                    unique_extra_deps,
+                })
+            }
             Err(err) => Err(GatewayError::IoError(
                 "failed to extract repodata records from sparse repodata".to_string(),
                 err,
@@ -90,8 +103,16 @@ impl SubdirClient for LocalSubdirClient {
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata
-            .package_names()
+            .package_names(PackageFormatSelection::PreferConda)
             .map(std::convert::Into::into)
             .collect()
+    }
+
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        self.sparse.repodata_revisions()
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sparse.channel_relations()
     }
 }

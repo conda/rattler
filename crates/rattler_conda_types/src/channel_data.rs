@@ -1,4 +1,4 @@
-//! Datastructures that are present in a `channeldata.json` file. Some channels on anaconda.org
+//! Data-structures that are present in a `channeldata.json` file. Some channels on anaconda.org
 //! contain a `channeldata.json` file which describes the subdirs the channel contains, the packages
 //! stored in the channel and additional data about them like their latest version.
 //!
@@ -9,11 +9,11 @@
 //! a single package variant) and therefore the `ChannelData` struct is not really used much more.
 //!
 use crate::{
-    utils::serde::{LossyUrl, VecSkipNone},
     Version,
+    utils::serde::{LossyUrl, VecSkipNone},
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
+use serde_with::{DisplayFromStr, OneOrMany, Same, serde_as, skip_serializing_none};
 use std::collections::HashMap;
 use url::Url;
 
@@ -100,7 +100,7 @@ pub struct ChannelDataPackage {
     #[serde(rename = "pre_unlink")]
     pub has_pre_unlink_scripts: bool,
 
-    /// Any run_exports contained within the package.
+    /// Any `run_exports` contained within the package.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[serde_as(as = "HashMap<DisplayFromStr, _>")]
     pub run_exports: HashMap<Version, RunExportsJson>,

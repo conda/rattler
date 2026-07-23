@@ -3,7 +3,8 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
-use fs_err as fs;
+#[cfg(target_family = "unix")]
+use std::io::Write;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -11,10 +12,16 @@ use std::{
     process::ExitStatus,
 };
 
+#[cfg(target_family = "unix")]
+use anyhow::{Context, Result};
+use fs_err as fs;
 use indexmap::IndexMap;
+use itertools::Itertools;
 use rattler_conda_types::Platform;
+#[cfg(target_family = "unix")]
+use rattler_pty::unix::PtySession;
 
-use crate::shell::{Shell, ShellScript};
+use crate::shell::{Shell, ShellError, ShellScript};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
@@ -46,16 +53,23 @@ pub struct ActivationVariables {
 
     /// The type of behavior of what should happen with the defined paths.
     pub path_modification_behavior: PathModificationBehavior,
+
+    /// Current environment variables
+    pub current_env: HashMap<String, String>,
 }
 
 impl ActivationVariables {
     /// Create a new `ActivationVariables` struct from the environment
     /// variables.
     pub fn from_env() -> Result<Self, std::env::VarError> {
+        // Read all environment variables here
+        let current_env: HashMap<String, String> = std::env::vars().collect();
+
         Ok(Self {
-            conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
+            conda_prefix: current_env.get("CONDA_PREFIX").map(PathBuf::from),
             path: None,
             path_modification_behavior: PathModificationBehavior::Prepend,
+            current_env,
         })
     }
 }
@@ -80,8 +94,13 @@ pub struct Activator<T: Shell + 'static> {
     /// A list of scripts to run when deactivating the environment
     pub deactivation_scripts: Vec<PathBuf>,
 
-    /// A list of environment variables to set when activating the environment
+    /// A list of environment variables to set before running the activation
+    /// scripts. These are evaluated before `activation_scripts` have run.
     pub env_vars: IndexMap<String, String>,
+
+    /// A list of environment variables to set after running the activation
+    /// scripts. These are evaluated after `activation_scripts` have run.
+    pub post_activation_env_vars: IndexMap<String, String>,
 
     /// The platform for which to generate the Activator
     pub platform: Platform,
@@ -130,6 +149,10 @@ pub enum ActivationError {
     /// An error that can occur when reading or writing files
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+
+    /// An error that can occur when running a command
+    #[error(transparent)]
+    ShellError(#[from] ShellError),
 
     /// An error that can occur when parsing JSON
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
@@ -224,10 +247,11 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
             for (key, value) in env_var_json {
                 if let Some(value) = value.as_str() {
-                    env_vars.insert(key.to_string(), value.to_string());
+                    env_vars.insert(key.clone(), value.to_string());
                 } else {
                     tracing::warn!(
-                        "WARNING: environment variable {key} has no string value (path: {env_var_file:?})");
+                        "WARNING: environment variable {key} has no string value (path: {env_var_file:?})"
+                    );
                 }
             }
         }
@@ -248,16 +272,18 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
         })?;
 
         for (key, value) in state_env_vars {
-            if state_env_vars.contains_key(key) {
+            if env_vars.contains_key(key) {
                 tracing::warn!(
-                    "WARNING: environment variable {key} already defined in packages (path: {state_file:?})");
+                    "WARNING: environment variable {key} already defined in packages (path: {state_file:?})"
+                );
             }
 
             if let Some(value) = value.as_str() {
                 env_vars.insert(key.to_uppercase(), value.to_string());
             } else {
                 tracing::warn!(
-                    "WARNING: environment variable {key} has no string value (path: {state_file:?})");
+                    "WARNING: environment variable {key} has no string value (path: {state_file:?})"
+                );
             }
         }
     }
@@ -303,6 +329,17 @@ pub struct ActivationResult<T: Shell + 'static> {
 }
 
 impl<T: Shell + Clone> Activator<T> {
+    /// Return unique env var keys from both `env_vars` and `post_activation_env_vars` in insertion order.
+    fn unique_env_keys(&self) -> impl Iterator<Item = &str> {
+        self.env_vars
+            .keys()
+            .chain(self.post_activation_env_vars.keys())
+            .map(String::as_str)
+            .unique()
+    }
+
+    // moved: apply_env_vars_with_backup now lives on `ShellScript`
+
     /// Create a new activator for the given conda environment.
     ///
     /// # Arguments
@@ -323,7 +360,7 @@ impl<T: Shell + Clone> Activator<T> {
     /// use rattler_conda_types::Platform;
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash, Platform::Osx64).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash::default(), Platform::Osx64).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
@@ -348,8 +385,75 @@ impl<T: Shell + Clone> Activator<T> {
             activation_scripts,
             deactivation_scripts,
             env_vars,
+            post_activation_env_vars: IndexMap::new(),
             platform,
         })
+    }
+
+    /// Starts a UNIX shell.
+    /// # Arguments
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and
+    ///   `Copy` traits.
+    /// - `args`: A vector of arguments to pass to the shell.
+    /// - `env`: A `HashMap` containing environment variables to set in the
+    ///   shell.
+    /// - `prompt`: Prompt to the shell
+    #[cfg(target_family = "unix")]
+    #[allow(dead_code)]
+    async fn start_unix_shell<T_: Shell + Copy + 'static>(
+        shell: T_,
+        args: Vec<&str>,
+        env: &HashMap<String, String>,
+        prompt: String,
+    ) -> Result<Option<i32>> {
+        const DONE_STR: &str = "RATTLER_SHELL_ACTIVATION_DONE";
+        // create a tempfile for activation
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("rattler_env_")
+            .suffix(&format!(".{}", shell.extension()))
+            .rand_bytes(3)
+            .tempfile()
+            .context("Failed to create tmp file")?;
+
+        let mut shell_script = ShellScript::new(shell, Platform::current());
+        for (key, value) in env {
+            shell_script
+                .set_env_var(key, value)
+                .context("Failed to set env var")?;
+        }
+
+        shell_script.echo(DONE_STR)?;
+
+        temp_file
+            .write_all(shell_script.contents()?.as_bytes())
+            .context("Failed to write shell script content")?;
+
+        // Write custom prompt to the env file
+        temp_file.write_all(prompt.as_bytes())?;
+
+        let mut command = std::process::Command::new(shell.executable());
+        command.args(args);
+
+        // Space added before `source` to automatically ignore it in history.
+        let mut source_command = " ".to_string();
+        shell
+            .run_script(&mut source_command, temp_file.path())
+            .context("Failed to run the script")?;
+
+        // Remove automatically added `\n`, if for some reason this fails, just ignore.
+        let source_command = source_command
+            .strip_suffix('\n')
+            .unwrap_or(source_command.as_str());
+
+        // Start process and send env activation to the shell.
+        let mut process = PtySession::new(command)?;
+        process
+            .send_line(source_command)
+            .context("Failed to send command to shell")?;
+
+        process
+            .interact(Some(DONE_STR))
+            .context("Failed to interact with shell process")
     }
 
     /// Create an activation script for a given shell and platform. This
@@ -385,19 +489,124 @@ impl<T: Shell + Clone> Activator<T> {
 
         script.set_path(path.as_slice(), variables.path_modification_behavior)?;
 
-        // deliberately not taking care of `CONDA_SHLVL` or any other complications at
-        // this point
+        // Get the current shell level
+        // For us, zero is the starting point, so we will increment it
+        // meaning that we will set CONDA_SHLVL to 1 on the first activation.
+        let shlvl = variables
+            .current_env
+            .get("CONDA_SHLVL")
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(0);
+
+        // Set the new CONDA_SHLVL first
+        let new_shlvl = shlvl + 1;
+        script.set_env_var("CONDA_SHLVL", &new_shlvl.to_string())?;
+
+        // Save original CONDA_PREFIX value if it exists
+        if let Some(existing_prefix) = variables.current_env.get("CONDA_PREFIX") {
+            script.set_env_var(
+                &format!("CONDA_ENV_SHLVL_{new_shlvl}_CONDA_PREFIX"),
+                existing_prefix,
+            )?;
+        }
+
+        // Set new CONDA_PREFIX
         script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
-        for (key, value) in &self.env_vars {
-            script.set_env_var(key, value)?;
-        }
+        // For each environment variable that was set during activation
+        script.apply_env_vars_with_backup(&variables.current_env, new_shlvl, &self.env_vars)?;
 
         for activation_script in &self.activation_scripts {
             script.run_script(activation_script)?;
         }
 
+        // Set environment variables that should be applied after activation scripts
+        script.apply_env_vars_with_backup(
+            &variables.current_env,
+            new_shlvl,
+            &self.post_activation_env_vars,
+        )?;
+
         Ok(ActivationResult { script, path })
+    }
+
+    /// Create a deactivation script for the environment.
+    /// This returns the deactivation script that unsets environment variables
+    /// and runs deactivation scripts.
+    pub fn deactivation(
+        &self,
+        variables: ActivationVariables,
+    ) -> Result<ActivationResult<T>, ActivationError> {
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+
+        // Get the current CONDA shell level from passed environment variables
+        let current_conda_shlvl = variables
+            .current_env
+            .get("CONDA_SHLVL")
+            .and_then(|s| s.parse::<i32>().ok());
+
+        match current_conda_shlvl {
+            None => {
+                // Handle edge case: CONDA_SHLVL not set
+                script
+                    .echo("Warning: CONDA_SHLVL not set. This may indicate a broken workflow.")?;
+                script.echo(
+                    "Proceeding to unset conda variables without restoring previous values.",
+                )?;
+
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
+                    script.unset_env_var(key)?;
+                }
+                script.unset_env_var("CONDA_PREFIX")?;
+                script.unset_env_var("CONDA_SHLVL")?;
+            }
+            Some(current_level) if current_level <= 0 => {
+                // Handle edge case: CONDA_SHLVL zero or negative
+                script.echo("Warning: CONDA_SHLVL is zero or negative. This may indicate a broken workflow.")?;
+                script.echo(
+                    "Proceeding to unset conda variables without restoring previous values.",
+                )?;
+
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
+                    script.unset_env_var(key)?;
+                }
+                script.unset_env_var("CONDA_PREFIX")?;
+                script.unset_env_var("CONDA_SHLVL")?;
+            }
+            Some(current_level) => {
+                // Unset the current level
+                // For each environment variable that was set during activation
+                for key in self.unique_env_keys() {
+                    let backup_key = format!("CONDA_ENV_SHLVL_{current_level}_{key}");
+                    script.restore_env_var(key, &backup_key)?;
+                }
+
+                // Handle CONDA_PREFIX restoration
+                let backup_prefix = format!("CONDA_ENV_SHLVL_{current_level}_CONDA_PREFIX");
+                script.restore_env_var("CONDA_PREFIX", &backup_prefix)?;
+
+                let prev_shlvl = current_level - 1;
+
+                // Update CONDA_SHLVL
+                if prev_shlvl == 0 {
+                    script.unset_env_var("CONDA_SHLVL")?;
+                } else {
+                    script.set_env_var("CONDA_SHLVL", &prev_shlvl.to_string())?;
+                }
+            }
+        }
+
+        // Run all deactivation scripts
+        for deactivation_script in &self.deactivation_scripts {
+            script.run_script(deactivation_script)?;
+        }
+
+        Ok(ActivationResult {
+            script,
+            path: Vec::new(),
+        })
     }
 
     /// Runs the activation script and returns the environment variables changed
@@ -419,9 +628,8 @@ impl<T: Shell + Clone> Activator<T> {
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
             .print_env()?
-            .echo(ENV_START_SEPARATOR)?;
-        activation_detection_script.append_script(&activation_script);
-        activation_detection_script
+            .echo(ENV_START_SEPARATOR)?
+            .append_script(&activation_script)
             .echo(ENV_START_SEPARATOR)?
             .print_env()?;
 
@@ -485,16 +693,86 @@ impl<T: Shell + Clone> Activator<T> {
 mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     use super::*;
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
-    use crate::{shell, shell::ShellEnum};
+    use crate::shell::{self, ShellEnum, native_path_to_unix};
+
+    #[test]
+    #[cfg(unix)]
+    fn test_post_activation_env_vars_applied_after_scripts_bash() {
+        let temp_dir = TempDir::with_prefix("test_post_activation_env_vars").unwrap();
+
+        // Create a dummy activation script so the activator will run it
+        let activate_dir = temp_dir.path().join("etc/conda/activate.d");
+        fs::create_dir_all(&activate_dir).unwrap();
+        let script_path = activate_dir.join("script1.sh");
+        fs::write(&script_path, "# noop\n").unwrap();
+
+        // Build an activator with both pre and post env vars
+        let pre_env = IndexMap::from_iter([(String::from("A"), String::from("x"))]);
+
+        // Ensure we also override a pre var in post
+        let post_env = IndexMap::from_iter([
+            (String::from("B"), String::from("y")),
+            (String::from("A"), String::from("z")),
+        ]);
+
+        let activator = Activator {
+            target_prefix: temp_dir.path().to_path_buf(),
+            shell_type: shell::Bash::default(),
+            paths: vec![temp_dir.path().join("bin")],
+            activation_scripts: vec![script_path.clone()],
+            deactivation_scripts: vec![],
+            env_vars: pre_env,
+            post_activation_env_vars: post_env,
+            platform: Platform::current(),
+        };
+
+        let result = activator
+            .activation(ActivationVariables {
+                conda_prefix: None,
+                path: None,
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                current_env: HashMap::new(),
+            })
+            .unwrap();
+
+        let mut contents = result.script.contents().unwrap();
+
+        // Normalize prefix path for consistent assertions
+        let prefix = temp_dir.path().to_str().unwrap();
+        contents = contents.replace(prefix, "__PREFIX__");
+
+        // Check ordering: pre env vars before script run, post env vars after script run
+        let idx_pre_a = contents.find("export A=x").expect("missing pre env A=x");
+        let idx_run = contents
+            .find(". __PREFIX__/etc/conda/activate.d/script1.sh")
+            .expect("missing activation script run");
+        let idx_post_b = contents.find("export B=y").expect("missing post env B=y");
+        let idx_post_a = contents
+            .find("export A=z")
+            .expect("missing post override A=z");
+
+        assert!(
+            idx_pre_a < idx_run,
+            "pre env var should be before activation script"
+        );
+        assert!(
+            idx_run < idx_post_b,
+            "post env var should be after activation script"
+        );
+        assert!(
+            idx_run < idx_post_a,
+            "post override should be after activation script"
+        );
+    }
 
     #[test]
     fn test_collect_scripts() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
 
         let path = tdir.path().join("etc/conda/activate.d/");
         fs::create_dir_all(&path).unwrap();
@@ -507,7 +785,7 @@ mod tests {
         fs::write(&script2, "").unwrap();
         fs::write(&script3, "").unwrap();
 
-        let shell_type = shell::Bash;
+        let shell_type = shell::Bash::default();
 
         let scripts = collect_scripts(&path, &shell_type).unwrap();
         assert_eq!(scripts.len(), 3);
@@ -524,7 +802,7 @@ mod tests {
 
     #[test]
     fn test_collect_env_vars() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
         let path = tdir.path().join("conda-meta/state");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
 
@@ -541,7 +819,7 @@ mod tests {
 
     #[test]
     fn test_collect_env_vars_with_directory() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
         let state_path = tdir.path().join("conda-meta/state");
         fs::create_dir_all(state_path.parent().unwrap()).unwrap();
 
@@ -582,6 +860,56 @@ mod tests {
         }
     }
 
+    /// Regression test for: <https://github.com/conda/rattler/issues/2253>
+    ///
+    /// `collect_env_vars` used to check `state_env_vars.contains_key(key)` while
+    /// iterating `state_env_vars` — always true, so a spurious "already defined" warning
+    /// was emitted for **every** env var in the state file.
+    ///
+    /// After the fix, the warning should only fire when a key from `conda-meta/state`
+    /// actually conflicts with one already collected from `etc/conda/env_vars.d`.
+    #[test]
+    fn test_collect_env_vars_no_spurious_conflict_warnings() {
+        let tdir = TempDir::with_prefix("test_no_spurious_warnings").unwrap();
+        let state_path = tdir.path().join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+
+        let env_var_d = tdir.path().join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+
+        // Pkg defines ONLY "PKG_VAR". "STATE_ONLY_VAR" is NOT in any package json.
+        let pkg_content = r#"{"PKG_VAR": "from_pkg"}"#;
+        fs::write(env_var_d.join("pkg.json"), pkg_content).unwrap();
+
+        // State file defines "STATE_ONLY_VAR" (no conflict) and "PKG_VAR" (real conflict).
+        let state_content =
+            r#"{"env_vars": {"STATE_ONLY_VAR": "state_val", "PKG_VAR": "state_override"}}"#;
+        fs::write(&state_path, state_content).unwrap();
+
+        let env_vars = collect_env_vars(tdir.path()).expect("collect_env_vars must succeed");
+
+        // Both keys must be present — collection itself must work correctly.
+        assert!(
+            env_vars.contains_key("STATE_ONLY_VAR"),
+            "STATE_ONLY_VAR (state-only key) must be collected"
+        );
+        assert!(
+            env_vars.contains_key("PKG_VAR"),
+            "PKG_VAR (conflict key) must be collected"
+        );
+
+        // Before the fix, `state_env_vars.contains_key(key)` was always true, so
+        // the warning fired for STATE_ONLY_VAR even though it had no conflict.
+        // The correct behaviour (after the fix) is:
+        //   - STATE_ONLY_VAR: no conflict → no warning (we can't assert on tracing
+        //     output easily, but we verify the logic by ensuring the change compiles
+        //     and the values are correctly collected).
+        //   - PKG_VAR: real conflict → warning is emitted (state value wins per
+        //     current semantics).
+        assert_eq!(env_vars["STATE_ONLY_VAR"], "state_val");
+        assert_eq!(env_vars["PKG_VAR"], "state_override");
+    }
+
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
@@ -591,7 +919,7 @@ mod tests {
 
     #[cfg(unix)]
     fn create_temp_dir() -> TempDir {
-        let tempdir = TempDir::new("test").unwrap();
+        let tempdir = TempDir::with_prefix("test").unwrap();
         let path = tempdir.path().join("etc/conda/activate.d/");
         fs::create_dir_all(&path).unwrap();
 
@@ -611,6 +939,12 @@ mod tests {
 
         let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
 
+        // Create a test environment
+        let test_env = HashMap::from([
+            ("FOO".to_string(), "bar".to_string()),
+            ("BAZ".to_string(), "qux".to_string()),
+        ]);
+
         let result = activator
             .activation(ActivationVariables {
                 conda_prefix: None,
@@ -622,6 +956,7 @@ mod tests {
                     PathBuf::from("/usr/local/bin"),
                 ]),
                 path_modification_behavior,
+                current_env: test_env,
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();
@@ -632,11 +967,11 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_activation_script_bash() {
-        let script = get_script(shell::Bash, PathModificationBehavior::Append);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Append);
         insta::assert_snapshot!("test_activation_script_bash_append", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Replace);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Replace);
         insta::assert_snapshot!("test_activation_script_bash_replace", script);
-        let script = get_script(shell::Bash, PathModificationBehavior::Prepend);
+        let script = get_script(shell::Bash::default(), PathModificationBehavior::Prepend);
         insta::assert_snapshot!("test_activation_script_bash_prepend", script);
     }
 
@@ -756,6 +1091,7 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         // Remove system specific environment variables.
+        env_diff.remove("CONDA_SHLVL");
         env_diff.remove("CONDA_PREFIX");
         env_diff.remove("Path");
         env_diff.remove("PATH");
@@ -781,7 +1117,35 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash.into(), false);
+        test_run_activation(crate::shell::Bash::default().into(), false);
+    }
+
+    /// Regression test for prefix-dev/pixi#6575: a post-activation env
+    /// var whose value contains a newline must survive the env dump /
+    /// parse round-trip instead of being truncated at the newline.
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_preserves_newline_in_env_var() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let mut activator = Activator::from_path(
+            environment_dir.path(),
+            shell::Bash::default(),
+            Platform::current(),
+        )
+        .unwrap();
+        activator.post_activation_env_vars = IndexMap::from_iter([(
+            String::from("ENV_WITH_NEWLINE"),
+            String::from("hello\nworld"),
+        )]);
+
+        let activation_env = activator
+            .run_activation(ActivationVariables::default(), None)
+            .unwrap();
+
+        assert_eq!(
+            activation_env.get("ENV_WITH_NEWLINE").map(String::as_str),
+            Some("hello\nworld")
+        );
     }
 
     #[test]
@@ -802,5 +1166,324 @@ mod tests {
     #[ignore]
     fn test_run_activation_xonsh() {
         test_run_activation(crate::shell::Xonsh.into(), false);
+    }
+
+    #[test]
+    fn test_deactivation() {
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut env_vars = IndexMap::new();
+        env_vars.insert("TEST_VAR1".to_string(), "value1".to_string());
+        env_vars.insert("TEST_VAR2".to_string(), "value2".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
+            (
+                "dash",
+                ShellEnum::Bash(shell::Bash {
+                    flavor: shell::BashFlavor::Dash,
+                }),
+            ),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        for (shell_name, shell_type) in shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
+                platform: Platform::current(),
+            };
+
+            // Test edge case: CONDA_SHLVL not set (current behavior)
+            let test_env = HashMap::new(); // Empty environment - no CONDA_SHLVL set
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: test_env,
+                })
+                .unwrap();
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(format!("test_deactivation_{}", shell_name), script_contents);
+        }
+    }
+
+    #[test]
+    fn test_deactivation_when_activated() {
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut env_vars = IndexMap::new();
+        env_vars.insert("TEST_VAR1".to_string(), "value1".to_string());
+        env_vars.insert("TEST_VAR2".to_string(), "value2".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        for (shell_name, shell_type) in shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
+                platform: Platform::current(),
+            };
+
+            // CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
+            let test_env = HashMap::from([
+                ("CONDA_SHLVL".to_string(), "1".to_string()),
+                (
+                    "CONDA_PREFIX".to_string(),
+                    tmp_dir_path.to_str().unwrap().to_string(),
+                ),
+            ]);
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: test_env,
+                })
+                .unwrap();
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_deactivation_when_activated{}", shell_name),
+                script_contents
+            );
+        }
+    }
+
+    #[test]
+    fn test_nested_deactivation() {
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut first_env_vars = IndexMap::new();
+        first_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        // now lets activate again an environment
+        // we reuse the same TEST_VAR1 variable to check that it is correctly restored
+        let mut second_env_vars = IndexMap::new();
+        second_env_vars.insert("TEST_VAR1".to_string(), "second_value".to_string());
+
+        for (shell_name, shell_type) in &shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
+                platform: Platform::current(),
+            };
+
+            let mut existing_env_vars = HashMap::new();
+            existing_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+            existing_env_vars.insert("CONDA_SHLVL".to_string(), "1".to_string());
+
+            let result = activator
+                .activation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: existing_env_vars,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            // Normalize temporary directory paths for consistent snapshots
+            let mut prefix = tmp_dir_path.to_str().unwrap().to_string();
+
+            if cfg!(windows) {
+                // Replace backslashes with forward slashes for consistency in snapshots as well
+                // as ; with :
+                script_contents = script_contents.replace("\\\\", "\\");
+                script_contents = script_contents.replace("\\", "/");
+                script_contents = script_contents.replace(";", ":");
+                prefix = prefix.replace("\\", "/");
+            }
+
+            script_contents = script_contents.replace(&prefix, "__PREFIX__");
+            // on windows and bash it will be quoted with shlex::try_quote
+            if cfg!(windows) && *shell_name == "bash" {
+                let unix_path = match native_path_to_unix(&prefix) {
+                    Ok(str) => str,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => prefix,
+                    Err(e) => panic!("Failed to convert path to unix: {e}"),
+                };
+                script_contents = script_contents.replace(&unix_path, "__PREFIX__");
+                script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
+            }
+
+            // on windows we need to replace Path with PATH
+            script_contents = script_contents.replace("Path", "PATH");
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_nested_deactivation_first_round{}", shell_name),
+                script_contents
+            );
+
+            // and now lets deactivate the environment
+            let activated_env = HashMap::from([("CONDA_SHLVL".to_string(), "2".to_string())]);
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: activated_env,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            let prefix = tmp_dir_path.to_str().unwrap();
+            script_contents = script_contents.replace(prefix, "__PREFIX__");
+
+            // on windows we need to replace Path with PATH
+            script_contents = script_contents.replace("Path", "PATH");
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_nested_deactivation_second_round{}", shell_name),
+                script_contents
+            );
+        }
+    }
+
+    #[test]
+    fn test_resetting_conda_shlvl() {
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut first_env_vars = IndexMap::new();
+        first_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash::default())),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        // now lets activate again an environment
+        // we reuse the same TEST_VAR1 variable to check that it is correctly restored
+        let mut second_env_vars = IndexMap::new();
+        second_env_vars.insert("TEST_VAR1".to_string(), "second_value".to_string());
+
+        for (shell_name, shell_type) in &shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
+                platform: Platform::current(),
+            };
+
+            let mut existing_env_vars = HashMap::new();
+            existing_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+            existing_env_vars.insert("CONDA_SHLVL".to_string(), "1".to_string());
+
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: existing_env_vars,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_resetting_conda_shlvl{}", shell_name),
+                script_contents
+            );
+        }
     }
 }

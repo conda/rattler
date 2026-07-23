@@ -1,22 +1,54 @@
-use crate::gateway::GatewayInner;
-use crate::{ChannelConfig, Gateway};
-use dashmap::DashMap;
-#[cfg(not(target_arch = "wasm32"))]
-use rattler_cache::package_cache::PackageCache;
-use reqwest::Client;
-use reqwest_middleware::ClientWithMiddleware;
 use std::sync::Arc;
 
+use coalesced_map::CoalescedMap;
+#[cfg(not(target_arch = "wasm32"))]
+use rattler_cache::package_cache::PackageCache;
+use rattler_networking::LazyClient;
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
+
+use crate::{ChannelConfig, Gateway, gateway::GatewayInner};
+
+static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
+/// Defines the maximum concurrency for the gateway.
+#[derive(Default, Clone)]
+pub enum MaxConcurrency {
+    /// No limit on the number of concurrent requests.
+    #[default]
+    Unlimited,
+    /// A specific number of concurrent requests.
+    Limited(usize),
+    /// Use the specified semaphore for concurrency control.
+    Semaphore(Arc<tokio::sync::Semaphore>),
+}
+
+impl From<usize> for MaxConcurrency {
+    fn from(value: usize) -> Self {
+        if value == 0 {
+            MaxConcurrency::Unlimited
+        } else {
+            MaxConcurrency::Limited(value)
+        }
+    }
+}
+
+impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
+    fn from(value: Arc<tokio::sync::Semaphore>) -> Self {
+        MaxConcurrency::Semaphore(value)
+    }
+}
+
 /// A builder for constructing a [`Gateway`].
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
-    client: Option<ClientWithMiddleware>,
+    client: Option<LazyClient>,
     #[cfg(not(target_arch = "wasm32"))]
     cache: Option<std::path::PathBuf>,
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
-    max_concurrent_requests: Option<usize>,
+    max_concurrent_requests: MaxConcurrency,
 }
 
 impl GatewayBuilder {
@@ -27,14 +59,14 @@ impl GatewayBuilder {
 
     /// Set the client to use for fetching repodata.
     #[must_use]
-    pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
+    pub fn with_client(mut self, client: impl Into<LazyClient>) -> Self {
         self.set_client(client);
         self
     }
 
     /// Set the client to use for fetching repodata.
-    pub fn set_client(&mut self, client: ClientWithMiddleware) -> &mut Self {
-        self.client = Some(client);
+    pub fn set_client(&mut self, client: impl Into<LazyClient>) -> &mut Self {
+        self.client = Some(client.into());
         self
     }
 
@@ -82,22 +114,61 @@ impl GatewayBuilder {
 
     /// Sets the maximum number of concurrent HTTP requests to make.
     #[must_use]
-    pub fn with_max_concurrent_requests(mut self, max_concurrent_requests: usize) -> Self {
-        self.set_max_concurrent_requests(max_concurrent_requests);
-        self
+    pub fn with_max_concurrent_requests(
+        self,
+        max_concurrent_requests: impl Into<MaxConcurrency>,
+    ) -> Self {
+        Self {
+            max_concurrent_requests: max_concurrent_requests.into(),
+            ..self
+        }
     }
 
     /// Sets the maximum number of concurrent HTTP requests to make.
-    pub fn set_max_concurrent_requests(&mut self, max_concurrent_requests: usize) -> &mut Self {
-        self.max_concurrent_requests = Some(max_concurrent_requests);
+    pub fn set_max_concurrent_requests(
+        &mut self,
+        max_concurrent_requests: impl Into<MaxConcurrency>,
+    ) -> &mut Self {
+        self.max_concurrent_requests = max_concurrent_requests.into();
+        self
+    }
+
+    /// Apply the shared rattler configuration (see [`rattler_config`]) to
+    /// this builder: the channel configuration is derived from
+    /// `repodata-config` and the maximum number of concurrent requests from
+    /// `concurrency.downloads`.
+    ///
+    /// Accepts a [`rattler_config::config::CommonConfig`]; a
+    /// `&ConfigBase<T>` of any extension coerces into it.
+    ///
+    /// Note that configuration that affects the HTTP client itself
+    /// (mirrors, S3, proxies, TLS, authentication) must be applied when
+    /// constructing the client passed to [`GatewayBuilder::with_client`].
+    #[cfg(feature = "rattler_config")]
+    #[must_use]
+    pub fn with_config(mut self, config: &rattler_config::config::CommonConfig) -> Self {
+        self.set_config(config);
+        self
+    }
+
+    /// Apply the shared rattler configuration to this builder. See
+    /// [`GatewayBuilder::with_config`].
+    #[cfg(feature = "rattler_config")]
+    pub fn set_config(&mut self, config: &rattler_config::config::CommonConfig) -> &mut Self {
+        self.set_channel_config(ChannelConfig::from(config));
+        self.set_max_concurrent_requests(config.concurrency.downloads);
         self
     }
 
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
-        let client = self
-            .client
-            .unwrap_or_else(|| ClientWithMiddleware::from(Client::new()));
+        let client = self.client.unwrap_or_else(|| {
+            LazyClient::new(|| {
+                ClientWithMiddleware::from(
+                    Client::builder().user_agent(USER_AGENT).build().unwrap(),
+                )
+            })
+        });
 
         #[cfg(not(target_arch = "wasm32"))]
         let cache = self.cache.unwrap_or_else(|| {
@@ -111,20 +182,50 @@ impl GatewayBuilder {
             cache.join(rattler_cache::PACKAGE_CACHE_DIR),
         ));
 
-        let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
+        let concurrent_requests_semaphore = match self.max_concurrent_requests {
+            MaxConcurrency::Unlimited => None,
+            MaxConcurrency::Limited(n) => Some(Arc::new(tokio::sync::Semaphore::new(n))),
+            MaxConcurrency::Semaphore(sem) => Some(sem),
+        };
+
         Gateway {
             inner: Arc::new(GatewayInner {
-                subdirs: DashMap::default(),
+                subdirs: CoalescedMap::new(),
                 client,
                 channel_config: self.channel_config,
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
                 package_cache,
-                concurrent_requests_semaphore: Arc::new(tokio::sync::Semaphore::new(
-                    max_concurrent_requests,
-                )),
+                subdir_run_exports_cache: Arc::default(),
+                concurrent_requests_semaphore,
             }),
         }
+    }
+}
+
+#[cfg(all(test, feature = "rattler_config"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_config_applies_repodata_and_concurrency() {
+        let (config, _) = rattler_config::ConfigBase::<rattler_config::NoExtension>::from_toml_str(
+            r#"
+                [repodata-config]
+                disable-zstd = true
+
+                [concurrency]
+                downloads = 7
+                "#,
+        )
+        .unwrap();
+
+        let builder = Gateway::builder().with_config(&config);
+        assert!(!builder.channel_config.default.zstd_enabled);
+        assert!(matches!(
+            builder.max_concurrent_requests,
+            MaxConcurrency::Limited(7)
+        ));
     }
 }

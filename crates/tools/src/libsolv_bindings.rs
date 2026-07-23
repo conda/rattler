@@ -1,6 +1,6 @@
-use crate::{project_root, reformat, update, Mode};
+use crate::{Mode, project_root, reformat, update};
 use std::borrow::Cow;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 const ALLOWED_FUNC_PREFIX: &[&str] = &[
     "map",
@@ -86,7 +86,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     //
     // The behavior of this file might change when we update libsolv so its important to check this
     // with every upgrade.
-    let temp_include_dir = TempDir::new("libsolv")?;
+    let temp_include_dir = TempDir::with_prefix("libsolv")?;
     std::fs::write(
         temp_include_dir.path().join("solvversion.h"),
         r#"#ifndef LIBSOLV_SOLVVERSION_H
@@ -105,8 +105,9 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
 
     // Define the contents of the bindings and how they are generated
     let bindings = bindgen::Builder::default()
-        .rust_target("1.81.0".parse().unwrap())
+        .rust_target("1.88.0".parse().unwrap())
         .clang_arg(format!("-I{}", temp_include_dir.path().display()))
+        .clang_arg(format!("-I{}", libsolv_path.join("src").display()))
         .ctypes_prefix("libc")
         .header(libsolv_path.join("src/solver.h").to_str().unwrap())
         .header(libsolv_path.join("src/solverdebug.h").to_str().unwrap())
@@ -130,8 +131,11 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     let mut libsolv_bindings = Vec::new();
     bindings.write(Box::new(&mut libsolv_bindings))?;
 
-    // Add a preemble to the bindings to ensure clippy also passes.
-    let libsolv_bindings = reformat(format!("#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}", String::from_utf8(libsolv_bindings).unwrap()))?;
+    // Add a preamble to the bindings to ensure clippy also passes.
+    let libsolv_bindings = reformat(format!(
+        "#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}",
+        String::from_utf8(libsolv_bindings).unwrap()
+    ))?;
 
     // Patch out some platform weirdness
     let libsolv_bindings = patch_enum_representation(&libsolv_bindings, "SolverRuleinfo");

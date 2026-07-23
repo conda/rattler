@@ -6,24 +6,24 @@ pub mod sandbox_impl;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-pub use sandbox_impl::{sandboxed_command, Exception};
+pub use sandbox_impl::{Exception, sandboxed_command};
 
 #[derive(clap::Parser)]
-struct Opts {
+pub struct Opts {
     #[clap(long)]
-    fs_exec_and_read: Option<Vec<String>>,
+    pub fs_exec_and_read: Option<Vec<String>>,
 
     #[clap(long)]
-    fs_write_and_read: Option<Vec<String>>,
+    pub fs_write_and_read: Option<Vec<String>>,
 
     #[clap(long)]
-    fs_read: Option<Vec<String>>,
+    pub fs_read: Option<Vec<String>>,
 
     #[clap(long)]
-    network: bool,
+    pub network: bool,
 
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    args: Vec<String>,
+    pub args: Vec<String>,
 }
 
 // This function checks if the current executable should execute as a sandboxed process

@@ -1,10 +1,31 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{Channel, Platform};
-use rattler_repodata_gateway::{fetch::CacheAction, ChannelConfig, Gateway, SourceConfig};
+use rattler_repodata_gateway::{
+    ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
+};
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 use url::Url;
 use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+unsafe extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = warn)]
+    fn console_warn(s: &str);
+}
+
+/// Forward each [`GatewayWarning`] to JS's `console.warn`. CEP-42's
+/// default `Warn` mode produces non-fatal warnings that the Rust API
+/// surfaces on the query output; for the JS binding we forward them
+/// to the host's standard warnings channel so they cannot be
+/// silently lost.
+pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
+    for w in warnings {
+        console_warn(&w.to_string());
+    }
+}
 
 use crate::JsResult;
 
@@ -94,7 +115,6 @@ impl Default for JsSourceConfig {
 impl From<JsSourceConfig> for SourceConfig {
     fn from(value: JsSourceConfig) -> Self {
         Self {
-            jlap_enabled: false,
             zstd_enabled: value.zstd_enabled,
             bz2_enabled: value.bz2_enabled,
             sharded_enabled: value.sharded_enabled,
@@ -107,7 +127,9 @@ impl From<JsSourceConfig> for SourceConfig {
 impl JsGateway {
     #[wasm_bindgen(constructor)]
     pub fn new(input: JsValue) -> JsResult<Self> {
-        let mut builder = Gateway::builder();
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
+        let mut builder = Gateway::builder().with_client(ClientWithMiddleware::from(Client::new()));
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
         if let Some(options) = options {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
@@ -139,11 +161,10 @@ impl JsGateway {
             .map(|p| Platform::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(self
-            .inner
-            .names(channels, platforms)
-            .execute()
-            .await?
+        let output = self.inner.names(channels, platforms).execute().await?;
+        emit_gateway_warnings(output.warnings);
+        Ok(output
+            .names
             .into_iter()
             .map(|name| name.as_source().to_string())
             .collect())

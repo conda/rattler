@@ -1,30 +1,33 @@
 #![allow(clippy::option_option)]
 
-use fxhash::{FxHashMap, FxHashSet};
+use std::{collections::BTreeSet, io, path::Path};
+
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-use std::collections::BTreeSet;
-use std::io;
-use std::path::Path;
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
+use crate::{
+    PackageRecord, PackageUrl, RepoData, Shard,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+};
 
 /// Represents a Conda repodata patch.
 ///
 /// This struct contains information about a patch to a Conda repodata file,
 /// which is used to update the metadata for Conda packages. The patch contains
-/// information about changes to the repodata, such as removed (yanked) packages and updated package
-/// metadata.
+/// information about changes to the repodata, such as removed (yanked) packages
+/// and updated package metadata.
 #[derive(Debug, Default, Clone)]
 pub struct RepoDataPatch {
     /// The patches to apply for each subdir
-    pub subdirs: FxHashMap<String, PatchInstructions>,
+    pub subdirs: ahash::HashMap<String, PatchInstructions>,
 }
 
 impl RepoDataPatch {
-    /// Load repodata patches from an extracted repodata patches package archive.
+    /// Load repodata patches from an extracted repodata patches package
+    /// archive.
     pub fn from_package(package: impl AsRef<Path>) -> io::Result<Self> {
-        let mut subdirs = FxHashMap::default();
+        let mut subdirs = ahash::HashMap::default();
 
         // Iterate over all directories in the package
         for entry in std::fs::read_dir(package)? {
@@ -44,13 +47,14 @@ impl RepoDataPatch {
     }
 }
 
-/// Contains items that overwrite metadata values stored for a single [`super::PackageRecord`].
+/// Contains items that overwrite metadata values stored for a single
+/// [`super::PackageRecord`].
 ///
-/// Not all entries of a [`super::PackageRecord`] can be overwritten because that would cause
-/// difficult to solve inconsistencies. For instance, changing the sha256 hash of a file could
-/// break local caches because usually the data is cached by filename. With this struct we
-/// explicitly define which fields of a [`super::PackageRecord`] can be modified through repodata
-/// patches.
+/// Not all entries of a [`super::PackageRecord`] can be overwritten because
+/// that would cause difficult to solve inconsistencies. For instance, changing
+/// the sha256 hash of a file could break local caches because usually the data
+/// is cached by filename. With this struct we explicitly define which fields of
+/// a [`super::PackageRecord`] can be modified through repodata patches.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
@@ -58,20 +62,30 @@ pub struct PackageRecordPatch {
     /// Specification of packages this package depends on
     pub depends: Option<Vec<String>>,
 
-    /// Additional constraints on packages. `constrains` are different from `depends` in that packages
-    /// specified in `depends` must be installed next to this package, whereas packages specified in
-    /// `constrains` are not required to be installed, but if they are installed they must follow these
-    /// constraints.
+    /// Additional constraints on packages. `constrains` are different from
+    /// `depends` in that packages specified in `depends` must be installed
+    /// next to this package, whereas packages specified in `constrains` are
+    /// not required to be installed, but if they are installed they must follow
+    /// these constraints.
     pub constrains: Option<Vec<String>>,
 
-    /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
-    /// that effect, the number of track features is counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
-    #[serde_as(as = "Option<crate::utils::serde::Features>")]
-    pub track_features: Option<Vec<String>>,
+    /// Track features are nowadays only used to downweight packages (ie. give
+    /// them less priority). To that effect, the number of track features is
+    /// counted (number of commas) and the package is downweighted
+    /// by the number of `track_features`.
+    ///
+    /// This field is double wrapped to be able to express the value `null`
+    /// separate from it being missing from the JSON.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "self::tracked_features"
+    )]
+    pub track_features: Option<Option<Vec<String>>>,
 
-    /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
-    /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
+    /// Features are a deprecated way to specify different feature sets for the
+    /// conda solver. This is not supported anymore and should not be used.
+    /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     #[serde(
         default,
@@ -96,30 +110,99 @@ pub struct PackageRecordPatch {
     )]
     pub license_family: Option<Option<String>>,
 
-    /// Package identifiers of packages that are equivalent to this package but from other
-    /// ecosystems.
-    pub purls: Option<BTreeSet<PackageUrl>>,
+    /// Package identifiers of packages that are equivalent to this package but
+    /// from other ecosystems.
+    /// See this CEP: <https://github.com/conda/ceps/pull/63>
+    ///
+    /// This field is double wrapped to be able to express the value `null`
+    /// separate from it being missing from the JSON.
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    pub purls: Option<Option<BTreeSet<PackageUrl>>>,
 }
 
-/// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
-/// information.
+mod tracked_features {
+    //! Helper module to serialize and deserialize the `track_features` field
+    //! and also allow it to be set to `null`.
+
+    use serde::{Deserializer, Serializer};
+    use serde_with::{DeserializeAs, SerializeAs};
+
+    use crate::utils::serde::Features;
+
+    /// Deserialize potentially non-existing optional value
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Option<Vec<String>>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<Features>::deserialize_as(deserializer).map(Some)
+    }
+
+    /// Serialize optional value
+    pub fn serialize<S>(
+        value: &Option<Option<Vec<String>>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            None => serializer.serialize_unit(),
+            Some(v) => Option::<Features>::serialize_as(v, serializer),
+        }
+    }
+}
+
+/// Patches for packages stored under the `v3` top-level key.
+/// Mirrors [`V3Packages`] but with [`PackageRecordPatch`] values.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+pub struct V3PackagePatches {
+    /// Patches for v3 tar.bz2 package records
+    #[serde(
+        default,
+        rename = "tar.bz2",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub tar_bz2: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for v3 conda package records
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub conda: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for v3 whl package records
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub whl: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+}
+
+impl V3PackagePatches {
+    /// Returns true if all sub-maps are empty.
+    pub fn is_empty(&self) -> bool {
+        self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+    }
+}
+
+/// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`]
+/// for more information.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PatchInstructions {
     /// Filenames that have been removed from the subdirectory
-    #[serde(default, skip_serializing_if = "FxHashSet::is_empty")]
-    pub remove: FxHashSet<String>,
+    #[serde(default, skip_serializing_if = "ahash::HashSet::is_empty")]
+    pub remove: ahash::HashSet<DistArchiveIdentifier>,
 
     /// Patches for package records
-    #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
-    pub packages: FxHashMap<String, PackageRecordPatch>,
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 
-    /// Patches for package records
+    /// Patches for conda package records
     #[serde(
         default,
         rename = "packages.conda",
-        skip_serializing_if = "FxHashMap::is_empty"
+        skip_serializing_if = "ahash::HashMap::is_empty"
     )]
-    pub conda_packages: FxHashMap<String, PackageRecordPatch>,
+    pub conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for v3 packages
+    #[serde(default, skip_serializing_if = "V3PackagePatches::is_empty")]
+    pub v3: V3PackagePatches,
 }
 
 impl PackageRecord {
@@ -132,7 +215,7 @@ impl PackageRecord {
             self.constrains = constrains.clone();
         }
         if let Some(track_features) = &patch.track_features {
-            self.track_features = track_features.clone();
+            self.track_features = track_features.clone().unwrap_or_default();
         }
         if let Some(features) = &patch.features {
             self.features = features.clone();
@@ -144,7 +227,7 @@ impl PackageRecord {
             self.license_family = license_family.clone();
         }
         if let Some(package_urls) = &patch.purls {
-            self.purls = Some(package_urls.clone());
+            self.purls = package_urls.clone();
         }
     }
 }
@@ -152,51 +235,66 @@ impl PackageRecord {
 /// Apply a patch to a repodata file
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
-    packages: &mut FxHashMap<String, PackageRecord>,
-    conda_packages: &mut FxHashMap<String, PackageRecord>,
-    removed: &mut FxHashSet<String>,
+    packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    v3: &mut super::V3Packages,
+    removed: &mut ahash::HashSet<DistArchiveIdentifier>,
     instructions: &PatchInstructions,
 ) {
-    for (pkg, patch) in instructions.packages.iter() {
-        if let Some(record) = packages.get_mut(pkg) {
+    for (identifier, patch) in instructions.packages.iter() {
+        if let Some(record) = packages.get_mut(identifier) {
             record.apply_patch(patch);
         }
 
-        // also apply the patch to the conda packages
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            assert!(archive_type == ArchiveType::TarBz2);
-            if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
-                record.apply_patch(patch);
+        let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
+        if let Some(record) = conda_packages.get_mut(&conda_identifier) {
+            record.apply_patch(patch);
+        }
+    }
+
+    for (identifier, patch) in instructions.conda_packages.iter() {
+        if let Some(record) = conda_packages.get_mut(identifier) {
+            record.apply_patch(patch);
+        }
+    }
+
+    // Apply patches to v3 packages
+    for (identifier, patch) in instructions.v3.tar_bz2.iter() {
+        if let Some(record) = v3.tar_bz2.get_mut(identifier) {
+            record.apply_patch(patch);
+        }
+    }
+    for (identifier, patch) in instructions.v3.conda.iter() {
+        if let Some(record) = v3.conda.get_mut(identifier) {
+            record.apply_patch(patch);
+        }
+    }
+    for (identifier, patch) in instructions.v3.whl.iter() {
+        if let Some(record) = v3.whl.get_mut(identifier) {
+            record.package_record.apply_patch(patch);
+        }
+    }
+
+    // Mark packages as removed. Note: we only add them to the `removed` set
+    // and do NOT remove them from the package maps. The `removed` key signals
+    // that a package has been yanked, but its metadata should remain available.
+    for identifier in instructions.remove.iter() {
+        match identifier.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+                removed.insert(identifier.clone());
+
+                // also mark equivalent .conda package as removed if it exists
+                let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
+                if conda_packages.contains_key(&conda_identifier) {
+                    removed.insert(conda_identifier);
+                }
             }
-        }
-    }
-
-    for (pkg, patch) in instructions.conda_packages.iter() {
-        if let Some(record) = conda_packages.get_mut(pkg) {
-            record.apply_patch(patch);
-        }
-    }
-
-    // remove packages that have been removed
-    for pkg in instructions.remove.iter() {
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            match archive_type {
-                ArchiveType::TarBz2 => {
-                    if packages.remove_entry(pkg).is_some() {
-                        removed.insert(pkg.clone());
-                    }
-
-                    // also remove equivalent .conda package if it exists
-                    let conda_pkg_name = format!("{pkg_name}.conda");
-                    if conda_packages.remove_entry(&conda_pkg_name).is_some() {
-                        removed.insert(conda_pkg_name);
-                    }
-                }
-                ArchiveType::Conda => {
-                    if conda_packages.remove_entry(pkg).is_some() {
-                        removed.insert(pkg.clone());
-                    }
-                }
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
+                removed.insert(identifier.clone());
+            }
+            DistArchiveType::Wheel(_) => {
+                // Wheel packages are stored in v3.whl; removal by
+                // DistArchiveIdentifier is not currently supported for v3.
             }
         }
     }
@@ -209,6 +307,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.v3,
             &mut self.removed,
             instructions,
         );
@@ -222,6 +321,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.v3,
             &mut self.removed,
             instructions,
         );
@@ -235,7 +335,7 @@ mod test {
     #[test]
     fn test_null_values() {
         let record_patch: super::PackageRecordPatch =
-            serde_json::from_str(r#"{"features": null, "license": null, "license_family": null, "depends": [], "constrains": [], "track_features": []}"#).unwrap();
+            serde_json::from_str(r#"{"features": null, "license": null, "license_family": null, "depends": [], "constrains": [], "track_features": null}"#).unwrap();
         insta::assert_yaml_snapshot!(record_patch);
     }
 
@@ -243,8 +343,8 @@ mod test {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/patch")
     }
 
-    fn load_test_repodata() -> RepoData {
-        let repodata_path = test_data_path().join("linux-64/repodata_from_packages.json");
+    fn load_test_repodata(name: &str) -> RepoData {
+        let repodata_path = test_data_path().join("linux-64").join(name);
         let repodata: RepoData =
             serde_json::from_str(&std::fs::read_to_string(repodata_path).unwrap()).unwrap();
         repodata
@@ -261,7 +361,7 @@ mod test {
     #[test]
     fn test_patching() {
         // test data
-        let mut repodata = load_test_repodata();
+        let mut repodata = load_test_repodata("repodata_from_packages.json");
         let patch_instructions = load_patch_instructions("patch_instructions.json");
 
         // apply patch
@@ -274,7 +374,7 @@ mod test {
     #[test]
     fn test_removing_1() {
         // test data
-        let mut repodata = load_test_repodata();
+        let mut repodata = load_test_repodata("repodata_from_packages.json");
         let patch_instructions = load_patch_instructions("patch_instructions_2.json");
 
         // apply patch
@@ -287,7 +387,7 @@ mod test {
     #[test]
     fn test_removing_2() {
         // test data
-        let mut repodata = load_test_repodata();
+        let mut repodata = load_test_repodata("repodata_from_packages.json");
         let patch_instructions = load_patch_instructions("patch_instructions_3.json");
 
         // apply patch
@@ -300,8 +400,21 @@ mod test {
     #[test]
     fn test_patch_purl() {
         // test data
-        let mut repodata = load_test_repodata();
+        let mut repodata = load_test_repodata("repodata_from_packages.json");
         let patch_instructions = load_patch_instructions("patch_instructions_4.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_tracked_features() {
+        // test data
+        let mut repodata = load_test_repodata("repodata_from_packages_5.json");
+        let patch_instructions = load_patch_instructions("patch_instructions_5.json");
 
         // apply patch
         repodata.apply_patches(&patch_instructions);

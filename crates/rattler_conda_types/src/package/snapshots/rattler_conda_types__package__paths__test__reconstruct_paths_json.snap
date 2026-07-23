@@ -24,4 +24,3 @@ paths:
     file_mode: text
     prefix_placeholder: "C:/conda/envs/_build"
 paths_version: 1
-

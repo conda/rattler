@@ -1,59 +1,85 @@
-use anyhow::{Context, Result};
-use clap::Parser;
-use rattler_conda_types::{menuinst::MenuMode, PackageName, Platform, PrefixRecord};
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
+use clap::Parser;
+use miette::IntoDiagnostic;
+use rattler_conda_types::{PackageName, Platform, PrefixRecord, menuinst::MenuMode};
+
+/// Install menu items for an installed package.
 #[derive(Debug, Parser)]
 pub struct InstallOpt {
-    /// Target prefix to look for the package (defaults to `.prefix`)
-    #[clap(long, short, default_value = ".prefix")]
+    /// Target prefix (environment path) to look for the package
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
     target_prefix: PathBuf,
 
     /// Name of the package for which to install menu items
     package_name: PackageName,
 }
 
-pub async fn install_menu(opts: InstallOpt) -> Result<()> {
+/// Remove installed menu items for a package.
+#[derive(Debug, Parser)]
+pub struct RemoveOpt {
+    /// Target prefix (environment path) to look for the package
+    #[clap(
+        short = 'p',
+        long = "prefix",
+        visible_alias = "target-prefix",
+        default_value = ".prefix"
+    )]
+    target_prefix: PathBuf,
+
+    /// Name of the package for which to remove menu items
+    package_name: PackageName,
+}
+
+pub async fn install_menu(opts: InstallOpt) -> miette::Result<()> {
     // Find the prefix record in the target_prefix and call `install_menu` on it
-    let records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(&opts.target_prefix)?;
+    let records: Vec<PrefixRecord> =
+        PrefixRecord::collect_from_prefix(&opts.target_prefix).into_diagnostic()?;
 
     let record = records
         .iter()
         .find(|r| r.repodata_record.package_record.name == opts.package_name)
-        .with_context(|| {
-            format!(
+        .ok_or_else(|| {
+            miette::miette!(
                 "Package {} not found in prefix {:?}",
                 opts.package_name.as_normalized(),
                 opts.target_prefix
             )
         })?;
-    let prefix = fs::canonicalize(&opts.target_prefix)?;
+    let prefix = std::path::absolute(&opts.target_prefix).into_diagnostic()?;
     rattler_menuinst::install_menuitems_for_record(
         &prefix,
         record,
         Platform::current(),
         MenuMode::User,
-    )?;
+    )
+    .into_diagnostic()?;
 
     Ok(())
 }
 
-pub async fn remove_menu(opts: InstallOpt) -> Result<()> {
+pub async fn remove_menu(opts: RemoveOpt) -> miette::Result<()> {
     // Find the prefix record in the target_prefix and call `remove_menu` on it
-    let records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(&opts.target_prefix)?;
+    let records: Vec<PrefixRecord> =
+        PrefixRecord::collect_from_prefix(&opts.target_prefix).into_diagnostic()?;
 
     let record = records
         .iter()
         .find(|r| r.repodata_record.package_record.name == opts.package_name)
-        .with_context(|| {
-            format!(
+        .ok_or_else(|| {
+            miette::miette!(
                 "Package {} not found in prefix {:?}",
                 opts.package_name.as_normalized(),
                 opts.target_prefix
             )
         })?;
 
-    rattler_menuinst::remove_menu_items(&record.installed_system_menus)?;
+    rattler_menuinst::remove_menu_items(&record.installed_system_menus).into_diagnostic()?;
 
     Ok(())
 }

@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
 use rattler_conda_types::{Channel, Platform};
-use reqwest_middleware::ClientWithMiddleware;
+use rattler_networking::LazyClient;
 
 use crate::{
+    Reporter,
     fetch::{
-        no_cache::{fetch_repo_data, FetchRepoDataOptions},
         FetchRepoDataError,
+        no_cache::{FetchRepoDataOptions, fetch_repo_data},
     },
     gateway::{
-        error::SubdirNotFoundError, local_subdir::LocalSubdirClient, GatewayError, SourceConfig,
+        GatewayError, SourceConfig, error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
     },
-    Reporter,
 };
 
 pub struct RemoteSubdirClient {
@@ -22,7 +22,7 @@ impl RemoteSubdirClient {
     pub async fn new(
         channel: Channel,
         platform: Platform,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Self, GatewayError> {

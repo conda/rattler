@@ -1,9 +1,9 @@
 //! Functionality to stream parts of a `.conda` archive for objects that implement both
 //! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor<T>`].
 
-use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
-use rattler_conda_types::package::ArchiveType;
+use crate::read::{stream_tar_bz2, stream_tar_zst};
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_conda_types::package::PackageFile;
 use std::fs::File;
 use std::io::Write;
@@ -14,10 +14,10 @@ use std::{
 use tar::Archive;
 use zip::CompressionMethod;
 
-fn stream_conda_zip_entry<'a>(
-    mut archive: zip::ZipArchive<impl Read + Seek + 'a>,
+fn stream_conda_zip_entry<'a, R: Read + Seek + 'a>(
+    mut archive: zip::ZipArchive<R>,
     file_name: &str,
-) -> Result<tar::Archive<impl Read + Sized + 'a>, ExtractError> {
+) -> Result<tar::Archive<impl Read + Sized + use<'a, R>>, ExtractError> {
     // Find the offset and size of the file in the zip.
     let (offset, size) = {
         let entry = archive.by_name(file_name)?;
@@ -27,7 +27,12 @@ fn stream_conda_zip_entry<'a>(
             return Err(ExtractError::UnsupportedCompressionMethod);
         }
 
-        (entry.data_start(), entry.size())
+        (
+            entry
+                .data_start()
+                .expect("data_start is available after reading entry"),
+            entry.size(),
+        )
     };
 
     // Seek to the position of the file
@@ -86,19 +91,19 @@ fn get_file_from_archive(
 }
 
 /// Read a package file content from archive based on the path
-fn read_package_file_content<'a>(
+pub fn read_package_file_content<'a>(
     file: impl Read + Seek + 'a,
-    path: impl AsRef<Path>,
+    archive_type: CondaArchiveType,
     package_path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
-    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::TarBz2 => {
+    match archive_type {
+        CondaArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Conda => {
-            let mut info_archive = stream_conda_info(file).unwrap();
+        CondaArchiveType::Conda => {
+            let mut info_archive = stream_conda_info(file)?;
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
@@ -121,9 +126,13 @@ fn read_package_file_content<'a>(
 pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
     // stream extract the file from a package
     let file = File::open(&path)?;
-    let content = read_package_file_content(&file, &path, P::package_path())?;
+    let content = read_package_file_content(
+        &file,
+        CondaArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
-    P::from_str(&String::from_utf8_lossy(&content))
+    P::from_slice(&content)
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 
@@ -133,7 +142,11 @@ pub fn extract_package_file<'a, P: PackageFile>(
     location: &Path,
     writer: &mut impl Write,
 ) -> Result<(), ExtractError> {
-    let content = read_package_file_content(reader, location, P::package_path())?;
+    let content = read_package_file_content(
+        reader,
+        CondaArchiveType::try_from(location).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
     writer.write_all(&content)?;
 

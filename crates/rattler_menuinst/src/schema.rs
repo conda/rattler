@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::render::{BaseMenuItemPlaceholders, PlaceholderString};
@@ -62,7 +63,9 @@ pub struct BasePlatformSpecific {
     /// Whether to run the program in a terminal/console.
     ///
     /// ### Platform-specific behavior
-    /// - `Windows`: Only has an effect if `activate` is true
+    /// - `Windows`: Only has an effect if `activate` is true. Suppressing the console
+    ///   window for console-subsystem executables when `activate` is false would require
+    ///   a GUI-subsystem proxy binary (similar to conda's `cwp.py` via `pythonw.exe`).
     /// - `MacOS`: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
@@ -124,7 +127,7 @@ pub struct Windows {
 
     /// Whether to create a quick launch icon in addition to the Start Menu item.
     ///
-    /// Defaults to `true` in the original implementation.
+    /// Defaults to `false` in the original implementation.
     pub quicklaunch: Option<bool>,
 
     /// Windows Terminal profile configuration.
@@ -427,12 +430,12 @@ pub struct MacOS {
 
     /// Build version number for the bundle. In the context of 'menuinst'
     /// this can be used to signal a new version of the menu item for the same
-    /// application version.    
+    /// application version.
     #[serde(rename = "CFBundleVersion")]
     pub cf_bundle_version: Option<PlaceholderString>,
 
     /// URL types supported by this app. Requires setting `event_handler` too.
-    /// Note this feature requires macOS 10.15+.    
+    /// Note this feature requires macOS 10.15+.
     #[serde(rename = "CFBundleURLTypes")]
     pub cf_bundle_url_types: Option<Vec<CFBundleURLTypesModel>>,
 
@@ -493,6 +496,10 @@ pub struct MacOS {
 
     /// Required shell script logic to handle opened URL payloads.
     pub event_handler: Option<PlaceholderString>,
+
+    /// Set of extra properties for the Info.plist file.
+    /// These properties are not validated by `menuinst.`
+    pub info_plist_extra: Option<IndexMap<String, serde_json::Value>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

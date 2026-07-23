@@ -1,13 +1,14 @@
 //! Middleware to handle `s3://` URLs to pull artifacts from an S3 bucket
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Error;
+use anyhow::{Context, Error};
+use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
+use http::Method;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tracing::info;
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -28,12 +29,61 @@ pub enum S3Config {
     },
 }
 
+#[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the given S3 options.
+pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, S3Config>
+where
+    M: IntoIterator<Item = (String, rattler_config::config::s3::S3Options)> + Clone,
+{
+    s3_options
+        .clone()
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                S3Config::Custom {
+                    endpoint_url: v.endpoint_url,
+                    region: v.region,
+                    force_path_style: v.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
+#[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the `s3-options` of the shared rattler
+/// configuration (see [`rattler_config`]).
+///
+/// Accepts a [`rattler_config::config::CommonConfig`]; a `&ConfigBase<T>` of
+/// any extension coerces into it.
+pub fn compute_s3_config_from_config(
+    config: &rattler_config::config::CommonConfig,
+) -> HashMap<String, S3Config> {
+    config
+        .s3_options
+        .0
+        .iter()
+        .map(|(bucket, options)| {
+            (
+                bucket.clone(),
+                S3Config::Custom {
+                    endpoint_url: options.endpoint_url.clone(),
+                    region: options.region.clone(),
+                    force_path_style: options.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {
     auth_storage: AuthenticationStorage,
     config: HashMap<String, S3Config>,
     expiration: std::time::Duration,
+    default_client: Arc<async_once_cell::OnceCell<aws_config::SdkConfig>>,
 }
 
 /// S3 middleware to authenticate requests.
@@ -45,7 +95,7 @@ pub struct S3Middleware {
 impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: HashMap<String, S3Config>, auth_storage: AuthenticationStorage) -> Self {
-        info!("Creating S3 middleware using {:?}", config);
+        tracing::trace!("Creating S3 middleware using {:?}", config);
         Self {
             s3: S3::new(config, auth_storage),
         }
@@ -59,6 +109,7 @@ impl S3 {
             config,
             auth_storage,
             expiration: std::time::Duration::from_secs(300),
+            default_client: Arc::new(OnceCell::new()),
         }
     }
 
@@ -66,19 +117,26 @@ impl S3 {
     ///
     /// # Arguments
     ///
-    /// * `url` - The S3 URL to obtain authentication information from the authentication storage.
-    ///     Only respected for custom (non-AWS-based) configuration.
+    /// * `url` - The S3 URL to obtain authentication information from the
+    ///   authentication storage. Only respected for custom (non-AWS-based)
+    ///   configuration.
     pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
+        let sdk_config = self
+            .default_client
+            .get_or_init(aws_config::defaults(BehaviorVersion::latest()).load())
+            .await;
+
         let bucket_name = url
             .host_str()
-            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
+            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?
+            .to_owned();
         if let S3Config::Custom {
             endpoint_url,
             region,
             force_path_style,
         } = self
             .config
-            .get(bucket_name)
+            .get(&bucket_name)
             .unwrap_or(&S3Config::FromAWS)
             .clone()
         {
@@ -91,36 +149,44 @@ impl S3 {
                         secret_access_key,
                         session_token,
                     }),
-                ) => {
-                    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-                    aws_sdk_s3::config::Builder::from(&sdk_config)
-                        .endpoint_url(endpoint_url)
-                        .region(aws_sdk_s3::config::Region::new(region))
-                        .force_path_style(force_path_style)
-                        .credentials_provider(aws_sdk_s3::config::Credentials::new(
-                            access_key_id,
-                            secret_access_key,
-                            session_token,
-                            None,
-                            "pixi",
-                        ))
-                }
+                ) => aws_sdk_s3::config::Builder::from(sdk_config)
+                    .endpoint_url(endpoint_url)
+                    .region(aws_sdk_s3::config::Region::new(region))
+                    .force_path_style(force_path_style)
+                    .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                        access_key_id,
+                        secret_access_key,
+                        session_token,
+                        None,
+                        "rattler",
+                    )),
                 (_, Some(_)) => {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
                 }
                 (_, None) => {
-                    return Err(anyhow::anyhow!("no S3 authentication found"));
+                    tracing::debug!(
+                        "No S3 credentials in rattler auth storage for bucket '{}', \
+                         falling back to AWS SDK default credential chain",
+                        bucket_name
+                    );
+                    aws_sdk_s3::config::Builder::from(sdk_config)
+                        .endpoint_url(endpoint_url)
+                        .region(aws_sdk_s3::config::Region::new(region))
+                        .force_path_style(force_path_style)
                 }
             };
             let s3_config = config_builder.build();
             Ok(aws_sdk_s3::Client::from_conf(s3_config))
         } else {
-            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-            let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+            let mut s3_config_builder = aws_sdk_s3::config::Builder::from(sdk_config);
+
+            // Set the region from the default provider chain.
+            s3_config_builder.set_region(sdk_config.region().cloned());
+
             // Infer if we expect path-style addressing from the endpoint URL.
             if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                // If the endpoint URL is localhost, we probably have to use path-style addressing.
-                // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
+                // If the endpoint URL is localhost, we probably have to use path-style
+                // addressing. xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
                 if endpoint_url.starts_with("http://localhost") {
                     s3_config_builder = s3_config_builder.force_path_style(true);
                 }
@@ -129,14 +195,16 @@ impl S3 {
                     s3_config_builder = s3_config_builder.force_path_style(true);
                 }
             }
-            let client = aws_sdk_s3::Client::from_conf(s3_config_builder.build());
-            Ok(client)
+            Ok(aws_sdk_s3::Client::from_conf(s3_config_builder.build()))
         }
     }
 
-    /// Generate a presigned S3 `GetObject` request.
-    async fn generate_presigned_s3_url(&self, url: Url) -> MiddlewareResult<Url> {
+    /// Generate a pre-signed S3 `GetObject` request.
+    async fn generate_presigned_s3_url(&self, url: Url, method: &Method) -> MiddlewareResult<Url> {
         let client = self.create_s3_client(url.clone()).await?;
+
+        let presign_config = PresigningConfig::expires_in(self.expiration)
+            .map_err(reqwest_middleware::Error::middleware)?;
 
         let bucket_name = url
             .host_str()
@@ -144,21 +212,34 @@ impl S3 {
         let key = url
             .path()
             .strip_prefix("/")
-            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
+            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {url}"))?;
 
-        let builder = client.get_object().bucket(bucket_name).key(key);
-
-        Url::parse(
-            builder
-                .presigned(
-                    PresigningConfig::expires_in(self.expiration)
-                        .map_err(reqwest_middleware::Error::middleware)?,
-                )
+        let presigned_request = match *method {
+            Method::HEAD => client
+                .head_object()
+                .bucket(bucket_name)
+                .key(key)
+                .presigned(presign_config)
                 .await
-                .map_err(reqwest_middleware::Error::middleware)?
-                .uri(),
-        )
-        .map_err(reqwest_middleware::Error::middleware)
+                .context("failed to presign S3 HEAD request")?,
+            Method::POST => client
+                .put_object()
+                .bucket(bucket_name)
+                .key(key)
+                .presigned(presign_config)
+                .await
+                .context("failed to presign S3 PUT request")?,
+            Method::GET => client
+                .get_object()
+                .bucket(bucket_name)
+                .key(key)
+                .presigned(presign_config)
+                .await
+                .context("failed to presign S3 GET request")?,
+            _ => unimplemented!("Only HEAD, POST and GET are supported for S3 requests"),
+        };
+
+        Ok(Url::parse(presigned_request.uri()).context("failed to parse presigned S3 URL")?)
     }
 }
 
@@ -171,12 +252,20 @@ impl Middleware for S3Middleware {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
-        if req.url().scheme() == "s3" {
-            let url = req.url().clone();
-            let presigned_url = self.s3.generate_presigned_s3_url(url).await?;
-            *req.url_mut() = presigned_url.clone();
+        // Only intercept `s3://` requests.
+        if req.url().scheme() != "s3" {
+            return next.run(req, extensions).await;
         }
-        next.run(req, extensions).await
+
+        let url = req.url().clone();
+        let presigned_url = self.s3.generate_presigned_s3_url(url, req.method()).await?;
+        *req.url_mut() = presigned_url;
+        let cloned_req = req.try_clone().ok_or_else(|| {
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                "Failed to clone S3 request: request body is a non-cloneable stream"
+            ))
+        })?;
+        next.run(cloned_req, extensions).await
     }
 }
 
@@ -184,12 +273,43 @@ impl Middleware for S3Middleware {
 mod tests {
     use std::sync::Arc;
 
-    use crate::authentication_storage::backends::file::FileStorage;
-
-    use super::*;
     use rstest::{fixture, rstest};
     use temp_env::async_with_vars;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
+
+    use super::*;
+    use crate::authentication_storage::backends::file::FileStorage;
+
+    /// Guard against regressions in the AWS SDK / reqwest crypto provider
+    /// alignment.
+    ///
+    /// `reqwest` 0.13's `rustls` feature uses `aws-lc-rs` as its rustls
+    /// crypto backend. We rely on `aws-smithy-http-client/rustls-aws-lc`
+    /// (plus `default-https-client` on `aws-config` and `aws-sdk-s3`) to
+    /// make the AWS SDK pick the same backend, so the process only pulls
+    /// in one rustls crypto crate and we don't have to hand-build an HTTP
+    /// client to align them.
+    ///
+    /// Without those features, building an SDK operation panics with
+    /// "a `http_client` is required". This exercises that path so a
+    /// regression surfaces here, alongside reqwest, in the same process.
+    #[tokio::test]
+    async fn aws_sdk_and_reqwest_share_default_https_client() {
+        // Force reqwest to initialize its rustls stack (uses aws-lc-rs via
+        // the `rustls` feature in reqwest 0.13).
+        let _reqwest_client = reqwest::Client::builder()
+            .build()
+            .expect("reqwest client builds");
+
+        // Force the AWS SDK to initialize its default HTTPS client and
+        // build an operation. If `default-https-client` /
+        // `rustls-aws-lc` are not wired up, this panics.
+        let s3 = S3::new(HashMap::new(), AuthenticationStorage::empty());
+        let _ = s3
+            .create_s3_client(Url::parse("s3://example-bucket/key").unwrap())
+            .await
+            .expect("S3 client builds");
+    }
 
     #[tokio::test]
     async fn test_presigned_s3_request_endpoint_url() {
@@ -204,6 +324,7 @@ mod tests {
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -230,6 +351,7 @@ mod tests {
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -278,6 +400,7 @@ region = eu-central-1
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -302,6 +425,7 @@ region = eu-central-1
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -346,6 +470,7 @@ region = eu-central-1
         let presigned = s3
             .generate_presigned_s3_url(
                 Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                &Method::GET,
             )
             .await
             .unwrap();
@@ -360,6 +485,9 @@ region = eu-central-1
 
     #[tokio::test]
     async fn test_presigned_s3_request_no_credentials() {
+        // When there are no rattler auth storage credentials for a Custom S3Config,
+        // the middleware should fall back to the AWS SDK default credential chain
+        // (env vars, AWS config files, IMDS, etc.) rather than hard-failing.
         let s3 = S3::new(
             HashMap::from([(
                 "rattler-s3-testing".into(),
@@ -372,18 +500,33 @@ region = eu-central-1
             AuthenticationStorage::empty(),
         );
 
-        let result = s3
-            .generate_presigned_s3_url(
-                Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
-            )
-            .await;
-        assert!(result.is_err());
-        let err_message = result.err().unwrap().to_string();
-        assert!(
-            err_message.contains("no S3 authentication found"),
-            "{}",
-            err_message
+        // Provide credentials via env vars (the AWS SDK default chain) so that the
+        // fallback path succeeds and produces a valid presigned URL using the custom
+        // endpoint and region from the S3Config.
+        let presigned = async_with_vars(
+            [
+                ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
+                ("AWS_SECRET_ACCESS_KEY", Some("minioadmin")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
+                )
+                .await
+                .unwrap()
+            },
+        )
+        .await;
+
+        // The custom endpoint and force_path_style should be respected.
+        assert_eq!(presigned.scheme(), "http");
+        assert_eq!(presigned.host_str().unwrap(), "localhost");
+        assert_eq!(
+            presigned.path(),
+            "/rattler-s3-testing/channel/noarch/repodata.json"
         );
+        assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
     }
 
     #[rstest]
@@ -401,6 +544,7 @@ region = eu-central-1
                 let result = s3
                     .generate_presigned_s3_url(
                         Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                        &Method::GET,
                     )
                     .await;
                 assert!(result.is_err());

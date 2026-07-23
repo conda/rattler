@@ -2,12 +2,15 @@ from __future__ import annotations
 import os
 import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyIndexJson
 from rattler.version.version import Version
 from rattler.version.with_source import VersionWithSource
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class IndexJson:
@@ -67,8 +70,18 @@ class IndexJson:
         """
         return IndexJson._from_py_index_json(PyIndexJson.from_str(string))
 
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[IndexJson]:
+        """
+        Fetches `info/index.json` from a remote package archive URL.
+        """
+        py_index_json = await PyIndexJson.from_remote_url(client._client, url)
+        if py_index_json is None:
+            return None
+        return cls._from_py_index_json(py_index_json)
+
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 

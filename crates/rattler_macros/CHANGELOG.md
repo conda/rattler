@@ -6,6 +6,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2](https://github.com/conda/rattler/compare/rattler_macros-v1.1.1...rattler_macros-v1.1.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.1.1](https://github.com/conda/rattler/compare/rattler_macros-v1.1.0...rattler_macros-v1.1.1) - 2026-06-02
+
+### Fixed
+
+- make sdist PEP 625 conformant and trim test data ([#2470](https://github.com/conda/rattler/pull/2470))
+
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_macros-v1.0.14...rattler_macros-v1.1.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [1.0.14](https://github.com/conda/rattler/compare/rattler_macros-v1.0.13...rattler_macros-v1.0.14) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [1.0.13](https://github.com/conda/rattler/compare/rattler_macros-v1.0.12...rattler_macros-v1.0.13) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [1.0.12](https://github.com/conda/rattler/compare/rattler_macros-v1.0.11...rattler_macros-v1.0.12) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [1.0.11](https://github.com/conda/rattler/compare/rattler_macros-v1.0.10...rattler_macros-v1.0.11) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [1.0.10](https://github.com/conda/rattler/compare/rattler_macros-v1.0.9...rattler_macros-v1.0.10) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [1.0.9](https://github.com/conda/rattler/compare/rattler_macros-v1.0.8...rattler_macros-v1.0.9) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.0.8](https://github.com/conda/rattler/compare/rattler_macros-v1.0.7...rattler_macros-v1.0.8) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.0.7](https://github.com/conda/rattler/compare/rattler_macros-v1.0.6...rattler_macros-v1.0.7) - 2025-03-10
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [1.0.6](https://github.com/conda/rattler/compare/rattler_macros-v1.0.5...rattler_macros-v1.0.6) - 2025-02-18
 
 ### Other

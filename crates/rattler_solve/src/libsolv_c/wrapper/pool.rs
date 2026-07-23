@@ -25,7 +25,7 @@ pub enum DistType {
     Conda = ffi::DISTTYPE_CONDA,
 }
 
-/// Wrapper for libsolv Pool, the interning datastructure used by libsolv
+/// Wrapper for libsolv Pool, the interning data-structure used by libsolv
 ///
 /// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
 /// when the Pool is dropped
@@ -66,7 +66,7 @@ impl Drop for Pool {
 type BoxedLogCallback = Box<dyn FnMut(&str, i32) + 'static>;
 
 /// The callback that is actually registered on the pool (it must be a function pointer)
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
     user_data: *mut c_void,
@@ -117,6 +117,30 @@ impl Pool {
     /// Interns a `REL_EQ` relation between `id1` and `id2`
     pub fn rel_eq(&self, id1: Id, id2: Id) -> Id {
         unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
+    }
+
+    /// Interns a `REL_AND` relation between `id1` and `id2`
+    pub fn rel_and(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_AND as i32, 1) }
+    }
+
+    /// Interns a `REL_OR` relation between `id1` and `id2`
+    pub fn rel_or(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_OR as i32, 1) }
+    }
+
+    /// Interns a `REL_COND` relation (conditional dependency)
+    /// This creates a conditional dependency: `dependency` is required if `condition` is true
+    pub fn rel_cond(&self, dependency: Id, condition: Id) -> Id {
+        unsafe {
+            ffi::pool_rel2id(
+                self.raw_ptr(),
+                dependency,
+                condition,
+                ffi::REL_COND as i32,
+                1,
+            )
+        }
     }
 
     /// Interns the provided matchspec
@@ -237,6 +261,11 @@ impl Pool {
 pub struct StringId(pub(super) Id);
 
 impl StringId {
+    /// Creates a `StringId` from a raw libsolv Id.
+    pub fn from_id(id: Id) -> Self {
+        Self(id)
+    }
+
     /// Resolves the id to the interned string, if present in the pool
     ///
     /// Note: string ids are basically indexes in an array, so using a [`StringId`] from one pool in
@@ -264,7 +293,7 @@ impl From<StringId> for Id {
 
 /// Wrapper for the match spec type of libsolv
 #[derive(Copy, Clone)]
-pub struct MatchSpecId(Id);
+pub struct MatchSpecId(pub(crate) Id);
 
 /// Conversion to [`Id`]
 impl From<MatchSpecId> for Id {
@@ -306,7 +335,8 @@ mod test {
             "イロハニホヘト チリヌルヲ ワカヨタレソ ツネナラム ウヰノオクヤマ ケフコエテ アサキユメミシ ヱヒモセスン",
             "Pchnąć w tę łódź jeża lub ośm skrzyń fig",
             "В чащах юга жил бы цитрус? Да, но фальшивый экземпляр!",
-            "Съешь же ещё этих мягких французских булок да выпей чаю"];
+            "Съешь же ещё этих мягких французских булок да выпей чаю",
+        ];
 
         let pool = Pool::default();
         for in_s in strings {

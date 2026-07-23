@@ -1,5 +1,5 @@
 use crate::MenuMode;
-use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FileExtension<'a> {
@@ -91,10 +91,10 @@ pub fn register_file_extension(
 
     // Set icon if provided
     if let Some(icon_path) = icon {
-        // Set default icon and shell open icon
+        // Set default icon as a subkey: <identifier>\DefaultIcon\(Default) = icon_path
         classes
-            .create(identifier)?
-            .set_string("DefaultIcon", icon_path)?;
+            .create(format!(r"{identifier}\DefaultIcon"))?
+            .set_string("", icon_path)?;
         classes
             .create(format!(r"{identifier}\shell\open"))?
             .set_string("Icon", icon_path)?;
@@ -458,10 +458,10 @@ mod tests {
         // Test registration with icon
         register_file_extension(file_extension, mode)?;
 
-        // Verify icon
+        // Verify icon (DefaultIcon is a subkey, not a named value)
         let classes = windows_registry::CURRENT_USER.open(r"Software\Classes")?;
-        let icon_key = classes.open(identifier)?;
-        let icon_value = icon_key.get_string("DefaultIcon")?;
+        let icon_key = classes.open(format!(r"{identifier}\DefaultIcon"))?;
+        let icon_value = icon_key.get_string("")?;
         assert_eq!(icon_value, icon);
 
         // Cleanup
@@ -489,7 +489,7 @@ mod tests {
         // Setup
         register_file_extension(file_extension, mode)?;
 
-        // Test unregistration
+        // Test un-registration
         unregister_file_extension(extension, identifier, mode)?;
 
         // Verify removal

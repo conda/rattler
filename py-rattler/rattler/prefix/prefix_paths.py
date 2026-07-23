@@ -22,9 +22,9 @@ class PrefixPathType:
             "softlink",
             "directory",
             "pyc_file",
-            "windows_python_entrypoint_script",
-            "windows_python_entrypoint_exe",
-            "unix_python_entrypoint",
+            "windows_python_entry_point_script",
+            "windows_python_entry_point_exe",
+            "unix_python_entry_point",
         ],
     ) -> None:
         """
@@ -82,25 +82,25 @@ class PrefixPathType:
         return self._inner.pyc_file
 
     @property
-    def windows_python_entrypoint_script(self) -> bool:
+    def windows_python_entry_point_script(self) -> bool:
         """
         A Windows entry point python script (a <entrypoint>-script.py Python script file)
         """
-        return self._inner.windows_python_entrypoint_script
+        return self._inner.windows_python_entry_point_script
 
     @property
-    def windows_python_entrypoint_exe(self) -> bool:
+    def windows_python_entry_point_exe(self) -> bool:
         """
         A Windows entry point python script (a <entrypoint>.exe executable)
         """
-        return self._inner.windows_python_entrypoint_exe
+        return self._inner.windows_python_entry_point_exe
 
     @property
-    def unix_python_entrypoint(self) -> bool:
+    def unix_python_entry_point(self) -> bool:
         """
         A Unix entry point python script (a <entrypoint> Python script file)
         """
-        return self._inner.unix_python_entrypoint
+        return self._inner.unix_python_entry_point
 
 
 class PrefixPathsEntry(BasePathLike):

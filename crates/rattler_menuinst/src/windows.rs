@@ -1,14 +1,14 @@
 use create_shortcut::Shortcut;
 use fs_err as fs;
 use rattler_conda_types::{
-    menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
     Platform,
+    menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
 };
 use rattler_shell::{
-    activation::{ActivationVariables, Activator},
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
-use registry::{notify_shell_changes, FileExtension, UrlProtocol};
+use registry::{FileExtension, UrlProtocol, notify_shell_changes};
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
@@ -17,10 +17,10 @@ use terminal::TerminalProfile;
 pub use terminal::TerminalUpdateError;
 
 use crate::{
+    MenuInstError, MenuMode,
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
     utils::{log_output, slugify},
-    MenuInstError, MenuMode,
 };
 
 mod create_shortcut;
@@ -78,7 +78,7 @@ impl Directories {
     /// Create a fake Directories struct for testing ONLY
     pub fn fake_folders(path: &Path) -> Directories {
         // Prepare the directories
-        fs::create_dir_all(&path).unwrap();
+        fs::create_dir_all(path).unwrap();
 
         let terminal_settings_json = path.join("terminal_settings.json");
         if !terminal_settings_json.exists() {
@@ -105,6 +105,7 @@ impl Directories {
 }
 
 pub struct WindowsMenu {
+    menu_name: String,
     prefix: PathBuf,
     name: String,
     item: Windows,
@@ -118,6 +119,7 @@ const SHORTCUT_EXTENSION: &str = "lnk";
 
 impl WindowsMenu {
     pub fn new(
+        menu_name: &str,
         prefix: &Path,
         item: Windows,
         command: MenuItemCommand,
@@ -135,6 +137,7 @@ impl WindowsMenu {
             .with_extension(SHORTCUT_EXTENSION);
 
         Self {
+            menu_name: menu_name.to_string(),
             prefix: prefix.to_path_buf(),
             name,
             item,
@@ -159,7 +162,11 @@ impl WindowsMenu {
             // create a bash activation script and emit it into the script
             let activator =
                 Activator::from_path(&self.prefix, shell::CmdExe, Platform::current()).unwrap();
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"set "{k}={v}""#));
@@ -251,6 +258,11 @@ impl WindowsMenu {
                 Ok(command)
             }
         } else {
+            // activate: false
+            // Run the command directly. Note: if the target exe is a console-subsystem
+            // application, Windows will show a console window. Properly suppressing it
+            // would require a GUI-subsystem proxy binary (similar to conda's cwp.py
+            // launched via pythonw.exe).
             let mut command = Vec::new();
             for elem in self.command.command.iter() {
                 command.push(elem.resolve(&self.placeholders));
@@ -332,6 +344,29 @@ impl WindowsMenu {
         let args = lex::quote_args(args).join(" ");
 
         let link_name = format!("{}.lnk", self.name);
+
+        // install start menu shortcut
+        let start_menu_subdir_path = self.directories.start_menu.join(&self.menu_name);
+        if !start_menu_subdir_path.exists() {
+            fs::create_dir_all(&start_menu_subdir_path)?;
+            tracker.start_menu_subdir_path = Some(start_menu_subdir_path.clone());
+        }
+
+        let start_menu_link_path = start_menu_subdir_path.join(&link_name);
+        let shortcut = Shortcut {
+            path: command,
+            description: &self.command.description.resolve(&self.placeholders),
+            filename: &start_menu_link_path,
+            arguments: Some(&args),
+            workdir: Some(&workdir),
+            iconpath: icon.as_deref(),
+            iconindex: Some(0),
+            app_id: Some(&app_id),
+        };
+        create_shortcut::create_shortcut(shortcut)?;
+        tracker.shortcuts.push(start_menu_link_path.clone());
+
+        // install desktop shortcut
         if self.item.desktop.unwrap_or(true) {
             let desktop_link_path = self.directories.desktop.join(&link_name);
             let shortcut = Shortcut {
@@ -349,11 +384,12 @@ impl WindowsMenu {
             tracker.shortcuts.push(desktop_link_path.clone());
         }
 
+        // install quicklaunch shortcut
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
-            if self.item.quicklaunch.unwrap_or(true) {
+            if self.item.quicklaunch.unwrap_or(false) {
                 let quicklaunch_link_path = quick_launch_dir.join(link_name);
                 let shortcut = Shortcut {
-                    path: &self.name,
+                    path: command,
                     description: &self.command.description.resolve(&self.placeholders),
                     filename: &quicklaunch_link_path,
                     arguments: Some(&args),
@@ -390,6 +426,15 @@ impl WindowsMenu {
         for extension in extensions {
             let extension = extension.resolve(&self.placeholders);
             let identifier = format!("{name}.AssocFile{extension}");
+            // Generate a friendly type name from the extension, e.g. ".h5" -> "H5 File"
+            let ext_no_dot = extension.trim_start_matches('.');
+            let friendly_name = if ext_no_dot.is_empty() {
+                "File".to_string()
+            } else {
+                let mut chars = ext_no_dot.chars();
+                let first = chars.next().unwrap().to_uppercase().to_string();
+                format!("{}{} File", first, chars.as_str())
+            };
             let file_extension = FileExtension {
                 extension: &extension,
                 identifier: &identifier,
@@ -397,7 +442,7 @@ impl WindowsMenu {
                 icon: icon.as_deref(),
                 app_name: Some(name),
                 app_user_model_id: Some(&app_user_model_id),
-                friendly_type_name: None,
+                friendly_type_name: Some(&friendly_name),
             };
 
             registry::register_file_extension(file_extension, self.menu_mode)?;
@@ -464,7 +509,7 @@ impl WindowsMenu {
         };
 
         for location in &self.directories.windows_terminal_settings_files {
-            terminal::add_windows_terminal_profile(&location, &profile)?;
+            terminal::add_windows_terminal_profile(location, &profile)?;
             tracker.terminal_profiles.push(WindowsTerminalProfile {
                 configuration_file: location.clone(),
                 identifier: profile.name.clone(),
@@ -487,6 +532,7 @@ impl WindowsMenu {
 }
 
 pub(crate) fn install_menu_item(
+    menu_name: &str,
     prefix: &Path,
     windows_item: Windows,
     command: MenuItemCommand,
@@ -501,6 +547,7 @@ pub(crate) fn install_menu_item(
     };
 
     let menu = WindowsMenu::new(
+        menu_name,
         prefix,
         windows_item,
         command,
@@ -518,6 +565,22 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("Failed to remove shortcut {}: {}", file.display(), e);
+            }
+        }
+    }
+
+    if let Some(subdir) = &tracker.start_menu_subdir_path {
+        // Check if subdir exists and is empty.
+        if subdir.exists() && subdir.read_dir()?.next().is_none() {
+            match fs::remove_dir(subdir) {
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to remove start menu sub-directory {}: {}",
+                        subdir.display(),
+                        e
+                    );
+                }
             }
         }
     }

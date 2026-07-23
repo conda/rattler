@@ -3,8 +3,14 @@
 
 use std::{cmp::Ordering, collections::HashMap};
 
-use chrono::{DateTime, Utc};
-use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+use rattler_conda_types::{
+    GenericVirtualPackage, RepoDataRecord, RepodataRevision,
+    package::{ArchiveIdentifier, DistArchiveType},
+};
+use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
+use std::collections::HashSet;
+
+use crate::ExcludeNewer;
 
 use super::{
     c_string,
@@ -13,7 +19,8 @@ use super::{
         keys::{
             REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDTIME,
             SOLVABLE_BUILDVERSION, SOLVABLE_CHECKSUM, SOLVABLE_CONSTRAINS, SOLVABLE_DOWNLOADSIZE,
-            SOLVABLE_LICENSE, SOLVABLE_PKGID, SOLVABLE_TRACK_FEATURES,
+            SOLVABLE_EXTRA_NAME, SOLVABLE_EXTRA_PACKAGE, SOLVABLE_LICENSE, SOLVABLE_PKGID,
+            SOLVABLE_REPODATA_RECORD_INDEX, SOLVABLE_TRACK_FEATURES,
         },
         pool::Pool,
         repo::Repo,
@@ -22,6 +29,18 @@ use super::{
     },
 };
 use crate::SolveError;
+
+fn parse_libsolv_match_spec(match_spec_str: &str) -> Result<Option<MatchSpec>, SolveError> {
+    let Ok(match_spec) = MatchSpec::from_str(
+        match_spec_str,
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+    ) else {
+        return Ok(None);
+    };
+
+    super::ensure_matchspec_flags_supported(&match_spec)?;
+    Ok(Some(match_spec))
+}
 
 #[cfg(not(target_family = "unix"))]
 /// Adds solvables to a repo from an in-memory .solv file
@@ -47,6 +66,28 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
     unsafe { libc::fclose(file) };
 }
 
+/// Parses a condition from a `MatchSpecCondition` and returns the corresponding libsolv Id
+pub fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wrapper::ffi::Id {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => {
+            // Convert the match spec to a string and use conda_matchspec to parse it
+            let match_spec_str = match_spec.to_string();
+            let c_str = c_string(&match_spec_str);
+            pool.conda_matchspec(&c_str)
+        }
+        MatchSpecCondition::And(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_and(left_id, right_id)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_or(left_id, right_id)
+        }
+    }
+}
+
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
@@ -54,7 +95,7 @@ pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     repo_data: impl IntoIterator<Item = &'a RepoDataRecord>,
-    exclude_newer: Option<&DateTime<Utc>>,
+    exclude_newer: Option<&ExcludeNewer>,
 ) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -74,21 +115,29 @@ pub fn add_repodata_records<'a>(
     let repo_type_sha256 = pool.find_interned_str(REPOKEY_TYPE_SHA256).unwrap();
 
     // Custom id
-    let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
+    let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
     // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
+    let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, SolvableId)> =
+        HashMap::new();
 
     // Through `data` we can manipulate solvables (see the `Repodata` docs for
     // details)
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
+
+    // Track all extras we encounter so we can create synthetic solvables for them
+    let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
-        // Skip packages that are newer than the specified timestamp
-        match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
-            (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,
-            _ => {}
+        if let Some(config) = exclude_newer
+            && config.is_excluded(
+                &repo_data.package_record.name,
+                repo_data.channel.as_deref(),
+                repo_data.package_record.timestamp.as_ref(),
+            )
+        {
+            continue;
         }
 
         // Create a solvable for the package
@@ -117,25 +166,68 @@ pub fn add_repodata_records<'a>(
         data.set_location(
             solvable_id,
             &c_string(&record.subdir),
-            &c_string(&repo_data.file_name),
+            &c_string(repo_data.identifier.to_string()),
         );
 
         // Dependencies
-        for match_spec in record.depends.iter() {
-            // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
+        for match_spec_str in record.depends.iter() {
+            if let Some(match_spec) = parse_libsolv_match_spec(match_spec_str)?
+                && let Some(condition) = match_spec.condition.as_ref()
+            {
+                // Create the dependency without the condition
+                let mut dep_spec = match_spec.clone();
+                dep_spec.condition = None;
+                let dep_id = pool.conda_matchspec(&c_string(dep_spec.to_string()));
 
-            // Add it to the list of requirements of this solvable
+                // Parse the condition
+                let condition_id = parse_condition(condition, pool);
+
+                // Create a conditional dependency
+                let conditional_dep_id = pool.rel_cond(dep_id, condition_id);
+
+                // Add it to the list of requirements
+                repo.add_requires(solvable, conditional_dep_id);
+                continue;
+            }
+
+            // Regular dependency without condition
+            let match_spec_id = pool.conda_matchspec(&c_string(match_spec_str));
             repo.add_requires(solvable, match_spec_id);
         }
 
         // Constraints
         for match_spec in record.constrains.iter() {
+            parse_libsolv_match_spec(match_spec)?;
+
             // Create a reldep id from a matchspec
             let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
 
             // Add it to the list of constraints of this solvable
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
+        }
+
+        // Process extra_depends: convert them into conditional requirements
+        for (extra_name, deps) in record.extra_depends.iter() {
+            // Track this extra for synthetic solvable creation
+            extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
+
+            // Create conditional dependencies: dep[when="package[extra]"]
+            for dep_str in deps.iter() {
+                parse_libsolv_match_spec(dep_str)?;
+
+                // Parse the dependency matchspec
+                let dep_id = pool.conda_matchspec(&c_string(dep_str));
+
+                // Create the condition: package[extra]
+                let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
+                let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
+
+                // Create a conditional dependency: dep[when="package[extra]"]
+                let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
+
+                // Add it as a requirement
+                repo.add_requires(solvable, conditional_dep_id);
+            }
         }
 
         // Track features
@@ -189,7 +281,7 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_pkg_id,
                 repo_type_md5,
-                &c_string(format!("{md5:x}")),
+                &c_string(hex::encode(md5)),
             );
         }
 
@@ -199,9 +291,39 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_checksum,
                 repo_type_sha256,
-                &c_string(format!("{sha256:x}")),
+                &c_string(hex::encode(sha256)),
             );
         }
+
+        solvable_ids.push(solvable_id);
+    }
+
+    // Custom ids for storing extra info on synthetic solvables
+    let extra_package_id = pool.intern_str(SOLVABLE_EXTRA_PACKAGE);
+    let extra_name_id = pool.intern_str(SOLVABLE_EXTRA_NAME);
+
+    // Add synthetic solvables for extras
+    for (package_name, extra_name) in extras {
+        // Create synthetic solvable with name "package[extra]"
+        let solvable_id = repo.add_solvable();
+        let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
+
+        // Set the name to "package[extra]" using bracket notation
+        let synthetic_name = format!("{package_name}[{extra_name}]");
+        solvable.name = pool.intern_str(synthetic_name.as_str()).into();
+
+        // Set a dummy version (version "0" to indicate this is a synthetic solvable)
+        solvable.evr = pool.intern_str("0").into();
+
+        // Add self-provides so the solver can find it
+        let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
+        repo.add_provides(solvable, rel_eq);
+
+        // Store extra info so we can retrieve it from the transaction
+        let package_name_interned = pool.intern_str(package_name.as_str());
+        let extra_name_interned = pool.intern_str(extra_name.as_str());
+        data.set_id(solvable_id, extra_package_id, package_name_interned.into());
+        data.set_id(solvable_id, extra_name_id, extra_name_interned.into());
 
         solvable_ids.push(solvable_id);
     }
@@ -221,43 +343,38 @@ fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     data: &Repodata<'_>,
-    package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
+    package_to_type: &mut HashMap<&'a ArchiveIdentifier, (DistArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Result<Option<SolvableId>, SolveError> {
     // Sometimes we can reuse an existing solvable
-    if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
-        if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
-            match archive_type.cmp(&other_package_type) {
-                Ordering::Less => {
-                    // A previous package that we already stored is actually a package of a better
-                    // "type" so we'll just use that instead (.conda > .tar.bz)
-                    return Ok(None);
-                }
-                Ordering::Greater => {
-                    // A previous package has a worse package "type", we'll reuse the handle but
-                    // overwrite its attributes
+    let identifier = &repo_data.identifier.identifier;
+    let archive_type = repo_data.identifier.archive_type;
 
-                    // Update the package to the new type mapping
-                    package_to_type.insert(filename, (archive_type, old_solvable_id));
-
-                    // Reset and reuse the old solvable
-                    reset_solvable(pool, repo, data, old_solvable_id);
-                    return Ok(Some(old_solvable_id));
-                }
-                Ordering::Equal => {
-                    return Err(SolveError::DuplicateRecords(filename.to_string()));
-                }
+    if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
+        match archive_type.cmp_preference(other_package_type) {
+            Ordering::Less => {
+                // A previous package that we already stored is actually a package of a better
+                // "type" so we'll just use that instead (.conda > .tar.bz)
+                Ok(None)
             }
-        } else {
-            let solvable_id = repo.add_solvable();
-            package_to_type.insert(filename, (archive_type, solvable_id));
-            return Ok(Some(solvable_id));
+            Ordering::Greater => {
+                // A previous package has a worse package "type", we'll reuse the handle but
+                // overwrite its attributes
+
+                // Update the package to the new type mapping
+                package_to_type.insert(identifier, (archive_type, old_solvable_id));
+
+                // Reset and reuse the old solvable
+                reset_solvable(pool, repo, data, old_solvable_id);
+                Ok(Some(old_solvable_id))
+            }
+            Ordering::Equal => Err(SolveError::DuplicateRecords(identifier.to_string())),
         }
     } else {
-        tracing::warn!("unknown package extension: {}", &repo_data.file_name);
+        let solvable_id = repo.add_solvable();
+        package_to_type.insert(identifier, (archive_type, solvable_id));
+        Ok(Some(solvable_id))
     }
-
-    Ok(Some(repo.add_solvable()))
 }
 
 pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVirtualPackage]) {

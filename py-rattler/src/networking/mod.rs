@@ -1,9 +1,9 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python};
+use pyo3::{Bound, Py, PyAny, PyResult, Python, pyfunction, types::PyTuple};
 use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
-    fetch_repo_data, CachedRepoData, FetchRepoDataError, FetchRepoDataOptions,
+    CachedRepoData, FetchRepoDataError, FetchRepoDataOptions, fetch_repo_data,
 };
 use url::Url;
 
@@ -14,7 +14,7 @@ use crate::{
     repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
-use rattler_repodata_gateway::Reporter;
+use rattler_repodata_gateway::{DownloadReporter, Reporter};
 
 pub mod cached_repo_data;
 pub mod client;
@@ -34,7 +34,7 @@ pub fn py_fetch_repo_data<'a>(
     fetch_options: Option<PyFetchRepoDataOptions>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
-    let client = client.unwrap_or(PyClientWithMiddleware::new(None)?);
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None, None, None, None)?);
     let fetch_options = fetch_options.unwrap_or(PyFetchRepoDataOptions {
         inner: FetchRepoDataOptions::default(),
     });
@@ -71,7 +71,7 @@ pub fn py_fetch_repo_data<'a>(
             Ok(res) => res
                 .into_iter()
                 .map(|(cache, chan, platform)| {
-                    PySparseRepoData::new(chan, platform, cache.repo_data_json_path)
+                    PySparseRepoData::from_args(chan, platform, cache.repo_data_json_path)
                 })
                 .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),
@@ -83,7 +83,7 @@ struct ProgressReporter {
     callback: Py<PyAny>,
 }
 
-impl Reporter for ProgressReporter {
+impl DownloadReporter for ProgressReporter {
     fn on_download_progress(
         &self,
         _url: &Url,
@@ -91,11 +91,17 @@ impl Reporter for ProgressReporter {
         bytes_downloaded: usize,
         total_bytes: Option<usize>,
     ) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes])
                 .expect("Failed to create tuple");
             self.callback.call1(py, args).expect("Callback failed!");
         });
+    }
+}
+
+impl Reporter for ProgressReporter {
+    fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+        Some(self)
     }
 }
 

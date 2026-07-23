@@ -1,11 +1,12 @@
 #![deny(missing_docs)]
 
-//! `rattler_repodata_gateway` is a crate that provides functionality to interact with Conda
-//! repodata. It currently provides functionality to download and cache `repodata.json` files
-//! through the [`fetch::fetch_repo_data`] function.
+//! `rattler_repodata_gateway` is a crate that provides functionality to
+//! interact with Conda repodata. It currently provides functionality to
+//! download and cache `repodata.json` files through the
+//! [`fetch::fetch_repo_data`] function.
 //!
-//! In the future this crate will also provide more high-level functionality to query information
-//! about specific packages from different sources.
+//! In the future this crate will also provide more high-level functionality to
+//! query information about specific packages from different sources.
 //!
 //! # Install
 //! Add the following to your *Cargo.toml*:
@@ -22,8 +23,8 @@
 //! ```
 //!
 //! # Examples
-//! Below is a basic example that shows how to retrieve and cache the repodata for a conda channel
-//! using the [`fetch::fetch_repo_data`] function:
+//! Below is a basic example that shows how to retrieve and cache the repodata
+//! for a conda channel using the [`fetch::fetch_repo_data`] function:
 //!
 //! ```no_run
 //! use std::{default::Default, path::PathBuf};
@@ -31,16 +32,16 @@
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
 //! use rattler_repodata_gateway::fetch;
+//! use rattler_networking::LazyClient;
 //!
 //! #[tokio::main]
 //! async fn main() {
 //!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
-//!     let client = ClientWithMiddleware::from(Client::new());
 //!     let cache = PathBuf::from("./cache");
 //!
 //!     let result = fetch::fetch_repo_data(
 //!         repodata_url,
-//!         client,
+//!         LazyClient::default(),
 //!         cache,
 //!         fetch::FetchRepoDataOptions { ..Default::default() },
 //!         None,
@@ -65,12 +66,21 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
-pub use reporter::Reporter;
+pub use reporter::{DownloadReporter, Reporter};
+#[cfg(feature = "sparse")]
+pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
 
 #[cfg(feature = "gateway")]
 mod gateway;
 
 #[cfg(feature = "gateway")]
 pub use gateway::{
-    ChannelConfig, Gateway, GatewayBuilder, GatewayError, RepoData, SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelRelationsMode, ChannelRelationsWarning,
+    DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH, Gateway, GatewayBuilder, GatewayError, GatewayWarning,
+    MaxConcurrency, NamesQuery, NamesQueryOutput, RepoData, RepoDataQuery, RepoDataQueryOutput,
+    RepoDataSource, Source, SourceConfig, SubdirSelection,
 };
+#[cfg(feature = "indicatif")]
+pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
+#[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
+pub use gateway::{RunExportExtractorError, RunExportsReporter};

@@ -1,6 +1,7 @@
 [package]
+exclude = ["**/snapshots/**"]
 name = "rattler"
-version = "0.32.4"
+version = "0.47.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -11,17 +12,29 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ['native-tls']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
-cli-tools = ['dep:clap']
+default = ['rustls']
+native-tls =['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
+rustls = ['reqwest/rustls', 'rattler_package_streaming/rustls', 'rattler_cache/rustls', 'rattler_networking/rustls']
+oauth = ["dep:openidconnect", "dep:oauth2-reqwest", "dep:open"]
+cli-tools = ['dep:clap', 'oauth', 'dep:console']
+# Adds an interactive MultiSelect picker to `auth logout` when run without
+# arguments on a TTY. Pulls in `dialoguer`; opt-in so library/headless
+# consumers don't pay for it.
+auth-interactive = ['cli-tools', 'dep:dialoguer', 'tokio/signal']
 indicatif = ['dep:indicatif', 'dep:console']
+
+[package.metadata.docs.rs]
+features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
+jiff = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
+hex = { workspace = true }
 dirs = { workspace = true }
+filetime = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 humantime = { workspace = true }
@@ -32,20 +45,22 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-rattler_cache = { path = "../rattler_cache", version = "0.3.13", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.3", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "1.0.7", default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.8", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.22.22", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.32", default-features = false, features = ["reqwest"] }
-rattler_menuinst = { path = "../rattler_menuinst", version = "0.2.2", default-features = false }
+rattler_cache = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_config = { workspace = true, optional = true, default-features = false }
+rattler_digest = { workspace = true }
+rattler_networking = { workspace = true }
+rattler_shell = { workspace = true }
+rattler_package_streaming = { workspace = true, features = ["reqwest"] }
+rattler_menuinst = { workspace = true, default-features = false }
+path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
+reqwest = { workspace = true, features = ["json", "form"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
-simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.1", default-features = false, features = ["tokio"] }
+simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
@@ -53,6 +68,11 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
+dialoguer = { workspace = true, optional = true }
+open = { workspace = true, optional = true }
+openidconnect = { workspace = true, optional = true }
+oauth2-reqwest = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [dev-dependencies]
@@ -67,3 +87,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
+walkdir.workspace = true
+mockito = "1"
+tempfile = { workspace = true }
+temp-env = { workspace = true }

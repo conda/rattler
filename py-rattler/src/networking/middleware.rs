@@ -1,9 +1,14 @@
-use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
-use rattler_networking::{
-    mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
-    OciMiddleware,
+use pyo3::{
+    FromPyObject, Py, PyAny, PyResult, Python, pyclass, pymethods,
+    types::{PyAnyMethods, PyDict, PyDictMethods, PyTypeMethods},
 };
+use rattler_networking::{
+    GCSMiddleware, MirrorMiddleware, mirror_middleware::Mirror, s3_middleware::S3Config,
+};
+use reqwest::{Request, Response};
+use reqwest_middleware::{Middleware, Next};
 use std::collections::HashMap;
+use std::sync::Arc;
 use url::Url;
 
 use crate::error::PyRattlerError;
@@ -12,12 +17,14 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
+    Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
     S3(PyS3Middleware),
+    AddHeaders(PyAddHeadersMiddleware),
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMirrorMiddleware {
@@ -39,7 +46,6 @@ impl PyMirrorMiddleware {
                             url,
                             no_zstd: false,
                             no_bz2: false,
-                            no_jlap: false,
                             max_failures: None,
                         })
                         .map_err(PyRattlerError::from)
@@ -58,7 +64,7 @@ impl From<PyMirrorMiddleware> for MirrorMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAuthenticationMiddleware {}
@@ -71,7 +77,22 @@ impl PyAuthenticationMiddleware {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct PyRetryMiddleware {
+    pub(crate) max_retries: u32,
+}
+
+#[pymethods]
+impl PyRetryMiddleware {
+    #[new]
+    #[pyo3(signature = (max_retries=3))]
+    pub fn __init__(max_retries: u32) -> Self {
+        Self { max_retries }
+    }
+}
+
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyOciMiddleware {}
@@ -84,13 +105,7 @@ impl PyOciMiddleware {
     }
 }
 
-impl From<PyOciMiddleware> for OciMiddleware {
-    fn from(_value: PyOciMiddleware) -> Self {
-        OciMiddleware
-    }
-}
-
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyGCSMiddleware {}
@@ -105,12 +120,12 @@ impl PyGCSMiddleware {
 
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
-        GCSMiddleware
+        GCSMiddleware::default()
     }
 }
 
 #[derive(Clone)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct PyS3Config {
     // non-trivial enums are not supported by pyo3 as pyclasses
     pub(crate) custom: Option<PyS3ConfigCustom>,
@@ -159,7 +174,7 @@ impl From<PyS3Config> for S3Config {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct PyS3Middleware {
     pub(crate) s3_config: HashMap<String, PyS3Config>,
@@ -170,5 +185,136 @@ impl PyS3Middleware {
     #[new]
     pub fn __init__(s3_config: HashMap<String, PyS3Config>) -> PyResult<Self> {
         Ok(Self { s3_config })
+    }
+}
+
+/// A middleware that adds headers to requests based on a Python callback.
+///
+/// The callback receives (host, path) and should return a dict of headers to add,
+/// or None to add no headers.
+#[pyclass(from_py_object)]
+pub struct PyAddHeadersMiddleware {
+    pub(crate) callback: Py<PyAny>,
+}
+
+impl Clone for PyAddHeadersMiddleware {
+    fn clone(&self) -> Self {
+        Python::attach(|py| Self {
+            callback: self.callback.clone_ref(py),
+        })
+    }
+}
+
+#[pymethods]
+impl PyAddHeadersMiddleware {
+    #[new]
+    pub fn __init__(callback: Py<PyAny>) -> Self {
+        Self { callback }
+    }
+}
+
+/// The actual middleware implementation that wraps the Python callback.
+/// Uses Arc to allow cloning without requiring Py<PyAny> to be Clone.
+#[derive(Clone)]
+pub struct AddHeadersMiddleware {
+    callback: Arc<Py<PyAny>>,
+}
+
+impl AddHeadersMiddleware {
+    /// Create a new `AddHeadersMiddleware` from a Python callback.
+    pub fn new(callback: Py<PyAny>) -> Self {
+        Self {
+            callback: Arc::new(callback),
+        }
+    }
+}
+
+impl From<PyAddHeadersMiddleware> for AddHeadersMiddleware {
+    fn from(value: PyAddHeadersMiddleware) -> Self {
+        AddHeadersMiddleware::new(value.callback)
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for AddHeadersMiddleware {
+    async fn handle(
+        &self,
+        mut req: Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        // Extract host and path from the URL
+        let url = req.url();
+        let host = url.host_str().unwrap_or("").to_string();
+        let path = url.path().to_string();
+
+        // Call the Python callback with host and path
+        let callback = self.callback.clone();
+        let headers_to_add: Option<HashMap<String, String>> = Python::attach(
+            |py| -> reqwest_middleware::Result<Option<HashMap<String, String>>> {
+                let result = callback
+                    .call1(py, (host.as_str(), path.as_str()))
+                    .map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Python callback failed: {e}"
+                        ))
+                    })?;
+
+                // Check if the result is None
+                if result.is_none(py) {
+                    return Ok(None);
+                }
+
+                // Try to extract as a dictionary
+                let dict = result.cast_bound::<PyDict>(py).map_err(|_e| {
+                    let type_name = result
+                        .bind(py)
+                        .get_type()
+                        .name()
+                        .map_or_else(|_| "unknown".to_string(), |n| n.to_string());
+                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                        "Python callback must return a dict or None, got: {type_name}",
+                    ))
+                })?;
+
+                // Convert the dict to a HashMap<String, String>
+                let mut headers = HashMap::new();
+                for (key, value) in dict.iter() {
+                    let key_str: String = key.extract().map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Header key must be a string: {e}"
+                        ))
+                    })?;
+                    let value_str: String = value.extract().map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Header value must be a string: {e}"
+                        ))
+                    })?;
+                    headers.insert(key_str, value_str);
+                }
+
+                Ok(Some(headers))
+            },
+        )?;
+
+        // Add the headers to the request
+        if let Some(headers) = headers_to_add {
+            for (key, value) in headers {
+                let header_name =
+                    reqwest::header::HeaderName::from_bytes(key.as_bytes()).map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Invalid header name '{key}': {e}"
+                        ))
+                    })?;
+                let header_value = reqwest::header::HeaderValue::from_str(&value).map_err(|e| {
+                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                        "Invalid header value for '{key}': {e}"
+                    ))
+                })?;
+                req.headers_mut().insert(header_name, header_value);
+            }
+        }
+
+        next.run(req, extensions).await
     }
 }

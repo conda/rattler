@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version = "0.1.0"
+version = "0.2.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -10,37 +10,75 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 default-run = "rattler"
-publish = false
 
 [[bin]]
 name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["native-tls"]
-native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls", "rattler_networking/native-tls"]
-rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls"]
+default = ["rustls", "s3", "gcs", "oauth"]
+native-tls = [
+  "reqwest/native-tls",
+  "rattler/native-tls",
+  "rattler_repodata_gateway/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_cache/native-tls",
+]
+rustls = [
+  "reqwest/rustls",
+  "rattler/rustls",
+  "rattler_repodata_gateway/rustls",
+  "rattler_networking/rustls",
+  "rattler_cache/rustls",
+]
+s3 = ["rattler_networking/s3", "rattler_upload/s3"]
+gcs = ["rattler_networking/gcs"]
+oauth = ["rattler/oauth"]
 
 [dependencies]
 anyhow = { workspace = true }
+jiff = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+clap_complete = { workspace = true }
+clap_complete_nushell = { workspace = true }
 console = { workspace = true, features = ["windows-console-colors"] }
+futures-util = { workspace = true }
+hex = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 indicatif = { workspace = true }
+miette = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.32.4", default-features = false, features = ["indicatif"] }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.3", default-features = false }
-rattler_networking = { path="../rattler_networking", version = "0.22.8", default-features = false, features = ["gcs", "s3"] }
-rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.22.0", default-features = false, features = ["gateway"] }
-rattler_solve = { path="../rattler_solve", version = "1.4.0", default-features = false, features = ["resolvo", "libsolv_c"] }
-rattler_virtual_packages = { path="../rattler_virtual_packages", version = "2.0.6", default-features = false }
-rattler_cache = { path="../rattler_cache", version = "0.3.13", default-features = false }
-rattler_menuinst = { path="../rattler_menuinst", version = "0.2.2", default-features = false }
-reqwest = { workspace = true }
+rattler = { workspace = true, features = ["indicatif", "cli-tools", "auth-interactive"] }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_index = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+  "netrc-rs",
+] }
+rattler_repodata_gateway = { workspace = true, default-features = false, features = [
+  "gateway",
+] }
+rattler_solve = { workspace = true, default-features = false, features = [
+  "resolvo",
+  "libsolv_c",
+] }
+rattler_virtual_packages = { workspace = true, default-features = false }
+rattler_cache = { workspace = true, default-features = false }
+rattler_menuinst = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false, features = [
+  "reqwest",
+] }
+rattler_upload = { workspace = true }
+rattler_shell = { workspace = true, default-features = false }
+reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
-
-[package.metadata.release]
-# Dont publish the binary
-release = false
+url = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+dunce = { workspace = true }
+regex = { workspace = true }

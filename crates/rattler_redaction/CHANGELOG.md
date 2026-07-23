@@ -6,6 +6,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.1...rattler_redaction-v0.2.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_redaction-v0.2.0...rattler_redaction-v0.2.1) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.15...rattler_redaction-v0.2.0) - 2026-05-13
+
+### Other
+
+- remove reqwest 0.12 ([#2427](https://github.com/conda/rattler/pull/2427))
+- upgrade reqwest to 0.13 and bump related crates ([#2419](https://github.com/conda/rattler/pull/2419))
+
+## [0.1.15](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.14...rattler_redaction-v0.1.15) - 2026-05-07
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.14](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.13...rattler_redaction-v0.1.14) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [0.1.13](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.12...rattler_redaction-v0.1.13) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.1.12](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.11...rattler_redaction-v0.1.12) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.1.11](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.10...rattler_redaction-v0.1.11) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.1.10](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.9...rattler_redaction-v0.1.10) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.9](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.8...rattler_redaction-v0.1.9) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.8](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.7...rattler_redaction-v0.1.8) - 2025-03-04
 
 ### Other

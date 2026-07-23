@@ -1,12 +1,14 @@
-use crate::package::ArchiveIdentifier;
-use crate::utils::serde::DeserializeFromStrUnchecked;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::{DeserializeAs, DeserializeFromStr};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{DeserializeAs, DeserializeFromStr};
 use thiserror::Error;
+
+use crate::package::CondaArchiveIdentifier;
+use crate::utils::serde::DeserializeFromStrUnchecked;
 
 /// A representation of a conda package name. This struct both stores the source string from which
 /// this instance was created as well as a normalized name that can be used to compare different
@@ -19,8 +21,8 @@ use thiserror::Error;
 /// to make the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
-    normalized: Option<String>,
-    source: String,
+    normalized: Option<Box<str>>,
+    source: Box<str>,
 }
 
 impl PackageName {
@@ -30,7 +32,7 @@ impl PackageName {
     pub fn new_unchecked<S: Into<String>>(normalized: S) -> Self {
         Self {
             normalized: None,
-            source: normalized.into(),
+            source: normalized.into().into_boxed_str(),
         }
     }
 
@@ -43,15 +45,182 @@ impl PackageName {
     /// Returns the normalized version of the package name. The normalized string is guaranteed to
     /// be a valid conda package name.
     pub fn as_normalized(&self) -> &str {
-        self.normalized.as_ref().unwrap_or(&self.source)
+        self.normalized.as_deref().unwrap_or(&self.source)
+    }
+
+    /// Parses the package name part from a matchspec string without parsing
+    /// the entire matchspec.
+    ///
+    /// This extracts the package name by splitting on whitespace or version
+    /// constraint characters (`>`, `<`, `=`, `!`, `~`, `;`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    ///
+    /// let name = PackageName::from_matchspec_str("pillow >=10").unwrap();
+    /// assert_eq!(name.as_source(), "pillow");
+    ///
+    /// let name = PackageName::from_matchspec_str("numpy>=1.0,<2.0").unwrap();
+    /// assert_eq!(name.as_source(), "numpy");
+    /// ```
+    pub fn from_matchspec_str(spec: &str) -> Result<Self, InvalidPackageNameError> {
+        Self::try_from(name_from_matchspec_str(spec))
+    }
+
+    /// Parses the package name part from a matchspec string without parsing
+    /// the entire matchspec. This function assumes the matchspec string is a
+    /// valid matchspec.
+    ///
+    /// This extracts the package name by splitting on whitespace or version
+    /// constraint characters (`>`, `<`, `=`, `!`, `~`, `;`). The original
+    /// capitalization is preserved in the source, while the normalized version
+    /// is lowercase.
+    ///
+    /// # Safety
+    ///
+    /// This function does not validate the package name. If the package name
+    /// is not valid, the returned `PackageName` may not behave correctly.
+    /// Use [`Self::from_matchspec_str`] for a fallible version.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    ///
+    /// let name = PackageName::from_matchspec_str_unchecked("Pillow >=10");
+    /// assert_eq!(name.as_source(), "Pillow");
+    /// assert_eq!(name.as_normalized(), "pillow");
+    /// ```
+    pub fn from_matchspec_str_unchecked(spec: &str) -> Self {
+        let (name, has_upper) = scan_matchspec_name(spec);
+        let normalized = if has_upper {
+            Some(name.to_ascii_lowercase().into_boxed_str())
+        } else {
+            None
+        };
+        Self {
+            normalized,
+            source: name.to_string().into_boxed_str(),
+        }
+    }
+
+    /// Extracts and normalizes the package name part from a matchspec string
+    /// without constructing a full `PackageName` instance.
+    ///
+    /// This is a lightweight alternative to [`Self::from_matchspec_str_unchecked`]
+    /// that avoids allocation when the package name is already lowercase.
+    /// Returns a borrowed string slice when no normalization is needed, or an
+    /// owned string when the name contains uppercase characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    /// use std::borrow::Cow;
+    ///
+    /// // Lowercase names are borrowed (no allocation)
+    /// let name = PackageName::normalized_name_from_matchspec_str("numpy>=1.0");
+    /// assert!(matches!(name, Cow::Borrowed("numpy")));
+    ///
+    /// // Uppercase names are normalized and owned (allocation required)
+    /// let name = PackageName::normalized_name_from_matchspec_str("Pillow >=10");
+    /// assert!(matches!(name, Cow::Owned(_)));
+    /// assert_eq!(name, "pillow");
+    /// ```
+    pub fn normalized_name_from_matchspec_str(spec: &str) -> Cow<'_, str> {
+        let (name, has_upper) = scan_matchspec_name(spec);
+        if has_upper {
+            Cow::Owned(name.to_ascii_lowercase())
+        } else {
+            Cow::Borrowed(name)
+        }
+    }
+
+    /// Extracts the normalized package name and the optional features (extras)
+    /// from a matchspec string.
+    ///
+    /// When the spec contains no `[` bracket section, this is the fast path:
+    /// equivalent to [`Self::normalized_name_from_matchspec_str`] with no
+    /// allocation for the extras `Vec`.
+    ///
+    /// When brackets are present, the full matchspec is parsed (with
+    /// experimental extras enabled) to correctly distinguish extras from other
+    /// bracket keys like `build`, `version` or `when`. If parsing fails, the
+    /// name is still extracted with the cheap scan and the extras list is
+    /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_conda_types::PackageName;
+    ///
+    /// let (name, extras) = PackageName::name_and_extras_from_matchspec_str("numpy >=1.0");
+    /// assert_eq!(name, "numpy");
+    /// assert!(extras.is_empty());
+    ///
+    /// let (name, extras) =
+    ///     PackageName::name_and_extras_from_matchspec_str("numpy[extras=[gpu, mkl]]");
+    /// assert_eq!(name, "numpy");
+    /// assert_eq!(extras, vec!["gpu".to_string(), "mkl".to_string()]);
+    /// ```
+    pub fn name_and_extras_from_matchspec_str(spec: &str) -> (Cow<'_, str>, Vec<String>) {
+        if !spec.contains('[') {
+            return (Self::normalized_name_from_matchspec_str(spec), Vec::new());
+        }
+
+        let name = Self::normalized_name_from_matchspec_str(spec);
+
+        let options = crate::ParseMatchSpecOptions::default().with_extras(true);
+        match crate::MatchSpec::from_str(spec, options) {
+            Ok(parsed) => (name, parsed.extras.unwrap_or_default()),
+            Err(err) => {
+                // Failure mode is silent under-fetching of an extra's deps;
+                // log so it shows up under RUST_LOG=debug when investigating.
+                tracing::debug!("failed to parse matchspec '{spec}' for extras extraction: {err}",);
+                (name, Vec::new())
+            }
+        }
     }
 }
 
+/// Returns `true` if the byte is a matchspec delimiter (whitespace or version
+/// constraint character: `>`, `<`, `=`, `!`, `~`, `;`).
+fn is_matchspec_delimiter(b: u8) -> bool {
+    b.is_ascii_whitespace() || matches!(b, b'>' | b'<' | b'=' | b'!' | b'~' | b';' | b'[')
+}
+
+/// Scans a matchspec string to find the package name boundary and whether it
+/// contains uppercase characters. Single-pass over the bytes.
+fn scan_matchspec_name(spec: &str) -> (&str, bool) {
+    let bytes = spec.as_bytes();
+    let mut has_upper = false;
+    let mut end = bytes.len();
+    for (i, &b) in bytes.iter().enumerate() {
+        if is_matchspec_delimiter(b) {
+            end = i;
+            break;
+        }
+        has_upper |= b.is_ascii_uppercase();
+    }
+    (&spec[..end], has_upper)
+}
+
+/// Extracts the package name part from a matchspec string by splitting on
+/// whitespace, version constraint characters (`>`, `<`, `=`, `!`, `~`, `;`),
+/// or bracket `[` (used for bracket syntax like `pkg[when="..."]`).
+fn name_from_matchspec_str(spec: &str) -> &str {
+    scan_matchspec_name(spec).0
+}
+
 /// An error that is returned when conversion from a string to a [`PackageName`] fails.
-#[derive(Clone, Debug, Error, PartialEq)]
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum InvalidPackageNameError {
     /// The package name contains illegal characters
-    #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error(
+        "'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+    )]
     InvalidCharacters(String),
 }
 
@@ -59,15 +228,15 @@ impl TryFrom<&String> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
-        value.clone().try_into()
+        value.as_str().try_into()
     }
 }
 
-impl TryFrom<ArchiveIdentifier> for PackageName {
+impl TryFrom<CondaArchiveIdentifier> for PackageName {
     type Error = InvalidPackageNameError;
 
-    fn try_from(value: ArchiveIdentifier) -> Result<Self, Self::Error> {
-        value.name.try_into()
+    fn try_from(value: CondaArchiveIdentifier) -> Result<Self, Self::Error> {
+        value.identifier.name.try_into()
     }
 }
 
@@ -77,21 +246,24 @@ impl TryFrom<String> for PackageName {
     fn try_from(source: String) -> Result<Self, Self::Error> {
         // Ensure that the string only contains valid characters
         if !source
-            .chars()
-            .all(|c| matches!(c, 'a'..='z'|'A'..='Z'|'0'..='9'|'-'|'_'|'.'))
+            .bytes()
+            .all(|b| matches!(b, b'a'..=b'z'|b'A'..=b'Z'|b'0'..=b'9'|b'-'|b'_'|b'.'))
         {
             return Err(InvalidPackageNameError::InvalidCharacters(source));
         }
 
         // Convert all characters to lowercase but only if it actually contains uppercase. This way
         // we dont allocate the memory of the string if it is already lowercase.
-        let normalized = if source.chars().any(|c| c.is_ascii_uppercase()) {
-            Some(source.to_ascii_lowercase())
+        let normalized = if source.bytes().any(|b| b.is_ascii_uppercase()) {
+            Some(source.to_ascii_lowercase().into_boxed_str())
         } else {
             None
         };
 
-        Ok(Self { normalized, source })
+        Ok(Self {
+            normalized,
+            source: source.into_boxed_str(),
+        })
     }
 }
 
@@ -160,9 +332,129 @@ impl Borrow<str> for PackageName {
     }
 }
 
+/// A package name in its original source form (not normalized).
+///
+/// This is a newtype around [`Box<str>`] that preserves the exact casing and
+/// formatting as written by the user (e.g. `MyPackage` instead of `mypackage`).
+///
+/// Use this type when you only care about the source name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourcePackageName(Box<str>);
+
+impl SourcePackageName {
+    /// Returns the source package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SourcePackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for SourcePackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.source)
+    }
+}
+
+impl From<SourcePackageName> for PackageName {
+    fn from(name: SourcePackageName) -> Self {
+        PackageName::try_from(name.0.into_string())
+            .expect("SourcePackageName is always a valid PackageName")
+    }
+}
+
+impl AsRef<str> for SourcePackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A normalized package name (always lowercase).
+///
+/// This is a newtype around [`Box<str>`] that guarantees the package name is in
+/// its normalized (lowercase) form.
+///
+/// Use this type when you only care about the normalized name. If you need to
+/// retain both the source and normalized forms, use [`PackageName`] instead.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NormalizedPackageName(Box<str>);
+
+impl NormalizedPackageName {
+    /// Returns the normalized package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for NormalizedPackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<PackageName> for NormalizedPackageName {
+    fn from(name: PackageName) -> Self {
+        Self(name.as_normalized().to_string().into_boxed_str())
+    }
+}
+
+impl From<NormalizedPackageName> for PackageName {
+    fn from(name: NormalizedPackageName) -> Self {
+        PackageName {
+            normalized: None,
+            source: name.0,
+        }
+    }
+}
+
+impl AsRef<str> for NormalizedPackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use rstest::rstest;
+
     use super::*;
+
+    #[test]
+    fn test_normalized_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let normalized = NormalizedPackageName::from(name);
+        assert_eq!(normalized.as_str(), "cudnn");
+        assert_eq!(normalized.to_string(), "cudnn");
+
+        // Convert back to PackageName
+        let back = PackageName::from(normalized);
+        assert_eq!(back.as_source(), "cudnn");
+        assert_eq!(back.as_normalized(), "cudnn");
+
+        // Round-trip: two different source names produce the same normalized name
+        let a = NormalizedPackageName::from(PackageName::try_from("cuDNN").unwrap());
+        let b = NormalizedPackageName::from(PackageName::try_from("cudnn").unwrap());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_source_package_name() {
+        let name = PackageName::try_from("cuDNN").unwrap();
+        let source = SourcePackageName::from(name);
+        assert_eq!(source.as_str(), "cuDNN");
+        assert_eq!(source.to_string(), "cuDNN");
+
+        // Equality is exact (not normalized)
+        let name_lower = PackageName::try_from("cudnn").unwrap();
+        assert_ne!(source, SourcePackageName::from(name_lower));
+    }
 
     #[test]
     fn test_package_name_basics() {
@@ -177,5 +469,124 @@ mod test {
         assert_eq!(name1, name2);
 
         assert!(PackageName::try_from("invalid$").is_err());
+    }
+
+    #[rstest]
+    #[case("pillow", "pillow")]
+    #[case("pillow >=10", "pillow")]
+    #[case("pillow>=10,<12", "pillow")]
+    #[case("pillow >=10, <12", "pillow")]
+    #[case("numpy", "numpy")]
+    #[case("numpy>=1.0", "numpy")]
+    #[case("numpy!=1.5", "numpy")]
+    #[case("numpy~=1.0", "numpy")]
+    // Conditional dependency syntax (deprecated ; if)
+    #[case("package; if __osx", "package")]
+    #[case("osx-dependency; if __osx", "osx-dependency")]
+    #[case("linux-dependency; if __linux", "linux-dependency")]
+    #[case("numpy; if python >=3.9", "numpy")]
+    #[case("pkg-a; if python>=3.8 and python<3.9.5", "pkg-a")]
+    // Conditional dependency syntax (bracket [when="..."])
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package")]
+    #[case(r#"osx-dependency[when="__osx"]"#, "osx-dependency")]
+    #[case(r#"numpy >=1.0[when="python >=3.9"]"#, "numpy")]
+    #[case(r#"foo[version=">=1.0", when="python >=3.6"]"#, "foo")]
+    fn test_from_matchspec_str(#[case] spec: &str, #[case] expected: &str) {
+        let name = PackageName::from_matchspec_str(spec).unwrap();
+        assert_eq!(name.as_source(), expected);
+    }
+
+    #[rstest]
+    #[case("pillow", "pillow", "pillow")]
+    #[case("pillow >=10", "pillow", "pillow")]
+    #[case("numpy>=1.0,<2.0", "numpy", "numpy")]
+    #[case("Pillow >=10", "Pillow", "pillow")]
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package", "package")]
+    #[case(r#"Numpy[when="python >=3.9"]"#, "Numpy", "numpy")]
+    fn test_from_matchspec_str_unchecked(
+        #[case] spec: &str,
+        #[case] expected_source: &str,
+        #[case] expected_normalized: &str,
+    ) {
+        let name = PackageName::from_matchspec_str_unchecked(spec);
+        assert_eq!(name.as_source(), expected_source);
+        assert_eq!(name.as_normalized(), expected_normalized);
+    }
+
+    #[test]
+    fn test_from_matchspec_str_invalid() {
+        // Invalid package name characters should fail
+        let result = PackageName::from_matchspec_str("invalid$package >=1.0");
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    #[case("numpy>=1.0", "numpy", true)]
+    #[case("pillow >=10", "pillow", true)]
+    #[case("Pillow >=10", "pillow", false)]
+    #[case("NUMPY>=1.0,<2.0", "numpy", false)]
+    #[case("package; if __osx", "package", true)]
+    #[case(r#"package[when="__osx"]"#, "package", true)]
+    fn test_normalized_name_from_matchspec_str(
+        #[case] spec: &str,
+        #[case] expected: &str,
+        #[case] is_borrowed: bool,
+    ) {
+        let name = PackageName::normalized_name_from_matchspec_str(spec);
+        assert_eq!(&*name, expected);
+        assert_eq!(matches!(name, Cow::Borrowed(_)), is_borrowed);
+    }
+
+    #[rstest]
+    // No brackets: fast path, no extras.
+    #[case("numpy", "numpy", &[])]
+    #[case("numpy>=1.0", "numpy", &[])]
+    #[case("numpy >=1.0,<2.0", "numpy", &[])]
+    #[case("NumPy>=1.0", "numpy", &[])]
+    // Brackets but no extras key.
+    #[case(r#"numpy[build="py37*"]"#, "numpy", &[])]
+    #[case(r#"numpy[when="python >=3.6"]"#, "numpy", &[])]
+    #[case(r#"foo[version=">=1.0", build="py*"]"#, "foo", &[])]
+    // Extras present.
+    #[case("numpy[extras=[gpu]]", "numpy", &["gpu"])]
+    #[case("numpy[extras=[gpu, mkl]]", "numpy", &["gpu", "mkl"])]
+    // Uppercase group names violate the CEP 44 grammar ([a-z0-9_.+-]); the
+    // parser rejects them, so extras fall back to empty (name still extracted).
+    #[case("Numpy[extras=[GPU]]", "numpy", &[])]
+    // Extras combined with other bracket keys.
+    #[case(
+        r#"aiohttp[extras=[speedups], build="py*"]"#,
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Extras combined with a version constraint outside the bracket.
+    #[case(
+        "aiohttp >=3.7.4 [extras=[speedups]]",
+        "aiohttp",
+        &["speedups"],
+    )]
+    // Malformed bracket section falls back to empty extras but still extracts name.
+    #[case("numpy[", "numpy", &[])]
+    #[case("foo[extras=[", "foo", &[])]
+    // Empty extras list is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[]]", "foo", &[])]
+    // Trailing comma is rejected by the parser; we fall back gracefully.
+    #[case("foo[extras=[a,]]", "foo", &[])]
+    // Multiple bracket sections are rejected by the parser; extras silently
+    // dropped. Documented limitation, captured here so future changes notice.
+    #[case(
+        r#"aiohttp[extras=[a]] [build="py*"]"#,
+        "aiohttp",
+        &[],
+    )]
+    fn test_name_and_extras_from_matchspec_str(
+        #[case] spec: &str,
+        #[case] expected_name: &str,
+        #[case] expected_extras: &[&str],
+    ) {
+        let (name, extras) = PackageName::name_and_extras_from_matchspec_str(spec);
+        assert_eq!(&*name, expected_name);
+        let expected: Vec<String> = expected_extras.iter().map(|s| (*s).to_string()).collect();
+        assert_eq!(extras, expected);
     }
 }

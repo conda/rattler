@@ -1,12 +1,14 @@
-use super::HashingWriter;
-use crate::HashingReader;
-use digest::Digest;
 use std::{
     io::Error,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use digest::Digest;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use super::HashingWriter;
+use crate::HashingReader;
 
 impl<W: AsyncWrite + Unpin, D: Digest> AsyncWrite for HashingWriter<W, D> {
     fn poll_write(
@@ -22,7 +24,7 @@ impl<W: AsyncWrite + Unpin, D: Digest> AsyncWrite for HashingWriter<W, D> {
 
         match writer.poll_write(cx, buf) {
             Poll::Ready(Ok(bytes)) => {
-                hasher.update(&buf[..bytes]);
+                hasher.update(buf.get(..bytes).expect("safe because bytes <= buf"));
                 Poll::Ready(Ok(bytes))
             }
             other => other,
@@ -59,7 +61,11 @@ impl<R: AsyncRead + Unpin, D: Digest> AsyncRead for HashingReader<R, D> {
         match reader.poll_read(cx, buf) {
             Poll::Ready(Ok(result)) => {
                 let filled_part = buf.filled();
-                hasher.update(&filled_part[previously_filled..]);
+                hasher.update(
+                    filled_part
+                        .get(previously_filled..)
+                        .expect("safe because filled_part >= previously_filled"),
+                );
                 Poll::Ready(Ok(result))
             }
             other => other,

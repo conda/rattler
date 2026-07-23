@@ -12,10 +12,13 @@ mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
 mod package_name;
+mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
+#[cfg(feature = "pty")]
+mod pty;
 mod record;
 mod repo_data;
 mod shell;
@@ -24,6 +27,7 @@ mod utils;
 mod version;
 mod virtual_package;
 
+mod exceptions;
 mod index_json;
 mod run_exports_json;
 
@@ -31,13 +35,16 @@ use std::ops::Deref;
 
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
-use error::{
-    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, ExtractException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    ValidatePackageRecordsException, VersionBumpException,
+use error::PyRattlerError;
+use exceptions::{
+    ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
+    ConversionError, ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError,
+    FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
+    InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
+    InvalidVersionSpecError, IoError, LinkError, LockFileError, PackageNameMatcherParseError,
+    ParseArchError, ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError,
+    RequirementError, ShellError, SolverError, TransactionError, ValidatePackageRecordsError,
+    VersionBumpError, VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -45,37 +52,39 @@ use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
 use installer::py_install;
 use lock::{
-    PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
-    PyPypiPackageEnvironmentData,
+    PyEnvironment, PyLockChannel, PyLockFile, PyLockPlatform, PyLockedPackage, PyPackageHashes,
+    PyPypiPackageData,
 };
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::middleware::{
-    PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware, PyOciMiddleware, PyS3Config,
-    PyS3Middleware,
+    PyAddHeadersMiddleware, PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware,
+    PyOciMiddleware, PyRetryMiddleware, PyS3Config, PyS3Middleware,
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
+use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
-use record::PyRecord;
+use record::{PyLink, PyRecord};
 use repo_data::{
+    PyChannelInfo, PyChannelRelations, PyRepoData,
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
-    sparse::PySparseRepoData,
-    PyRepoData,
+    sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
-use version::PyVersion;
+use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
-use crate::error::GatewayException;
+#[cfg(feature = "pty")]
+use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
@@ -92,11 +101,13 @@ impl<T> Deref for Wrap<T> {
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyVersion>()?;
+    m.add_class::<PyVersionSpec>()?;
 
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
     m.add_class::<PyPackageName>()?;
+    m.add_class::<PyPackageNameMatcher>()?;
 
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
@@ -110,6 +121,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyGCSMiddleware>()?;
     m.add_class::<PyS3Middleware>()?;
     m.add_class::<PyS3Config>()?;
+    m.add_class::<PyRetryMiddleware>()?;
+    m.add_class::<PyAddHeadersMiddleware>()?;
     m.add_class::<PyClientWithMiddleware>()?;
 
     // Shell activation things
@@ -118,14 +131,26 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyShellEnum>()?;
     m.add_class::<PyActivator>()?;
 
+    // PTY (pseudoterminal) support - optional feature, Unix only
+    #[cfg(feature = "pty")]
+    {
+        m.add_class::<PyPtyProcess>()?;
+        m.add_class::<PyPtyProcessOptions>()?;
+        m.add_class::<PyPtySession>()?;
+    }
+
     m.add_class::<PySparseRepoData>()?;
+    m.add_class::<PyPackageFormatSelection>()?;
     m.add_class::<PyRepoData>()?;
+    m.add_class::<PyChannelInfo>()?;
+    m.add_class::<PyChannelRelations>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PySourceConfig>()?;
     m.add_class::<PyFetchRepoDataOptions>()?;
 
     m.add_class::<PyRecord>()?;
+    m.add_class::<PyLink>()?;
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, &m)?)?;
     m.add_class::<PyGenericVirtualPackage>()?;
@@ -141,9 +166,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyLockFile>()?;
     m.add_class::<PyEnvironment>()?;
     m.add_class::<PyLockChannel>()?;
+    m.add_class::<PyLockPlatform>()?;
     m.add_class::<PyLockedPackage>()?;
     m.add_class::<PyPypiPackageData>()?;
-    m.add_class::<PyPypiPackageEnvironmentData>()?;
     m.add_class::<PyPackageHashes>()?;
 
     m.add_class::<PyAboutJson>()?;
@@ -165,67 +190,102 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_to_path, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_bytes, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_to_writer, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
+    m.add_function(
+        wrap_pyfunction!(package_streaming::fetch_raw_package_file_from_url, &m).unwrap(),
+    )?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
 
     // Exceptions
+    m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
     m.add(
-        "InvalidVersionError",
-        py.get_type::<InvalidVersionException>(),
+        "InvalidVersionSpecError",
+        py.get_type::<InvalidVersionSpecError>(),
     )?;
     m.add(
         "InvalidMatchSpecError",
-        py.get_type::<InvalidMatchSpecException>(),
+        py.get_type::<InvalidMatchSpecError>(),
     )?;
     m.add(
         "InvalidPackageNameError",
-        py.get_type::<InvalidPackageNameException>(),
+        py.get_type::<InvalidPackageNameError>(),
     )?;
-    m.add("InvalidUrlError", py.get_type::<InvalidUrlException>())?;
     m.add(
-        "InvalidChannelError",
-        py.get_type::<InvalidChannelException>(),
+        "PackageNameMatcherParseError",
+        py.get_type::<PackageNameMatcherParseError>(),
     )?;
-    m.add("ActivationError", py.get_type::<ActivationException>())?;
+    m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
+    m.add("InvalidChannelError", py.get_type::<InvalidChannelError>())?;
+    m.add("ActivationError", py.get_type::<ActivationError>())?;
     m.add(
-        "ParsePlatformError",
-        py.get_type::<ParsePlatformException>(),
+        "ActivationScriptFormatError",
+        py.get_type::<ActivationScriptFormatError>(),
     )?;
-    m.add("ParseArchError", py.get_type::<ParseArchException>())?;
-    m.add("SolverError", py.get_type::<SolverException>())?;
-    m.add("TransactionError", py.get_type::<TransactionException>())?;
-    m.add("LinkError", py.get_type::<LinkException>())?;
-    m.add("IoError", py.get_type::<IoException>())?;
+    m.add("ParsePlatformError", py.get_type::<ParsePlatformError>())?;
+    m.add("ParseArchError", py.get_type::<ParseArchError>())?;
+    m.add("FetchRepoDataError", py.get_type::<FetchRepoDataError>())?;
+    m.add("CacheDirError", py.get_type::<CacheDirError>())?;
     m.add(
         "DetectVirtualPackageError",
-        py.get_type::<DetectVirtualPackageException>(),
+        py.get_type::<DetectVirtualPackageError>(),
     )?;
-    m.add("CacheDirError", py.get_type::<CacheDirException>())?;
-    m.add(
-        "FetchRepoDataError",
-        py.get_type::<FetchRepoDataException>(),
-    )?;
-    m.add(
-        "ConvertSubdirError",
-        py.get_type::<ConvertSubdirException>(),
-    )?;
-    m.add("VersionBumpError", py.get_type::<VersionBumpException>())?;
-
+    m.add("IoError", py.get_type::<IoError>())?;
+    m.add("SolverError", py.get_type::<SolverError>())?;
+    m.add("TransactionError", py.get_type::<TransactionError>())?;
+    m.add("LinkError", py.get_type::<LinkError>())?;
+    m.add("ConvertSubdirError", py.get_type::<ConvertSubdirError>())?;
+    m.add("VersionBumpError", py.get_type::<VersionBumpError>())?;
+    m.add("VersionExtendError", py.get_type::<VersionExtendError>())?;
+    m.add("ParseCondaLockError", py.get_type::<ParseCondaLockError>())?;
+    m.add("ConversionError", py.get_type::<ConversionError>())?;
+    m.add("RequirementError", py.get_type::<RequirementError>())?;
     m.add(
         "EnvironmentCreationError",
-        py.get_type::<EnvironmentCreationException>(),
+        py.get_type::<EnvironmentCreationError>(),
     )?;
-
-    m.add("ExtractError", py.get_type::<ExtractException>())?;
-
-    m.add("GatewayError", py.get_type::<GatewayException>())?;
-
+    m.add("LockFileError", py.get_type::<LockFileError>())?;
     m.add(
-        "ValidatePackageRecordsException",
-        py.get_type::<ValidatePackageRecordsException>(),
+        "ExtractError",
+        py.get_type::<crate::exceptions::ExtractError>(),
+    )?;
+    m.add(
+        "GatewayError",
+        py.get_type::<crate::exceptions::GatewayError>(),
+    )?;
+    m.add(
+        "GatewayWarning",
+        py.get_type::<crate::exceptions::GatewayWarning>(),
+    )?;
+    m.add(
+        "InstallerError",
+        py.get_type::<crate::exceptions::InstallerError>(),
+    )?;
+    m.add(
+        "ParseExplicitEnvironmentSpecError",
+        py.get_type::<ParseExplicitEnvironmentSpecError>(),
+    )?;
+    m.add(
+        "ValidatePackageRecordsError",
+        py.get_type::<ValidatePackageRecordsError>(),
+    )?;
+    m.add(
+        "AuthenticationStorageError",
+        py.get_type::<AuthenticationStorageError>(),
+    )?;
+    m.add("ShellError", py.get_type::<ShellError>())?;
+    m.add(
+        "InvalidHeaderNameError",
+        py.get_type::<InvalidHeaderNameError>(),
+    )?;
+    m.add(
+        "InvalidHeaderValueError",
+        py.get_type::<InvalidHeaderValueError>(),
     )?;
 
     Ok(())

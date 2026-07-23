@@ -1,10 +1,15 @@
 mod error;
 mod gateway;
+mod noarch_type;
+mod package_name;
+mod package_record;
 mod parse_strictness;
+mod platform;
 pub mod solve;
 mod utils;
 mod version;
 mod version_spec;
+mod version_with_source;
 
 pub use error::{JsError, JsResult};
 

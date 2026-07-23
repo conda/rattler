@@ -1,0 +1,25 @@
+recipe:
+  name: clobber-upgrade
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-directory-upgrade
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/xbin
+        - echo "initial" > $PREFIX/xbin/content.txt
+
+  - package:
+      name: clobber-directory-upgrade
+      version: 0.2.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/bin
+        - echo "initial" > $PREFIX/bin/content.txt
+        - touch $PREFIX/xbin

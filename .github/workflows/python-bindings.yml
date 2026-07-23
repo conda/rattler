@@ -2,7 +2,7 @@ name: Python bindings CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
     paths:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
@@ -11,10 +11,10 @@ on:
       - Cargo.*
 
       # When something in the bindings themselves changes
-      - 'py-rattler/**/*'
+      - "py-rattler/**/*"
 
       # Or when this workflow changes
-      - '.github/workflows/python-bindings.yml'
+      - ".github/workflows/python-bindings.yml"
   workflow_dispatch:
 
 concurrency:
@@ -29,14 +29,14 @@ jobs:
     name: Format, Lint and Test the Python bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: recursive
-      - uses: prefix-dev/setup-pixi@v0.8.3
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
           manifest-path: py-rattler/pixi.toml
           environments: test
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
         with:
           components: clippy, rustfmt
       - name: Format and Lint

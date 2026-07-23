@@ -33,40 +33,34 @@ jobs:
   format_lint_test:
     name: Format, Lint and Test the JS bindings
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: ["20.x"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
-          node-version: ${{ matrix.node-version }}
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+          manifest-path: js-rattler/pixi.toml
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          components: clippy, rustfmt
-          target: wasm32-unknown-unknown
-          cache-workspaces: js-rattler -> target
+          workspaces: js-rattler
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@v1
-        with:
-          manifest-path: js-rattler/Cargo.toml
+        working-directory: js-rattler
+        run: pixi run cargo fmt --all --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets
         working-directory: js-rattler
+        run: pixi run cargo clippy --all-targets
 
-      - run: npm ci
+      - name: Check formatting
         working-directory: js-rattler
-      - run: npm run fmt:check
+        run: pixi run fmt-check
+
+      - name: Build and test
         working-directory: js-rattler
-      - run: npm run build
-        working-directory: js-rattler
-      - run: npm test
-        working-directory: js-rattler
+        run: pixi run test
 
       # some e2e test to make sure our build works
       - run: |

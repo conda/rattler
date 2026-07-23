@@ -7,8 +7,8 @@ use std::{
 use fs_err::tokio as tokio_fs;
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
     ExtractError,
+    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
 };
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
@@ -92,6 +92,7 @@ fn conda_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
 )]
 fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
+#[cfg(feature = "reqwest")]
 #[template]
 #[rstest]
 #[case::ruff(
@@ -103,6 +104,11 @@ fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str)
     "https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2",
     "20d1f1b5dc620b745c325844545fd5c0cdbfdb2385a0e27ef1507399844c8c6d",
     "13ee3577afc291dabd2d9edc59736688"
+)]
+#[case::openmp(
+    "https://conda.anaconda.org/conda-forge/linux-64/openmp-8.0.1-0.tar.bz2",
+    "a3332e80c633be1ee20a41c7dd8810260a2132cf7d03f363d83752cad907bcfd",
+    "b35241079152e5cc891c99368395b2c6"
 )]
 fn url_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
@@ -119,8 +125,8 @@ fn test_extract_conda(#[case] input: Url, #[case] sha256: &str, #[case] md5: &st
     )
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(conda_archives)]
@@ -154,11 +160,13 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
         index_json.version,
         index_json.build
     );
-    assert!(input
-        .path_segments()
-        .and_then(Iterator::last)
-        .unwrap()
-        .starts_with(&name));
+    assert!(
+        input
+            .path_segments()
+            .and_then(Iterator::last)
+            .unwrap()
+            .starts_with(&name)
+    );
 }
 
 #[apply(tar_bz2_archives)]
@@ -175,8 +183,8 @@ fn test_extract_tar_bz2(#[case] input: Url, #[case] sha256: &str, #[case] md5: &
     )
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(tar_bz2_archives)]
@@ -198,8 +206,8 @@ async fn test_extract_tar_bz2_async(#[case] input: Url, #[case] sha256: &str, #[
     .await
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[apply(conda_archives)]
@@ -223,8 +231,8 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
         .await
         .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[cfg(feature = "reqwest")]
@@ -253,8 +261,8 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
     .await
     .unwrap();
 
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
+    assert_eq!(hex::encode(result.sha256), sha256);
+    assert_eq!(hex::encode(result.md5), md5);
 }
 
 #[rstest]
@@ -282,7 +290,9 @@ fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)]
     assert_matches::assert_matches!(result, ExtractError::IoError(_));
 }
 
-#[rstest]
+// Skip on windows as the test package contains symbolic links
+#[cfg_attr(target_os = "windows", ignore)]
+#[test]
 fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     let package_path = "tests/resources/ca-certificates-2024.7.4-hbcca054_0.conda";
 
@@ -302,11 +312,178 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
         extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir).unwrap();
 
     let combined_result = json!({
-        "sha256": format!("{:x}", new_result.sha256),
-        "md5": format!("{:x}", new_result.md5),
+        "sha256": hex::encode(new_result.sha256),
+        "md5": hex::encode(new_result.md5),
     });
 
     insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);
+}
+
+/// Regression test: a tar entry with an absolute path must not let the manual
+/// mtime-setting touch a file *outside* the extraction directory. The content
+/// is written safely inside `destination` (tar strips the leading root), and
+/// the mtime must be applied to that sanitized path, never to the raw header
+/// path joined onto `destination`.
+#[cfg(unix)]
+#[test]
+fn test_absolute_path_entry_does_not_set_mtime_outside_destination() {
+    use std::io::{Cursor, Write};
+
+    // A file that lives outside the extraction destination. Kept short so it
+    // fits the 100-byte tar name field.
+    let victim = Path::new("/tmp/rattler_extract_traversal_victim.txt").to_path_buf();
+    std::fs::write(&victim, b"data outside the extraction directory").unwrap();
+    let untouched = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+    filetime::set_file_mtime(&victim, untouched).unwrap();
+
+    // Craft an archive with a regular file whose header path is the victim's
+    // absolute path, and a pre-1980 mtime to take the clamping branch.
+    let content = b"x";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1);
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_path_absolute(&victim).unwrap();
+    header.set_cksum();
+
+    let mut builder = tar::Builder::new(Vec::new());
+    builder.append(&header, &content[..]).unwrap();
+    let tar_data = builder.into_inner().unwrap();
+
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    encoder.write_all(&tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    let target_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("absolute_path_traversal");
+    let _ = std::fs::remove_dir_all(&target_dir);
+    extract_tar_bz2(Cursor::new(bz2_data), &target_dir).unwrap();
+
+    // The victim outside the destination must be completely untouched.
+    let after =
+        filetime::FileTime::from_last_modification_time(&std::fs::metadata(&victim).unwrap());
+    assert_eq!(
+        after.unix_seconds(),
+        1_700_000_000,
+        "mtime of a file outside the extraction directory was modified"
+    );
+
+    // The content is written inside the destination (root stripped) and its
+    // mtime is clamped to the 1980 floor, proving mtimes are still applied to
+    // the correct, sanitized path.
+    let inside = target_dir.join(victim.strip_prefix("/").unwrap());
+    assert!(
+        inside.exists(),
+        "entry should be extracted inside destination"
+    );
+    let inside_mtime =
+        filetime::FileTime::from_last_modification_time(&std::fs::metadata(&inside).unwrap());
+    assert_eq!(inside_mtime.unix_seconds(), 315_532_800);
+}
+
+/// Test that extracting a tar archive containing entries with mtime=1
+/// (Unix epoch + 1 second, a common sentinel value) completes without error.
+/// This verifies the fix for exFAT filesystems that cannot represent
+/// timestamps before 1980-01-01.
+#[test]
+fn test_extract_tar_with_pre_1980_mtime() {
+    use std::io::Cursor;
+
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    let target_dir = temp_dir.join("pre_1980_mtime_test");
+
+    // Build a tar archive in memory with mtime=1 (sentinel value)
+    let mut builder = tar::Builder::new(Vec::new());
+
+    let content = b"hello world";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1); // Unix epoch + 1 second (1970-01-01T00:00:01Z)
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "test_file.txt", &content[..])
+        .unwrap();
+
+    let tar_data = builder.into_inner().unwrap();
+
+    // Wrap in bzip2 to create a .tar.bz2
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    std::io::Write::write_all(&mut encoder, &tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    // Extract — this should succeed even though mtime=1 is pre-1980
+    let result = extract_tar_bz2(Cursor::new(bz2_data), &target_dir);
+    assert!(
+        result.is_ok(),
+        "Extraction should not fail due to mtime=1: {:?}",
+        result.err()
+    );
+
+    // Verify the file was actually extracted
+    let extracted_file = target_dir.join("test_file.txt");
+    assert!(extracted_file.exists(), "Extracted file should exist");
+
+    let mut extracted_content = Vec::new();
+    File::open(&extracted_file)
+        .unwrap()
+        .read_to_end(&mut extracted_content)
+        .unwrap();
+    assert_eq!(extracted_content, content);
+}
+
+/// Same test but for the async extraction path.
+#[tokio::test]
+async fn test_extract_tar_with_pre_1980_mtime_async() {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    let target_dir = temp_dir.join("pre_1980_mtime_test_async");
+
+    // Build a tar archive in memory with mtime=1 (sentinel value)
+    let mut builder = tar::Builder::new(Vec::new());
+
+    let content = b"hello world async";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(0o644);
+    header.set_mtime(1); // Unix epoch + 1 second (1970-01-01T00:00:01Z)
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "test_file_async.txt", &content[..])
+        .unwrap();
+
+    let tar_data = builder.into_inner().unwrap();
+
+    // Wrap in bzip2 to create a .tar.bz2
+    let mut bz2_data = Vec::new();
+    let mut encoder = bzip2::write::BzEncoder::new(&mut bz2_data, bzip2::Compression::fast());
+    std::io::Write::write_all(&mut encoder, &tar_data).unwrap();
+    encoder.finish().unwrap();
+
+    // Write to a temp file so we can use tokio::fs::File as AsyncRead
+    tokio::fs::create_dir_all(&temp_dir).await.unwrap();
+    let archive_path = temp_dir.join("pre_1980_mtime_test.tar.bz2");
+    tokio::fs::write(&archive_path, &bz2_data).await.unwrap();
+
+    // Extract using the async path
+    let file = tokio_fs::File::open(&archive_path).await.unwrap();
+    let result =
+        rattler_package_streaming::tokio::async_read::extract_tar_bz2(file, &target_dir).await;
+    assert!(
+        result.is_ok(),
+        "Async extraction should not fail due to mtime=1: {:?}",
+        result.err()
+    );
+
+    // Verify the file was actually extracted
+    let extracted_file = target_dir.join("test_file_async.txt");
+    assert!(extracted_file.exists(), "Extracted file should exist");
+
+    let extracted_content = tokio::fs::read(&extracted_file).await.unwrap();
+    assert_eq!(extracted_content, content);
 }
 
 struct FlakyReader<R: Read> {
@@ -319,7 +496,7 @@ impl<R: Read> Read for FlakyReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let remaining = self.cutoff.saturating_sub(self.total_read);
         if remaining == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "flaky"));
+            return Err(std::io::Error::other("flaky"));
         }
         let max_read = buf.len().min(remaining);
         let bytes_read = self.reader.read(&mut buf[..max_read])?;

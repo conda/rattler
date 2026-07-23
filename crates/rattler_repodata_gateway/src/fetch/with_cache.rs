@@ -6,29 +6,29 @@ use std::{
 };
 
 use cache_control::{Cachability, CacheControl};
-use futures::{future::ready, FutureExt, TryStreamExt};
-use humansize::{SizeFormatter, DECIMAL};
-use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::retry_policies::default_retry_policy;
+use futures::{FutureExt, TryStreamExt, future::ready};
+use humansize::{DECIMAL, SizeFormatter};
+use rattler_digest::{Blake2b256, HashingWriter, compute_file_digest};
+use rattler_networking::{LazyClient, retry_policies::default_retry_policy};
 use rattler_redaction::Redact;
 use reqwest::{
-    header::{HeaderMap, HeaderValue},
     Response, StatusCode,
+    header::{HeaderMap, HeaderValue},
 };
 use retry_policies::{RetryDecision, RetryPolicy};
 use tempfile::NamedTempFile;
 use tokio_util::io::StreamReader;
-use tracing::{instrument, Level};
+use tracing::{Level, instrument};
 use url::Url;
 
 use crate::{
-    fetch::{
-        cache::{CacheHeaders, Expiring, RepoDataState},
-        jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
-    },
-    reporter::ResponseReporterExt,
-    utils::{AsyncEncoding, Encoding, LockedFile},
     Reporter,
+    fetch::{
+        CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
+        cache::{CacheHeaders, Expiring, RepoDataState},
+    },
+    reporter::{DownloadReporter, ResponseReporterExt},
+    utils::{AsyncEncoding, Encoding, LockedFile},
 };
 
 /// Additional knobs that allow you to tweak the behavior of
@@ -42,9 +42,6 @@ pub struct FetchRepoDataOptions {
     /// Determines which variant to download. See [`Variant`] for more
     /// information.
     pub variant: Variant,
-
-    /// When enabled repodata can be fetched incrementally using JLAP
-    pub jlap_enabled: bool,
 
     /// When enabled, the zstd variant will be used if available
     pub zstd_enabled: bool,
@@ -62,7 +59,6 @@ impl Default for FetchRepoDataOptions {
         Self {
             cache_action: CacheAction::default(),
             variant: Variant::default(),
-            jlap_enabled: true,
             zstd_enabled: true,
             bz2_enabled: true,
             retry_policy: None,
@@ -136,11 +132,8 @@ async fn repodata_from_file(
         },
         cache_last_modified: SystemTime::now(),
         blake2_hash: None,
-        blake2_hash_nominal: None,
         has_zst: None,
         has_bz2: None,
-        has_jlap: None,
-        jlap: None,
     };
 
     // write the cache state
@@ -183,7 +176,7 @@ async fn repodata_from_file(
 #[instrument(err(level = Level::INFO), skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: reqwest_middleware::ClientWithMiddleware,
+    client: LazyClient,
     cache_path: PathBuf,
     options: FetchRepoDataOptions,
     reporter: Option<Arc<dyn Reporter>>,
@@ -272,7 +265,7 @@ pub async fn fetch_repo_data(
 
     // Determine the availability of variants based on the cache or by querying the
     // remote.
-    let variant_availability = check_variant_availability(
+    let mut variant_availability = check_variant_availability(
         &client,
         &subdir_url,
         cache_state.as_ref(),
@@ -286,30 +279,115 @@ pub async fn fetch_repo_data(
     // refreshed it.
     let has_zst = options.zstd_enabled && variant_availability.has_zst();
     let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
-    let has_jlap = options.jlap_enabled && variant_availability.has_jlap();
 
-    // We first attempt to make a JLAP request; if it fails for any reason, we
-    // continue on with a normal request.
-    let jlap_state = if has_jlap && cache_state.is_some() {
-        let repo_data_state = cache_state.as_ref().unwrap();
-        match jlap::patch_repo_data(
-            &client,
-            subdir_url.clone(),
-            repo_data_state.clone(),
-            &repo_data_json_path,
-            reporter.clone(),
-        )
-        .await
+    let default_retry_behavior = default_retry_policy();
+    let retry_behavior = options
+        .retry_policy
+        .as_deref()
+        .unwrap_or(&default_retry_behavior);
+
+    let mut candidates = Vec::with_capacity(3);
+    if has_zst {
+        candidates.push((
+            subdir_url
+                .join(&format!("{}.zst", options.variant.file_name()))
+                .unwrap(),
+            Encoding::Zst,
+        ));
+    }
+    if has_bz2 {
+        candidates.push((
+            subdir_url
+                .join(&format!("{}.bz2", options.variant.file_name()))
+                .unwrap(),
+            Encoding::Bz2,
+        ));
+    }
+    candidates.push((
+        subdir_url.join(options.variant.file_name()).unwrap(),
+        Encoding::Passthrough,
+    ));
+
+    let mut last_not_found = None;
+    let (repo_data_url, temp_file, blake2_hash, cache_headers) = 'candidates: loop {
+        let Some((repo_data_url, content_encoding)) = candidates.first().cloned() else {
+            return Err(FetchRepoDataError::NotFound(
+                last_not_found.expect("plain repodata was tried"),
+            ));
+        };
+        candidates.remove(0);
+
+        // Construct the HTTP request
+        tracing::debug!("fetching '{}'", &repo_data_url);
+        let request_builder = client.client().get(repo_data_url.clone());
+
+        let mut headers = HeaderMap::default();
+
+        // We can handle g-zip encoding which is often used. We could also set this
+        // option on the client, but that will disable all download progress
+        // messages by `reqwest` because the gzipped data is decoded on the fly and
+        // the size of the decompressed body is unknown. However, we don't really
+        // care about the decompressed size but rather we'd like to know the number
+        // of raw bytes that are actually downloaded.
+        //
+        // To do this we manually set the request header to accept gzip encoding and we
+        // use the [`AsyncEncoding`] trait to perform the decoding on the fly.
+        headers.insert(
+            reqwest::header::ACCEPT_ENCODING,
+            HeaderValue::from_static("gzip"),
+        );
+
+        // Add previous cache headers only when revalidating the same URL. Cache
+        // validators for compressed variants are not valid for the plain JSON URL.
+        if let Some(cache_headers) = cache_state
+            .as_ref()
+            .filter(|state| state.url == repo_data_url)
+            .map(|state| &state.cache_headers)
         {
-            Ok((state, disk_hash)) => {
-                tracing::info!("fetched JLAP patches successfully");
+            cache_headers.add_to_request(&mut headers);
+        }
+        // Send the request and wait for a reply
+        let download_reporter = reporter
+            .as_deref()
+            .and_then(|reporter| reporter.download_reporter())
+            .map(|r| (r, r.on_download_start(&repo_data_url)));
+
+        let (client, request) = request_builder.headers(headers).build_split();
+        let request = request.expect("must have a valid request at this point");
+        let mut retry_count = 0;
+        loop {
+            let request_start_time = SystemTime::now();
+            let response = match client.execute(request.try_clone().unwrap()).await {
+                Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+                    let unavailable = Some(Expiring {
+                        value: false,
+                        last_checked: jiff::Timestamp::now(),
+                    });
+                    match content_encoding {
+                        Encoding::Zst => variant_availability.has_zst = unavailable,
+                        Encoding::Bz2 => variant_availability.has_bz2 = unavailable,
+                        _ => {}
+                    }
+                    last_not_found = Some(RepoDataNotFoundError::from(
+                        response.error_for_status().unwrap_err(),
+                    ));
+                    continue 'candidates;
+                }
+                Ok(response) => response.error_for_status()?,
+                Err(e) => {
+                    return Err(FetchRepoDataError::from(e));
+                }
+            };
+
+            // If the content didn't change, simply return whatever we have on disk.
+            if response.status() == StatusCode::NOT_MODIFIED {
+                tracing::debug!("repodata was unmodified");
+
+                // Update the cache on disk with any new findings.
                 let cache_state = RepoDataState {
-                    blake2_hash: Some(disk_hash),
-                    blake2_hash_nominal: Some(state.footer.latest),
+                    url: repo_data_url,
                     has_zst: variant_availability.has_zst,
                     has_bz2: variant_availability.has_bz2,
-                    has_jlap: variant_availability.has_jlap,
-                    jlap: Some(state),
                     ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
                 };
 
@@ -325,173 +403,83 @@ pub async fn fetch_repo_data(
                     lock_file,
                     repo_data_json_path,
                     cache_state,
-                    cache_result: CacheResult::CacheOutdated,
+                    cache_result: CacheResult::CacheHitAfterFetch,
                 });
             }
-            Err(error) => {
-                tracing::warn!("Error during JLAP request: {}", error);
-                None
+
+            // Fail if the status code is not a success
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.ok();
+                return Err(FetchRepoDataError::HttpError(
+                    reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                        "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                        status,
+                        repo_data_url.redact(),
+                        body.as_deref().unwrap_or("<failed to get body>"),
+                    )),
+                ));
             }
-        }
-    } else {
-        None
-    };
 
-    // Determine which variant to download
-    let repo_data_url = if has_zst {
-        subdir_url
-            .join(&format!("{}.zst", options.variant.file_name()))
-            .unwrap()
-    } else if has_bz2 {
-        subdir_url
-            .join(&format!("{}.bz2", options.variant.file_name()))
-            .unwrap()
-    } else {
-        subdir_url.join(options.variant.file_name()).unwrap()
-    };
+            // Get cache headers from the response
+            let cache_headers = CacheHeaders::from(&response);
 
-    // Construct the HTTP request
-    tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = client.get(repo_data_url.clone());
+            // Stream the content to a temporary file
+            let response_url = response.url().clone();
+            let stream_result = stream_and_decode_to_file(
+                repo_data_url.clone(),
+                response,
+                content_encoding,
+                &cache_path,
+                download_reporter,
+            )
+            .await;
 
-    let mut headers = HeaderMap::default();
+            match stream_result {
+                Ok((file, hash)) => {
+                    if let Some((reporter, index)) = download_reporter {
+                        reporter.on_download_complete(&response_url, index);
+                    }
+                    break 'candidates (repo_data_url, file, hash, cache_headers);
+                }
+                Err(FetchRepoDataError::FailedToDownload(url, err)) => {
+                    let execute_after =
+                        match retry_behavior.should_retry(request_start_time, retry_count) {
+                            RetryDecision::Retry { execute_after } => execute_after,
+                            RetryDecision::DoNotRetry => {
+                                return Err(FetchRepoDataError::FailedToDownload(url, err));
+                            }
+                        };
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or(Duration::ZERO);
 
-    // We can handle g-zip encoding which is often used. We could also set this
-    // option on the client, but that will disable all download progress
-    // messages by `reqwest` because the gzipped data is decoded on the fly and
-    // the size of the decompressed body is unknown. However, we don't really
-    // care about the decompressed size but rather we'd like to know the number
-    // of raw bytes that are actually downloaded.
-    //
-    // To do this we manually set the request header to accept gzip encoding and we
-    // use the [`AsyncEncoding`] trait to perform the decoding on the fly.
-    headers.insert(
-        reqwest::header::ACCEPT_ENCODING,
-        HeaderValue::from_static("gzip"),
-    );
-
-    // Add previous cache headers if we have them
-    if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
-        cache_headers.add_to_request(&mut headers);
-    }
-    // Send the request and wait for a reply
-    let download_reporter = reporter
-        .as_deref()
-        .map(|r| (r, r.on_download_start(&repo_data_url)));
-
-    let (client, request) = request_builder.headers(headers).build_split();
-    let request = request.expect("must have a valid request at this point");
-    let default_retry_behavior = default_retry_policy();
-    let retry_behavior = options
-        .retry_policy
-        .as_deref()
-        .unwrap_or(&default_retry_behavior);
-    let mut retry_count = 0;
-    let (temp_file, blake2_hash, response_url, cache_headers) = loop {
-        let request_start_time = SystemTime::now();
-        let response = match client.execute(request.try_clone().unwrap()).await {
-            Ok(response) if response.status() == StatusCode::NOT_FOUND => {
-                return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
-                    response.error_for_status().unwrap_err(),
-                )));
-            }
-            Ok(response) => response.error_for_status()?,
-            Err(e) => {
-                return Err(FetchRepoDataError::from(e));
-            }
-        };
-
-        // If the content didn't change, simply return whatever we have on disk.
-        if response.status() == StatusCode::NOT_MODIFIED {
-            tracing::debug!("repodata was unmodified");
-
-            // Update the cache on disk with any new findings.
-            let cache_state = RepoDataState {
-                url: repo_data_url,
-                has_zst: variant_availability.has_zst,
-                has_bz2: variant_availability.has_bz2,
-                has_jlap: variant_availability.has_jlap,
-                jlap: jlap_state,
-                ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
-            };
-
-            let cache_state = tokio::task::spawn_blocking(move || {
-                cache_state
-                    .to_path(&cache_state_path)
-                    .map(|_| cache_state)
-                    .map_err(FetchRepoDataError::FailedToWriteCacheState)
-            })
-            .await??;
-
-            return Ok(CachedRepoData {
-                lock_file,
-                repo_data_json_path,
-                cache_state,
-                cache_result: CacheResult::CacheHitAfterFetch,
-            });
-        }
-
-        // Get cache headers from the response
-        let cache_headers = CacheHeaders::from(&response);
-
-        // Stream the content to a temporary file
-        let response_url = response.url().clone();
-        let stream_result = stream_and_decode_to_file(
-            repo_data_url.clone(),
-            response,
-            if has_zst {
-                Encoding::Zst
-            } else if has_bz2 {
-                Encoding::Bz2
-            } else {
-                Encoding::Passthrough
-            },
-            &cache_path,
-            download_reporter,
-        )
-        .await;
-
-        match stream_result {
-            Ok((file, hash)) => break (file, hash, response_url, cache_headers),
-            Err(FetchRepoDataError::FailedToDownload(url, err)) => {
-                let execute_after =
-                    match retry_behavior.should_retry(request_start_time, retry_count) {
-                        RetryDecision::Retry { execute_after } => execute_after,
-                        RetryDecision::DoNotRetry => {
-                            return Err(FetchRepoDataError::FailedToDownload(url, err))
-                        }
-                    };
-                let duration = execute_after
-                    .duration_since(SystemTime::now())
-                    .unwrap_or(Duration::ZERO);
-
-                // Wait for a second to let the remote service restore itself. This increases
-                // the chance of success.
-                tracing::warn!(
+                    // Wait for a second to let the remote service restore itself. This increases
+                    // the chance of success.
+                    tracing::warn!(
                         "failed to download repodata from {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
                         &url,
                         err,
                         retry_count,
                         duration
                     );
-                tokio::time::sleep(duration).await;
+                    tokio::time::sleep(duration).await;
+                }
+                Err(e) => return Err(e),
             }
-            Err(e) => return Err(e),
+
+            retry_count += 1;
         }
-
-        retry_count += 1;
     };
-
-    if let Some((reporter, index)) = download_reporter {
-        reporter.on_download_complete(&response_url, index);
-    }
 
     // Persist the file to its final destination
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path)
-            .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
+            .persist(repo_data_destination_path.clone())
+            .map_err(|e| {
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+            })?;
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding
@@ -511,11 +499,8 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        blake2_hash_nominal: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
-        has_jlap: variant_availability.has_jlap,
-        jlap: jlap_state,
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {
@@ -547,7 +532,7 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    reporter: Option<(&dyn Reporter, usize)>,
+    reporter: Option<(&dyn DownloadReporter, usize)>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
@@ -559,7 +544,7 @@ async fn stream_and_decode_to_file(
         .inspect_ok(|bytes| {
             total_bytes += bytes.len();
         })
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
 
     // Create a new stream from the byte stream that decodes the bytes using the
     // transfer encoding on the fly.
@@ -600,10 +585,10 @@ async fn stream_and_decode_to_file(
     let (_, hash) = hashing_file_writer.finalize();
 
     tracing::debug!(
-        "downloaded {}, decoded that into {}, BLAKE2 hash: {:x}",
+        "downloaded {}, decoded that into {}, BLAKE2 hash: {}",
         SizeFormatter::new(total_bytes, DECIMAL),
         SizeFormatter::new(bytes, DECIMAL),
-        hash
+        hex::encode(hash)
     );
 
     Ok((temp_file, hash))
@@ -614,7 +599,6 @@ async fn stream_and_decode_to_file(
 pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
     has_bz2: Option<Expiring<bool>>,
-    has_jlap: Option<Expiring<bool>>,
 }
 
 impl VariantAvailability {
@@ -629,18 +613,12 @@ impl VariantAvailability {
     pub fn has_bz2(&self) -> bool {
         self.has_bz2.as_ref().is_some_and(|state| state.value)
     }
-
-    /// Returns true if there is a JLAP variant available, regardless of when it
-    /// was checked
-    pub fn has_jlap(&self) -> bool {
-        self.has_jlap.as_ref().is_some_and(|state| state.value)
-    }
 }
 
 /// Determine the availability of `repodata.json` variants (like a `.zst` or
 /// `.bz2`) by checking a cache or the internet.
 pub async fn check_variant_availability(
-    client: &reqwest_middleware::ClientWithMiddleware,
+    client: &LazyClient,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
@@ -648,7 +626,7 @@ pub async fn check_variant_availability(
 ) -> VariantAvailability {
     // Determine from the cache which variant are available. This is currently
     // cached for a maximum of 14 days.
-    let expiration_duration = chrono::TimeDelta::try_days(14).expect("14 days is a valid duration");
+    let expiration_duration = jiff::Span::new().days(14);
     let has_zst = if options.zstd_enabled {
         cache_state
             .and_then(|state| state.has_zst.as_ref())
@@ -665,19 +643,10 @@ pub async fn check_variant_availability(
     } else {
         Some(false)
     };
-    let has_jlap = if options.jlap_enabled {
-        cache_state
-            .and_then(|state| state.has_jlap.as_ref())
-            .and_then(|value| value.value(expiration_duration))
-            .copied()
-    } else {
-        Some(false)
-    };
 
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
     let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
-    let jlap_repodata_url = subdir_url.join(jlap::JLAP_FILE_NAME).unwrap();
 
     let zst_future = match has_zst {
         Some(_) => {
@@ -687,7 +656,7 @@ pub async fn check_variant_availability(
         None => async {
             Some(Expiring {
                 value: check_valid_download_target(&zst_repodata_url, client).await,
-                last_checked: chrono::Utc::now(),
+                last_checked: jiff::Timestamp::now(),
             })
         }
         .right_future(),
@@ -699,7 +668,7 @@ pub async fn check_variant_availability(
     let bz2_future = if has_zst == Some(true) {
         // If we already know that zst is available we simply copy the availability
         // value from the last time we checked.
-        ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
+        ready(cache_state.and_then(|state| state.has_bz2.clone())).right_future()
     } else {
         // If the zst variant might not be available we need to check whether bz2 is
         // available.
@@ -711,43 +680,22 @@ pub async fn check_variant_availability(
                 }
                 None => Some(Expiring {
                     value: check_valid_download_target(&bz2_repodata_url, client).await,
-                    last_checked: chrono::Utc::now(),
+                    last_checked: jiff::Timestamp::now(),
                 }),
             }
         }
         .left_future()
     };
 
-    let jlap_future = match has_jlap {
-        Some(_) => {
-            // The last cached value is valid, so we simply copy that
-            ready(cache_state.and_then(|state| state.has_jlap.clone())).left_future()
-        }
-        None => async {
-            Some(Expiring {
-                value: check_valid_download_target(&jlap_repodata_url, client).await,
-                last_checked: chrono::Utc::now(),
-            })
-        }
-        .right_future(),
-    };
-
     // Await all futures so they happen concurrently. Note that a request might not
     // actually happen if the cache is still valid.
-    let (has_zst, has_bz2, has_jlap) = futures::join!(zst_future, bz2_future, jlap_future);
+    let (has_zst, has_bz2) = futures::join!(zst_future, bz2_future);
 
-    VariantAvailability {
-        has_zst,
-        has_bz2,
-        has_jlap,
-    }
+    VariantAvailability { has_zst, has_bz2 }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
-async fn check_valid_download_target(
-    url: &Url,
-    client: &reqwest_middleware::ClientWithMiddleware,
-) -> bool {
+async fn check_valid_download_target(url: &Url, client: &LazyClient) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
     if url.scheme() == "file" {
@@ -761,7 +709,7 @@ async fn check_valid_download_target(
         exists
     } else {
         // Otherwise, perform a HEAD request to determine whether the url seems valid.
-        match client.head(url.clone()).send().await {
+        match client.client().head(url.clone()).send().await {
             Ok(response) => {
                 if response.status().is_success() {
                     tracing::debug!("'{url}' seems to be available");
@@ -843,7 +791,7 @@ fn validate_cached_state(
     // Try to read the repodata state cache
     let cache_state = match RepoDataState::from_path(&cache_state_path) {
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            // Ignore, the cache just doesnt exist
+            // Ignore, the cache just doesn't exist
             tracing::debug!("repodata cache state is missing. Ignoring cached files...");
             return ValidatedCacheState::InvalidOrMissing;
         }
@@ -878,7 +826,9 @@ fn validate_cached_state(
     // Determine last modified date of the repodata.json file.
     let cache_last_modified = match json_metadata.modified() {
         Err(_) => {
-            tracing::warn!("could not determine last modified date of repodata.json file. Ignoring cached files...");
+            tracing::warn!(
+                "could not determine last modified date of repodata.json file. Ignoring cached files..."
+            );
             return ValidatedCacheState::Mismatched(cache_state);
         }
         Ok(last_modified) => last_modified,
@@ -912,7 +862,9 @@ fn validate_cached_state(
         if json_metadata.len() != cache_state.cache_size
             || Some(cache_last_modified) != json_metadata.modified().ok()
         {
-            tracing::warn!("repodata cache state mismatches the existing repodatajson file. Ignoring cached files...");
+            tracing::warn!(
+                "repodata cache state mismatches the existing repodatajson file. Ignoring cached files..."
+            );
             return ValidatedCacheState::Mismatched(cache_state);
         }
     }
@@ -932,8 +884,8 @@ fn validate_cached_state(
         match CacheControl::from_value(cache_control) {
             None => {
                 tracing::warn!(
-                "could not parse cache_control from repodata cache state. Ignoring cached files..."
-            );
+                    "could not parse cache_control from repodata cache state. Ignoring cached files..."
+                );
                 return ValidatedCacheState::Mismatched(cache_state);
             }
             Some(CacheControl {
@@ -976,13 +928,14 @@ mod test {
         net::SocketAddr,
         path::{Path, PathBuf},
         sync::{
-            atomic::{AtomicUsize, Ordering},
             Arc,
+            atomic::{AtomicUsize, Ordering},
         },
     };
 
     use assert_matches::assert_matches;
     use axum::{
+        Router,
         body::Body,
         extract::State,
         http::{Request, StatusCode},
@@ -990,27 +943,25 @@ mod test {
         middleware::Next,
         response::{IntoResponse, Response},
         routing::get,
-        Router,
     };
     use bytes::Bytes;
     use fs_err::tokio as tokio_fs;
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use hex_literal::hex;
-    use rattler_networking::AuthenticationMiddleware;
+    use rattler_networking::{AuthenticationMiddleware, LazyClient};
     use reqwest::Client;
-    use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
     use tempfile::TempDir;
     use tokio::{io::AsyncWriteExt, sync::Mutex};
     use tokio_util::io::ReaderStream;
     use url::Url;
 
     use crate::{
+        DownloadReporter, Reporter,
         fetch::{
-            with_cache::{fetch_repo_data, CacheResult, CachedRepoData, FetchRepoDataOptions},
             FetchRepoDataError, RepoDataNotFoundError,
+            with_cache::{CacheResult, CachedRepoData, FetchRepoDataOptions, fetch_repo_data},
         },
-        utils::{simple_channel_server::SimpleChannelServer, Encoding},
-        Reporter,
+        utils::{Encoding, simple_channel_server::SimpleChannelServer},
     };
 
     async fn write_encoded(
@@ -1100,8 +1051,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1130,7 +1081,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
+            LazyClient::default(),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1143,7 +1094,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
+            LazyClient::default(),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1157,7 +1108,7 @@ mod test {
         );
 
         // I know this is terrible but without the sleep rust is too blazingly fast and
-        // the server doesnt think the file was actually updated.. This is
+        // the server doesn't think the file was actually updated.. This is
         // because the time send by the server has seconds precision.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
@@ -1167,8 +1118,8 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1196,8 +1147,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1238,8 +1189,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1259,6 +1210,66 @@ mod test {
             result.cache_state.has_bz2, Some(super::Expiring {
                 value, ..
             }) if value
+        );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_bz2_404_falls_back_to_repodata_json() {
+        let subdir_path = TempDir::new().unwrap();
+        write_encoded(
+            FAKE_REPO_DATA.as_bytes(),
+            &subdir_path.path().join("repodata.json.bz2"),
+            Encoding::Bz2,
+        )
+        .await
+        .unwrap();
+
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
+        let cache_dir = TempDir::new().unwrap();
+        let options = FetchRepoDataOptions {
+            zstd_enabled: false,
+            ..FetchRepoDataOptions::default()
+        };
+
+        let result = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.path().to_owned(),
+            options.clone(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(result.cache_state.url.path().ends_with("repodata.json.bz2"));
+        drop(result);
+
+        std::fs::remove_file(subdir_path.path().join("repodata.json.bz2")).unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+
+        // Let the local HTTP cache entry expire while keeping the compressed variant
+        // availability cache fresh.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let result = fetch_repo_data(
+            server.url(),
+            LazyClient::default(),
+            cache_dir.keep(),
+            options,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(result.repo_data_json_path).unwrap(),
+            FAKE_REPO_DATA
+        );
+        assert!(result.cache_state.url.path().ends_with("repodata.json"));
+        assert_matches!(
+            result.cache_state.has_bz2, Some(super::Expiring {
+                value, ..
+            }) if !value
         );
     }
 
@@ -1287,8 +1298,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1342,8 +1353,8 @@ mod test {
 
         let result = fetch_repo_data(
             server.url(),
-            authenticated_client,
-            cache_dir.into_path(),
+            authenticated_client.into(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1369,6 +1380,12 @@ mod test {
         }
 
         impl Reporter for BasicReporter {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+        }
+
+        impl DownloadReporter for BasicReporter {
             fn on_download_progress(
                 &self,
                 _url: &Url,
@@ -1390,8 +1407,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let _result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             Some(reporter.clone()),
         )
@@ -1408,13 +1425,13 @@ mod test {
         let subdir_path = TempDir::new().unwrap();
         // Don't add repodata to the channel.
 
-        // Download the "data" from the local filebased channel.
+        // Download the "data" from the local file-based channel.
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1435,8 +1452,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1508,10 +1525,7 @@ mod test {
                 // Create a stream that ends prematurely
                 let stream = stream::iter(vec![
                     Ok(bytes.into_iter().collect::<Bytes>()),
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "premature close",
-                    )),
+                    Err(std::io::Error::other("premature close")),
                     // The stream ends after sending partial data, simulating a premature close
                 ]);
                 let body = Body::from_stream(stream);
@@ -1542,17 +1556,14 @@ mod test {
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
-        let client = ClientBuilder::new(Client::default()).build();
-
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server_url,
-            client,
+            LazyClient::default(),
             cache_dir.path().into(),
             FetchRepoDataOptions {
                 bz2_enabled: false,
                 zstd_enabled: false,
-                jlap_enabled: false,
                 ..FetchRepoDataOptions::default()
             },
             None,
@@ -1567,5 +1578,34 @@ mod test {
             2,
             "there must have been exactly two requests"
         );
+    }
+
+    /// Regression test for <https://github.com/conda/rattler/issues/1952>.
+    ///
+    /// On Windows, memory-mapped files cannot be deleted unless they were
+    /// opened with `FILE_SHARE_DELETE`.  `SparseRepoData::from_file` sets
+    /// that flag.  This verifies the file can be deleted while mapped.
+    #[test]
+    #[cfg(feature = "sparse")]
+    fn test_can_delete_mmap_opened_via_sparse_repodata() {
+        use rattler_conda_types::{Channel, ChannelConfig};
+
+        let temp = TempDir::new().unwrap();
+        let json_path = temp.path().join("repodata.json");
+        std::fs::write(
+            &json_path,
+            r#"{"info":{"subdir":"noarch"},"packages":{},"packages.conda":{}}"#,
+        )
+        .unwrap();
+
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("test", &channel_config).unwrap();
+
+        let _sparse =
+            crate::sparse::SparseRepoData::from_file(channel, "noarch", &json_path, None).unwrap();
+
+        // Must succeed even while the file is memory-mapped.
+        std::fs::remove_file(&json_path)
+            .expect("should be able to delete a file opened with FILE_SHARE_DELETE");
     }
 }

@@ -1,28 +1,15 @@
-use std::convert::TryFrom;
-
 use nom::{
+    IResult, Parser,
     branch::alt,
-    bytes::complete::{tag, take_while},
+    bytes::complete::{tag, take_while, take_while1},
     character::complete::{alpha1, digit1, multispace0, u32},
-    combinator::{all_consuming, cut, map, not, opt, recognize, value},
-    error::{context, convert_error, ContextError, ParseError},
-    multi::{many0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
-    IResult,
+    combinator::{cut, not, opt, recognize, value},
+    error::{ContextError, ParseError, context},
+    sequence::{delimited, preceded, terminated},
 };
 use thiserror::Error;
 
-use crate::version_spec::{
-    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
-};
-
-/// A representation of an hierarchy of version constraints e.g.
-/// `1.3.4,>=5.0.1|(1.2.4,>=3.0.1)`.
-#[derive(Debug, Eq, PartialEq)]
-pub(super) enum VersionTree<'a> {
-    Term(&'a str),
-    Group(LogicalOperator, Vec<VersionTree<'a>>),
-}
+use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseVersionTreeError {
@@ -58,14 +45,15 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
             VersionOperators::StrictRange(StrictRangeOperator::Compatible),
             tag("~="),
         ),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Recognizes the version epoch
 fn parse_version_epoch<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, u32), nom::Err<E>> {
-    terminated(u32, tag("!"))(input)
+    terminated(u32, tag("!")).parse(input)
 }
 
 /// A parser that recognizes a version
@@ -81,9 +69,9 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
             let num = digit1;
             let glob = tag("*");
             if allow_glob {
-                alt((ident, num, glob))(input)
+                alt((ident, num, glob)).parse(input)
             } else {
-                alt((ident, num))(input)
+                alt((ident, num)).parse(input)
             }
         }
     }
@@ -93,18 +81,36 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
         allow_glob: bool,
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
-            recognize(tuple((
-                recognize_version_component(allow_glob),
-                many0(preceded(
-                    opt(take_while(|c: char| c == '.' || c == '-' || c == '_')),
-                    recognize_version_component(allow_glob),
-                )),
-            )))(input)
+            // Parse the first component (required)
+            let (mut rest, _) = recognize_version_component::<E>(allow_glob)(input)?;
+            // Parse subsequent separator + component pairs without allocating
+            loop {
+                let after_sep = match opt(take_while::<_, _, E>(|c: char| {
+                    c == '.' || c == '-' || c == '_'
+                }))
+                .parse(rest)
+                {
+                    Ok((r, _)) => r,
+                    Err(_) => break,
+                };
+                match recognize_version_component::<E>(allow_glob)(after_sep) {
+                    Ok((r, _)) => rest = r,
+                    Err(_) => break,
+                }
+            }
+            // Versions can end in one or more underscores or dashes (e.g.
+            // `3.7b_`), those are part of the version. A trailing `.` stays
+            // unconsumed so globs like `3.*` keep working.
+            if let Ok((r, _)) = take_while1::<_, _, E>(|c: char| c == '_' || c == '-').parse(rest) {
+                rest = r;
+            }
+            let matched = &input[..input.len() - rest.len()];
+            Ok((rest, matched))
         }
     }
 
     move |input: &'a str| {
-        recognize(tuple((
+        recognize((
             // Optional version epoch
             opt(context("epoch", parse_version_epoch)),
             // Version components
@@ -114,7 +120,8 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
                 tag("+"),
                 cut(context("local", recognize_version_components(allow_glob))),
             )),
-        )))(input)
+        ))
+        .parse(input)
     }
 }
 
@@ -130,7 +137,8 @@ pub(crate) fn recognize_version_with_star<'a, E: ParseError<&'a str> + ContextEr
         ),
         // Just a *
         tag("*"),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// A parser that recognized a constraint but does not actually parse it.
@@ -151,138 +159,17 @@ pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a
             )),
             cut(context("version", recognize_version_with_star)),
         )),
-    ))(input)
-}
-
-impl<'a> TryFrom<&'a str> for VersionTree<'a> {
-    type Error = ParseVersionTreeError;
-
-    fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        /// Parse a single term or a group surrounded by parenthesis.
-        fn parse_term<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            alt((
-                delimited(
-                    terminated(tag("("), multispace0),
-                    parse_or_group,
-                    preceded(multispace0, tag(")")),
-                ),
-                map(recognize_constraint, |constraint| {
-                    VersionTree::Term(constraint)
-                }),
-            ))(input)
-        }
-
-        /// Given multiple version tree components, flatten the structure as
-        /// much as possible.
-        fn flatten_group(operator: LogicalOperator, args: Vec<VersionTree<'_>>) -> VersionTree<'_> {
-            if args.len() == 1 {
-                args.into_iter().next().unwrap()
-            } else {
-                let mut result = Vec::new();
-                for term in args {
-                    match term {
-                        VersionTree::Group(op, mut others) if op == operator => {
-                            result.append(&mut others);
-                        }
-                        term => result.push(term),
-                    }
-                }
-
-                VersionTree::Group(operator, result)
-            }
-        }
-
-        /// Parses a group of version constraints separated by ,s
-        fn parse_and_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            let (rest, group) =
-                separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)(input)?;
-            Ok((rest, flatten_group(LogicalOperator::And, group)))
-        }
-
-        /// Parses a group of version constraints
-        fn parse_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-            input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
-            let (rest, group) = separated_list1(
-                delimited(multispace0, tag("|"), multispace0),
-                parse_and_group,
-            )(input)?;
-            Ok((rest, flatten_group(LogicalOperator::Or, group)))
-        }
-
-        match all_consuming(parse_or_group)(input) {
-            Ok((_, tree)) => Ok(tree),
-            Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
-                Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
-            }
-            _ => unreachable!("with all_consuming the only error can be Error"),
-        }
-    }
+    ))
+    .parse(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
-    use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
+    use super::{parse_operator, recognize_version};
     use crate::version_spec::{
-        version_tree::{parse_version_epoch, recognize_constraint},
         EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+        version_tree::{parse_version_epoch, recognize_constraint},
     };
-
-    #[test]
-    fn test_treeify() {
-        use LogicalOperator::{And, Or};
-        use VersionTree::{Group, Term};
-
-        assert_eq!(VersionTree::try_from("1.2.3").unwrap(), Term("1.2.3"));
-
-        assert_eq!(
-            VersionTree::try_from("1.2.3,(4.5.6),<=7.8.9").unwrap(),
-            Group(And, vec![Term("1.2.3"), Term("4.5.6"), Term("<=7.8.9")])
-        );
-        assert_eq!(
-            VersionTree::try_from("((1.2.3)|(4.5.6))|<=7.8.9").unwrap(),
-            Group(Or, vec![Term("1.2.3"), Term("4.5.6"), Term("<=7.8.9")])
-        );
-
-        assert_eq!(
-            VersionTree::try_from("1.2.3,4.5.6|<=7.8.9").unwrap(),
-            Group(
-                Or,
-                vec![
-                    Group(And, vec![Term("1.2.3"), Term("4.5.6")]),
-                    Term("<=7.8.9")
-                ]
-            )
-        );
-
-        assert_eq!(VersionTree::try_from("((((1.5))))").unwrap(), Term("1.5"));
-
-        assert_eq!(
-            VersionTree::try_from("((1.5|((1.6|1.7), 1.8), 1.9 |2.0))|2.1").unwrap(),
-            Group(
-                Or,
-                vec![
-                    Term("1.5"),
-                    Group(
-                        And,
-                        vec![
-                            Group(Or, vec![Term("1.6"), Term("1.7")]),
-                            Term("1.8"),
-                            Term("1.9")
-                        ]
-                    ),
-                    Term("2.0"),
-                    Term("2.1")
-                ]
-            )
-        );
-    }
 
     #[test]
     fn test_parse_operator() {
@@ -353,6 +240,20 @@ mod tests {
         );
         assert_eq!(recognize_version::<Err<'_>>(false)("3."), Ok((".", "3")));
         assert_eq!(recognize_version::<Err<'_>>(false)("3.*"), Ok((".*", "3")));
+
+        // Trailing underscores and dashes are part of the version
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("3.7b_"),
+            Ok(("", "3.7b_"))
+        );
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("1.0__"),
+            Ok(("", "1.0__"))
+        );
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("1.0-"),
+            Ok(("", "1.0-"))
+        );
 
         let versions = [
             // Implicit epoch of 0
@@ -455,10 +356,5 @@ mod tests {
             recognize_constraint::<Err<'_>>(">=3.8.*,<3.9"),
             Ok((",<3.9", ">=3.8.*"))
         );
-    }
-
-    #[test]
-    fn issue_204() {
-        assert!(VersionTree::try_from(">=3.8<3.9").is_err());
     }
 }

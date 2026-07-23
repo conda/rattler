@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use http::StatusCode;
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
-use reqwest_middleware::ClientWithMiddleware;
+use futures::future::OptionFuture;
+use rattler_conda_types::{
+    Channel, ChannelRelations, PackageName, RepodataRevisions, ShardedRepodata,
+};
+use rattler_networking::LazyClient;
 use url::Url;
 
 use super::add_trailing_slash;
@@ -10,31 +12,33 @@ use super::add_trailing_slash;
 mod index;
 
 use crate::{
+    GatewayError, Reporter,
     fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
-        sharded_subdir::{decode_zst_bytes_async, parse_records},
-        subdir::SubdirClient,
+        sharded_subdir::{
+            decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
+        },
+        subdir::{PackageRecords, SubdirClient},
     },
     reporter::ResponseReporterExt,
-    GatewayError, Reporter,
 };
 
 pub struct ShardedSubdir {
     channel: Channel,
-    client: ClientWithMiddleware,
+    client: LazyClient,
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl ShardedSubdir {
     pub async fn new(
         channel: Channel,
         subdir: String,
-        client: ClientWithMiddleware,
-        concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+        client: LazyClient,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
@@ -53,10 +57,12 @@ impl ShardedSubdir {
         )
         .await
         .map_err(|e| match e {
-            GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
+            GatewayError::ReqwestError(e)
+                if e.status().is_some_and(is_missing_sharded_repodata_status) =>
+            {
                 GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
-                    subdir,
+                    subdir: subdir.clone(),
                     source: e.into(),
                 }))
             }
@@ -100,29 +106,38 @@ impl SubdirClient for ShardedSubdir {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(vec![].into());
+            return Ok(PackageRecords::default());
         };
 
         // Download the shard
         let shard_url = self
             .shards_base_url
-            .join(&format!("{shard:x}.msgpack.zst"))
+            .join(&format!("{}.msgpack.zst", hex::encode(shard)))
             .expect("invalid shard url");
 
         let shard_request = self
             .client
+            .client()
             .get(shard_url.clone())
             .build()
             .expect("failed to build shard request");
 
         let shard_bytes = {
-            let _permit = self.concurrent_requests_semaphore.acquire();
-            let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
+            let _request_permit = OptionFuture::from(
+                self.concurrent_requests_semaphore
+                    .as_deref()
+                    .map(tokio::sync::Semaphore::acquire),
+            )
+            .await;
+            let reporter = reporter
+                .and_then(Reporter::download_reporter)
+                .map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
+                .client()
                 .execute(shard_request)
                 .await
                 .and_then(|r| r.error_for_status().map_err(Into::into))
@@ -140,20 +155,26 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
-        // Create a future to parse the records from the shard
-        let records = parse_records(
+        // Parse the records from the shard (includes dep extraction)
+        parse_records(
             shard_bytes,
             self.channel.base_url.clone(),
             self.package_base_url.clone(),
         )
-        .await?;
-
-        Ok(records.into())
+        .await
     }
 
     fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
+    }
+
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        &self.sharded_repodata.info.repodata_revisions
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sharded_repodata.info.channel_relations.as_ref()
     }
 }

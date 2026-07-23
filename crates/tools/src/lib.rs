@@ -1,7 +1,10 @@
 pub mod libsolv_bindings;
 mod test_files;
 
-pub use test_files::{download_and_cache_file, download_and_cache_file_async};
+pub use test_files::{
+    download_and_cache_file, download_and_cache_file_async, fetch_test_conda_forge_repodata,
+    fetch_test_conda_forge_repodata_async, test_data_dir,
+};
 
 use std::{
     fs,
@@ -17,7 +20,7 @@ pub enum Mode {
     Overwrite,
 
     /// Verify that the file on disk contains the same content as the generated content. Returns an
-    /// error if thats not the case.
+    /// error if that is not the case.
     Verify,
 }
 
@@ -33,18 +36,20 @@ fn update(path: &Path, contents: &str, mode: Mode) -> anyhow::Result<()> {
 
     if mode == Mode::Verify {
         let changes = difference::Changeset::new(&old_contents, &contents, "\n");
-        anyhow::bail!("==================================================\n`{}` is not up-to-date\n==================================================\n{}", path.display(), changes,);
+        anyhow::bail!(
+            "==================================================\n`{}` is not up-to-date\n==================================================\n{}",
+            path.display(),
+            changes,
+        );
     }
     eprintln!("updating {}", path.display());
     fs::write(path, contents)?;
     Ok(())
 }
 
-/// Reformats the given input with `rustfmt`.
+/// Re-formats the given input with `rustfmt`.
 fn reformat(text: impl std::fmt::Display) -> anyhow::Result<String> {
     let mut rustfmt = Command::new("rustfmt")
-        //.arg("--config-path")
-        //.arg(project_root().join("rustfmt.toml"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()?;
@@ -71,7 +76,9 @@ mod test {
     #[test]
     fn libsolv_bindings_up_to_date() {
         if let Err(error) = super::libsolv_bindings::generate(Mode::Verify) {
-            panic!("{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\nMake sure you run that command both on Windows and on a unix machine!\n");
+            panic!(
+                "{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\nMake sure you run that command both on Windows and on a unix machine!\n"
+            );
         }
     }
 }

@@ -25,14 +25,14 @@ environments:
 packages:
   - conda: ../minimal-project
     name: minimal-project
-    version: '0.1'
+    version: "0.1"
     subdir: win-64
     build: "first"
     depends:
       - __win
   - conda: ../minimal-project
     name: minimal-project
-    version: '0.1'
+    version: "0.1"
     build: "second"
     subdir: win-64
     depends:
@@ -40,21 +40,20 @@ packages:
     path:
   - conda: ../minimal-project
     name: minimal-project
-    version: '0.1'
+    version: "0.1"
     subdir: linux-64
     build: "first"
     depends:
       - __unix
   - conda: ../a-python-project
     name: a-python-project
-    version: '0.1'
+    version: "0.1"
     build: "py38"
     subdir: noarch
     noarch: python
   - conda: ../a-python-project
     name: b-python-project
-    version: '0.1'
+    version: "0.1"
     build: "h398123"
     subdir: noarch
     noarch: python
-

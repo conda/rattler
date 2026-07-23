@@ -107,7 +107,7 @@ impl AsRef<HashMap<String, String>> for BaseMenuItemPlaceholders {
 
 /// Replace placeholders in a string with values from a hashmap
 /// This only replaces placeholders in the form of {{ key }} (note: while this looks like a Jinja template, it is not).
-fn replace_placeholders(mut text: String, replacements: &HashMap<String, String>) -> String {
+pub fn replace_placeholders(mut text: String, replacements: &HashMap<String, String>) -> String {
     for (key, value) in replacements {
         let placeholder = format!("{{{{ {key} }}}}");
         text = text.replace(&placeholder, value);

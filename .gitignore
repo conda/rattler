@@ -20,10 +20,12 @@ target/
 
 # pixi
 .pixi/
-pixi.lock
 
 # test files that we download
 test-data/channels/conda-forge/
 
 # Visual studio files
 .vs/
+
+# Local environment files
+*.local.*

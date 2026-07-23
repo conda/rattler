@@ -7,8 +7,11 @@ use itertools::Itertools;
 use rattler_conda_types::{
     Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
-use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
+use rattler_solve::{
+    ChannelPriority, SolveStrategy,
+    resolvo::{CondaDependencyProvider, NameType},
+};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
 
@@ -19,18 +22,23 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
         .join("channels")
         .join("conda-forge");
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
-    let channel = Channel::from_directory(&channel_path);
+    let channel = Channel::try_from_directory(&channel_path).unwrap();
 
     let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");
 
-    SparseRepoData::load_records_recursive(&[sparse_repo_data], [package_name.clone()], None)
-        .expect("failed to load records")
+    SparseRepoData::load_records_recursive(
+        &[sparse_repo_data],
+        [package_name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .expect("failed to load records")
 }
 
 fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> String {
     let match_spec = MatchSpec::from_str(package_name, Lenient).unwrap();
-    let package_name = match_spec.name.clone().unwrap();
+    let package_name = match_spec.name.as_exact().unwrap().clone();
 
     // Load repodata
     let repodata = load_repodata(&package_name);
@@ -41,17 +49,19 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         &[],
         &[],
         &[],
-        &[match_spec.clone()],
+        std::slice::from_ref(&match_spec),
+        None,
         None,
         ChannelPriority::default(),
         None,
         strategy,
+        Vec::new(), // dependency_overrides
     )
     .expect("failed to create dependency provider");
 
     let name = dependency_provider
         .pool
-        .intern_package_name(package_name.as_normalized());
+        .intern_package_name(NameType::from(&package_name));
     let version_set = dependency_provider
         .pool
         .intern_version_set(name, match_spec.into_nameless().1.into());

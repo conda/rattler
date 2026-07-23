@@ -1,7 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/environment_yaml.rs
-assertion_line: 186
-expression: "EnvironmentYaml::from_path(&path).unwrap()"
+expression: "EnvironmentYaml::from_path(path).unwrap()"
 input_file: test-data/environments/mamba_dev_extra.environment.yaml
 ---
 channels:

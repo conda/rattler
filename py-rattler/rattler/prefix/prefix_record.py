@@ -1,10 +1,26 @@
 from __future__ import annotations
 import os
+from enum import Enum
 from typing import List, Optional
 
-from rattler.rattler import PyRecord
+from rattler.rattler import PyRecord, PyLink
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
+from pathlib import Path
+
+
+class LinkType(Enum):
+    HARDLINK = ("hardlink",)
+    COPY = ("copy",)
+    SOFTLINK = ("softlink",)
+    DIRECTORY = ("directory",)
+
+
+class Link:
+    _inner: PyLink
+
+    def __init__(self, path: os.PathLike[str], type: Optional[LinkType]) -> None:
+        self._inner = PyLink(path, type.value if type else None)
 
 
 class PrefixRecord(RepoDataRecord):
@@ -22,18 +38,22 @@ class PrefixRecord(RepoDataRecord):
         self,
         repodata_record: RepoDataRecord,
         paths_data: PrefixPaths,
+        link: Optional[Link] = None,
         package_tarball_full_path: Optional[os.PathLike[str]] = None,
         extracted_package_dir: Optional[os.PathLike[str]] = None,
         requested_spec: Optional[str] = None,
+        requested_specs: Optional[List[str]] = None,
         files: Optional[List[os.PathLike[str]]] = None,
     ) -> None:
         record = PyRecord.create_prefix_record(
-            repodata_record._record,
-            paths_data._paths,
-            package_tarball_full_path,
-            extracted_package_dir,
-            requested_spec,
-            files,
+            repodata_record=repodata_record._record,
+            paths_data=paths_data._paths,
+            link=link._inner if link else None,
+            package_tarball_full_path=package_tarball_full_path,
+            extracted_package_dir=extracted_package_dir,
+            files=files,
+            requested_spec=requested_spec,
+            requested_specs=requested_specs,
         )
         self._record = record
 
@@ -61,7 +81,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.write_to_path(path, pretty)
 
     @property
-    def package_tarball_full_path(self) -> Optional[os.PathLike[str]]:
+    def package_tarball_full_path(self) -> Optional[Path]:
         """
         The path to where the archive of the package was stored on disk.
 
@@ -71,7 +91,7 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.package_tarball_full_path
+        >>> str(r.package_tarball_full_path)
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2'
         >>>
         ```
@@ -83,7 +103,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.package_tarball_full_path = value
 
     @property
-    def extracted_package_dir(self) -> Optional[os.PathLike[str]]:
+    def extracted_package_dir(self) -> Optional[Path]:
         """
         The path that contains the extracted package content.
 
@@ -93,7 +113,7 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.extracted_package_dir
+        >>> str(r.extracted_package_dir)
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0'
         >>>
         ```
@@ -105,7 +125,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.extracted_package_dir = value
 
     @property
-    def files(self) -> List[os.PathLike[str]]:
+    def files(self) -> List[Path]:
         """
         A sorted list of all files included in this package
 
@@ -151,11 +171,8 @@ class PrefixRecord(RepoDataRecord):
     @property
     def requested_spec(self) -> Optional[str]:
         """
-        The spec that was used when this package was installed.
-        Note that this field is not currently updated if another
-        spec was used. If this package was not directly requested by the
-        user but was instead installed as a dependency of another package
-        `None` will be returned.
+        The spec that was used when this package was installed (deprecated).
+        Use requested_specs instead.
 
         Examples
         --------
@@ -163,8 +180,8 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.requested_spec
-        ''
+        >>> r.requested_spec is None
+        True
         >>>
         ```
         """
@@ -173,6 +190,31 @@ class PrefixRecord(RepoDataRecord):
     @requested_spec.setter
     def requested_spec(self, value: Optional[str]) -> None:
         self._record.requested_spec = value
+
+    @property
+    def requested_specs(self) -> List[str]:
+        """
+        The specs that were used when this package was installed.
+        If this package was not directly requested by the user but was instead
+        installed as a dependency of another package an empty list will be
+        returned.
+
+        Examples
+        --------
+        ```python
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.requested_specs
+        []
+        >>>
+        ```
+        """
+        return self._record.requested_specs
+
+    @requested_specs.setter
+    def requested_specs(self, value: List[str]) -> None:
+        self._record.requested_specs = value
 
     def __repr__(self) -> str:
         """

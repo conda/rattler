@@ -1,8 +1,7 @@
 name: Rust Release
 
 permissions:
-  pull-requests: write
-  contents: write
+  contents: read
 
 on:
   push:
@@ -10,19 +9,79 @@ on:
       - main
 
 jobs:
-  release-plz:
-    name: Release-plz
+  # Release unpublished packages.
+  release-plz-release:
+    name: Release-plz release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      - name: Obtain GitHub app token
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: write
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          token: ${{ steps.octo-sts.outputs.token }}
           lfs: false
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup show
+
+      - name: Disable LFS globally
+        # We really don't want to checkout / clone / fetch any LFS files anymore
+        run: |
+          # Remove LFS first
+          git lfs uninstall
+          sudo apt remove -y git-lfs
+
+          # Clean any LFS remnants
+          rm -rf .git/lfs
+          rm -rf ~/.git-lfs
+
+          # Verify configs are gone
+          git config --global --list
+      - name: Run release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Create a PR with the new versions and changelog, preparing the next release.
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Obtain GitHub app token
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: write
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ steps.octo-sts.outputs.token }}
+          lfs: false
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: Install Rust toolchain
+        run: rustup show
 
       - name: Disable LFS globally
         # We really don't want to checkout / clone / fetch any LFS files anymore
@@ -39,7 +98,23 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        id: release-plz
+        with:
+          command: release-pr
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Update bindings lockfiles
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          PR: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          gh pr checkout "$(jq -r .number <<<"$PR")"
+          cargo update --manifest-path py-rattler/Cargo.toml --workspace
+          cargo update --manifest-path js-rattler/Cargo.toml --workspace
+          git add py-rattler/Cargo.lock js-rattler/Cargo.lock
+          git diff --cached --quiet || git commit -m "chore: update bindings lockfiles"
+          git push

@@ -1,10 +1,11 @@
-use chrono::{DateTime, Utc};
-use fxhash::FxHashMap;
-use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
+//! Serde utilities for conda types.
+
+use indexmap::IndexMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _, ser::Error};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{
-    collections::BTreeMap,
     marker::PhantomData,
     path::{Path, PathBuf},
 };
@@ -99,44 +100,127 @@ impl<'de> DeserializeAs<'de, String> for MultiLineString {
     }
 }
 
-pub(crate) struct Timestamp;
+/// Wrapper type for timestamps that preserves whether they were originally
+/// in seconds or milliseconds format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TimestampMs {
+    timestamp: jiff::Timestamp,
+    /// Whether the original timestamp was in milliseconds (true) or seconds (false)
+    is_millis: bool,
+}
 
-impl<'de> DeserializeAs<'de, chrono::DateTime<chrono::Utc>> for Timestamp {
-    fn deserialize_as<D>(deserializer: D) -> Result<chrono::DateTime<chrono::Utc>, D::Error>
+impl TimestampMs {
+    /// Create a new `TimestampMs` from a `Timestamp` with millisecond precision
+    pub fn from_timestamp_millis(timestamp: jiff::Timestamp) -> Self {
+        Self {
+            timestamp,
+            is_millis: true,
+        }
+    }
+
+    /// Create a new `TimestampMs` from a `Timestamp` with second precision
+    pub fn from_timestamp_seconds(timestamp: jiff::Timestamp) -> Self {
+        Self {
+            timestamp,
+            is_millis: false,
+        }
+    }
+
+    /// Get the inner `Timestamp`
+    pub fn jiff_timestamp(&self) -> jiff::Timestamp {
+        self.timestamp
+    }
+
+    /// Get the timestamp as seconds since Unix epoch
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp.as_second()
+    }
+
+    /// Get the timestamp as milliseconds since Unix epoch
+    pub fn timestamp_millis(&self) -> i64 {
+        self.timestamp.as_millisecond()
+    }
+}
+
+impl PartialOrd for TimestampMs {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TimestampMs {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.timestamp.cmp(&other.timestamp)
+    }
+}
+
+// Allow comparison with jiff::Timestamp
+impl PartialEq<jiff::Timestamp> for TimestampMs {
+    fn eq(&self, other: &jiff::Timestamp) -> bool {
+        self.timestamp == *other
+    }
+}
+
+impl PartialOrd<jiff::Timestamp> for TimestampMs {
+    fn partial_cmp(&self, other: &jiff::Timestamp) -> Option<std::cmp::Ordering> {
+        self.timestamp.partial_cmp(other)
+    }
+}
+
+impl From<jiff::Timestamp> for TimestampMs {
+    fn from(timestamp: jiff::Timestamp) -> Self {
+        // Default to millisecond precision for compatibility
+        Self::from_timestamp_millis(timestamp)
+    }
+}
+
+impl From<TimestampMs> for jiff::Timestamp {
+    fn from(ts: TimestampMs) -> Self {
+        ts.timestamp
+    }
+}
+
+impl<'de> Deserialize<'de> for TimestampMs {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let timestamp = i64::deserialize(deserializer)?;
 
-        // Convert from milliseconds to seconds
-        let microseconds = if timestamp > 253_402_300_799 {
-            timestamp * 1_000
+        // Determine if this is milliseconds or seconds based on magnitude
+        let (ts, is_millis) = if timestamp > 253_402_300_799 {
+            // This is milliseconds (year 9999 in seconds is 253402300799)
+            let ts = jiff::Timestamp::from_millisecond(timestamp).map_err(|_err| {
+                D::Error::custom("got invalid timestamp, timestamp out of range")
+            })?;
+            (ts, true)
         } else {
-            timestamp * 1_000_000
+            // This is seconds
+            let ts = jiff::Timestamp::from_second(timestamp).map_err(|_err| {
+                D::Error::custom("got invalid timestamp, timestamp out of range")
+            })?;
+            (ts, false)
         };
 
-        // Convert the timestamp to a UTC timestamp
-        chrono::DateTime::from_timestamp_micros(microseconds)
-            .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))
+        Ok(Self {
+            timestamp: ts,
+            is_millis,
+        })
     }
 }
 
-impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
-    fn serialize_as<S>(source: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+impl Serialize for TimestampMs {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        // Convert the date to a timestamp
-        let timestamp: i64 = source.timestamp_millis();
-
-        // Determine the precision of the timestamp.
-        let timestamp = if timestamp % 1000 == 0 {
-            timestamp / 1000
+        // Preserve the original format
+        let timestamp = if self.is_millis {
+            self.timestamp.as_millisecond()
         } else {
-            timestamp
+            self.timestamp.as_second()
         };
 
-        // Serialize the timestamp
         timestamp.serialize(serializer)
     }
 }
@@ -146,8 +230,8 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
 pub struct DeserializeFromStrUnchecked;
 
 /// A helper function used to sort map alphabetically when serializing.
-pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &FxHashMap<String, T>,
+pub(crate) fn sort_map_alphabetically<K: Ord + Serialize, T: Serialize, H, S: serde::Serializer>(
+    value: &HashMap<K, T, H>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value
@@ -156,8 +240,32 @@ pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
         .serialize(serializer)
 }
 
+/// A helper function used to sort map alphabetically when serializing.
+pub(crate) fn sort_index_map_alphabetically<
+    K: Ord + Serialize,
+    T: Serialize,
+    H,
+    S: serde::Serializer,
+>(
+    value: &IndexMap<K, T, H>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
+}
+
+/// A helper function used to sort a set alphabetically when serializing.
+pub(crate) fn sort_set_alphabetically<K: Ord + Serialize, S: serde::Serializer>(
+    value: &ahash::HashSet<K>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value.iter().collect::<BTreeSet<_>>().serialize(serializer)
+}
+
 /// A helper to serialize and deserialize `track_features` in repodata. Track
-/// features are expected to be a space seperated list. However, in the past we
+/// features are expected to be a space separated list. However, in the past we
 /// have serialized and deserialized them as a list of strings so for
 /// deserialization that behavior is retained.
 pub struct Features;
@@ -195,5 +303,103 @@ impl<'de> DeserializeAs<'de, Vec<String>> for Features {
                     .collect())
             })
             .deserialize(deserializer)
+    }
+}
+
+pub fn is_none_or_empty_string(opt: &Option<String>) -> bool {
+    opt.as_ref().is_none_or(String::is_empty)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_timestamp_ms_preserves_seconds() {
+        // Test a timestamp in seconds (1640000000 = 2021-12-20)
+        let json = "1640000000";
+        let ts: TimestampMs = serde_json::from_str(json).unwrap();
+
+        // Verify it was recognized as seconds
+        assert!(!ts.is_millis);
+
+        // Verify it round-trips correctly
+        let serialized = serde_json::to_string(&ts).unwrap();
+        assert_eq!(serialized, json);
+    }
+
+    #[test]
+    fn test_timestamp_ms_preserves_milliseconds() {
+        // Test a timestamp in milliseconds (1640000000000 = 2021-12-20)
+        let json = "1640000000000";
+        let ts: TimestampMs = serde_json::from_str(json).unwrap();
+
+        // Verify it was recognized as milliseconds
+        assert!(ts.is_millis);
+
+        // Verify it round-trips correctly
+        let serialized = serde_json::to_string(&ts).unwrap();
+        assert_eq!(serialized, json);
+    }
+
+    #[test]
+    fn test_timestamp_ms_milliseconds_ending_with_000() {
+        // Test a timestamp in milliseconds that ends with 000
+        // This was the problematic case in the old implementation
+        let json = "1640000000000"; // 2021-12-20 00:00:00.000
+        let ts: TimestampMs = serde_json::from_str(json).unwrap();
+
+        // Verify it was recognized as milliseconds
+        assert!(ts.is_millis);
+
+        // Verify it serializes back to milliseconds (not seconds)
+        let serialized = serde_json::to_string(&ts).unwrap();
+        assert_eq!(serialized, json);
+    }
+
+    #[test]
+    fn test_timestamp_ms_seconds_ending_with_000() {
+        // Test a timestamp in seconds that ends with 000
+        let json = "1640000000"; // 2021-12-20 00:00:00
+        let ts: TimestampMs = serde_json::from_str(json).unwrap();
+
+        // Verify it was recognized as seconds
+        assert!(!ts.is_millis);
+
+        // Verify it serializes back to seconds
+        let serialized = serde_json::to_string(&ts).unwrap();
+        assert_eq!(serialized, json);
+    }
+
+    #[test]
+    fn test_timestamp_ms_from_timestamp() {
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
+
+        // Test creating from timestamp with milliseconds precision marker
+        let ts_millis = TimestampMs::from_timestamp_millis(timestamp);
+        assert_eq!(ts_millis.jiff_timestamp(), timestamp);
+        // Serializes as milliseconds
+        let json = serde_json::to_string(&ts_millis).unwrap();
+        assert_eq!(json, "1640000000000");
+
+        // Test creating from timestamp with seconds precision marker
+        let ts_seconds = TimestampMs::from_timestamp_seconds(timestamp);
+        assert_eq!(ts_seconds.jiff_timestamp(), timestamp);
+        // Serializes as seconds
+        let json = serde_json::to_string(&ts_seconds).unwrap();
+        assert_eq!(json, "1640000000");
+    }
+
+    #[test]
+    fn test_timestamp_ms_conversion() {
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
+
+        // Test From trait
+        let ts: TimestampMs = timestamp.into();
+        assert_eq!(ts.jiff_timestamp(), timestamp);
+
+        // Test Into trait
+        let converted: jiff::Timestamp = ts.into();
+        assert_eq!(converted, timestamp);
     }
 }

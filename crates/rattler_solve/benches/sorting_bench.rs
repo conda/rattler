@@ -1,21 +1,27 @@
-use std::path::Path;
+use std::{hint::black_box, path::Path};
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
-use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::resolvo::CondaDependencyProvider;
-use rattler_solve::ChannelPriority;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
+use rattler_solve::{
+    ChannelPriority,
+    resolvo::{CondaDependencyProvider, NameType},
+};
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
     let match_spec =
         MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
-    let package_name = match_spec.name.clone().unwrap();
+    let package_name = match_spec.name.as_exact().unwrap().clone();
 
-    let repodata =
-        SparseRepoData::load_records_recursive([sparse_repo_data], [package_name.clone()], None)
-            .expect("failed to load records");
+    let repodata = SparseRepoData::load_records_recursive(
+        [sparse_repo_data],
+        [package_name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .expect("failed to load records");
 
     // Construct a cache
     c.bench_function(&format!("sort {spec}"), |b| {
@@ -29,17 +35,19 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     &[],
                     &[],
                     &[],
-                    &[match_spec.clone()],
+                    std::slice::from_ref(&match_spec),
+                    None,
                     None,
                     ChannelPriority::default(),
                     None,
                     rattler_solve::SolveStrategy::Highest,
+                    Vec::new(),
                 )
                 .expect("failed to create dependency provider");
 
                 let name = dependency_provider
                     .pool
-                    .intern_package_name(package_name.as_normalized());
+                    .intern_package_name(NameType::from(&package_name));
                 let version_set = dependency_provider
                     .pool
                     .intern_version_set(name, match_spec.into_nameless().1.into());
@@ -65,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .join("channels")
         .join("conda-forge");
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
-    let channel = Channel::from_directory(&channel_path);
+    let channel = Channel::try_from_directory(&channel_path).unwrap();
 
     let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");

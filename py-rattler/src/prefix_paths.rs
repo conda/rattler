@@ -1,5 +1,5 @@
 use crate::{paths_json::PyFileMode, utils::sha256_from_pybytes};
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
+use pyo3::{Bound, PyResult, Python, exceptions::PyValueError, pyclass, pymethods, types::PyBytes};
 use rattler_conda_types::prefix_record::{PathType, PathsEntry, PrefixPaths};
 use std::path::PathBuf;
 
@@ -50,7 +50,7 @@ impl PyPrefixPathsEntry {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPaths {
@@ -69,10 +69,10 @@ impl From<PrefixPaths> for PyPrefixPaths {
     }
 }
 
-/// An entry in the paths_data attribute of the PrefixRecord
-/// This is similar to PathsEntry from paths_json but refers
+/// An entry in the `paths_data` attribute of the `PrefixRecord`
+/// This is similar to `PathsEntry` from `paths_json` but refers
 /// to an entry for an installed package
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPathsEntry {
@@ -92,9 +92,9 @@ impl From<PyPrefixPathsEntry> for PathsEntry {
 }
 
 /// The path type of the path entry
-/// This is similar to PathType from paths_json; however, it contains additional enum fields
+/// This is similar to `PathType` from `paths_json`; however, it contains additional enum fields
 /// since it represents a file that's installed
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPrefixPathType {
@@ -130,13 +130,13 @@ impl PyPrefixPathType {
             "pyc_file" => Ok(Self {
                 inner: PathType::PycFile,
             }),
-            "windows_python_entrypoint_script" => Ok(Self {
+            "windows_python_entry_point_script" => Ok(Self {
                 inner: PathType::WindowsPythonEntryPointScript,
             }),
-            "windows_python_entrypoint_exe" => Ok(Self {
+            "windows_python_entry_point_exe" => Ok(Self {
                 inner: PathType::WindowsPythonEntryPointExe,
             }),
-            "unix_python_entrypoint" => Ok(Self {
+            "unix_python_entry_point" => Ok(Self {
                 inner: PathType::UnixPythonEntryPoint,
             }),
             _ => Err(PyValueError::new_err("Invalid path type")),
@@ -169,20 +169,20 @@ impl PyPrefixPathType {
 
     /// A Windows entry point python script (a <entrypoint>-script.py Python script file)
     #[getter]
-    pub fn windows_python_entrypoint_script(&self) -> bool {
+    pub fn windows_python_entry_point_script(&self) -> bool {
         matches!(&self.inner, PathType::WindowsPythonEntryPointScript)
     }
 
     /// A Windows Python entry point executable (a <entrypoint>.exe file)
     #[getter]
-    pub fn windows_python_entrypoint_exe(&self) -> bool {
+    pub fn windows_python_entry_point_exe(&self) -> bool {
         matches!(&self.inner, PathType::WindowsPythonEntryPointExe)
     }
 
     /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
     /// Entry points are created in the `bin/...` directory when installing Python noarch packages
     #[getter]
-    pub fn unix_python_entrypoint(&self) -> bool {
+    pub fn unix_python_entry_point(&self) -> bool {
         matches!(&self.inner, PathType::UnixPythonEntryPoint)
     }
 }
@@ -249,7 +249,7 @@ impl PyPrefixPathsEntry {
     }
 
     /// A hex representation of the SHA256 hash of the contents of the file
-    /// If prefix_placeholder is present, this represents the hash of the file *before*
+    /// If `prefix_placeholder` is present, this represents the hash of the file *before*
     /// any placeholders were replaced
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
@@ -262,7 +262,7 @@ impl PyPrefixPathsEntry {
     // }
 
     /// A hex representation of the SHA256 hash of the contents of the file as installed
-    /// This will be present only if prefix_placeholder is defined. In this case,
+    /// This will be present only if `prefix_placeholder` is defined. In this case,
     /// this is the hash of the file after the placeholder has been replaced.
     #[getter]
     pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {

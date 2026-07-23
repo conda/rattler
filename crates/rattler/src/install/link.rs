@@ -3,8 +3,8 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
+use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -16,7 +16,8 @@ use std::fs::Permissions;
 use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+use super::apple_codesign::{AppleCodeSignBehavior, codesign};
+use super::{ExternalSymlinkPolicy, Prefix};
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -91,10 +92,18 @@ pub enum LinkFileError {
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
+    /// The atime/mtime could not be updated on the destination file.
+    #[error("could not update file modification and access time")]
+    FailedToUpdateDestinationFileTimestamps(#[source] std::io::Error),
+
     /// The binary (dylib or executable) could not be signed (codesign -f -s -) on
     /// macOS ARM64 (Apple Silicon).
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary,
+
+    /// The symlink target escapes the target prefix directory.
+    #[error("symlink target escapes the target prefix")]
+    SymlinkTargetEscapesPrefix,
 
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
@@ -106,6 +115,7 @@ pub enum LinkFileError {
 }
 
 /// The successful result of calling [`link_file`].
+#[derive(Debug)]
 pub struct LinkedFile {
     /// True if an existing file already existed and linking overwrote the original file.
     pub clobbered: bool,
@@ -134,25 +144,32 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
-#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
+///
+/// The `modification_time` is a timestamp we set on all files we modify. We want a value
+/// we control here to make the generated filesystem tree more reproducible. `modification_time`
+/// should be greater than any of the modification times of any of the files that were packaged
+/// up (ignoring any data conda stores).
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub fn link_file(
     path_json_entry: &PathsEntry,
     destination_relative_path: PathBuf,
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     target_prefix: &str,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
-) -> Result<LinkedFile, LinkFileError> {
+    modification_time: filetime::FileTime,
+    external_symlink_policy: ExternalSymlinkPolicy,
+) -> Result<Option<LinkedFile>, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
-    let destination_path = target_dir.join(&destination_relative_path);
+    let destination_path = target_dir.path().join(&destination_relative_path);
 
     // Temporary variables to store intermediate computations in. If we already computed the file
-    // size or the sha hash we dont have to recompute them at the end of the function.
+    // size or the sha hash we don't have to recompute them at the end of the function.
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
@@ -164,6 +181,9 @@ pub fn link_file(
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = map_or_read_source_file(&source_path)?;
+
+        // Detect file type from the content
+        let file_type = FileType::detect(source.as_ref());
 
         // Open the destination file
         let destination = BufWriter::with_capacity(
@@ -215,16 +235,14 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // Copy over filesystem permissions. We do this to ensure that the destination file has the
-        // same permissions as the source file.
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        fs::set_permissions(&destination_path, metadata.permissions())
-            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-
-        // (re)sign the binary if the file is executable
-        if has_executable_permissions(&metadata.permissions())
-            && target_platform == Platform::OsxArm64
+        // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
+        // This is required for all macOS platforms because prefix replacement modifies the binary
+        // content, which invalidates existing signatures. We need to preserve entitlements.
+        if (has_executable_permissions(&metadata.permissions())
+            || file_type == Some(FileType::MachO))
+            && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
@@ -257,18 +275,51 @@ pub fn link_file(
                 );
             }
         }
+
+        // Copy file permissions and timestamps
+        fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        filetime::set_file_times(&destination_path, modification_time, modification_time)
+            .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?
-    } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        symlink_to_destination(&source_path, &destination_path)?
+    } else if path_json_entry.path_type == PathType::SoftLink {
+        // The source for a SoftLink may be missing if extraction skipped it (this
+        // happens on Windows when the user lacks the privileges required to create
+        // symlinks; see `rattler_package_streaming::tokio::shared`). Convert the
+        // resulting NotFound into a skip rather than failing the whole install.
+        let dispatch = if allow_symbolic_links {
+            symlink_to_destination(
+                &source_path,
+                &destination_path,
+                target_dir.path(),
+                external_symlink_policy,
+            )
+        } else {
+            copy_symlink_target_to_destination(&source_path, &destination_path)
+        };
+        match dispatch {
+            Ok(method) => method,
+            Err(LinkFileError::FailedToReadSymlink(io) | LinkFileError::FailedToLink(_, io))
+                if io.kind() == ErrorKind::NotFound =>
+            {
+                tracing::warn!(
+                    "skipping symlink entry '{}': source missing in package cache (likely skipped during extraction)",
+                    path_json_entry.relative_path.display()
+                );
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        }
     } else {
         copy_to_destination(&source_path, &destination_path)?
     };
 
-    // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
+    // Compute the final SHA256 if we didn't already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
     } else if link_method == LinkMethod::Softlink {
@@ -295,7 +346,7 @@ pub fn link_file(
         Sha256Hash::default()
     };
 
-    // Compute the final file size if we didnt already.
+    // Compute the final file size if we didn't already.
     let file_size = if let Some(file_size) = file_size {
         file_size
     } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
@@ -311,14 +362,14 @@ pub fn link_file(
         .as_ref()
         .map(|p| p.placeholder.clone());
 
-    Ok(LinkedFile {
+    Ok(Some(LinkedFile {
         clobbered: false,
         sha256,
         file_size,
         relative_path: destination_relative_path,
         method: link_method,
         prefix_placeholder,
-    })
+    }))
 }
 
 /// Either a memory mapped file or the complete contents of a file read to memory.
@@ -378,15 +429,19 @@ fn reflink_to_destination(
     loop {
         match reflink(source_path, destination_path) {
             Ok(_) => {
-                #[cfg(target_os = "linux")]
+                #[cfg(not(target_os = "macos"))]
                 {
-                    // Copy over filesystem permissions. We do this to ensure that the destination file has the
-                    // same permissions as the source file.
-                    let metadata = fs::metadata(source_path)
+                    // Mac is documented to clone the file attributes and extended attributes. Linux and Windows
+                    // both do not guarantee that, so copy permissions and timestamps
+                    let metadata = fs::symlink_metadata(source_path)
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
                     fs::set_permissions(destination_path, metadata.permissions())
                         .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                    filetime::set_file_times(destination_path, file_time, file_time)
+                        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
                 }
+
                 return Ok(LinkMethod::Reflink);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -419,7 +474,10 @@ fn hardlink_to_destination(
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
         match fs::hard_link(source_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Hardlink),
+            Ok(_) => {
+                // No need to copy file permissions, hard links share those anyway
+                return Ok(LinkMethod::Hardlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -441,13 +499,59 @@ fn hardlink_to_destination(
 fn symlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
+    target_prefix: &Path,
+    external_symlink_policy: ExternalSymlinkPolicy,
 ) -> Result<LinkMethod, LinkFileError> {
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
+
+    // Resolve the symlink target relative to the destination's parent and
+    // verify it stays inside the target prefix.
+    let resolved = destination_path
+        .parent()
+        .unwrap_or(destination_path)
+        .join(&linked_path);
+
+    let mut normalized = PathBuf::new();
+    for component in resolved.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normalized.push(other),
+        }
+    }
+
+    if !normalized.starts_with(target_prefix) {
+        match external_symlink_policy {
+            ExternalSymlinkPolicy::Allow => {}
+            ExternalSymlinkPolicy::Warn => {
+                tracing::warn!(
+                    "symlink {} points outside the target prefix: {}",
+                    destination_path.display(),
+                    linked_path.display()
+                );
+            }
+            ExternalSymlinkPolicy::Deny => {
+                return Err(LinkFileError::SymlinkTargetEscapesPrefix);
+            }
+        }
+    }
+
     loop {
         match symlink(&linked_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Softlink),
+            Ok(_) => {
+                // Copy timestamps as permissions are not relevant on soft links
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_symlink_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Softlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -458,7 +562,7 @@ fn symlink_to_destination(
                     "failed to symlink {}: {e}, falling back to copying.",
                     destination_path.display()
                 );
-                return copy_to_destination(source_path, destination_path);
+                return copy_symlink_target_to_destination(source_path, destination_path);
             }
         }
     }
@@ -478,10 +582,30 @@ fn copy_to_destination(
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
-            Ok(_) => return Ok(LinkMethod::Copy),
+            Ok(_) => {
+                // Copy file modification times, fs::copy transfers file permissions automatically
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Copy);
+            }
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
+}
+
+/// Copy the file a cached symlink points to. `fs::copy` on the symlink itself
+/// fails when its target is only valid in the install prefix, so we resolve
+/// through the cache first.
+fn copy_symlink_target_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
+    let resolved = fs::canonicalize(source_path).map_err(LinkFileError::FailedToReadSymlink)?;
+    copy_to_destination(&resolved, destination_path)
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
@@ -690,6 +814,13 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    if new_prefix.len() > old_prefix.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "target prefix cannot be longer than the placeholder prefix",
+        ));
+    }
+
     let finder = memchr::memmem::Finder::new(old_prefix);
 
     loop {
@@ -697,7 +828,7 @@ pub fn copy_and_replace_cstring_placeholder(
             // write all bytes up to the old prefix, followed by the new prefix.
             destination.write_all(&source_bytes[..index])?;
 
-            // Find the end of the c-style string. The nul terminator basically.
+            // Find the end of the c-style string. The null terminator basically.
             let mut end = index + old_prefix.len();
             while end < source_bytes.len() && source_bytes[end] != b'\0' {
                 end += 1;
@@ -723,8 +854,8 @@ pub fn copy_and_replace_cstring_placeholder(
 
             // Compute the padding required when replacing the old prefix(es) with the new one. If the old
             // prefix is longer than the new one we need to add padding to ensure that the entire part
-            // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
-            // ensures that the text will remain a valid nul-terminated string.
+            // will hold the same number of bytes. We do this by adding '\0's (e.g. null terminators). This
+            // ensures that the text will remain a valid null-terminated string.
             let padding = old_len.saturating_sub(out.len());
             destination.write_all(&vec![0; padding])?;
 
@@ -755,13 +886,239 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
     return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
 }
 
+/// Represents the type of file detected from its content
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum FileType {
+    /// A Mach-O binary (executable, dylib, bundle, etc.)
+    MachO,
+}
+
+impl FileType {
+    // Mach-O magic bytes constants
+    const MACHO_FAT_MAGIC: u32 = 0xcafebabe; // Fat/Universal binary (big-endian)
+    const MACHO_FAT_CIGAM: u32 = 0xbebafeca; // Fat/Universal binary (little-endian)
+    const MACHO_MAGIC_32: u32 = 0xfeedface; // Mach-O 32-bit (big-endian)
+    const MACHO_CIGAM_32: u32 = 0xcefaedfe; // Mach-O 32-bit (little-endian)
+    const MACHO_MAGIC_64: u32 = 0xfeedfacf; // Mach-O 64-bit (big-endian)
+    const MACHO_CIGAM_64: u32 = 0xcffaedfe; // Mach-O 64-bit (little-endian)
+
+    /// Detects the file type by checking its magic bytes.
+    /// Returns `Some(FileType)` if a known file type is detected, `None` otherwise.
+    fn detect(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 4 {
+            return None;
+        }
+
+        let magic = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+        match magic {
+            Self::MACHO_FAT_MAGIC
+            | Self::MACHO_FAT_CIGAM
+            | Self::MACHO_MAGIC_32
+            | Self::MACHO_CIGAM_32
+            | Self::MACHO_MAGIC_64
+            | Self::MACHO_CIGAM_64 => Some(FileType::MachO),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::ExternalSymlinkPolicy;
     use super::PYTHON_REGEX;
     use fs_err as fs;
     use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
+
+    /// Patched files must receive `modification_time` rather than preserving
+    /// the source file's mtime. Without this, Python reuses stale .pyc files
+    /// whose headers record the original source mtime, even though the .py
+    /// content was changed by prefix replacement.
+    #[test]
+    fn test_patched_file_receives_modification_time() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(
+            package_dir.join("config.py"),
+            "prefix = '/old/placeholder/path'\n",
+        )
+        .unwrap();
+
+        let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
+        filetime::set_file_times(package_dir.join("config.py"), source_time, source_time).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("config.py"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: Some(PrefixPlaceholder {
+                file_mode: FileMode::Text,
+                placeholder: "/old/placeholder/path".to_string(),
+            }),
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("config.py"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.method, super::LinkMethod::Patched(FileMode::Text));
+
+        let content = fs::read_to_string(target_dir.path().join("config.py")).unwrap();
+        assert!(content.contains(target_dir.path().to_str().unwrap()));
+        assert!(!content.contains("/old/placeholder/path"));
+
+        let dest_metadata = fs::metadata(target_dir.path().join("config.py")).unwrap();
+        let dest_mtime = filetime::FileTime::from_last_modification_time(&dest_metadata);
+        assert_eq!(
+            dest_mtime, modification_time,
+            "patched file should have modification_time ({modification_time}), not source mtime ({source_time})",
+        );
+    }
+
+    /// Files without `prefix_placeholder` are reflinked/hardlinked/copied and
+    /// must keep their original mtime, not receive `modification_time`.
+    #[test]
+    fn test_unpatched_file_keeps_source_mtime() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(package_dir.join("data.txt"), "no prefix here\n").unwrap();
+
+        let source_time = filetime::FileTime::from_unix_time(1_000_000, 0);
+        filetime::set_file_times(package_dir.join("data.txt"), source_time, source_time).unwrap();
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("data.txt"),
+            no_link: false,
+            path_type: PathType::HardLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("data.txt"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_ne!(
+            result.method,
+            super::LinkMethod::Patched(rattler_conda_types::package::FileMode::Text)
+        );
+        assert_ne!(
+            result.method,
+            super::LinkMethod::Patched(rattler_conda_types::package::FileMode::Binary)
+        );
+
+        let dest_metadata = fs::metadata(target_dir.path().join("data.txt")).unwrap();
+        let dest_mtime = filetime::FileTime::from_last_modification_time(&dest_metadata);
+        assert_eq!(
+            dest_mtime, source_time,
+            "unpatched file should keep source mtime ({source_time}), not modification_time ({modification_time})",
+        );
+    }
+
+    /// A `SoftLink` entry whose source is missing on disk (because extraction
+    /// skipped it, e.g. on Windows without symlink privileges) should be
+    /// skipped with `Ok(None)` instead of failing the whole install.
+    #[test]
+    fn test_missing_symlink_source_is_skipped() {
+        use super::AppleCodeSignBehavior;
+        use rattler_conda_types::package::{PathType, PathsEntry};
+        use rattler_conda_types::prefix::Prefix;
+        use std::path::PathBuf;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let package_dir = temp_dir.path().join("package");
+        fs::create_dir_all(&package_dir).unwrap();
+        // Intentionally do NOT create `missing-link` in package_dir.
+
+        let target_dir = Prefix::create(temp_dir.path().join("target")).unwrap();
+        let modification_time = filetime::FileTime::from_unix_time(2_000_000, 0);
+
+        let entry = PathsEntry {
+            relative_path: PathBuf::from("missing-link"),
+            no_link: false,
+            path_type: PathType::SoftLink,
+            prefix_placeholder: None,
+            sha256: None,
+            size_in_bytes: None,
+        };
+
+        let result = super::link_file(
+            &entry,
+            PathBuf::from("missing-link"),
+            &package_dir,
+            &target_dir,
+            target_dir.path().to_str().unwrap(),
+            true,
+            true,
+            true,
+            Platform::Linux64,
+            AppleCodeSignBehavior::DoNothing,
+            modification_time,
+            ExternalSymlinkPolicy::Deny,
+        )
+        .unwrap();
+
+        assert!(
+            result.is_none(),
+            "expected Ok(None) for missing symlink source"
+        );
+        assert!(
+            !target_dir.path().join("missing-link").exists(),
+            "no destination file should have been created"
+        );
+    }
 
     #[rstest]
     #[case("Hello, cruel world!", "cruel", "fabulous", "Hello, fabulous world!")]
@@ -799,8 +1156,6 @@ mod test {
         "cruel",
         b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
-    #[case(b"short\x00", "short", "verylong", b"veryl\x00")]
-    #[case(b"short1234\x00", "short", "verylong", b"verylong1\x00")]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,
@@ -821,6 +1176,26 @@ mod test {
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[rstest]
+    #[case(b"short\x00", "short", "verylong")]
+    #[case(b"short1234\x00", "short", "verylong")]
+    pub fn test_shorter_binary_placeholder(
+        #[case] input: &[u8],
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+    ) {
+        assert!(target_prefix.len() > prefix_placeholder.len());
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+        );
+        assert!(result.is_err());
     }
 
     #[test]
@@ -950,5 +1325,139 @@ mod test {
         for s in no_match_strings {
             assert!(!PYTHON_REGEX.is_match(s));
         }
+    }
+
+    #[test]
+    fn test_detect_file_type() {
+        use super::FileType;
+
+        // Test Mach-O 64-bit magic (big-endian)
+        let macho_64_be = [0xfe, 0xed, 0xfa, 0xcf, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_be), Some(FileType::MachO));
+
+        // Test Mach-O 64-bit magic (little-endian)
+        let macho_64_le = [0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_le), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (big-endian)
+        let macho_32_be = [0xfe, 0xed, 0xfa, 0xce, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_be), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (little-endian)
+        let macho_32_le = [0xce, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_le), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (big-endian)
+        let fat_be = [0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_be), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (little-endian)
+        let fat_le = [0xbe, 0xba, 0xfe, 0xca, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_le), Some(FileType::MachO));
+
+        // Test non-Mach-O file
+        let not_macho = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05];
+        assert_eq!(FileType::detect(&not_macho), None);
+
+        // Test short file
+        let short = [0xfe, 0xed];
+        assert_eq!(FileType::detect(&short), None);
+
+        // Test empty file
+        let empty: [u8; 0] = [];
+        assert_eq!(FileType::detect(&empty), None);
+    }
+
+    #[test]
+    fn test_symlink_escape_rejected() {
+        use super::{LinkFileError, symlink_to_destination};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let prefix = tmp.path().join("prefix");
+        let cache = tmp.path().join("cache");
+        fs::create_dir_all(prefix.join("lib")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../../../../escape_target", cache.join("lib/sneaky-link"))
+            .unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(
+            "..\\..\\..\\..\\escape_target",
+            cache.join("lib\\sneaky-link"),
+        )
+        .unwrap();
+
+        let result = symlink_to_destination(
+            &cache.join("lib/sneaky-link"),
+            &prefix.join("lib/sneaky-link"),
+            &prefix,
+            ExternalSymlinkPolicy::Deny,
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            LinkFileError::SymlinkTargetEscapesPrefix
+        ));
+    }
+
+    #[test]
+    fn test_symlink_within_prefix_allowed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let prefix = tmp.path().join("prefix");
+        let cache = tmp.path().join("cache");
+        fs::create_dir_all(prefix.join("lib")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../bin/real_file", cache.join("lib/safe-link")).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file("..\\bin\\real_file", cache.join("lib\\safe-link"))
+            .unwrap();
+
+        let result = super::symlink_to_destination(
+            &cache.join("lib/safe-link"),
+            &prefix.join("lib/safe-link"),
+            &prefix,
+            ExternalSymlinkPolicy::Deny,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[cfg_attr(
+        windows,
+        ignore = "creating symlinks on Windows requires elevated privileges"
+    )]
+    #[test]
+    fn test_copy_symlink_target_to_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("cache");
+        let dest_dir = tmp.path().join("dest");
+        fs::create_dir_all(cache.join("bin")).unwrap();
+        fs::create_dir_all(cache.join("lib")).unwrap();
+        fs::create_dir_all(&dest_dir).unwrap();
+
+        let real_file = cache.join("bin/real_file");
+        fs::write(&real_file, b"hello world").unwrap();
+
+        let symlink_path = cache.join("lib/link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("../bin/real_file", &symlink_path).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file("..\\bin\\real_file", &symlink_path).unwrap();
+
+        let dest_path = dest_dir.join("link");
+        let method = super::copy_symlink_target_to_destination(&symlink_path, &dest_path)
+            .expect("copying through a symlink source should succeed");
+
+        assert_eq!(method, super::LinkMethod::Copy);
+        assert!(
+            !dest_path
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "destination should be a regular file, not a symlink"
+        );
+        assert_eq!(fs::read(&dest_path).unwrap(), b"hello world");
     }
 }

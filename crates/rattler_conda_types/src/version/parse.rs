@@ -3,12 +3,11 @@ use crate::version::flags::Flags;
 use crate::version::segment::Segment;
 use crate::version::{ComponentVec, SegmentVec};
 use nom::branch::alt;
-use nom::bytes::complete::tag_no_case;
 use nom::character::complete::{alpha1, char, digit1, one_of};
-use nom::combinator::{map, opt, value};
+use nom::combinator::{map, opt};
 use nom::error::{ErrorKind, FromExternalError, ParseError};
 use nom::sequence::terminated;
-use nom::IResult;
+use nom::{IResult, Parser};
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -110,7 +109,7 @@ impl<'i> FromExternalError<&'i str, ParseVersionErrorKind> for ParseVersionError
 /// Parses the epoch part of a version. This is a number followed by `'!'` at the start of the
 /// version string.
 pub fn epoch_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
-    let (rest, digits) = terminated(digit1, char('!'))(input)?;
+    let (rest, digits) = terminated(digit1, char('!')).parse(input)?;
     let epoch = digits
         .parse()
         .map_err(ParseVersionErrorKind::EpochMustBeInteger)
@@ -132,14 +131,23 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
     alt((
         // Parse a numeral
         map(numeral_parser, Component::Numeral),
-        // Parse special case components
-        value(Component::Post, tag_no_case("post")),
-        value(Component::Dev, tag_no_case("dev")),
-        // Parse an identifier
+        // Parse an identifier. `dev` and `post` are only special when they make up the entire
+        // non-numeric run; longer identifiers such as `devdev` remain plain strings.
         map(alpha1, |alpha: &'i str| {
-            Component::Iden(alpha.to_lowercase().into_boxed_str())
+            // Match `post`/`dev` without allocating; only `Iden` needs an owned copy.
+            if alpha.eq_ignore_ascii_case("post") {
+                Component::Post
+            } else if alpha.eq_ignore_ascii_case("dev") {
+                Component::Dev
+            } else if alpha.bytes().all(|b| b.is_ascii_lowercase()) {
+                // Already lowercase: skip re-lowercasing.
+                Component::Iden(Box::from(alpha))
+            } else {
+                Component::Iden(alpha.to_lowercase().into_boxed_str())
+            }
         }),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Parses a version segment from a list of components.
@@ -152,7 +160,7 @@ fn segment_parser<'i>(
         Ok(result) => result,
         // Convert undefined parse errors into an expect error
         Err(nom::Err::Error(ParseVersionErrorKind::Nom(_))) => {
-            return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent))
+            return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent));
         }
         Err(e) => return Err(e),
     };
@@ -168,7 +176,7 @@ fn segment_parser<'i>(
 
     // Loop until we can't find any more components
     loop {
-        let (remaining, component) = match opt(component_parser)(rest) {
+        let (remaining, component) = match opt(component_parser).parse(rest) {
             Ok((i, o)) => (i, o),
             Err(e) => {
                 // Remove any components that we may have added.
@@ -183,7 +191,7 @@ fn segment_parser<'i>(
                 None => {
                     return Err(nom::Err::Failure(
                         ParseVersionErrorKind::TooManyComponentsInASegment,
-                    ))
+                    ));
                 }
             }
         } else {
@@ -205,7 +213,8 @@ fn trailing_dash_underscore_parser(
     dash_or_underscore: Option<char>,
 ) -> IResult<&str, (Option<Component>, Option<char>), ParseVersionErrorKind> {
     // Parse a - or _. Return early if it cannot be found.
-    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_"))(input)
+    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_"))
+        .parse(input)
         .map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))?
     else {
         return Ok((input, (None, dash_or_underscore)));
@@ -218,7 +227,7 @@ fn trailing_dash_underscore_parser(
         (Some('-'), '_') | (Some('_'), '-') => {
             return Err(nom::Err::Error(
                 ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
-            ))
+            ));
         }
         _ => dash_or_underscore,
     };
@@ -250,7 +259,7 @@ fn version_part_parser<'i>(
     // Iterate over any additional segments that we find.
     let result = loop {
         // Parse a version segment separator.
-        let (rest, separator) = match opt(one_of("-._"))(input) {
+        let (rest, separator) = match opt(one_of("-._")).parse(input) {
             Ok((_, None)) => {
                 // No additional separator found, exit early.
                 return Ok((input, dash_or_underscore));
@@ -275,7 +284,7 @@ fn version_part_parser<'i>(
             (Some('-'), '_') | (Some('_'), '-') => {
                 break Err(nom::Err::Failure(
                     ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
-                ))
+                ));
             }
             _ => {}
         }
@@ -361,7 +370,7 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
     }
 
     // Parse an optional epoch.
-    let (input, epoch) = opt(epoch_parser)(input)?;
+    let (input, epoch) = opt(epoch_parser).parse(input)?;
     if let Some(epoch) = epoch {
         components.push(epoch.into());
         flags = flags.with_has_epoch(true);
@@ -444,8 +453,8 @@ impl FromStr for StrictVersion {
 #[cfg(test)]
 mod test {
     use super::Version;
-    use crate::version::parse::version_parser;
     use crate::version::SegmentFormatter;
+    use crate::version::parse::version_parser;
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::path::Path;
@@ -509,7 +518,7 @@ mod test {
     }
 
     /// Parse a large number of versions and see if parsing succeeded.
-    /// TODO: This doesnt really verify that the parsing is correct. Maybe we can parse the version
+    /// TODO: This doesn't really verify that the parsing is correct. Maybe we can parse the version
     /// with Conda too and verify that the results match?
     #[test]
     fn test_parse_all() {

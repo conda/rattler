@@ -8,7 +8,7 @@ use crate::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
+use serde_with::{OneOrMany, Same, serde_as, skip_serializing_none};
 
 use url::Url;
 
@@ -80,6 +80,10 @@ impl PackageFile for AboutJson {
     fn from_str(str: &str) -> Result<Self, Error> {
         serde_json::from_str(str).map_err(Into::into)
     }
+
+    fn from_slice(slice: &[u8]) -> Result<Self, Error> {
+        serde_json::from_slice(slice).map_err(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -106,7 +110,9 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        insta::assert_yaml_snapshot!(AboutJson::from_package_directory(package_dir.path()).unwrap());
+        insta::assert_yaml_snapshot!(
+            AboutJson::from_package_directory(package_dir.path()).unwrap()
+        );
     }
 
     #[test]
@@ -122,7 +128,7 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let package_dir = package_dir.into_path();
+        let package_dir = package_dir.keep();
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(AboutJson::from_package_directory(&package_dir).unwrap());

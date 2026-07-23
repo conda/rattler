@@ -4,7 +4,6 @@ from enum import Enum
 from typing import Iterable, Optional
 from pathlib import Path
 import os
-import sys
 from rattler.platform.platform import Platform, PlatformLiteral
 
 from rattler.rattler import (
@@ -34,21 +33,24 @@ class ActivationVariables:
     def __init__(
         self,
         current_prefix: Optional[os.PathLike[str]] = None,
-        current_path: Optional[Iterable[str] | Iterable[os.PathLike[str]]] = sys.path,
+        current_path: Optional[Iterable[str] | Iterable[os.PathLike[str]]] | None = None,
         path_modification_behavior: PathModificationBehavior = PathModificationBehavior.Prepend,
     ) -> None:
         """
         Construct a new ActivationVariables object.
 
         current_prefix: The current activated conda prefix (usually
-            `sys.env["CONDA_PREFIX"]`). This prefix is going to be deactivated.
-        current_path: The current PATH environment variable (usually `sys.path`).
+            `os.environ["CONDA_PREFIX"]`). This prefix is going to be deactivated.
+        current_path: The current PATH environment variable (usually
+            `os.environ["PATH"].split(os.pathsep)`).
         path_modification_behavior: The behavior to use when modifying the PATH
             environment variable. One of "Prepend", "Append", or "Replace".
             Defaults to "Prepend".
         """
         self._activation_variables = PyActivationVariables(
-            current_prefix, current_path, path_modification_behavior.value
+            current_prefix,
+            current_path or os.environ.get("PATH", "").split(os.pathsep),
+            path_modification_behavior.value,
         )
 
     def __str__(self) -> str:
@@ -92,7 +94,7 @@ class Shell:
 def activate(
     prefix: Path,
     activation_variables: ActivationVariables,
-    shell: Optional[Shell],
+    shell: Optional[Shell] = None,
     platform: Optional[Platform | PlatformLiteral] = None,
 ) -> ActivationResult:
     """
@@ -118,7 +120,7 @@ def activate(
     >>> from pathlib import Path
     >>> import sys
     >>> p = Path("/path/to/conda/prefix")
-    >>> actvars = ActivationVariables(None, sys.path)
+    >>> actvars = ActivationVariables()
     >>> a = activate(p, actvars, Shell.xonsh)
     >>> print(a)
     <rattler.shell.shell.ActivationResult object at ...>

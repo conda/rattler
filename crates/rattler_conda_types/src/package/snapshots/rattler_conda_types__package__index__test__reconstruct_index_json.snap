@@ -5,6 +5,7 @@ expression: "IndexJson::from_package_directory(package_dir.path()).unwrap()"
 arch: x86_64
 build: vc10_0
 build_number: 0
+depends: []
 features: vc10
 license: "zlib (http://zlib.net/zlib_license.html)"
 license_family: Other
@@ -12,4 +13,3 @@ name: zlib
 platform: win
 subdir: win-64
 version: 1.2.8
-

@@ -1,0 +1,139 @@
+//! in-memory storage for authentication information
+use std::{collections::HashMap, sync::Mutex};
+
+use crate::{
+    Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
+};
+
+/// A struct that implements storage and access of authentication
+/// information backed by a in-memory hashmap
+#[derive(Debug)]
+pub struct MemoryStorage {
+    name: Option<String>,
+    store: Mutex<HashMap<String, Authentication>>,
+}
+
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MemoryStorage {
+    /// Create a new empty memory storage
+    pub fn new() -> Self {
+        Self {
+            name: None,
+            store: Mutex::default(),
+        }
+    }
+
+    /// Create a new empty memory storage with a custom name. Used by tests
+    /// that need to distinguish between multiple in-memory backends layered
+    /// into the same `AuthenticationStorage` (e.g. to test shadowed-entry
+    /// behavior).
+    pub fn with_name(name: impl Into<String>) -> Self {
+        Self {
+            name: Some(name.into()),
+            store: Mutex::default(),
+        }
+    }
+}
+
+/// An error that can occur when accessing the authentication storage
+#[derive(thiserror::Error, Debug)]
+pub enum MemoryStorageError {
+    /// Could not lock the storage
+    #[error("Could not lock the storage")]
+    LockError,
+}
+
+impl StorageBackend for MemoryStorage {
+    fn name(&self) -> String {
+        match &self.name {
+            Some(n) => format!("memory ({n})"),
+            None => "memory".to_string(),
+        }
+    }
+
+    fn store(
+        &self,
+        host: &str,
+        authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        store.insert(host.to_string(), authentication.clone());
+        Ok(())
+    }
+
+    fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        Ok(store.get(host).cloned())
+    }
+
+    fn list(&self) -> Result<Vec<(String, crate::Authentication)>, AuthenticationStorageError> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        Ok(store
+            .iter()
+            .map(|(host, auth)| (host.clone(), auth.clone()))
+            .collect())
+    }
+
+    fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_err| MemoryStorageError::LockError)?;
+        store.remove(host);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_memory_storage() {
+        let storage = MemoryStorage::new();
+
+        assert_eq!(storage.get("test").unwrap(), None);
+
+        storage
+            .store("test", &Authentication::CondaToken("password".to_string()))
+            .unwrap();
+        assert_eq!(
+            storage.get("test").unwrap(),
+            Some(Authentication::CondaToken("password".to_string()))
+        );
+
+        storage
+            .store(
+                "bearer",
+                &Authentication::BearerToken("password".to_string()),
+            )
+            .unwrap();
+        storage
+            .store(
+                "basic",
+                &Authentication::BasicHTTP {
+                    username: "user".to_string(),
+                    password: "password".to_string(),
+                },
+            )
+            .unwrap();
+
+        storage.delete("test").unwrap();
+        assert_eq!(storage.get("test").unwrap(), None);
+    }
+}

@@ -1,0 +1,5 @@
+---
+source: crates/rattler_repodata_gateway/src/gateway/sharded_subdir/mod.rs
+expression: err_string
+---
+failed to decode zstd shard from 'http://localhost:[PORT]/linux-64/shards/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.msgpack.zst': received empty response (0 bytes). This usually indicates a misconfigured server.

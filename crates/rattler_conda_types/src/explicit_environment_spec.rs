@@ -223,8 +223,9 @@ impl FromStr for ExplicitEnvironmentSpec {
 mod test {
     use super::{ExplicitEnvironmentSpec, ParseExplicitEnvironmentSpecError};
     use crate::{
+        ExplicitEnvironmentEntry,
         explicit_environment_spec::{PackageArchiveHash, ParsePackageArchiveHashError},
-        get_test_data_dir, ExplicitEnvironmentEntry,
+        get_test_data_dir,
     };
     use assert_matches::assert_matches;
     use hex_literal::hex;
@@ -252,7 +253,9 @@ mod test {
     #[test]
     fn test_parse_no_explicit_tag() {
         assert_matches!(
-            ExplicitEnvironmentSpec::from_str("https://repo.anaconda.com/pkgs/main/win-64/vs2015_runtime-14.16.27012-hf0eaf9b_3.conda#a98ea1e3abfdbbd201d60ff6b43ea7e4"),
+            ExplicitEnvironmentSpec::from_str(
+                "https://repo.anaconda.com/pkgs/main/win-64/vs2015_runtime-14.16.27012-hf0eaf9b_3.conda#a98ea1e3abfdbbd201d60ff6b43ea7e4"
+            ),
             Err(ParseExplicitEnvironmentSpecError::MissingExplicitTag)
         );
     }

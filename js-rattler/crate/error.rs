@@ -32,6 +32,10 @@ pub enum JsError {
     Serde(#[from] serde_wasm_bindgen::Error),
     #[error(transparent)]
     PackageNameError(#[from] InvalidPackageNameError),
+    #[error("{0} is not a valid hex encoded MD5 hash")]
+    InvalidHexMd5(String),
+    #[error("{0} is not a valid hex encoded SHA256 hash")]
+    InvalidHexSha256(String),
 }
 
 pub type JsResult<T> = Result<T, JsError>;
@@ -39,17 +43,8 @@ pub type JsResult<T> = Result<T, JsError>;
 impl From<JsError> for JsValue {
     fn from(error: JsError) -> Self {
         match error {
-            JsError::InvalidVersion(error) => JsValue::from_str(&error.to_string()),
-            JsError::VersionExtendError(error) => JsValue::from_str(&error.to_string()),
-            JsError::VersionBumpError(error) => JsValue::from_str(&error.to_string()),
-            JsError::ParseVersionSpecError(error) => JsValue::from_str(&error.to_string()),
-            JsError::ParseChannel(error) => JsValue::from_str(&error.to_string()),
-            JsError::ParsePlatform(error) => JsValue::from_str(&error.to_string()),
-            JsError::ParseMatchSpec(error) => JsValue::from_str(&error.to_string()),
-            JsError::GatewayError(error) => JsValue::from_str(&error.to_string()),
-            JsError::SolveError(error) => JsValue::from_str(&error.to_string()),
-            JsError::PackageNameError(error) => JsValue::from_str(&error.to_string()),
             JsError::Serde(error) => error.into(),
+            error => JsValue::from_str(&error.to_string()),
         }
     }
 }

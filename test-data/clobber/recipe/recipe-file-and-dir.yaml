@@ -1,0 +1,43 @@
+recipe:
+  name: clobber-file-and-dir
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-fd-1
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - echo "clobber-fd-1" > $PREFIX/clobber
+
+  - package:
+      name: clobber-fd-2
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber
+        - echo "clobber-fd-2" > $PREFIX/clobber/clobber-fd-2.txt
+
+  - package:
+      name: clobber-fd-3
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber
+        - echo "clobber-fd-3" > $PREFIX/clobber/clobber-fd-3.txt
+
+  - package:
+      name: clobber-fd-2-conflicting
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber
+        - echo "clobber-fd-2-conflicting" > $PREFIX/clobber/clobber-fd-2.txt

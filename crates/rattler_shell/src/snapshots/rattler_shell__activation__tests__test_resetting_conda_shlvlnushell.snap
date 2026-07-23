@@ -1,0 +1,17 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+if ($env | get CONDA_ENV_SHLVL_1_TEST_VAR1?) {
+                $env.TEST_VAR1 = $env.CONDA_ENV_SHLVL_1_TEST_VAR1
+                $env = $env | reject CONDA_ENV_SHLVL_1_TEST_VAR1
+            } else {
+                $env = $env | reject TEST_VAR1
+            }
+if ($env | get CONDA_ENV_SHLVL_1_CONDA_PREFIX?) {
+                $env.CONDA_PREFIX = $env.CONDA_ENV_SHLVL_1_CONDA_PREFIX
+                $env = $env | reject CONDA_ENV_SHLVL_1_CONDA_PREFIX
+            } else {
+                $env = $env | reject CONDA_PREFIX
+            }
+hide-env CONDA_SHLVL

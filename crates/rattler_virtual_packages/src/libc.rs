@@ -24,6 +24,63 @@ pub enum DetectLibCError {
     ParseLibCVersion(#[from] ParseVersionError),
 }
 
+/// Attempts to detect the glibc version by loading the `gnu_get_libc_version()`
+/// function from `libc.so.6`.
+///
+/// Returns `Ok(Some(version))` if glibc is detected and the version can be parsed.
+/// Returns `Ok(None)` if:
+/// - `libc.so.6` cannot be loaded (e.g., on musl systems)
+/// - The `gnu_get_libc_version` symbol is not found
+/// - The function returns a null pointer
+/// - The version string cannot be parsed
+#[cfg(target_os = "linux")]
+fn try_detect_libc_version_via_symbol() -> Result<Option<Version>, DetectLibCError> {
+    unsafe {
+        // Try to load libc.so.6
+        let lib = match libloading::Library::new("libc.so.6") {
+            Ok(lib) => lib,
+            Err(e) => {
+                tracing::debug!("failed to load libc.so.6: {e}");
+                return Ok(None);
+            }
+        };
+
+        // Try to get the gnu_get_libc_version symbol
+        let gnu_get_libc_version: libloading::Symbol<
+            '_,
+            unsafe extern "C" fn() -> *const std::os::raw::c_char,
+        > = match lib.get(b"gnu_get_libc_version") {
+            Ok(sym) => sym,
+            Err(e) => {
+                tracing::debug!("failed to load gnu_get_libc_version symbol: {e}");
+                return Ok(None);
+            }
+        };
+
+        // Call the function to get the version string
+        let version_ptr = gnu_get_libc_version();
+        if version_ptr.is_null() {
+            tracing::debug!("gnu_get_libc_version returned null");
+            return Ok(None);
+        }
+
+        // Convert the C string to a Rust string
+        let version_cstr = std::ffi::CStr::from_ptr(version_ptr);
+        let version_str = match version_cstr.to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::debug!("failed to convert version string to UTF-8: {e}");
+                return Ok(None);
+            }
+        };
+
+        // Parse the version string
+        let version = std::str::FromStr::from_str(version_str)?;
+        tracing::debug!("detected glibc version via symbol: {version}");
+        Ok(Some(version))
+    }
+}
+
 /// Tries to detected the libc family and version that is available on the
 /// system.
 ///
@@ -36,12 +93,16 @@ pub enum DetectLibCError {
 /// detection methods in the future.
 #[cfg(unix)]
 fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCError> {
-    // Run `ldd --version` to detect the libc version and family on the system.
-    // `ldd` is shipped with libc so if an error occurred during its execution we
-    // can assume no libc is available on the system.
-
     #[cfg(target_os = "linux")]
     {
+        // First, try to detect glibc version by loading gnu_get_libc_version() from libc.so.6
+        if let Some(version) = try_detect_libc_version_via_symbol()? {
+            return Ok(Some((String::from("glibc"), version)));
+        }
+
+        // Fall back to running `ldd --version` to detect the libc version and family.
+        // `ldd` is shipped with libc so if an error occurred during its execution we
+        // can assume no libc is available on the system.
         let output = match std::process::Command::new("ldd").arg("--version").output() {
             Err(e) => {
                 tracing::info!(

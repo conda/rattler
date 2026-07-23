@@ -1,13 +1,18 @@
-from rattler.version import Version, VersionWithSource
+from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
+    ChannelInfo,
+    ChannelRelations,
     PackageRecord,
     RepoData,
     RepoDataRecord,
+    WhlPackageRecord,
     PatchInstructions,
     SparseRepoData,
     Gateway,
     SourceConfig,
+    PackageFormatSelection,
+    RepoDataSource,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -22,17 +27,19 @@ from rattler.package import (
     PrefixPlaceholder,
     FileMode,
     IndexJson,
+    NoArchType,
+    NoArchLiteral,
 )
-from rattler.package.no_arch_type import NoArchType
-from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
+from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
-from rattler.install import install
+from rattler.install import install, InstallerReporter
 from rattler.index import index
 from rattler.lock import (
     LockFile,
     Environment,
     LockChannel,
+    LockPlatform,
     PackageHashes,
     LockedPackage,
     CondaLockedSourcePackage,
@@ -47,9 +54,12 @@ del _get_rattler_version
 
 __all__ = [
     "Version",
+    "VersionSpec",
     "VersionWithSource",
     "MatchSpec",
     "NamelessMatchSpec",
+    "ChannelInfo",
+    "ChannelRelations",
     "PackageRecord",
     "Channel",
     "ChannelConfig",
@@ -57,6 +67,7 @@ __all__ = [
     "Client",
     "PatchInstructions",
     "RepoDataRecord",
+    "WhlPackageRecord",
     "RepoData",
     "fetch_repo_data",
     "GenericVirtualPackage",
@@ -69,9 +80,11 @@ __all__ = [
     "PrefixPathsEntry",
     "PrefixPathType",
     "SparseRepoData",
+    "PackageFormatSelection",
     "LockFile",
     "Environment",
     "LockChannel",
+    "LockPlatform",
     "PackageHashes",
     "LockedPackage",
     "CondaLockedSourcePackage",
@@ -82,6 +95,7 @@ __all__ = [
     "solve_with_sparse_repodata",
     "Platform",
     "install",
+    "InstallerReporter",
     "index",
     "AboutJson",
     "RunExportsJson",
@@ -93,5 +107,17 @@ __all__ = [
     "IndexJson",
     "Gateway",
     "SourceConfig",
+    "RepoDataSource",
     "NoArchType",
+    "NoArchLiteral",
+    "Link",
+    "LinkType",
 ]
+
+# PTY support - only available on Unix platforms
+try:
+    from rattler.pty import PtySession, PtyProcess, PtyProcessOptions  # noqa: F401
+
+    __all__.extend(["PtySession", "PtyProcess", "PtyProcessOptions"])
+except ImportError:
+    pass

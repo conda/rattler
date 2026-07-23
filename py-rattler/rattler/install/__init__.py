@@ -1,3 +1,3 @@
-from rattler.install.installer import install
+from rattler.install.installer import install, InstallerReporter
 
-__all__ = ["install"]
+__all__ = ["install", "InstallerReporter"]

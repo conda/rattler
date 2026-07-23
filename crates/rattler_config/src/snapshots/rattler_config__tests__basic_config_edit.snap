@@ -1,0 +1,24 @@
+---
+source: crates/rattler_config/src/lib.rs
+expression: toml_output
+---
+default-channels = [
+    "conda-forge",
+    "bioconda",
+    "pytorch",
+]
+authentication-override-file = "/home/user/.rattler-auth"
+tls-no-verify = true
+array_field = []
+
+[mirrors]
+"https://conda.anaconda.org/" = [
+    "https://mirror1.com/",
+    "https://mirror2.com/",
+]
+
+[concurrency]
+solves = 12
+downloads = 24
+
+[nested]

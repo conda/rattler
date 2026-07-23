@@ -1,13 +1,19 @@
+//! Platform-specific code.
+use std::{
+    cmp::Ordering,
+    fmt,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+
 use itertools::Itertools;
 use serde::{Deserializer, Serializer};
-use std::cmp::Ordering;
-use std::fmt::Display;
-use std::{fmt, fmt::Formatter, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// A platform supported by Conda.
 #[allow(missing_docs)]
+#[non_exhaustive] // The `Platform` enum is non-exhaustive to allow for future extensions without breaking changes.
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
@@ -18,12 +24,17 @@ pub enum Platform {
     LinuxAarch64,
     LinuxArmV6l,
     LinuxArmV7l,
+    LinuxLoongArch64,
     LinuxPpc64le,
     LinuxPpc64,
     LinuxPpc,
     LinuxS390X,
     LinuxRiscv32,
     LinuxRiscv64,
+
+    FreeBsd32,
+    FreeBsd64,
+    FreeBsdArm64,
 
     Osx64,
     OsxArm64,
@@ -52,6 +63,7 @@ impl Ord for Platform {
 
 /// Known architectures supported by Conda.
 #[allow(missing_docs)]
+#[non_exhaustive] // The `Arch` enum is non-exhaustive to allow for future extensions without breaking changes.
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
@@ -62,6 +74,7 @@ pub enum Arch {
     Arm64,
     ArmV6l,
     ArmV7l,
+    LoongArch64,
     Ppc64le,
     Ppc64,
     Ppc,
@@ -95,6 +108,9 @@ impl Platform {
                 return Platform::LinuxArmV6l;
             }
 
+            #[cfg(target_arch = "loongarch64")]
+            return Platform::LinuxLoongArch64;
+
             #[cfg(all(target_arch = "powerpc64", target_endian = "little"))]
             return Platform::LinuxPpc64le;
 
@@ -122,9 +138,24 @@ impl Platform {
                 target_arch = "arm",
                 target_arch = "powerpc64",
                 target_arch = "powerpc",
-                target_arch = "s390x"
+                target_arch = "s390x",
+                target_arch = "loongarch64"
             )))]
             compile_error!("unsupported linux architecture");
+        }
+        #[cfg(target_os = "freebsd")]
+        {
+            #[cfg(target_arch = "x86")]
+            return Platform::FreeBsd32;
+
+            #[cfg(target_arch = "x86_64")]
+            return Platform::FreeBsd64;
+
+            #[cfg(target_arch = "aarch64")]
+            return Platform::FreeBsdArm64;
+
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+            compile_error!("unsupported freebsd architecture");
         }
         #[cfg(windows)]
         {
@@ -163,6 +194,7 @@ impl Platform {
 
         #[cfg(not(any(
             target_os = "linux",
+            target_os = "freebsd",
             target_os = "macos",
             target_os = "emscripten",
             target_os = "wasi",
@@ -190,7 +222,15 @@ impl Platform {
 
     /// Returns true if the platform is a unix based platform.
     pub const fn is_unix(self) -> bool {
-        self.is_linux() || self.is_osx() || matches!(self, Platform::EmscriptenWasm32)
+        self.is_linux()
+            || self.is_osx()
+            || matches!(
+                self,
+                Platform::EmscriptenWasm32
+                    | Platform::FreeBsd32
+                    | Platform::FreeBsd64
+                    | Platform::FreeBsdArm64
+            )
     }
 
     /// Returns true if the platform is a linux based platform.
@@ -202,6 +242,7 @@ impl Platform {
                 | Platform::LinuxAarch64
                 | Platform::LinuxArmV6l
                 | Platform::LinuxArmV7l
+                | Platform::LinuxLoongArch64
                 | Platform::LinuxPpc64le
                 | Platform::LinuxPpc64
                 | Platform::LinuxPpc
@@ -225,12 +266,14 @@ impl Platform {
             | Platform::LinuxAarch64
             | Platform::LinuxArmV6l
             | Platform::LinuxArmV7l
+            | Platform::LinuxLoongArch64
             | Platform::LinuxPpc64le
             | Platform::LinuxPpc64
             | Platform::LinuxPpc
             | Platform::LinuxS390X
             | Platform::LinuxRiscv32
             | Platform::LinuxRiscv64 => Some("linux"),
+            Platform::FreeBsd32 | Platform::FreeBsd64 | Platform::FreeBsdArm64 => Some("freebsd"),
             Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
             Platform::EmscriptenWasm32 => Some("emscripten"),
@@ -269,12 +312,16 @@ impl FromStr for Platform {
             "linux-aarch64" => Platform::LinuxAarch64,
             "linux-armv6l" => Platform::LinuxArmV6l,
             "linux-armv7l" => Platform::LinuxArmV7l,
+            "linux-loongarch64" => Platform::LinuxLoongArch64,
             "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
             "linux-ppc" => Platform::LinuxPpc,
             "linux-s390x" => Platform::LinuxS390X,
             "linux-riscv32" => Platform::LinuxRiscv32,
             "linux-riscv64" => Platform::LinuxRiscv64,
+            "freebsd-32" => Platform::FreeBsd32,
+            "freebsd-64" => Platform::FreeBsd64,
+            "freebsd-arm64" => Platform::FreeBsdArm64,
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
             "win-32" => Platform::Win32,
@@ -301,12 +348,16 @@ impl From<Platform> for &'static str {
             Platform::LinuxAarch64 => "linux-aarch64",
             Platform::LinuxArmV6l => "linux-armv6l",
             Platform::LinuxArmV7l => "linux-armv7l",
+            Platform::LinuxLoongArch64 => "linux-loongarch64",
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
             Platform::LinuxPpc => "linux-ppc",
             Platform::LinuxS390X => "linux-s390x",
             Platform::LinuxRiscv32 => "linux-riscv32",
             Platform::LinuxRiscv64 => "linux-riscv64",
+            Platform::FreeBsd32 => "freebsd-32",
+            Platform::FreeBsd64 => "freebsd-64",
+            Platform::FreeBsdArm64 => "freebsd-arm64",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
@@ -323,22 +374,26 @@ impl From<Platform> for &'static str {
 impl Platform {
     /// Return the arch string for the platform
     /// The arch is usually the part after the `-` of the platform string.
-    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64` respectively.
+    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64`
+    /// respectively.
     pub fn arch(&self) -> Option<Arch> {
         match self {
             Platform::Unknown | Platform::NoArch => None,
             Platform::LinuxArmV6l => Some(Arch::ArmV6l),
             Platform::LinuxArmV7l => Some(Arch::ArmV7l),
+            Platform::LinuxLoongArch64 => Some(Arch::LoongArch64),
             Platform::LinuxPpc64le => Some(Arch::Ppc64le),
             Platform::LinuxPpc64 => Some(Arch::Ppc64),
             Platform::LinuxPpc => Some(Arch::Ppc),
             Platform::LinuxS390X => Some(Arch::S390X),
             Platform::LinuxRiscv32 => Some(Arch::Riscv32),
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
-            Platform::Linux32 | Platform::Win32 => Some(Arch::X86),
-            Platform::Linux64 | Platform::Win64 | Platform::Osx64 => Some(Arch::X86_64),
+            Platform::Linux32 | Platform::Win32 | Platform::FreeBsd32 => Some(Arch::X86),
+            Platform::Linux64 | Platform::Win64 | Platform::Osx64 | Platform::FreeBsd64 => {
+                Some(Arch::X86_64)
+            }
             Platform::LinuxAarch64 => Some(Arch::Aarch64),
-            Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Arm64),
+            Platform::WinArm64 | Platform::OsxArm64 | Platform::FreeBsdArm64 => Some(Arch::Arm64),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
             Platform::ZosZ => Some(Arch::Z),
         }
@@ -403,6 +458,7 @@ impl FromStr for Arch {
             "arm64" => Arch::Arm64,
             "armv6l" => Arch::ArmV6l,
             "armv7l" => Arch::ArmV7l,
+            "loongarch64" => Arch::LoongArch64,
             "ppc64le" => Arch::Ppc64le,
             "ppc64" => Arch::Ppc64,
             "ppc" => Arch::Ppc,
@@ -429,6 +485,7 @@ impl From<Arch> for &'static str {
             Arch::Aarch64 => "aarch64",
             Arch::ArmV6l => "armv6l",
             Arch::ArmV7l => "armv7l",
+            Arch::LoongArch64 => "loongarch64",
             Arch::Ppc64le => "ppc64le",
             Arch::Ppc64 => "ppc64",
             Arch::Ppc => "ppc",
@@ -483,6 +540,18 @@ mod tests {
             "linux-armv6l".parse::<Platform>().unwrap(),
             Platform::LinuxArmV6l
         );
+        assert_eq!(
+            "freebsd-32".parse::<Platform>().unwrap(),
+            Platform::FreeBsd32
+        );
+        assert_eq!(
+            "freebsd-64".parse::<Platform>().unwrap(),
+            Platform::FreeBsd64
+        );
+        assert_eq!(
+            "freebsd-arm64".parse::<Platform>().unwrap(),
+            Platform::FreeBsdArm64
+        );
         assert_eq!("win-arm64".parse::<Platform>().unwrap(), Platform::WinArm64);
         assert_eq!(
             "emscripten-wasm32".parse::<Platform>().unwrap(),
@@ -517,12 +586,16 @@ mod tests {
         assert_eq!(Platform::LinuxAarch64.arch(), Some(Arch::Aarch64));
         assert_eq!(Platform::LinuxArmV6l.arch(), Some(Arch::ArmV6l));
         assert_eq!(Platform::LinuxArmV7l.arch(), Some(Arch::ArmV7l));
+        assert_eq!(Platform::LinuxLoongArch64.arch(), Some(Arch::LoongArch64));
         assert_eq!(Platform::LinuxPpc64le.arch(), Some(Arch::Ppc64le));
         assert_eq!(Platform::LinuxPpc64.arch(), Some(Arch::Ppc64));
         assert_eq!(Platform::LinuxPpc.arch(), Some(Arch::Ppc));
         assert_eq!(Platform::LinuxS390X.arch(), Some(Arch::S390X));
         assert_eq!(Platform::LinuxRiscv32.arch(), Some(Arch::Riscv32));
         assert_eq!(Platform::LinuxRiscv64.arch(), Some(Arch::Riscv64));
+        assert_eq!(Platform::FreeBsd32.arch(), Some(Arch::X86));
+        assert_eq!(Platform::FreeBsd64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::FreeBsdArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::Osx64.arch(), Some(Arch::X86_64));
         assert_eq!(Platform::OsxArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::Win32.arch(), Some(Arch::X86));

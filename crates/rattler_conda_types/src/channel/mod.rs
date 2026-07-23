@@ -31,6 +31,7 @@ const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 /// Url but instead only specify the name of the channel and reading the primary
 /// server address from a configuration file (e.g. `.condarc`).
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually
     /// this Url refers to the `https://conda.anaconda.org` server but users are free to change this. This allows
@@ -38,11 +39,13 @@ pub struct ChannelConfig {
     /// "conda-forge" actually refers to `<https://conda.anaconda.org/conda-forge>`).
     ///
     /// The default value is: <https://conda.anaconda.org>
+    #[serde(alias = "channel_alias")] // Continue supporting snake_case alias
     pub channel_alias: Url,
 
     /// For local channels, the root directory from which to resolve relative
     /// paths. Most of the time you would initialize this with the current
     /// working directory.
+    #[serde(alias = "root_dir")] // Continue supporting snake_case alias
     pub root_dir: PathBuf,
 }
 
@@ -55,7 +58,6 @@ impl ChannelConfig {
                 .expect("could not parse default channel alias"),
         }
     }
-
     /// Strip the channel alias if the base url is "under" the channel alias.
     /// This returns the name of the channel (for example "conda-forge" for
     /// `https://conda.anaconda.org/conda-forge` when the channel alias is
@@ -64,13 +66,14 @@ impl ChannelConfig {
         base_url
             .as_str()
             .strip_prefix(self.channel_alias.as_str())
-            .map(|s| s.trim_end_matches('/').to_string())
+            .map(|s| s.trim_matches('/').to_string())
+            .filter(|s| !s.is_empty())
     }
 
     /// Returns the canonical name of a channel with the given base url.
     pub fn canonical_name(&self, base_url: &Url) -> String {
-        if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
-            stripped.trim_end_matches('/').to_string()
+        if let Some(stripped) = self.strip_channel_alias(base_url) {
+            stripped
         } else {
             base_url.clone().redact().to_string()
         }
@@ -184,7 +187,7 @@ impl serde::Serialize for NamedChannelOrUrl {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash, Deserialize)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit
     /// platforms have been specified.
@@ -195,6 +198,7 @@ pub struct Channel {
     pub base_url: ChannelUrl,
 
     /// The name of the channel
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -209,9 +213,13 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
+            let name = config.strip_channel_alias(&url);
+            let base_channel = Channel::from_url(url);
+
             Channel {
+                name: name.or(base_channel.name),
                 platforms,
-                ..Channel::from_url(url)
+                ..base_channel
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
@@ -309,27 +317,45 @@ impl Channel {
 
     /// Constructs a channel from a directory path.
     ///
+    /// A relative path is canonicalized, so it must point to an existing
+    /// directory. Use [`Channel::try_from_directory`] for a variant that
+    /// returns an error instead of panicking.
+    ///
     /// # Panics
     ///
     /// Panics if the path is not an absolute path or could not be
     /// canonicalized.
     #[cfg(not(target_arch = "wasm32"))]
+    #[deprecated(
+        since = "0.47.3",
+        note = "this function panics on invalid paths; use `Channel::try_from_directory` instead"
+    )]
     pub fn from_directory(path: &Path) -> Self {
+        Self::try_from_directory(path).expect("could not create channel from directory")
+    }
+
+    /// Constructs a channel from a directory path.
+    ///
+    /// This is the non-panicking variant of [`Channel::from_directory`]. A
+    /// relative path is canonicalized, so it must point to an existing
+    /// directory; otherwise a [`ParseChannelError::InvalidPath`] is returned.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn try_from_directory(path: &Path) -> Result<Self, ParseChannelError> {
         let path = if path.is_absolute() {
             Cow::Borrowed(path)
         } else {
-            Cow::Owned(
-                path.canonicalize()
-                    .expect("path is a not a valid absolute path"),
-            )
+            Cow::Owned(path.canonicalize().map_err(|err| {
+                ParseChannelError::InvalidPath(format!("{}: {err}", path.display()))
+            })?)
         };
 
-        let url = Url::from_directory_path(path).expect("path is a valid url");
-        Self {
+        let url = Url::from_directory_path(&path)
+            .map_err(|()| ParseChannelError::InvalidPath(path.display().to_string()))?;
+        Ok(Self {
             platforms: None,
             base_url: url.into(),
             name: None,
-        }
+        })
     }
 
     /// Returns the name of the channel
@@ -417,22 +443,22 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    if channel.rfind(']').is_some() {
-        if let Some(start_platform_idx) = channel.find('[') {
-            let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms = platform_part
-                .split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(FromStr::from_str)
-                .collect::<Result<Vec<_>, _>>()?;
-            let platforms = if platforms.is_empty() {
-                None
-            } else {
-                Some(platforms)
-            };
-            return Ok((platforms, &channel[0..start_platform_idx]));
-        }
+    if channel.rfind(']').is_some()
+        && let Some(start_platform_idx) = channel.find('[')
+    {
+        let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
+        let platforms = platform_part
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(FromStr::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
+        let platforms = if platforms.is_empty() {
+            None
+        } else {
+            Some(platforms)
+        };
+        return Ok((platforms, &channel[0..start_platform_idx]));
     }
 
     Ok((None, channel))
@@ -487,6 +513,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_issue_1953_artifactory_path_parsing() {
+        let alias_str = "https://example.jfrog.io/artifactory/api/conda/";
+        let config = ChannelConfig {
+            channel_alias: Url::from_str(alias_str).unwrap(),
+            root_dir: std::env::current_dir().unwrap(),
+        };
+
+        let full_url = "https://example.jfrog.io/artifactory/api/conda/conda_example";
+        let channel = Channel::from_str(full_url, &config).unwrap();
+
+        // Should be "conda_example", not "artifactory/api/conda/conda_example"
+        assert_eq!(channel.name.as_deref(), Some("conda_example"));
+    }
+
+    #[test]
     fn test_parse_platforms() {
         assert_eq!(
             parse_platforms("[noarch, linux-64]"),
@@ -510,9 +551,9 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        let native_current_dir = typed_path::utils::utf8_current_dir()
-            .expect("")
-            .to_typed_path_buf();
+        let native_current_dir =
+            Utf8TypedPath::derive(typed_path::utils::utf8_current_dir().expect("").as_str())
+                .to_path_buf();
         assert_eq!(
             absolute_path(".", &current_dir).as_ref(),
             Ok(&native_current_dir)
@@ -635,6 +676,24 @@ mod tests {
             channel.base_url.url().to_file_path().unwrap(),
             current_dir.join("dir/does/not_exist")
         );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn try_from_directory() {
+        // An existing absolute directory succeeds.
+        let current_dir = std::env::current_dir().expect("no current dir?");
+        let channel = Channel::try_from_directory(&current_dir).unwrap();
+        assert_eq!(channel.base_url.url().to_file_path().unwrap(), current_dir);
+
+        // A relative path to a directory that does not exist cannot be
+        // canonicalized and returns an error instead of panicking.
+        let missing = Path::new("this/directory/does/not/exist");
+        assert!(!missing.is_absolute());
+        assert!(matches!(
+            Channel::try_from_directory(missing),
+            Err(ParseChannelError::InvalidPath(_))
+        ));
     }
 
     #[test]

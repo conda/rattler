@@ -1,6 +1,5 @@
-[project]
+[workspace]
 name = "py-rattler"
-description = "Add a short description here"
 authors = [
   "Bas Zalmstra <bas@prefix.dev>",
   "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
@@ -8,49 +7,63 @@ authors = [
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
+exclude-newer = "7d"
+preview = ["pixi-build"]
 
-[tasks]
+[exclude-newer]
+# TODO: remove 29.06.2026
+pixi-build-python = "0d"
 
-[feature.build.dependencies]
-maturin = "~=1.2.2"
-pip = "~=23.2.1"
-rust = "~=1.85.0"
+[package]
+name = "py-rattler"
 
-[feature.build.tasks]
-build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
-build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
-
-[feature.build.target.linux-64.dependencies]
-patchelf = "~=0.17.2"
+[package.build.backend]
+name = "pixi-build-python"
+version = ">=0.7.0"
+[package.host-dependencies]
+maturin = "*"
+[package.build.config]
+abi3 = true
+compilers = ["c", "rust"]
+env = { MATURIN_PEP517_ARGS = "--features pty --locked" }
 
 [feature.test.dependencies]
-# Python 3.8 is the minimum supported version, so we use that for testing
-python = "3.9.*"
+py-rattler = { path = "." }
+python = "3.10.*"
+boto3 = "*"
+requests = ">=2.32.3,<3"
+types-requests = ">=2.32,<3"
+types-networkx = "*"
 
-ruff = ">=0.3.3,<0.4"
-mypy = "~=1.5.1"
+ruff = ">=0.14.1"
+mypy = ">=1.17.0,<2"
+nushell = ">=0.106.1"
 
-pytest = "~=7.4.0"
-pytest-asyncio = "0.21.1.*"
-pytest-xprocess = ">=0.23.0,<0.24"
+pytest = ">=8.4.1,<9"
+pytest-asyncio = ">=1.0.0,<2"
+pytest-xprocess = ">=1.0.2,<2"
 
 # used in examples
 typer = "*"
-
-[feature.test.pypi-dependencies]
-types-networkx = "*"
-# boto3 on conda-forge requires python >=3.10
-boto3 = "*"
+# for rust-analyzer
+rust = "~=1.95.0"
+rust-src = "~=1.95.0"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }
+test = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py"
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
+ensure-version-synced = "nu scripts/ensure-version-synced.nu"
 fmt = { depends-on = ["fmt-python", "fmt-rust"] }
-lint = { depends-on = ["type-check", "lint-python", "lint-rust"] }
-type-check = { cmd = "mypy", depends-on = ["build"] }
+lint = { depends-on = [
+  "ensure-version-synced",
+  "type-check",
+  "lint-python",
+  "lint-rust",
+] }
+type-check = "mypy"
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
@@ -58,29 +71,38 @@ fmt-python-check = "ruff format rattler examples tests --diff"
 fmt-check = { depends-on = ["fmt-python-check", "fmt-rust-check"] }
 
 [feature.docs.dependencies]
-mkdocs = ">=1.5.3,<2"
-mkdocstrings-python = ">=1.13.0,<2"
-mkdocstrings = ">=0.24.1,<1"
-mkdocs-material = ">=9.5.20"
+mkdocs = ">=1.6.1,<2"
+mkdocstrings-python = ">=2.0.1,<3"
+mkdocstrings = ">=1.0.0,<2"
+mkdocs-material = ">=9.7.0,<10"
 mdx_truly_sane_lists = ">=1.3,<2"
-cairosvg = "2.7.1.*"
-pillow = ">=9.4.0"
-ruff = ">=0.9.3,<0.10"
+cairosvg = ">=2.8.2,<3"
+pillow = ">=12.0.0,<13"
+ruff = ">=0.14.9,<0.15"
+mkdocs-llmstxt = ">=0.4.0,<0.5"
+mike = ">=2.1.3,<3"
+python = { build-number = ">10" }
+
 
 [feature.docs.tasks]
-docs = { cmd = "mkdocs serve" }
-build-docs = { cmd = "mkdocs build" }
+docs = { cmd = "mkdocs serve", description = "Serve the docs locally", depends-on = [
+  "download-font",
+] }
+build-docs = { cmd = "mkdocs build --strict", depends-on = ["download-font"] }
+download-font = { cmd = "bash docs/layouts/download-font-to-cache.sh" }
+deploy-latest = { cmd = "mike deploy --push --update-aliases $RELEASE_VERSION latest", depends-on = [
+  "download-font",
+] }
+deploy-dev = { cmd = "mike deploy --push dev devel", depends-on = [
+  "download-font",
+] }
 
 [feature.repl.dependencies]
 ipython = ">=8.29.0,<9"
 [feature.repl.tasks]
-repl = { depends-on = ["build"], cmd = "ipython" }
+repl = "ipython"
 
 [environments]
-test = { features = ["build", "test"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
 docs = ["docs"]
 repl = ["repl"]
-
-[dependencies]
-requests = ">=2.32.3,<2.33"
-types-requests = ">=2.32.0.20240602,<2.32.1"

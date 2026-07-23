@@ -1,0 +1,18 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
+if (Test-Path env:CONDA_ENV_SHLVL_1_TEST_VAR1) {
+                $env:TEST_VAR1 = $env:CONDA_ENV_SHLVL_1_TEST_VAR1
+                Remove-Item env:CONDA_ENV_SHLVL_1_TEST_VAR1
+            } else {
+                Remove-Item env:TEST_VAR1 -ErrorAction SilentlyContinue
+            }
+if (Test-Path env:CONDA_ENV_SHLVL_1_CONDA_PREFIX) {
+                $env:CONDA_PREFIX = $env:CONDA_ENV_SHLVL_1_CONDA_PREFIX
+                Remove-Item env:CONDA_ENV_SHLVL_1_CONDA_PREFIX
+            } else {
+                Remove-Item env:CONDA_PREFIX -ErrorAction SilentlyContinue
+            }
+${Env:CONDA_SHLVL}=""

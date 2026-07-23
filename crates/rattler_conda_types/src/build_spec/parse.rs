@@ -2,7 +2,7 @@
 
 use super::{BuildNumber, BuildNumberSpec, OrdOperator};
 
-use nom::{bytes::complete::take_while1, character::complete::digit1, Finish, IResult};
+use nom::{Finish, IResult, bytes::complete::take_while1, character::complete::digit1};
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -30,7 +30,7 @@ impl BuildNumberSpec {
                     ParseBuildNumberSpecError::InvalidOperator(
                         ParseOrdOperatorError::InvalidOperator(op),
                     ),
-                ))
+                ));
             }
             Err(nom::Err::Error(_)) => (input, None),
             Ok((rest, op)) => (rest, Some(op)),
@@ -126,7 +126,7 @@ impl OrdOperator {
             _ => {
                 return Err(nom::Err::Failure(ParseOrdOperatorError::InvalidOperator(
                     operator_str.to_string(),
-                )))
+                )));
             }
         };
 

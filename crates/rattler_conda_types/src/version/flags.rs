@@ -78,10 +78,12 @@ mod test {
     fn test_epoch() {
         assert!(!Flags::default().has_epoch());
         assert!(Flags::default().with_has_epoch(true).has_epoch());
-        assert!(!Flags::default()
-            .with_has_epoch(true)
-            .with_has_epoch(false)
-            .has_epoch(),);
+        assert!(
+            !Flags::default()
+                .with_has_epoch(true)
+                .with_has_epoch(false)
+                .has_epoch(),
+        );
     }
 
     #[test]

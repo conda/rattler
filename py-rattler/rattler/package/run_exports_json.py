@@ -1,9 +1,12 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
 
 from rattler.rattler import PyRunExportsJson
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class RunExportsJson:
@@ -117,8 +120,18 @@ class RunExportsJson:
         """
         return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_str(string))
 
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[RunExportsJson]:
+        """
+        Fetches `info/run_exports.json` from a remote package archive URL.
+        """
+        py_run_exports_json = await PyRunExportsJson.from_remote_url(client._client, url)
+        if py_run_exports_json is None:
+            return None
+        return cls._from_py_run_exports_json(py_run_exports_json)
+
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 

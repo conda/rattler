@@ -1,0 +1,12 @@
+---
+source: crates/rattler_config/src/lib.rs
+expression: toml_output
+---
+array_field = []
+
+[repodata-config]
+disable-bzip2 = false
+disable-zstd = true
+disable-sharded = false
+
+[nested]

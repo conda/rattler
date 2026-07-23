@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseStrictness};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
+use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions};
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyNamelessMatchSpec {
@@ -34,17 +34,27 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
-        Ok(NamelessMatchSpec::from_str(
-            spec,
-            if strict {
-                ParseStrictness::Strict
-            } else {
-                ParseStrictness::Lenient
-            },
-        )
-        .map(Into::into)
-        .map_err(PyRattlerError::from)?)
+    #[pyo3(signature = (spec, strict = false, extras = true, conditionals = true, flags = true))]
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub fn __init__(
+        spec: &str,
+        strict: bool,
+        extras: bool,
+        conditionals: bool,
+        flags: bool,
+    ) -> PyResult<Self> {
+        let options = if strict {
+            ParseMatchSpecOptions::strict()
+        } else {
+            ParseMatchSpecOptions::lenient()
+        }
+        .with_extras(extras)
+        .with_conditionals(conditionals)
+        .with_flags(flags);
+
+        Ok(NamelessMatchSpec::from_str(spec, options)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -98,6 +108,30 @@ impl PyNamelessMatchSpec {
         self.inner.namespace.clone()
     }
 
+    /// The extras (optional dependencies) of the package
+    #[getter]
+    pub fn extras(&self) -> Option<Vec<String>> {
+        self.inner.extras.clone()
+    }
+
+    /// The flags of the package variant.
+    #[getter]
+    pub fn flags(&self) -> Option<Vec<String>> {
+        self.inner
+            .flags
+            .as_ref()
+            .map(|flags| flags.iter().map(ToString::to_string).collect())
+    }
+
+    /// The condition under which this match spec applies
+    #[getter]
+    pub fn condition(&self) -> Option<String> {
+        self.inner
+            .condition
+            .as_ref()
+            .map(std::string::ToString::to_string)
+    }
+
     /// The md5 hash of the package
     #[getter]
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
@@ -110,12 +144,12 @@ impl PyNamelessMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns a string representation of MatchSpec
+    /// Returns a string representation of `MatchSpec`
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }
 
-    /// Match a PyNamelessMatchSpec against a PackageRecord
+    /// Match a `PyNamelessMatchSpec` against a `PackageRecord`
     pub fn matches(&self, record: &PyRecord) -> bool {
         self.inner.matches(&record.as_package_record().clone())
     }

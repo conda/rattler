@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List, Optional, Literal
+from typing import TYPE_CHECKING, List, Optional, Literal
 from rattler.rattler import (
     PyPathsJson,
     PyPathsEntry,
@@ -9,6 +9,9 @@ from rattler.rattler import (
     PyPrefixPlaceholder,
     PyFileMode,
 )
+
+if TYPE_CHECKING:
+    from rattler.networking.client import Client
 
 
 class PathsJson:
@@ -81,8 +84,18 @@ class PathsJson:
         """
         return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
 
+    @classmethod
+    async def from_remote_url(cls, client: Client, url: str) -> Optional[PathsJson]:
+        """
+        Fetches `info/paths.json` from a remote package archive URL.
+        """
+        py_paths_json = await PyPathsJson.from_remote_url(client._client, url)
+        if py_paths_json is None:
+            return None
+        return cls._from_py_paths_json(py_paths_json)
+
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 
@@ -224,7 +237,7 @@ class PathsEntry:
         ...     sha256=None,
         ...     size_in_bytes=None
         ... )
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'lib/file.txt'
         >>> entry.no_link
         False
@@ -254,7 +267,7 @@ class PathsEntry:
         self._inner = PyPathsEntry(relative_path, no_link, path_type._inner, prefix_placeholder, sha256, size_in_bytes)
 
     @property
-    def relative_path(self) -> str:
+    def relative_path(self) -> Path:
         """
         The relative path from the root of the package.
 
@@ -265,10 +278,10 @@ class PathsEntry:
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO'
         >>> entry.relative_path = "new/path"
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'new/path'
         >>>
         ```

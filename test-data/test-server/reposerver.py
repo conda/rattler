@@ -388,7 +388,7 @@ server = HTTPServer(("", PORT), ChannelHandler)
 print("Server started at localhost:" + str(PORT))
 try:
     server.serve_forever()
-except:
+except Exception:
     # Catch all sorts of interrupts
     print("Shutting server down")
     server.shutdown()

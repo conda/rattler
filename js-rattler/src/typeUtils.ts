@@ -1,3 +1,5 @@
+export { NonEmptyString } from "../pkg/";
+
 /**
  * Ensures that a given type is `true`. Used for compile-time assertions.
  *
@@ -42,20 +44,3 @@ export type IsFalse<T extends false> = T;
  * @internal
  */
 export type IsSame<A, B> = A extends B ? (B extends A ? true : false) : false;
-
-/**
- * Ensures that a string is non-empty.
- *
- * - If `T` is an empty string, it resolves to `never`.
- * - Otherwise, it resolves to `T`.
- *
- * @example
- *
- * ```ts
- * type Valid = NonEmptyString<"hello">; // 'hello'
- * type Invalid = NonEmptyString<"">; // never
- * ```
- *
- * @public
- */
-export type NonEmptyString<T extends string> = T extends "" ? never : T;

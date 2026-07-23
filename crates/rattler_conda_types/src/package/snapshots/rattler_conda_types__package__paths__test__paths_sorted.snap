@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/package/paths.rs
-assertion_line: 332
 expression: "PathsJson { paths, paths_version: 1 }"
 ---
 paths:
@@ -50,4 +49,3 @@ paths:
     path_type: hardlink
     size_in_bytes: 0
 paths_version: 1
-

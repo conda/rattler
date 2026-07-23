@@ -6,4 +6,4 @@ import mod from "../pkg/js_rattler_bg.wasm";
 import { initSync } from "../pkg/js_rattler";
 
 //@ts-ignore
-await initSync({ module: await mod() });
+initSync({ module: mod() });

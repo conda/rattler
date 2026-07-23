@@ -1,0 +1,17 @@
+version: 6
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda: pixi-url-package
+packages:
+  - conda: pixi-url-package
+    name: pixi-url-package
+    version: 2.0.0
+    build: pyhbf21a9e_0
+    subdir: noarch
+    package_build_source:
+      url: https://example.com/package.tar.gz
+      sha256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef

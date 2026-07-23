@@ -1,4 +1,3 @@
 # FetchRepoDataError
 
 ::: rattler.exceptions.FetchRepoDataError
-

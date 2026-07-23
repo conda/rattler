@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::{self, PathBuf};
 
 fn build_libsolv() -> Result<PathBuf> {
@@ -12,7 +12,9 @@ fn build_libsolv() -> Result<PathBuf> {
         ));
     }
     let out = cmake::Config::new(p.parent().unwrap())
+        .define("DENABLE_EXAMPLES", "OFF")
         .define("ENABLE_CONDA", "ON")
+        .define("ENABLE_COMPLEX_DEPS", "ON")
         .define("ENABLE_STATIC", "ON")
         .define("DISABLE_SHARED", "ON")
         .define("MULTI_SEMANTICS", "ON")

@@ -24,8 +24,7 @@ class Version:
             self._version = PyVersion(version)
         else:
             raise TypeError(
-                "Version constructor received unsupported type "
-                f" {type(version).__name__!r} for the `version` parameter"
+                f"Version constructor received unsupported type  {type(version).__name__!r} for the `version` parameter"
             )
 
     @classmethod
@@ -141,7 +140,7 @@ class Version:
         >>>
         >>> Version("1.5").bump_segment(-5) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.VersionBumpException
+        exceptions.VersionBumpError
         >>> Version("1.5").bump_segment(5)
         Version("1.5.0.0.0.1")
         >>>
@@ -353,7 +352,7 @@ class Version:
         Version("2!1")
         >>> v.pop_segments(3) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.InvalidVersionException: new Version must have atleast 1 valid
+        exceptions.InvalidVersionError: new Version must have atleast 1 valid
         segment
         >>>
         ```

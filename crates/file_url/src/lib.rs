@@ -2,11 +2,10 @@
 //! This crates provides functionality that tries to parse a `file://` URL as a path on all operating
 //! systems. This is useful when you want to convert a `file://` URL to a path and vice versa.
 
+use std::{fmt::Write, path::PathBuf, str::FromStr};
+
 use itertools::Itertools;
-use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
-use std::fmt::Write;
-use std::path::PathBuf;
-use std::str::FromStr;
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode, percent_encode};
 use thiserror::Error;
 use typed_path::{
     Utf8TypedComponent, Utf8TypedPath, Utf8TypedPathBuf, Utf8UnixComponent, Utf8WindowsComponent,
@@ -14,21 +13,22 @@ use typed_path::{
 };
 use url::{Host, Url};
 
-/// Returns true if the specified segment is considered to be a Windows drive letter segment.
-/// E.g. the segment `C:` or `C%3A` would be considered a drive letter segment.
+/// Returns true if the specified segment is considered to be a Windows drive
+/// letter segment. E.g. the segment `C:` or `C%3A` would be considered a drive
+/// letter segment.
 fn is_windows_drive_letter_segment(segment: &str) -> Option<String> {
     // Segment is a simple drive letter: X:
-    if let Some((drive_letter, ':')) = segment.chars().collect_tuple() {
-        if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{drive_letter}:\\"));
-        }
+    if let Some((drive_letter, ':')) = segment.chars().collect_tuple()
+        && drive_letter.is_ascii_alphabetic()
+    {
+        return Some(format!("{drive_letter}:\\"));
     }
 
     // Segment is a simple drive letter but the colon is percent escaped: E.g. X%3A
-    if let Some((drive_letter, '%', '3', 'a' | 'A')) = segment.chars().collect_tuple() {
-        if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{drive_letter}:\\"));
-        }
+    if let Some((drive_letter, '%', '3', 'a' | 'A')) = segment.chars().collect_tuple()
+        && drive_letter.is_ascii_alphabetic()
+    {
+        return Some(format!("{drive_letter}:\\"));
     }
 
     None
@@ -55,9 +55,18 @@ fn url_to_path_inner<T: From<String>>(url: &Url) -> Option<T> {
             return None;
         }
 
-        match is_windows_drive_letter_segment(first) {
-            Some(drive_letter) => (drive_letter, "\\"),
-            None => (format!("/{first}/"), "/"),
+        if let Some(drive_letter) = is_windows_drive_letter_segment(first) {
+            (drive_letter, "\\")
+        } else {
+            // A Windows path like C:\foo\bar in a file:// URL gets
+            // its backslashes percent-encoded, collapsing the entire
+            // path into one URL segment (e.g. "C%3A%5Cfoo%5Cbar").
+            // Percent-decode and re-check for a drive letter.
+            let decoded = String::from_utf8(percent_decode(first.as_bytes()).collect()).ok()?;
+            if starts_with_windows_drive_letter(&decoded) && decoded.contains('\\') {
+                return Some(T::from(decoded));
+            }
+            (format!("/{first}/"), "/")
         }
     };
 
@@ -78,9 +87,10 @@ fn url_to_path_inner<T: From<String>>(url: &Url) -> Option<T> {
 ///
 /// We assume that any passed URL that represents a path is an absolute path.
 ///
-/// [`Url::to_file_path`] has a different code path for Windows and other operating systems, this
-/// can cause URLs to parse perfectly fine on Windows, but fail to parse on Linux. This function
-/// tries to parse the URL as a path on all operating systems.
+/// [`Url::to_file_path`] has a different code path for Windows and other
+/// operating systems, this can cause URLs to parse perfectly fine on Windows,
+/// but fail to parse on Linux. This function tries to parse the URL as a path
+/// on all operating systems.
 pub fn url_to_path(url: &Url) -> Option<PathBuf> {
     url_to_path_inner(url)
 }
@@ -89,9 +99,10 @@ pub fn url_to_path(url: &Url) -> Option<PathBuf> {
 ///
 /// We assume that any passed URL that represents a path is an absolute path.
 ///
-/// [`Url::to_file_path`] has a different code path for Windows and other operating systems, this
-/// can cause URLs to parse perfectly fine on Windows, but fail to parse on Linux. This function
-/// tries to parse the URL as a path on all operating systems.
+/// [`Url::to_file_path`] has a different code path for Windows and other
+/// operating systems, this can cause URLs to parse perfectly fine on Windows,
+/// but fail to parse on Linux. This function tries to parse the URL as a path
+/// on all operating systems.
 pub fn url_to_typed_path(url: &Url) -> Option<Utf8TypedPathBuf> {
     url_to_path_inner(url)
 }
@@ -108,10 +119,14 @@ pub fn is_windows_drive_letter(segment: &str) -> bool {
 }
 
 fn starts_with_windows_drive_letter(s: &str) -> bool {
-    s.len() >= 2
-        && (s.as_bytes()[0] as char).is_ascii_alphabetic()
-        && matches!(s.as_bytes()[1], b':' | b'|')
-        && (s.len() == 2 || matches!(s.as_bytes()[2], b'/' | b'\\' | b'?' | b'#'))
+    let mut str_bytes = s.as_bytes().iter();
+    let Some((&a, &b)) = str_bytes.next_tuple() else {
+        return false;
+    };
+    let c = str_bytes.next();
+    (a as char).is_ascii_alphabetic()
+        && matches!(b, b':' | b'|')
+        && c.is_none_or(|c| matches!(*c, b'/' | b'\\' | b'?' | b'#'))
 }
 
 fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURLParseError> {
@@ -196,8 +211,9 @@ pub fn directory_path_to_url<'a>(
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
     use std::path::PathBuf;
+
+    use rstest::rstest;
     use url::Url;
 
     #[rstest]
@@ -208,6 +224,9 @@ mod tests {
     // Percent encoding
     #[case("file:///foo/ba%20r", Some("/foo/ba r"))]
     #[case("file:///C%3A/Test/Foo.txt", Some("C:\\Test\\Foo.txt"))]
+    // Percent-encoded Windows backslashes collapsed into one segment
+    #[case("file:///C%3A%5Cfoo%5Cbar", Some("C:\\foo\\bar"))]
+    #[case("file:///c%3A%5Ctemp%5Ctest-file.txt", Some("c:\\temp\\test-file.txt"))]
     // Non file URLs
     #[case("http://example.com", None)]
     fn test_url_to_path(#[case] url: &str, #[case] expected: Option<&str>) {

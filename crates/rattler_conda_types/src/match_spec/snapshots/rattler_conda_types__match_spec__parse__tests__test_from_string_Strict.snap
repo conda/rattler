@@ -105,3 +105,5 @@ rust ~=1.2.3:
   subdir: linux-64
 numpy>=2.*.*:
   error: regex constraints are not supported
+"bird_tool_utils_python =0.*,>=0.4.1":
+  error: "'*' is incompatible with '=' operator'"

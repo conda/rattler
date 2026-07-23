@@ -1,0 +1,32 @@
+version: 6
+environments:
+  without-options:
+    channels: []
+    packages: {}
+    options: {}
+  with-exclude-newer:
+    channels: []
+    packages: {}
+    options:
+      exclude-newer: "2025-04-15T12:15:00+00:00"
+  with-strategy:
+    channels: []
+    packages: {}
+    options:
+      strategy: "lowest-version"
+  with-default-strategy:
+    channels: []
+    packages: {}
+    options:
+      strategy: "highest"
+  with-channel-priority:
+    channels: []
+    packages: {}
+    options:
+      channel-priority: "disabled"
+  with-default-channel-priority:
+    channels: []
+    packages: {}
+    options:
+      channel-priority: "strict"
+packages: []

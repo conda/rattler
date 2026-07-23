@@ -22,7 +22,7 @@ pub struct RunExportsJson {
     /// noarch run exports apply a run export only to noarch packages (other run
     /// exports are ignored) for example, python uses this to apply a
     /// dependency on python to all noarch packages, but not to
-    /// the python_abi package
+    /// the `python_abi` package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub noarch: Vec<String>,
     /// weak constrains apply a constrain dependency from host to build, or run
@@ -42,6 +42,10 @@ impl PackageFile for RunExportsJson {
 
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
         serde_json::from_str(str).map_err(Into::into)
+    }
+
+    fn from_slice(slice: &[u8]) -> Result<Self, std::io::Error> {
+        serde_json::from_slice(slice).map_err(Into::into)
     }
 }
 
@@ -78,7 +82,7 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let package_dir = package_dir.into_path();
+        let package_dir = package_dir.keep();
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(RunExportsJson::from_package_directory(&package_dir).unwrap());

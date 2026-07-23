@@ -1,0 +1,11 @@
+{
+    "yaml": {
+        "printWidth": 100,
+        "formatComments": true,
+        "braceSpacing": false,
+    },
+    "excludes": [ "**/*-lock.json", "**/*.lock", "**/node_modules/", "dist/" ],
+    "plugins": [
+        "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm",
+    ],
+}

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Union, TYPE_CHECKING
 
@@ -35,14 +36,22 @@ class FetchRepoDataOptions:
     * `'current'`: Fetch `current_repodata.json` file. This file contains only the latest version of each package.
     """
 
-    jlap_enabled: bool = True
-    """Whether the JLAP compression is enabled or not."""
-
     zstd_enabled: bool = True
     """Whether the ZSTD compression is enabled or not."""
 
     bz2_enabled: bool = True
     """Whether the BZ2 compression is enabled or not."""
+
+    jlap_enabled: Optional[bool] = None
+    """Deprecated: JLAP support has been removed. This field is ignored."""
+
+    def __post_init__(self) -> None:
+        if self.jlap_enabled is not None:
+            warnings.warn(
+                "The 'jlap_enabled' option is deprecated and has no effect. JLAP support has been removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def _into_py(self) -> PyFetchRepoDataOptions:
         """
@@ -59,7 +68,6 @@ class FetchRepoDataOptions:
         return PyFetchRepoDataOptions(
             cache_action=self.cache_action,
             variant=self.variant,
-            jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
         )
@@ -96,7 +104,7 @@ async def fetch_repo_data(
         [platform._inner for platform in platforms],
         cache_path,
         callback,
-        client,
+        client._client if client else None,
         fetch_options._into_py(),
     )
 

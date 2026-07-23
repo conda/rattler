@@ -6,6 +6,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.4.0...rattler_libsolv_c-v1.4.1) - 2026-07-14
+
+### Other
+
+- update dependencies ([#2589](https://github.com/conda/rattler/pull/2589))
+
+## [1.4.0](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.3...rattler_libsolv_c-v1.4.0) - 2026-05-19
+
+### Added
+
+- channel index options (TOML) for `rattler-index` ([#2390](https://github.com/conda/rattler/pull/2390))
+
+## [1.3.3](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.2...rattler_libsolv_c-v1.3.3) - 2026-05-13
+
+### Other
+
+- bump Rust edition to 2024 ([#2429](https://github.com/conda/rattler/pull/2429))
+
+## [1.3.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.1...rattler_libsolv_c-v1.3.2) - 2026-04-30
+
+### Other
+
+- Added a getting started explainer to README ([#2334](https://github.com/conda/rattler/pull/2334))
+
+## [1.3.1](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.3.0...rattler_libsolv_c-v1.3.1) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [1.3.0](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.3...rattler_libsolv_c-v1.3.0) - 2025-11-27
+
+### Added
+
+- add condition dependency and `extras` support for libsolv ([#1836](https://github.com/conda/rattler/pull/1836))
+
+## [1.2.3](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.2...rattler_libsolv_c-v1.2.3) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [1.2.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.1...rattler_libsolv_c-v1.2.2) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [1.2.1](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.0...rattler_libsolv_c-v1.2.1) - 2025-05-16
+
+### Other
+
+- update dependencies ([#1126](https://github.com/conda/rattler/pull/1126))
+
+## [1.1.3](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.1.2...rattler_libsolv_c-v1.1.3) - 2025-03-10
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [1.1.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.1.1...rattler_libsolv_c-v1.1.2) - 2025-02-18
 
 ### Other

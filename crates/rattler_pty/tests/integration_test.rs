@@ -16,7 +16,7 @@ mod tests {
             Command::new("cat"),
             PtyProcessOptions {
                 echo: false,
-                window_size: Default::default(),
+                window_size: Option::default(),
             },
         )
         .expect("could not execute cat");

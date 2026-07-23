@@ -1,0 +1,15 @@
+---
+source: crates/rattler_conda_types/src/match_spec/condition.rs
+expression: result
+---
+Or:
+  - And:
+      - MatchSpec:
+          name: a
+      - MatchSpec:
+          name: b
+  - And:
+      - MatchSpec:
+          name: c
+      - MatchSpec:
+          name: d

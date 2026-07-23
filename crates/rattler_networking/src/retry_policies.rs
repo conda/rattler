@@ -4,7 +4,7 @@
 //! This module also provides the [`DoNotRetryPolicy`] which is useful if you do not want to retry
 //! anything.
 
-pub use retry_policies::{policies::*, Jitter, RetryDecision, RetryPolicy};
+pub use retry_policies::{Jitter, RetryDecision, RetryPolicy, policies::*};
 use std::time::SystemTime;
 
 /// A simple [`RetryPolicy`] that just never retries.
@@ -16,7 +16,7 @@ impl RetryPolicy for DoNotRetryPolicy {
     }
 }
 
-/// Returns the default retry policy that can be used .
+/// Returns the default retry policy that can be used.
 ///
 /// This is useful if you just do not care about a retry policy and you just want something
 /// sensible. Note that the behavior of what is "sensible" might change over time.

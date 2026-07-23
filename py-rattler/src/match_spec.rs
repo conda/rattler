@@ -1,14 +1,15 @@
 use std::sync::Arc;
+use std::{borrow::Borrow, str::FromStr};
 
-use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, ParseStrictness};
+use pyo3::{Bound, PyResult, Python, pyclass, pymethods, types::PyBytes};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageNameMatcher, ParseMatchSpecOptions};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
-    package_name::PyPackageName, record::PyRecord,
+    package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMatchSpec {
@@ -27,26 +28,44 @@ impl From<PyMatchSpec> for MatchSpec {
     }
 }
 
+impl Borrow<MatchSpec> for PyMatchSpec {
+    fn borrow(&self) -> &MatchSpec {
+        &self.inner
+    }
+}
+
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
-        Ok(MatchSpec::from_str(
-            spec,
-            if strict {
-                ParseStrictness::Strict
-            } else {
-                ParseStrictness::Lenient
-            },
-        )
-        .map(Into::into)
-        .map_err(PyRattlerError::from)?)
+    #[pyo3(signature = (spec, strict = false, exact_names_only = true, extras = true, conditionals = true, flags = true))]
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub fn __init__(
+        spec: &str,
+        strict: bool,
+        exact_names_only: bool,
+        extras: bool,
+        conditionals: bool,
+        flags: bool,
+    ) -> PyResult<Self> {
+        let options = if strict {
+            ParseMatchSpecOptions::strict()
+        } else {
+            ParseMatchSpecOptions::lenient()
+        }
+        .with_exact_names_only(exact_names_only)
+        .with_extras(extras)
+        .with_conditionals(conditionals)
+        .with_flags(flags);
+
+        Ok(MatchSpec::from_str(spec, options)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageName> {
-        self.inner.name.clone().map(std::convert::Into::into)
+    pub fn name(&self) -> PyPackageNameMatcher {
+        self.inner.name.clone().into()
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -100,6 +119,30 @@ impl PyMatchSpec {
         self.inner.namespace.clone()
     }
 
+    /// The extras (optional dependencies) of the package
+    #[getter]
+    pub fn extras(&self) -> Option<Vec<String>> {
+        self.inner.extras.clone()
+    }
+
+    /// The flags of the package variant.
+    #[getter]
+    pub fn flags(&self) -> Option<Vec<String>> {
+        self.inner
+            .flags
+            .as_ref()
+            .map(|flags| flags.iter().map(ToString::to_string).collect())
+    }
+
+    /// The condition under which this match spec applies
+    #[getter]
+    pub fn condition(&self) -> Option<String> {
+        self.inner
+            .condition
+            .as_ref()
+            .map(std::string::ToString::to_string)
+    }
+
     /// The md5 hash of the package
     #[getter]
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
@@ -112,24 +155,35 @@ impl PyMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns a string representation of MatchSpec
+    /// Returns a string representation of `MatchSpec`
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }
 
-    /// Matches a MatchSpec against a PackageRecord
+    /// Matches a `MatchSpec` against a `PackageRecord`
     pub fn matches(&self, record: &PyRecord) -> bool {
         self.inner.matches(record.as_package_record())
     }
 
-    /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
+    /// Constructs a `PyMatchSpec` from a `PyNamelessMatchSpec` and a name.
     #[staticmethod]
     pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> PyResult<Self> {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
+                PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?,
             ),
         })
+    }
+
+    #[staticmethod]
+    pub fn from_url(url: &str) -> PyResult<Self> {
+        let url = url
+            .parse::<url::Url>()
+            .map_err(PyRattlerError::InvalidUrl)?;
+
+        Ok(MatchSpec::try_from(url)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 }

@@ -1,23 +1,23 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Literal, Optional
 
 from rattler.rattler import PyNoArchType
+
+NoArchLiteral = Optional[Literal["python", "generic", True]]
 
 
 class NoArchType:
     _noarch: PyNoArchType
 
-    def __init__(self, noarch: Optional[str] = None) -> None:
+    def __init__(self, noarch: NoArchLiteral = None) -> None:
         if noarch is None:
             self._noarch = PyNoArchType.none()
         elif noarch == "python":
             self._noarch = PyNoArchType.python()
-        elif noarch == "generic":
+        elif noarch == "generic" or noarch is True:
             self._noarch = PyNoArchType.generic()
         else:
-            raise ValueError(
-                "NoArchType constructor received unsupported value " f"{noarch} for the `noarch` parameter"
-            )
+            raise ValueError(f"NoArchType constructor received unsupported value {noarch} for the `noarch` parameter")
 
     @classmethod
     def _from_py_no_arch_type(cls, py_no_arch_type: PyNoArchType) -> NoArchType:

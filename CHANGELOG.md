@@ -35,13 +35,13 @@ This release contains some big changes to rattler:
 #### Consistent clobbering
 
 Rattler installs packages in parallel but this was at the cost of not being able to resolve files properly that existed in multiple packages.
-With this release we fixed this issue by creating a consistent clobbering experience. 
+With this release we fixed this issue by creating a consistent clobbering experience.
 When a file is clobbered (installed by multiple packages) the last package in the topological ordering wins.
 This information is also recorded in the prefix itself which means that even if packages are added or removed from the environment the order remains consistent.
 
 #### reqwest-middleware-client
 
-The `AuthenticatedClient` has been rewritten by @vlad-ivanov-name. 
+The `AuthenticatedClient` has been rewritten by @vlad-ivanov-name.
 Instead of having a custom client for network requests we now use the [`reqwest-middleware`](https://crates.io/crates/reqwest-middleware) crate.
 The rattler implementation adds a middleware that handles authentication.
 This changes makes it easier to integrate with other crates that use `reqwest` for network requests, and it allows users to add their own middleware.
@@ -51,7 +51,7 @@ This changes makes it easier to integrate with other crates that use `reqwest` f
 The lock-file format has been updated to version 4.
 Originally our implementation was semi-compatible with [conda-lock](https://github.com/conda/conda-lock).
 We wanted to stay as close as possible to this format because it was already an established standard.
-However, with version 2 and 3 of the format we started to diverge more and more. 
+However, with version 2 and 3 of the format we started to diverge more and more.
 We felt like the goals between both formats also started to diverge more and more so with version 4 we decided to completely abandon the conda-lock format and create our own.
 For more information about the lock-file format and the differences between conda-lock you can [read the documentation](https://docs.rs/rattler_lock/0.17.0/rattler_lock).
 Note that all old formats (including the original conda-lock format) can still be parsed by rattler.
@@ -90,7 +90,7 @@ Note that all old formats (including the original conda-lock format) can still b
 
 # [0.16.2] - 2024-01-11
 
-### 📃 Details 
+### 📃 Details
 
 #### Fixed
 
@@ -208,7 +208,7 @@ Note that all old formats (including the original conda-lock format) can still b
 
 ### ✨ Highlights
 
-Adds support for strict priority channel ordering, channel-specific selectors, 
+Adds support for strict priority channel ordering, channel-specific selectors,
 
 ### 📃 Details
 
@@ -259,7 +259,7 @@ Lock file support has been moved into its own crate (rattler_lock) and support f
 ### ✨ Highlights
 
 The solver has been renamed and moved to its own repository: [resolvo](https://github.com/mamba-org/resolvo).
-With the latest changes to the python bindings you can now download repodata and solve environments! 
+With the latest changes to the python bindings you can now download repodata and solve environments!
 Still no official release of the bindings though, but getting closer every day.
 
 ### 📃 Details
@@ -293,7 +293,7 @@ Still no official release of the bindings though, but getting closer every day.
 
 ### ✨ Highlights
 
-This is a pretty substantial release which includes many refactors to the solver (which we will pull out of this repository at some point), initial work on Python bindings, and many many fixes.  
+This is a pretty substantial release which includes many refactors to the solver (which we will pull out of this repository at some point), initial work on Python bindings, and many many fixes.
 
 ### 📃 Details
 
@@ -326,14 +326,14 @@ This is a pretty substantial release which includes many refactors to the solver
 * update all dependencies and fix chrono deprecation by @wolfv in [#302](https://github.com/conda/rattler/pull/302)
 * shell improvements for powershell env-var escaping and xonsh detection by @wolfv in [#307](https://github.com/conda/rattler/pull/307)
 * also export strict version by @wolfv in [#312](https://github.com/conda/rattler/pull/312)
-* make FetchRepoDataOptions clonable by @Wackyator in [#321](https://github.com/conda/rattler/pull/321)
+* make FetchRepoDataOptions cloneable by @Wackyator in [#321](https://github.com/conda/rattler/pull/321)
 * bump json-patch 1.1.0 to fix stack overflow by @baszalmstra in [#332](https://github.com/conda/rattler/pull/332)
 * emscripten is a unix variant by @wolfv in [#339](https://github.com/conda/rattler/pull/339)
 * authentication fallback storage location by @ruben-arts in [#347](https://github.com/conda/rattler/pull/347)
 
 ### 🐍 Python
 
-Although this release doesn't include a formal release of the python bindings yet, a lot of work has been done to work towards a first version. 
+Although this release doesn't include a formal release of the python bindings yet, a lot of work has been done to work towards a first version.
 
 * initial version of rattler python bindings by @baszalmstra in [#279](https://github.com/conda/rattler/pull/279)
 * bind `Version`, `MatchSpec`, `NamelessMatchSpec` by @Wackyator in [#292](https://github.com/conda/rattler/pull/292)
@@ -407,7 +407,7 @@ This release mostly contains bug fixes.
 
 #### New rust based solver implementation
 
-This version of rattler includes a new solver implementation! 
+This version of rattler includes a new solver implementation!
 @aochagavia worked hard on porting libsolv to rust and integrating that with `rattler_solve`.
 The port performs slightly faster or similar to the original C code and does not contain unsafe code, is well documented, and thread-safe.
 Our implementation (`rattler_libsolv_rs`) is specific to solving conda packages by leveraging `rattler_conda_types` for matching and parsing.
@@ -452,7 +452,7 @@ Caching the result of an activation script can be useful if you need to invoke m
 
 - Run activation scripts and capture their output by @baszalmstra in ([#239](https://github.com/conda/rattler/pull/239))
 - Support for sha256 and md5 field in matchspec by @0xbe7a in ([#241](https://github.com/conda/rattler/pull/241))
-- A rust port of libsolv as an additional solver backend by @aochagavia, @baszalmstra in ([#243](https://github.com/conda/rattler/pull/243) & [#253](https://github.com/conda/rattler/pull/253)) 
+- A rust port of libsolv as an additional solver backend by @aochagavia, @baszalmstra in ([#243](https://github.com/conda/rattler/pull/243) & [#253](https://github.com/conda/rattler/pull/253))
 - Test cases and benchmarks for solver implementations by @baszalmstra in ([#250](https://github.com/conda/rattler/pull/249) & [#250](https://github.com/conda/rattler/pull/249))
 - The ability to add a dependency from `python` on `pip` while loading repodata @wolfv in ([#238](https://github.com/conda/rattler/pull/238))
 
@@ -549,8 +549,8 @@ A new crate has been added to facilitate authentication when downloading repodat
 #### Added
 
 - Support for detecting more platforms ([#135](https://github.com/conda/rattler/pull/135))
-- `RepoData` is now clonable ([#138](https://github.com/conda/rattler/pull/138))
-- `RunExportsJson` is now clonable ([#169](https://github.com/conda/rattler/pull/169))
+- `RepoData` is now cloneable ([#138](https://github.com/conda/rattler/pull/138))
+- `RunExportsJson` is now cloneable ([#169](https://github.com/conda/rattler/pull/169))
 - `file://` urls are now supported for package extraction functions ([#157](https://github.com/conda/rattler/pull/157))
 - `file://` urls are now supported for repodata fetching ([#158](https://github.com/conda/rattler/pull/158))
 - Getting started with rattler using micromamba ([#163](https://github.com/conda/rattler/pull/163))

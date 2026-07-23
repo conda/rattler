@@ -123,7 +123,7 @@ impl RunExportsCache {
         Fut: Future<Output = Result<Option<NamedTempFile>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_path = self.inner.path.join(cache_key.to_path_segment()?);
         let cache_entry = self
             .inner
             .run_exports
@@ -145,10 +145,10 @@ impl RunExportsCache {
             .await
             .map_err(|e| RunExportsCacheError::Fetch(Arc::new(e)))?;
 
-        if let Some(parent_dir) = cache_path.parent() {
-            if !parent_dir.exists() {
-                tokio_fs::create_dir_all(parent_dir).await?;
-            }
+        if let Some(parent_dir) = cache_path.parent()
+            && !parent_dir.exists()
+        {
+            tokio_fs::create_dir_all(parent_dir).await?;
         }
 
         let run_exports = if let Some(file) = run_exports_file {
@@ -336,17 +336,21 @@ pub enum RunExportsCacheError {
     #[error("{0}")]
     Persist(#[from] PersistError),
 
-    /// An error occured when extracting `run_exports` from archive
+    /// An error occurred when extracting `run_exports` from archive
     #[error(transparent)]
     Extract(#[from] ExtractError),
 
-    /// An error occured when serializing `run_exports`
+    /// An error occurred when serializing `run_exports`
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
 
     /// The operation was cancelled
     #[error("operation was cancelled")]
     Cancelled,
+
+    /// The cache key contains metadata that could lead to path traversal.
+    #[error(transparent)]
+    UnsafeCacheKey(#[from] rattler_conda_types::utils::InvalidPathComponentError),
 }
 
 struct PassthroughReporter {
@@ -385,6 +389,7 @@ mod test {
 
     use assert_matches::assert_matches;
     use axum::{
+        Router,
         body::Body,
         extract::State,
         http::{Request, StatusCode},
@@ -392,11 +397,10 @@ mod test {
         middleware::Next,
         response::{Redirect, Response},
         routing::get,
-        Router,
     };
 
     use rattler_conda_types::{PackageName, PackageRecord, Version};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{Sha256, parse_digest_from_hex};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -416,7 +420,7 @@ mod test {
         // so we expect the cache to return None
         let package_url = Url::parse("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2").unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 
@@ -460,7 +464,7 @@ mod test {
             Url::parse("https://repo.prefix.dev/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda")
                 .unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 
@@ -702,7 +706,7 @@ mod test {
         .await
         .unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 

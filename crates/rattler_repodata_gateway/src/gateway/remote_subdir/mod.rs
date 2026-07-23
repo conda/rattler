@@ -1,7 +1,6 @@
-use crate::gateway::subdir::SubdirClient;
+use crate::gateway::subdir::{PackageRecords, SubdirClient};
 use crate::{GatewayError, Reporter};
-use rattler_conda_types::{PackageName, RepoDataRecord};
-use std::sync::Arc;
+use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -20,11 +19,19 @@ impl SubdirClient for RemoteSubdirClient {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<PackageRecords, GatewayError> {
         self.sparse.fetch_package_records(name, reporter).await
     }
 
     fn package_names(&self) -> Vec<String> {
         self.sparse.package_names()
+    }
+
+    fn repodata_revisions(&self) -> &RepodataRevisions {
+        self.sparse.repodata_revisions()
+    }
+
+    fn channel_relations(&self) -> Option<&ChannelRelations> {
+        self.sparse.channel_relations()
     }
 }
