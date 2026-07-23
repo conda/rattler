@@ -38,7 +38,6 @@ path = "src/main.rs"
 thiserror = { workspace = true }
 ahash = { workspace = true }
 anyhow = { workspace = true }
-base64 = { workspace = true }
 bytes = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }

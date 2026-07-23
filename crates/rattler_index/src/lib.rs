@@ -18,7 +18,6 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use base64::Engine;
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{StreamExt, stream::FuturesUnordered};
@@ -772,28 +771,21 @@ async fn index_subdir_inner(
             }
         };
 
-    let existing = op.list_with(&format!("{}/", subdir.as_str())).await?;
-    // get the md5 hashes of each uploaded .conda, storing an optional md5 hash and a archive size
-    // for each, so that we can later check if the contents has changed
-    let uploaded_hashes: HashMap<DistArchiveIdentifier, Option<&str>> = existing
+    // List all the packages in the subdirectory.
+    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
+        .list_with(&format!("{}/", subdir.as_str()))
+        .await?
         .iter()
         .filter_map(|entry| {
-            let meta = entry.metadata();
-            if meta.mode().is_file() {
+            if entry.metadata().mode().is_file() {
+                let filename = entry.name().to_string();
                 // Check if the file is an archive package file.
-                DistArchiveIdentifier::try_from_filename(entry.name())
-                    // opendal populates content_md5 from the backend's Content-MD5
-                    // header on list (verified for azure/azblob via the azure_md5_probe
-                    // test). md5 is documented best-effort, so backends that omit it
-                    // yield None here and those packages get re-indexed.
-                    .map(|id| (id, meta.content_md5()))
+                DistArchiveIdentifier::try_from_filename(&filename)
             } else {
                 None
             }
         })
         .collect();
-    let uploaded_packages: HashSet<DistArchiveIdentifier> =
-        uploaded_hashes.keys().cloned().collect();
 
     tracing::debug!(
         "Found {} already uploaded packages in subdir {}.",
@@ -818,43 +810,6 @@ async fn index_subdir_inner(
     );
 
     for filename in &packages_to_delete {
-        registered_packages.remove(filename);
-    }
-
-    // Re-index packages whose file no longer matches the md5 recorded in the
-    // previous repodata. `.conda`/`.tar.bz2` archives aren't reproducible, so a
-    // package rebuilt and republished under the same filename has different
-    // bytes; without this the stale record's sha256/size are kept and clients
-    // hit a hash mismatch on download. Dropping the mismatched entry here moves
-    // it into `packages_to_add` below, which re-reads and re-hashes it.
-    let stale = registered_packages
-        .iter()
-        .filter(|(id, pkg)| {
-            // Not stale only if the backend's md5 matches the one in the previous
-            // repodata. opendal exposes content_md5 as the base64 Content-MD5 header
-            // (e.g. azure), so decode it to raw bytes before comparing to the record's
-            // 16-byte digest. Missing/undecodable md5 => treat as stale and re-index.
-            if let Some(Some(new_md5)) = uploaded_hashes.get(id)
-                && let Some(old_md5) = pkg.record.md5
-                && let Ok(new_md5) = base64::engine::general_purpose::STANDARD.decode(new_md5)
-                && old_md5.as_slice() == new_md5.as_slice()
-            {
-                false
-            } else {
-                true
-            }
-        })
-        .map(|(id, _)| id.clone())
-        .collect::<Vec<_>>();
-
-    if !stale.is_empty() {
-        tracing::warn!(
-            "Re-indexing {} packages in subdir {} whose md5 changed since the last index.",
-            stale.len(),
-            subdir
-        );
-    }
-    for filename in &stale {
         registered_packages.remove(filename);
     }
 
