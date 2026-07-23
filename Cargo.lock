@@ -5053,6 +5053,7 @@ dependencies = [
  "jiff",
  "thiserror 2.0.18",
  "url",
+ "which",
 ]
 
 [[package]]

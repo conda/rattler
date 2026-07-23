@@ -1,3 +1,15 @@
+//! Helpers for deriving Azure Blob coordinates from channel URLs and for minting
+//! short-lived credentials for them.
+//!
+//! # Trusted-host model
+//!
+//! [`account_and_container`] trusts the URL host verbatim: whatever host is
+//! named is taken to be the storage endpoint, and any ambient AAD credentials
+//! (an `az login` session) are sent to that host. Userinfo (`user:pass@host`) is
+//! rejected because it is a host-spoofing vector, but an honest, arbitrary host
+//! is the caller's responsibility — this crate does not police which hosts are
+//! legitimate Azure endpoints.
+
 #[cfg(feature = "clap")]
 pub mod clap;
 
@@ -39,6 +51,13 @@ pub enum AzureUrlError {
     #[error("no host in Azure blob URL")]
     NoHost,
 
+    /// The URL carries userinfo (`user:pass@host`).
+    #[error(
+        "Azure blob URL must not contain userinfo (`user:pass@host`): the `user@host` form is a \
+         host-spoofing vector that can disguise the real target host"
+    )]
+    UserInfoNotAllowed,
+
     /// The host is not a dotted domain, so no storage account can be derived.
     #[error(
         "Azure blob URL host `{0}` is not a dotted domain of the form `<account>.blob.<suffix>`; \
@@ -53,6 +72,13 @@ pub enum AzureUrlError {
     /// The URL has no container path segment.
     #[error("no container in Azure blob URL")]
     NoContainer,
+
+    /// The derived account or container contains characters outside `[a-z0-9-]`.
+    #[error(
+        "Azure blob URL component `{0}` contains characters outside [a-z0-9-]; account and \
+         container names are restricted to that set"
+    )]
+    InvalidCharacters(String),
 }
 
 /// The storage account and container an Azure Blob channel URL resolves to.
@@ -74,7 +100,19 @@ pub struct AzureCoordinates {
 /// The account name is the first label of the host, so the host must be a dotted
 /// domain; IP-literal and single-label hosts (e.g. `localhost` or the Azurite
 /// emulator) are rejected because no account can be derived from them.
+///
+/// The host is otherwise trusted verbatim (see the [crate-level docs] for the
+/// trusted-host model): userinfo (`user:pass@host`) is rejected as a
+/// host-spoofing vector, but an honest, arbitrary host is the caller's
+/// responsibility. The derived account and container are additionally restricted
+/// to `[a-z0-9-]` so that argument-injection-shaped values can never reach the
+/// `az` subprocess.
+///
+/// [crate-level docs]: crate
 pub fn account_and_container(url: &Url) -> Result<AzureCoordinates, AzureUrlError> {
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(AzureUrlError::UserInfoNotAllowed);
+    }
     let host = url.host_str().ok_or(AzureUrlError::NoHost)?;
     if !matches!(url.host(), Some(url::Host::Domain(domain)) if domain.contains('.')) {
         return Err(AzureUrlError::InvalidHost(host.to_string()));
@@ -89,6 +127,14 @@ pub fn account_and_container(url: &Url) -> Result<AzureCoordinates, AzureUrlErro
         .and_then(|mut segments| segments.next())
         .filter(|segment| !segment.is_empty())
         .ok_or(AzureUrlError::NoContainer)?;
+    for component in [account, container] {
+        if !component
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            return Err(AzureUrlError::InvalidCharacters(component.to_string()));
+        }
+    }
     Ok(AzureCoordinates {
         account: account.to_string(),
         container: container.to_string(),
@@ -106,6 +152,10 @@ pub enum AzureCliSasError {
     /// The `az` executable could not be found on `PATH`.
     #[error("could not find the Azure CLI (`az`) on PATH; install it and run `az login`")]
     AzNotFound(#[source] std::io::Error),
+
+    /// The `az` executable could not be resolved on `PATH`.
+    #[error("could not resolve the Azure CLI (`az`) on PATH; install it and run `az login`")]
+    AzResolve(#[source] which::Error),
 
     /// The `az` process could not be spawned.
     #[error("failed to run the Azure CLI (`az`)")]
@@ -139,6 +189,15 @@ pub enum AzureCliSasError {
 ///
 /// This blocks the calling thread while the `az` process runs; it is meant to be
 /// called once at setup time.
+///
+/// # Container-scope limitation
+///
+/// A user-delegation SAS minted against a flat container is *container-scoped*,
+/// not prefix-scoped: it grants its permissions over the whole container, so a
+/// SAS for one channel also grants rights over any sibling channels that share
+/// the same container. The short TTL requested here bounds the blast radius, but
+/// prefix-scoping a flat container is not possible without a stored access
+/// policy, which this path deliberately does not create.
 #[cfg(feature = "clap")]
 pub fn mint_user_delegation_sas(
     account: &str,
@@ -160,7 +219,12 @@ pub fn mint_user_delegation_sas(
     // is not floored down to the enclosing whole minute.
     let expiry = expiry.strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-    let output = az_command()
+    #[cfg(windows)]
+    let mut command = az_command()?;
+    #[cfg(not(windows))]
+    let mut command = az_command();
+
+    let output = command
         .args([
             "storage",
             "container",
@@ -204,16 +268,53 @@ pub fn mint_user_delegation_sas(
 /// Build the [`std::process::Command`] used to invoke the Azure CLI.
 ///
 /// On Windows the Azure CLI is a `az.cmd` batch shim; `std::process` does not
-/// honor `PATHEXT`, so a bare `az` fails to resolve it. Going through the command
-/// interpreter (`cmd /C az ...`) lets Windows apply `PATHEXT` and find the shim.
+/// honor `PATHEXT`, so a bare `az` fails to resolve it. `which` applies `PATHEXT`
+/// to find the real `az`/`az.cmd` path, which is then invoked directly. Routing
+/// through the command interpreter (`cmd /C az ...`) is deliberately avoided: it
+/// would expose the command line to `cmd` metacharacter interpretation, an
+/// argument-injection vector.
 #[cfg(all(feature = "clap", windows))]
-fn az_command() -> std::process::Command {
-    let mut command = std::process::Command::new("cmd");
-    command.args(["/C", "az"]);
-    command
+fn az_command() -> Result<std::process::Command, AzureCliSasError> {
+    let path = which::which("az").map_err(AzureCliSasError::AzResolve)?;
+    Ok(std::process::Command::new(path))
 }
 
 #[cfg(all(feature = "clap", not(windows)))]
 fn az_command() -> std::process::Command {
     std::process::Command::new("az")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_url_resolves() {
+        let url = Url::parse("https://acct.blob.core.windows.net/general/noarch").unwrap();
+        assert_eq!(
+            account_and_container(&url).unwrap(),
+            AzureCoordinates {
+                account: "acct".to_string(),
+                container: "general".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn userinfo_is_rejected() {
+        let url = Url::parse("https://acct.blob.core.windows.net@evil.example/general").unwrap();
+        assert!(matches!(
+            account_and_container(&url),
+            Err(AzureUrlError::UserInfoNotAllowed)
+        ));
+    }
+
+    #[test]
+    fn invalid_charset_container_is_rejected() {
+        let url = Url::parse("https://acct.blob.core.windows.net/general;evil/noarch").unwrap();
+        assert!(matches!(
+            account_and_container(&url),
+            Err(AzureUrlError::InvalidCharacters(_))
+        ));
+    }
 }
