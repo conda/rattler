@@ -20,6 +20,7 @@ pub enum PyMiddleware {
     Retry(PyRetryMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
+    Azure(PyAzureMiddleware),
     S3(PyS3Middleware),
     AddHeaders(PyAddHeadersMiddleware),
 }
@@ -121,6 +122,19 @@ impl PyGCSMiddleware {
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
         GCSMiddleware::default()
+    }
+}
+
+#[pyclass(from_py_object)]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyAzureMiddleware {}
+
+#[pymethods]
+impl PyAzureMiddleware {
+    #[new]
+    pub fn __init__() -> Self {
+        Self {}
     }
 }
 

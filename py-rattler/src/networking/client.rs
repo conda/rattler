@@ -4,8 +4,8 @@ use crate::{
 };
 use pyo3::{PyResult, pyclass, pymethods};
 use rattler_networking::{
-    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, LazyClient, MirrorMiddleware,
-    OciMiddleware, S3Middleware,
+    AuthenticationMiddleware, AuthenticationStorage, AzureMiddleware, GCSMiddleware, LazyClient,
+    MirrorMiddleware, OciMiddleware, S3Middleware,
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
@@ -83,6 +83,9 @@ impl PyClientWithMiddleware {
                 }
                 PyMiddleware::Gcs(middleware) => {
                     client = client.with(GCSMiddleware::from(middleware));
+                }
+                PyMiddleware::Azure(_middleware) => {
+                    client = client.with(AzureMiddleware::new(reqwest_client.clone()));
                 }
                 PyMiddleware::S3(middleware) => {
                     client = client.with(S3Middleware::new(

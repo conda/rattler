@@ -3,6 +3,7 @@ from __future__ import annotations
 from rattler.networking.middleware import (
     AddHeadersMiddleware,
     AuthenticationMiddleware,
+    AzureMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
     OciMiddleware,
@@ -27,6 +28,7 @@ class Client:
                 | MirrorMiddleware
                 | OciMiddleware
                 | GCSMiddleware
+                | AzureMiddleware
                 | S3Middleware
             ]
             | None

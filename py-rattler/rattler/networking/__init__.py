@@ -3,6 +3,7 @@ from rattler.networking.fetch_repo_data import fetch_repo_data, CacheAction, Fet
 from rattler.networking.middleware import (
     AddHeadersMiddleware,
     AuthenticationMiddleware,
+    AzureMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
     OciMiddleware,
@@ -22,4 +23,5 @@ __all__ = [
     "OciMiddleware",
     "S3Middleware",
     "GCSMiddleware",
+    "AzureMiddleware",
 ]

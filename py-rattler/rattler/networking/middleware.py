@@ -5,6 +5,7 @@ from typing import Callable
 from rattler.rattler import (
     PyAddHeadersMiddleware,
     PyAuthenticationMiddleware,
+    PyAzureMiddleware,
     PyGCSMiddleware,
     PyMirrorMiddleware,
     PyOciMiddleware,
@@ -151,6 +152,30 @@ class GCSMiddleware:
 
     def __init__(self) -> None:
         self._middleware = PyGCSMiddleware()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class AzureMiddleware:
+    """
+    Middleware to work with az:// URLs
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import Client
+    >>> middleware = AzureMiddleware()
+    >>> middleware
+    AzureMiddleware()
+    >>> Client([middleware])
+    Client()
+    >>>
+    ```
+    """
+
+    def __init__(self) -> None:
+        self._middleware = PyAzureMiddleware()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

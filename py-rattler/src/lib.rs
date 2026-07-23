@@ -59,8 +59,8 @@ use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::middleware::{
-    PyAddHeadersMiddleware, PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware,
-    PyOciMiddleware, PyRetryMiddleware, PyS3Config, PyS3Middleware,
+    PyAddHeadersMiddleware, PyAuthenticationMiddleware, PyAzureMiddleware, PyGCSMiddleware,
+    PyMirrorMiddleware, PyOciMiddleware, PyRetryMiddleware, PyS3Config, PyS3Middleware,
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
@@ -119,6 +119,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyAuthenticationMiddleware>()?;
     m.add_class::<PyOciMiddleware>()?;
     m.add_class::<PyGCSMiddleware>()?;
+    m.add_class::<PyAzureMiddleware>()?;
     m.add_class::<PyS3Middleware>()?;
     m.add_class::<PyS3Config>()?;
     m.add_class::<PyRetryMiddleware>()?;
