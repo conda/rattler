@@ -384,6 +384,24 @@ async fn test_index_repodata_revision_from_index_json() {
 /// current blob hit a hash mismatch.
 #[tokio::test]
 async fn test_incremental_reindexes_replaced_package() {
+    // Incremental index (force: false) — the path that carried the bug.
+    async fn index(channel: &Path) {
+        index_fs(IndexFsConfig {
+            channel: channel.into(),
+            target_platform: Some(Platform::NoArch),
+            repodata_patch: None,
+            write_zst: false,
+            write_shards: false,
+            repodata_revisions: Vec::new(),
+            package_revision_assignment: PackageRevisionAssignment::default(),
+            force: false,
+            max_parallel: 1,
+            multi_progress: None,
+        })
+        .await
+        .unwrap();
+    }
+
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = temp_dir.path().join("noarch");
     fs::create_dir(&subdir_path).unwrap();
@@ -412,24 +430,6 @@ async fn test_incremental_reindexes_replaced_package() {
         )
         .unwrap();
     };
-
-    // Incremental index (force: false) — the path that carried the bug.
-    async fn index(channel: &Path) {
-        index_fs(IndexFsConfig {
-            channel: channel.into(),
-            target_platform: Some(Platform::NoArch),
-            repodata_patch: None,
-            write_zst: false,
-            write_shards: false,
-            repodata_revisions: Vec::new(),
-            package_revision_assignment: PackageRevisionAssignment::default(),
-            force: false,
-            max_parallel: 1,
-            multi_progress: None,
-        })
-        .await
-        .unwrap();
-    }
 
     let recorded = |field: &str| -> Value {
         let repodata: Value =
