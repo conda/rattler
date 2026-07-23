@@ -295,7 +295,7 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
 ///
 /// This dispatches to the correct reader for `.conda` and `.tar.bz2` package
 /// archives based on the file extension.
-pub fn package_record_from_archive(file: &Path) -> std::io::Result<PackageRecord> {
+pub fn package_record_from_package_archive(file: &Path) -> std::io::Result<PackageRecord> {
     match CondaArchiveType::try_from(file).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,

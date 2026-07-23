@@ -49,7 +49,7 @@ pub async fn inject(opt: InjectOpt) -> miette::Result<()> {
         .into_iter()
         .map(|package_path| {
             let package_path = package_path.canonicalize().into_diagnostic()?;
-            let package_record = rattler_index::package_record_from_archive(&package_path)
+            let package_record = rattler_index::package_record_from_package_archive(&package_path)
                 .into_diagnostic()
                 .with_context(|| {
                     format!(
