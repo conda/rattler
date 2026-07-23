@@ -22,7 +22,7 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 
 
 async def solve(
-    sources: Sequence[Union[Channel, str, RepoDataSource]],
+    sources: Sequence[Union[Channel, str, RepoDataSource, SparseRepoData]],
     specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
     platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
@@ -43,7 +43,7 @@ async def solve(
 
     Arguments:
         sources: The sources to query for the packages. Can be channels (by name, URL,
-                 or Channel object) or custom RepoDataSource implementations.
+                 or Channel object), custom RepoDataSource implementations or SparseRepoData objects.
         specs: A list of matchspec to solve.
         platforms: The platforms to query for the packages. If `None` the current platform and
                 `noarch` is used.
