@@ -349,6 +349,34 @@ fn lockfile_from_records(
     Ok(builder.finish())
 }
 
+/// Whether we should attempt to force-unmount `path` before mounting.
+///
+/// Returns `true` when `path` is a mount point (it lives on a different
+/// filesystem than its parent) or when its state can't be determined (a stat
+/// error can indicate a stale mount whose userspace server has died). Returns
+/// `false` for an ordinary directory, so the common "nothing mounted" case
+/// skips the `umount` subprocess entirely.
+#[cfg(unix)]
+fn should_force_unmount(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        // Ambiguous (possibly a stale/dead mount): fall back to cleanup.
+        Err(_) => return true,
+    };
+    match path.parent().and_then(|p| std::fs::metadata(p).ok()) {
+        Some(parent_meta) => meta.dev() != parent_meta.dev(),
+        None => false,
+    }
+}
+
+/// On non-Unix targets there is no cheap portable mount-point probe, so keep
+/// the previous always-attempt-cleanup behaviour.
+#[cfg(not(unix))]
+fn should_force_unmount(_path: &Path) -> bool {
+    true
+}
+
 /// Mounts `lockfile` at `prefix` via `rattler_vfs`, returning the live mount
 /// handle. Clears any stale mount left behind by a previous crashed run first.
 async fn mount_prefix(
@@ -363,8 +391,14 @@ async fn mount_prefix(
         .context("failed to create mount point")?;
 
     // A previous run that was killed (SIGKILL, power loss) can leave a stale
-    // mount at this path; clear it so the fresh mount can take over.
-    let _ = force_unmount(prefix, Transport::Auto);
+    // mount at this path; clear it so the fresh mount can take over. Only do
+    // this when the path actually looks mounted (or its state is ambiguous) —
+    // otherwise every invocation would spawn a pointless `umount` subprocess
+    // (adding latency + run-to-run jitter) and print a spurious
+    // "not currently mounted" error.
+    if should_force_unmount(prefix) {
+        let _ = force_unmount(prefix, Transport::Auto);
+    }
 
     // ProjFS on Windows has no read-only mode, so ask for read-only where it is
     // supported and let it fall through to writable on Windows.
