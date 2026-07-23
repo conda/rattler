@@ -187,8 +187,8 @@ pub enum AzureCliSasError {
 /// `permissions` is the Azure SAS permission string (e.g. `"cw"`). The returned
 /// token has no leading `?`. Requires `az` on `PATH` and a prior `az login`.
 ///
-/// This blocks the calling thread while the `az` process runs; it is meant to be
-/// called once at setup time.
+/// Runs the `az` process on the tokio runtime; it is meant to be called once at
+/// setup time.
 ///
 /// # Container-scope limitation
 ///
@@ -199,7 +199,7 @@ pub enum AzureCliSasError {
 /// prefix-scoping a flat container is not possible without a stored access
 /// policy, which this path deliberately does not create.
 #[cfg(feature = "clap")]
-pub fn mint_user_delegation_sas(
+pub async fn mint_user_delegation_sas(
     account: &str,
     container: &str,
     permissions: &str,
@@ -245,6 +245,7 @@ pub fn mint_user_delegation_sas(
             "tsv",
         ])
         .output()
+        .await
         .map_err(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
                 AzureCliSasError::AzNotFound(err)
@@ -265,23 +266,23 @@ pub fn mint_user_delegation_sas(
     Ok(token)
 }
 
-/// Build the [`std::process::Command`] used to invoke the Azure CLI.
+/// Build the [`tokio::process::Command`] used to invoke the Azure CLI.
 ///
-/// On Windows the Azure CLI is a `az.cmd` batch shim; `std::process` does not
-/// honor `PATHEXT`, so a bare `az` fails to resolve it. `which` applies `PATHEXT`
+/// On Windows the Azure CLI is a `az.cmd` batch shim; the process spawner does
+/// not honor `PATHEXT`, so a bare `az` fails to resolve it. `which` applies `PATHEXT`
 /// to find the real `az`/`az.cmd` path, which is then invoked directly. Routing
 /// through the command interpreter (`cmd /C az ...`) is deliberately avoided: it
 /// would expose the command line to `cmd` metacharacter interpretation, an
 /// argument-injection vector.
 #[cfg(all(feature = "clap", windows))]
-fn az_command() -> Result<std::process::Command, AzureCliSasError> {
+fn az_command() -> Result<tokio::process::Command, AzureCliSasError> {
     let path = which::which("az").map_err(AzureCliSasError::AzResolve)?;
-    Ok(std::process::Command::new(path))
+    Ok(tokio::process::Command::new(path))
 }
 
 #[cfg(all(feature = "clap", not(windows)))]
-fn az_command() -> std::process::Command {
-    std::process::Command::new("az")
+fn az_command() -> tokio::process::Command {
+    tokio::process::Command::new("az")
 }
 
 #[cfg(test)]

@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+#[cfg(feature = "s3")]
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{

@@ -12,12 +12,17 @@ readme.workspace = true
 [features]
 default = []
 # CLI credential options; resolving them may mint a short-lived user-delegation
-# SAS by shelling out to the Azure CLI (which needs `jiff` for the expiry).
-clap = ["dep:clap", "dep:jiff", "dep:which"]
+# SAS by shelling out to the Azure CLI (which needs `jiff` for the expiry and
+# `tokio` to run `az` without blocking the async runtime).
+clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["process"], optional = true }
 url = { workspace = true }
 which = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

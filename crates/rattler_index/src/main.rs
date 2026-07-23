@@ -266,9 +266,11 @@ async fn main() -> anyhow::Result<()> {
                 effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
-            let credentials = credentials.resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
-                Ok(rattler_azure::account_and_container(&channel)?)
-            })?;
+            let credentials = credentials
+                .resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
+                    Ok(rattler_azure::account_and_container(&channel)?)
+                })
+                .await?;
 
             index_azure_with_channel_metadata(
                 IndexAzureConfig {

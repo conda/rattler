@@ -69,7 +69,7 @@ impl AzureAuthSource {
     /// container returned by `cli_context` with those permissions. The account
     /// key and SAS token arms never invoke `cli_context`, so callers pay for
     /// account/container derivation only on the minting path.
-    pub fn resolve(
+    pub async fn resolve(
         self,
         permissions: &str,
         cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
@@ -79,7 +79,8 @@ impl AzureAuthSource {
             AzureAuthSource::SasToken(token) => Ok(AzureCredentials::SasToken(token)),
             AzureAuthSource::AzureCli { ttl } => {
                 let AzureCoordinates { account, container } = cli_context()?;
-                let token = mint_user_delegation_sas(&account, &container, permissions, ttl)?;
+                let token =
+                    mint_user_delegation_sas(&account, &container, permissions, ttl).await?;
                 Ok(AzureCredentials::SasToken(token))
             }
         }
@@ -172,12 +173,12 @@ impl AzureCredentialsOpts {
     /// Precedence is applied by [`AzureCredentialsOpts::source`]. `permissions`
     /// and `cli_context` are consulted only when the winning source is
     /// `--azure-cli`; see [`AzureAuthSource::resolve`].
-    pub fn resolve(
+    pub async fn resolve(
         self,
         permissions: &str,
         cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
     ) -> Result<AzureCredentials, AzureCredentialsError> {
-        self.source()?.resolve(permissions, cli_context)
+        self.source()?.resolve(permissions, cli_context).await
     }
 }
 
@@ -203,26 +204,28 @@ mod tests {
         panic!("cli_context should not be called for non-azure-cli sources");
     }
 
-    #[test]
-    fn account_key_resolves() {
+    #[tokio::test]
+    async fn account_key_resolves() {
         assert!(matches!(
-            opts(Some("key"), None, false).resolve("cw", unreachable_context),
+            opts(Some("key"), None, false).resolve("cw", unreachable_context).await,
             Ok(AzureCredentials::AccountKey(k)) if k == "key"
         ));
     }
 
-    #[test]
-    fn sas_token_resolves() {
+    #[tokio::test]
+    async fn sas_token_resolves() {
         assert!(matches!(
-            opts(None, Some("sv=..."), false).resolve("cw", unreachable_context),
+            opts(None, Some("sv=..."), false).resolve("cw", unreachable_context).await,
             Ok(AzureCredentials::SasToken(t)) if t == "sv=..."
         ));
     }
 
-    #[test]
-    fn none_is_rejected() {
+    #[tokio::test]
+    async fn none_is_rejected() {
         assert!(matches!(
-            opts(None, None, false).resolve("cw", unreachable_context),
+            opts(None, None, false)
+                .resolve("cw", unreachable_context)
+                .await,
             Err(AzureCredentialsError::Missing)
         ));
     }
