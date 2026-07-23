@@ -161,6 +161,9 @@ pub trait EnvOverride: Sized {
 }
 
 /// An enum that represents all virtual package types provided by this library.
+// Non-exhaustive so that adding new virtual package types (like `__ios` and
+// `__android`) is not a breaking change for downstream crates.
+#[non_exhaustive]
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
     /// Available on windows
@@ -195,6 +198,9 @@ pub enum VirtualPackage {
 }
 
 /// A struct that represents all virtual packages provided by this library.
+// Non-exhaustive so that adding new virtual package types (like `__ios` and
+// `__android`) is not a breaking change for downstream crates.
+#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct VirtualPackages {
     /// Available on windows

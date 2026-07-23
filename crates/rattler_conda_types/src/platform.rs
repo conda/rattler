@@ -39,10 +39,28 @@ pub enum Platform {
     Osx64,
     OsxArm64,
 
+    // iOS and Android map the PyPI wheel-tag model (PEP 730/738) onto conda:
+    // a wheel tag like `ios_13_0_arm64_iphoneos` packs arch, ABI and
+    // minimum OS version into one string. Conda splits these axes: arch + ABI
+    // become the subdir, while the minimum OS version (min iOS version /
+    // Android API level) is expressed through the `__ios`/`__android` virtual
+    // packages, so version compatibility is handled by the solver just like
+    // `__osx` and `__glibc`.
+    //
+    // Each subdir is single-arch by construction and keeps to a single
+    // `<os>-<arch>` dash so tools that split the subdir on `-` keep working;
+    // the device/simulator split is folded into the os token
+    // (`iossimulator`).
     IosArm64,
     IosSimulatorArm64,
     IosSimulator64,
 
+    // Android runs a Linux kernel but links against Bionic instead of glibc,
+    // which is why `android-*` gets its own subdirs and is deliberately not
+    // `is_linux()`: `linux-*` packages declare their libc requirement via
+    // `__glibc`, a constraint Bionic cannot satisfy, so mixing the two
+    // subdirs would install packages whose libc requirement is silently
+    // violated.
     AndroidAarch64,
     AndroidArmV7a,
     Android64,
@@ -83,7 +101,11 @@ pub enum Arch {
     Arm64,
     ArmV6l,
     ArmV7l,
-    // armv7a is used for android (the `armeabi-v7a` ABI)
+    // armv7a is used for Android's `armeabi-v7a` ABI. It is distinct from
+    // `armv7l` (the `uname -m` value used for `linux-armv7l`): both are
+    // 32-bit ARMv7, but `armeabi-v7a` uses Android's softfp calling
+    // convention and links against Bionic instead of glibc, so binaries are
+    // not interchangeable between the two.
     ArmV7a,
     LoongArch64,
     Ppc64le,
@@ -191,6 +213,56 @@ impl Platform {
             return Platform::OsxArm64;
         }
 
+        #[cfg(target_os = "ios")]
+        {
+            // Mac Catalyst (`*-apple-ios-macabi`) also reports `target_os =
+            // "ios"`, but produces binaries that run on macOS. No conda
+            // subdir exists for it.
+            #[cfg(target_abi = "macabi")]
+            return Platform::Unknown;
+
+            #[cfg(all(target_arch = "aarch64", target_abi = "sim"))]
+            return Platform::IosSimulatorArm64;
+
+            #[cfg(all(
+                target_arch = "aarch64",
+                not(any(target_abi = "sim", target_abi = "macabi"))
+            ))]
+            return Platform::IosArm64;
+
+            // The only x86_64 iOS target (`x86_64-apple-ios`) is the simulator.
+            #[cfg(all(target_arch = "x86_64", not(target_abi = "macabi")))]
+            return Platform::IosSimulator64;
+
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+            compile_error!("unsupported ios architecture");
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            return Platform::AndroidAarch64;
+
+            // armv7-linux-androideabi and thumbv7neon-linux-androideabi → armeabi-v7a
+            #[cfg(target_arch = "arm")]
+            return Platform::AndroidArmV7a;
+
+            #[cfg(target_arch = "x86")]
+            return Platform::Android32;
+
+            #[cfg(target_arch = "x86_64")]
+            return Platform::Android64;
+
+            // e.g. riscv64-linux-android
+            #[cfg(not(any(
+                target_arch = "aarch64",
+                target_arch = "arm",
+                target_arch = "x86",
+                target_arch = "x86_64"
+            )))]
+            compile_error!("unsupported android architecture");
+        }
+
         #[cfg(target_os = "emscripten")]
         {
             #[cfg(target_arch = "wasm32")]
@@ -207,6 +279,8 @@ impl Platform {
             target_os = "linux",
             target_os = "freebsd",
             target_os = "macos",
+            target_os = "ios",
+            target_os = "android",
             target_os = "emscripten",
             target_os = "wasi",
             windows

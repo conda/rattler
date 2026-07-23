@@ -82,6 +82,8 @@ class VirtualPackageOverrides:
     def __init__(
         self,
         osx: Override | None = None,
+        ios: Override | None = None,
+        android: Override | None = None,
         libc: Override | None = None,
         cuda: Override | None = None,
         archspec: Override | None = None,
@@ -91,6 +93,8 @@ class VirtualPackageOverrides:
         """
         self._overrides = PyVirtualPackageOverrides.none()
         self.osx = osx
+        self.ios = ios
+        self.android = android
         self.libc = libc
         self.cuda = cuda
         self.archspec = archspec
@@ -116,6 +120,36 @@ class VirtualPackageOverrides:
         Sets the OSX override.
         """
         self._overrides.osx = override._override if override else None
+
+    @property
+    def ios(self) -> Override | None:
+        """
+        Returns the iOS override.
+        """
+        override = self._overrides.ios
+        return Override._from_py_override(override) if override else None
+
+    @ios.setter
+    def ios(self, override: Override | None) -> None:
+        """
+        Sets the iOS override.
+        """
+        self._overrides.ios = override._override if override else None
+
+    @property
+    def android(self) -> Override | None:
+        """
+        Returns the Android override.
+        """
+        override = self._overrides.android
+        return Override._from_py_override(override) if override else None
+
+    @android.setter
+    def android(self, override: Override | None) -> None:
+        """
+        Sets the Android override.
+        """
+        self._overrides.android = override._override if override else None
 
     @property
     def libc(self) -> Override | None:
