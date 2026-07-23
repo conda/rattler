@@ -20,11 +20,8 @@ const X_MS_VERSION: &str = "2021-12-02";
 /// (a hard error). It is a presence check only — it does not validate that the
 /// values are usable; reqsign does that when it actually signs.
 ///
-/// NOTE: an interactive `az login` CLI session is intentionally NOT detected
-/// here. Doing so would require shelling out to `az` (or parsing its token
-/// cache), which is more than a cheap env probe. The residual gap: a machine
-/// authenticated only via `az login` whose session is broken will still fall
-/// back to an unsigned request rather than erroring.
+/// A persisted `az login` session (a profile on disk) counts as a source too;
+/// see [`azure_cli_session_present`].
 fn azure_credential_source_present() -> bool {
     // Explicit Shared Key or SAS token.
     if std::env::var_os("AZURE_STORAGE_ACCOUNT_KEY").is_some()
@@ -48,7 +45,27 @@ fn azure_credential_source_present() -> bool {
     {
         return true;
     }
-    false
+    // Persisted `az login` session.
+    azure_cli_session_present()
+}
+
+/// Whether a persisted `az login` session exists on disk.
+///
+/// `az login` writes an `azureProfile.json` into the Azure CLI config dir
+/// (`$AZURE_CONFIG_DIR`, else `~/.azure`). Its presence means a login was
+/// performed at some point, so a *broken* az-login credential hard-errors
+/// rather than silently downgrading to an unsigned request. This is a presence
+/// check only — reqsign validates the token when it actually signs, so a stale
+/// profile with no usable token still yields a hard error, never anonymous.
+fn azure_cli_session_present() -> bool {
+    let config_dir = match std::env::var_os("AZURE_CONFIG_DIR") {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => match std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            Some(home) => std::path::PathBuf::from(home).join(".azure"),
+            None => return false,
+        },
+    };
+    config_dir.join("azureProfile.json").exists()
 }
 
 /// Middleware that rewrites `az://` URLs to HTTPS Azure Blob Storage URLs and
@@ -401,6 +418,25 @@ mod tests {
         assert!(!AzureMiddleware::has_userinfo(
             &Url::parse("az://acct.blob.core.windows.net/c/x.json").unwrap()
         ));
+    }
+
+    /// A persisted `az login` profile counts as a credential source (so a
+    /// broken az-login session hard-errors instead of going anonymous), while
+    /// an empty config dir does not.
+    #[test]
+    fn detects_az_login_profile_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        temp_env::with_var("AZURE_CONFIG_DIR", Some(dir.path().as_os_str()), || {
+            assert!(
+                !azure_cli_session_present(),
+                "no profile file yet ⇒ not a credential source"
+            );
+            std::fs::write(dir.path().join("azureProfile.json"), "{}").unwrap();
+            assert!(
+                azure_cli_session_present(),
+                "azureProfile.json present ⇒ credential source"
+            );
+        });
     }
 
     /// When a credential source is detected but signing fails
