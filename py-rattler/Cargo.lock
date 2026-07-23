@@ -4119,7 +4119,9 @@ dependencies = [
  "clap",
  "jiff",
  "thiserror 2.0.18",
+ "tokio",
  "url",
+ "which",
 ]
 
 [[package]]
@@ -4235,7 +4237,6 @@ version = "0.30.9"
 dependencies = [
  "ahash",
  "anyhow",
- "base64",
  "bytes",
  "clap",
  "clap-verbosity-flag",
