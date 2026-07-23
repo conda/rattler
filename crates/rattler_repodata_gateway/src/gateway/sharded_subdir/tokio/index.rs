@@ -297,64 +297,38 @@ pub async fn fetch_index(
                         return Err(create_subdir_not_found_error(channel_base_url));
                     }
 
-                    // A `304 Not Modified` means the cached shard index is
-                    // still valid, so serve it directly. Servers that omit
-                    // `Cache-Control` on the shard index (e.g. Azure Blob
-                    // Storage) leave the cached policy with no freshness
-                    // lifetime, so without this guard the 304 falls through to
-                    // `from_response`, which rejects it as an unexpected status.
-                    //
-                    // Persist a refreshed policy from this revalidation so the
-                    // next fetch is a local cache hit rather than yet another
-                    // conditional round-trip: `shard_index_cache_policy`
-                    // synthesizes a small `max-age` for the Cache-Control-less
-                    // Azure case, so freshness accumulates.
-                    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                        match read_cached_body(&mut cache_reader).await {
-                            Ok(body) => {
-                                tracing::debug!("shard index revalidated (304 Not Modified)");
-                                let refreshed =
-                                    shard_index_cache_policy(&canonical_request, &response);
-                                let mut guard = cache_reader.into_inner();
-                                if let Err(e) = write_shard_index_cache(
-                                    guard.inner_mut(),
-                                    refreshed,
-                                    Bytes::from(body.clone()),
-                                )
-                                .await
-                                {
-                                    tracing::warn!(
-                                        "failed to persist refreshed shard index cache policy: {e}"
-                                    );
-                                }
-                                if let Some((reporter, index)) = download_reporter {
-                                    reporter.on_download_complete(response.url(), index);
-                                }
-                                return parse_shard_index(body).await;
-                            }
-                            Err(e) => {
-                                // Cache unreadable; fall through to a fresh fetch.
-                                tracing::warn!("the cached shard index has been corrupted: {e}");
-                            }
-                        }
-                    }
-
                     match cache_header.policy.after_response(
                         &state_request,
                         &response,
                         SystemTime::now(),
                     ) {
-                        AfterResponse::NotModified(_policy, _) => {
-                            // The cached file is still valid
-                            match read_shard_index_from_reader(&mut cache_reader).await {
-                                Ok(shard_index) => {
+                        AfterResponse::NotModified(refreshed, _) => {
+                            // The cached file is still valid. `after_response`
+                            // returns a refreshed policy derived from the stored
+                            // 200 response with the 304's headers merged, so it
+                            // stays storable and retains the original (or
+                            // synthesized) freshness window. Persist it so the
+                            // next fetch inside the window is a local cache hit
+                            // instead of yet another conditional round-trip.
+                            match read_cached_body(&mut cache_reader).await {
+                                Ok(body) => {
                                     tracing::debug!("shard index cache was not modified");
+                                    let mut guard = cache_reader.into_inner();
+                                    if let Err(e) = write_shard_index_cache(
+                                        guard.inner_mut(),
+                                        refreshed,
+                                        Bytes::from(body.clone()),
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(
+                                            "failed to persist refreshed shard index cache policy: {e}"
+                                        );
+                                    }
                                     if let Some((reporter, index)) = download_reporter {
                                         reporter.on_download_complete(response.url(), index);
                                     }
-                                    // If reading the file failed for some reason we'll just
-                                    // fetch it again.
-                                    return Ok(shard_index);
+                                    return parse_shard_index(body).await;
                                 }
                                 Err(e) => {
                                     tracing::warn!(
@@ -640,5 +614,78 @@ impl RequestLike for SimpleRequest {
 
     fn is_same_uri(&self, other: &Uri) -> bool {
         &self.uri() == other
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, SystemTime};
+
+    use http::{StatusCode, header};
+    use http_cache_semantics::{AfterResponse, BeforeRequest};
+    use url::Url;
+
+    use super::{SimpleRequest, shard_index_cache_policy};
+
+    /// Builds a bodyless `reqwest::Response`, mirroring how an origin (e.g.
+    /// Azure Blob Storage) answers for a shard index.
+    fn response(status: StatusCode, etag: &str, cache_control: Option<&str>) -> reqwest::Response {
+        let mut builder = http::Response::builder()
+            .status(status)
+            .header(header::ETAG, etag);
+        if let Some(cache_control) = cache_control {
+            builder = builder.header(header::CACHE_CONTROL, cache_control);
+        }
+        reqwest::Response::from(builder.body(Vec::new()).unwrap())
+    }
+
+    /// A 304 revalidation must persist a policy that keeps a non-zero freshness
+    /// window, so a fetch within that window is a local cache hit instead of yet
+    /// another conditional round-trip.
+    #[test]
+    fn revalidation_policy_retains_freshness() {
+        let url = Url::parse(
+            "https://example.blob.core.windows.net/channel/noarch/repodata_shards.msgpack.zst",
+        )
+        .unwrap();
+        let request = SimpleRequest::get(&url);
+        let now = SystemTime::now();
+
+        // The original 200 carried no `Cache-Control`, so `shard_index_cache_policy`
+        // synthesizes a small `max-age` and the stored policy starts fresh.
+        let original = response(StatusCode::OK, "\"v1\"", None);
+        let stored = shard_index_cache_policy(&request, &original);
+        assert!(matches!(
+            stored.before_request(&request, now),
+            BeforeRequest::Fresh(_)
+        ));
+
+        // A later revalidation is answered with a 304 that, like Azure, carries no
+        // `Cache-Control`. Routing it through `after_response` yields the policy
+        // that is persisted for the next fetch.
+        let not_modified = response(StatusCode::NOT_MODIFIED, "\"v1\"", None);
+        let refreshed = match stored.after_response(&request, &not_modified, now) {
+            AfterResponse::NotModified(policy, _) => policy,
+            AfterResponse::Modified(_, _) => {
+                panic!("a matching ETag must revalidate as NotModified")
+            }
+        };
+
+        // The refreshed policy must retain a non-zero freshness window so the next
+        // fetch is served straight from the cache.
+        assert!(
+            refreshed.time_to_live(now) > Duration::ZERO,
+            "refreshed policy lost its freshness window"
+        );
+        assert!(matches!(
+            refreshed.before_request(&request, now),
+            BeforeRequest::Fresh(_)
+        ));
+
+        // Regression guard: building a policy directly from the 304 (a status that
+        // is not storable) yields zero freshness, which would force perpetual
+        // revalidation.
+        let from_304 = shard_index_cache_policy(&request, &not_modified);
+        assert_eq!(from_304.time_to_live(now), Duration::ZERO);
     }
 }
