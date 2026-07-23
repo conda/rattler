@@ -10,10 +10,6 @@ license = "BSD-3-Clause"
 exclude-newer = "7d"
 preview = ["pixi-build"]
 
-[exclude-newer]
-# TODO: remove 29.06.2026
-pixi-build-python = "0d"
-
 [package]
 name = "py-rattler"
 
@@ -46,8 +42,8 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-rust = "~=1.95.0"
-rust-src = "~=1.95.0"
+rust = "==1.97.0"
+rust-src = "==1.97.0"
 
 [feature.test.tasks]
 test = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py"

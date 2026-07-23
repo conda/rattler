@@ -24,7 +24,7 @@ test-debug = { cmd="npm run test:debug", depends-on = ["build-debug", "build-typ
 
 [dependencies]
 nodejs = ">=25.7.0,<25.8"
-rust = ">=1.94.0,<1.95"
+rust = "==1.97.0"
 rust-std-wasm32-unknown-unknown = ">=1.94.0,<2"
 wasm-pack = ">=0.14.0,<0.15"
 zstd = ">=1.5.7,<2"
