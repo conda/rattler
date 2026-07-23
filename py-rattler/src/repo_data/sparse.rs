@@ -2,7 +2,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use pyo3::{Bound, PyRef, PyResult, Python, pyclass, pymethods};
 
+use rattler_conda_types::{PackageName, Platform, RepoDataRecord};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
+use rattler_repodata_gateway::{GatewayError, RepoDataSource};
 
 use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
@@ -25,13 +27,80 @@ pub struct PySparseRepoData {
     // This whole thing is then wrapped in an Arc so we can share this with a background thread
     // without blocking the GIL.
     pub(crate) inner: Arc<RwLock<Option<SparseRepoData>>>,
-    subdir: String,
+    pub(crate) subdir: String,
 }
 
 impl PySparseRepoData {
     /// Create a new instance without requiring the GIL.
     pub(crate) fn from_args(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
         Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
+    }
+
+    /// Adapts this instance to the `RepoDataSource` trait so it can be passed
+    /// directly to `Gateway::query` (e.g. via `solve`'s `sources` argument).
+    pub(crate) fn as_repo_data_source(&self) -> Arc<dyn RepoDataSource> {
+        Arc::new(PySparseRepoDataSource {
+            inner: self.inner.clone(),
+            subdir: self.subdir.clone(),
+        })
+    }
+}
+
+/// Adapts a [`PySparseRepoData`] to the [`RepoDataSource`] trait. Only
+/// answers queries for the platform matching its own subdir; every other
+/// platform is treated as having no records, mirroring how a single
+/// `SparseRepoData` only ever represents one channel/subdir pair.
+struct PySparseRepoDataSource {
+    inner: Arc<RwLock<Option<SparseRepoData>>>,
+    subdir: String,
+}
+
+#[async_trait::async_trait]
+impl RepoDataSource for PySparseRepoDataSource {
+    async fn fetch_package_records(
+        &self,
+        platform: Platform,
+        name: &PackageName,
+    ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
+        if platform.as_str() != self.subdir {
+            return Ok(Vec::new());
+        }
+
+        let inner = self.inner.clone();
+        let name = name.clone();
+        tokio::task::spawn_blocking(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(GatewayError::Generic(
+                    "I/O operation on closed file.".to_string(),
+                ));
+            };
+            sparse
+                .load_records(&name, PackageFormatSelection::PreferCondaWithWhl)
+                .map(|records| records.into_iter().map(Arc::new).collect::<Vec<_>>())
+                .map_err(|err| {
+                    GatewayError::IoError(
+                        "failed to extract repodata records from sparse repodata".to_string(),
+                        err,
+                    )
+                })
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(GatewayError::Generic(join_err.to_string())))
+    }
+
+    fn package_names(&self, platform: Platform) -> Vec<String> {
+        if platform.as_str() != self.subdir {
+            return Vec::new();
+        }
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Vec::new();
+        };
+        sparse
+            .package_names(PackageFormatSelection::PreferCondaWithWhl)
+            .map(Into::into)
+            .collect()
     }
 }
 
