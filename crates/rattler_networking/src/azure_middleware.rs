@@ -109,7 +109,7 @@ fn azure_cli_session_present() -> bool {
 /// When **no credential source is detected**, the request is sent **unsigned**
 /// rather than failing, so public/anonymous containers remain reachable with
 /// zero ambient credentials. When a credential source *is* configured
-/// (see [`azure_credential_source_present`]) but signing fails, that is a
+/// (see `azure_credential_source_present`) but signing fails, that is a
 /// **hard error** — reqsign collapses "no credential" and "broken credential"
 /// into the same [`reqsign_core::ErrorKind::CredentialInvalid`], so a broken credential must
 /// not be silently downgraded to an anonymous request.

@@ -29,7 +29,7 @@ pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "cw";
 /// The channel URL must be of the form
 /// `https://<account>.blob.core.windows.net/<container>/<prefix>`; the account
 /// name, endpoint, container, and root prefix are all derived from it (see
-/// [`azblob_config`]). Because the account is derived from the host, upload
+/// `azblob_config`). Because the account is derived from the host, upload
 /// requires this dotted `<account>.blob...` form and does not support
 /// path-style or emulator (Azurite) endpoints. The full blob host lives in the
 /// channel URL itself, so no separate account/endpoint configuration is needed.
