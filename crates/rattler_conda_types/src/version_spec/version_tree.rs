@@ -1,7 +1,7 @@
 use nom::{
     IResult, Parser,
     branch::alt,
-    bytes::complete::{tag, take_while},
+    bytes::complete::{tag, take_while, take_while1},
     character::complete::{alpha1, digit1, multispace0, u32},
     combinator::{cut, not, opt, recognize, value},
     error::{ContextError, ParseError, context},
@@ -97,6 +97,12 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
                     Ok((r, _)) => rest = r,
                     Err(_) => break,
                 }
+            }
+            // Versions can end in one or more underscores or dashes (e.g.
+            // `3.7b_`), those are part of the version. A trailing `.` stays
+            // unconsumed so globs like `3.*` keep working.
+            if let Ok((r, _)) = take_while1::<_, _, E>(|c: char| c == '_' || c == '-').parse(rest) {
+                rest = r;
             }
             let matched = &input[..input.len() - rest.len()];
             Ok((rest, matched))
@@ -234,6 +240,20 @@ mod tests {
         );
         assert_eq!(recognize_version::<Err<'_>>(false)("3."), Ok((".", "3")));
         assert_eq!(recognize_version::<Err<'_>>(false)("3.*"), Ok((".*", "3")));
+
+        // Trailing underscores and dashes are part of the version
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("3.7b_"),
+            Ok(("", "3.7b_"))
+        );
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("1.0__"),
+            Ok(("", "1.0__"))
+        );
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("1.0-"),
+            Ok(("", "1.0-"))
+        );
 
         let versions = [
             // Implicit epoch of 0

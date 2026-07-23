@@ -83,6 +83,21 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 lint = { features = ["lint"], solve-group = "default" }
 
 #------------------------------
+# Breaking API change detection
+#------------------------------
+[feature.semver-check.dependencies]
+nushell = "*"
+
+[feature.semver-check.tasks]
+breaking-changes = "nu scripts/check-breaking-changes.nu"
+test-breaking-changes = "nu scripts/test-breaking-changes.nu"
+update-breaking-change-comment = "nu scripts/update-breaking-change-comment.nu"
+
+[environments.semver-check]
+features = ["semver-check"]
+no-default-feature = true
+
+#------------------------------
 # Minio E2E test
 #------------------------------
 [feature.minio.dependencies]

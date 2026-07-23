@@ -124,6 +124,12 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+struct TokenArgs {
+    /// The host to print the stored token for (e.g. prefix.dev)
+    host: String,
+}
+
+#[derive(Parser, Debug)]
 struct StatusArgs {
     /// Show endpoint URLs, client ID, and other IdP-introspection fields
     /// that are only useful for debugging.
@@ -143,6 +149,8 @@ enum Subcommand {
     Login(LoginArgs),
     /// Remove authentication information for a given host
     Logout(LogoutArgs),
+    /// Print the stored authentication token for a given host
+    Token(TokenArgs),
     /// Show stored authentication entries and non-secret token metadata
     Status(StatusArgs),
 }
@@ -216,6 +224,11 @@ pub enum AuthenticationCLIError {
     /// No stored credentials were found for the requested host.
     #[error("No stored credentials found for {0}")]
     NotLoggedIn(String),
+
+    /// Credentials were found for the host, but they aren't a bearer-style
+    /// token that can be printed on its own (e.g. basic auth or S3 keys).
+    #[error("Stored credentials for {0} are {1} credentials, not a printable token")]
+    NotAToken(String, String),
 
     /// Interactive logout was requested but the process isn't attached to a TTY.
     #[cfg(feature = "auth-interactive")]
@@ -789,6 +802,41 @@ async fn logout_with_offline(
     Ok(())
 }
 
+/// Extract a bearer-style secret suitable for printing as a plain token.
+fn printable_token(auth: &Authentication) -> Option<&str> {
+    match auth {
+        Authentication::BearerToken(token) | Authentication::CondaToken(token) => Some(token),
+        Authentication::OAuth { access_token, .. } => Some(access_token),
+        Authentication::BasicHTTP { .. } | Authentication::S3Credentials { .. } => None,
+    }
+}
+
+async fn token(
+    args: TokenArgs,
+    storage: AuthenticationStorage,
+    offline: bool,
+) -> Result<(), AuthenticationCLIError> {
+    let url = ensure_url_scheme(&args.host);
+
+    // Refresh an expired OAuth access token before printing it, unless we're
+    // offline (needs network access).
+    let auth = if offline {
+        storage.get_by_url(url)?.1
+    } else {
+        storage.get_by_url_refreshed(url).await?.1
+    };
+
+    let Some(auth) = auth else {
+        return Err(AuthenticationCLIError::NotLoggedIn(args.host));
+    };
+
+    let token = printable_token(&auth)
+        .ok_or_else(|| AuthenticationCLIError::NotAToken(args.host, auth.method().to_string()))?;
+
+    println!("{token}");
+    Ok(())
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct TokenMetadata {
     expires_at: Option<i64>,
@@ -1108,6 +1156,7 @@ pub async fn execute_with_offline(args: Args, offline: bool) -> Result<(), Authe
     match args.subcommand {
         Subcommand::Login(args) => login_with_offline(args, storage, offline).await,
         Subcommand::Logout(args) => logout_with_offline(args, storage, offline).await,
+        Subcommand::Token(args) => token(args, storage, offline).await,
         Subcommand::Status(args) => status(args, storage).await,
     }
 }
@@ -1492,6 +1541,57 @@ mod tests {
         // No explicit method on a non-OAuth host → still falls through to existing
         // NoAuthenticationMethod error.
         assert!(default_oauth_for_login(&create_login_args("example.com")).is_none());
+    }
+
+    fn token_args(host: &str) -> TokenArgs {
+        TokenArgs {
+            host: host.to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn token_prints_bearer_token_for_matching_host() {
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store("*.prefix.dev", &Authentication::BearerToken("tok".into()))
+            .unwrap();
+
+        // `repo.prefix.dev` should resolve against the `*.prefix.dev` entry.
+        assert!(
+            token(token_args("repo.prefix.dev"), storage, true)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn token_unknown_host_returns_not_logged_in() {
+        let (storage, _temp_dir) = create_test_storage();
+        let result = token(token_args("nothing-here.example"), storage, true).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotLoggedIn(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn token_basic_auth_credentials_are_not_a_token() {
+        let (storage, _temp_dir) = create_test_storage();
+        storage
+            .store(
+                "example.com",
+                &Authentication::BasicHTTP {
+                    username: "user".into(),
+                    password: "pass".into(),
+                },
+            )
+            .unwrap();
+
+        let result = token(token_args("example.com"), storage, true).await;
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NotAToken(_, _))
+        ));
     }
 
     fn logout_args(host: Option<&str>, all: bool) -> LogoutArgs {

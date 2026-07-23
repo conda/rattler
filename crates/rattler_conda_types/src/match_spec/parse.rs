@@ -1199,6 +1199,19 @@ mod tests {
         );
 
         assert_matches!(
+            split_version_and_build("=3.7b_", Lenient),
+            Ok(("=3.7b_", None))
+        );
+        assert_matches!(
+            split_version_and_build("==3.7b_", Strict),
+            Ok(("==3.7b_", None))
+        );
+        assert_matches!(
+            split_version_and_build("=1.0_=py27_0", Lenient),
+            Ok(("=1.0_", Some("py27_0")))
+        );
+
+        assert_matches!(
             split_version_and_build("3.8.* *_cpython", Lenient),
             Ok(("3.8.*", Some("*_cpython")))
         );
@@ -1869,6 +1882,22 @@ mod tests {
     }
 
     #[test]
+    fn test_build_only_matchspec_roundtrips() {
+        // Without a `*` placeholder the build slides into the version slot and misparses.
+        let spec = MatchSpec::from_str("foo[build=py39h123_0]", Strict).unwrap();
+        assert_eq!(spec.version, None);
+        assert!(spec.build.is_some());
+
+        let rendered = spec.to_string();
+        assert_eq!(rendered, "foo * py39h123_0");
+
+        for strictness in [ParseStrictness::Lenient, Strict] {
+            let reparsed = MatchSpec::from_str(&rendered, strictness).unwrap();
+            assert_eq!(reparsed.build, spec.build);
+        }
+    }
+
+    #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
             "bird_tool_utils_python =0.*,>=0.4.1",
@@ -1878,6 +1907,32 @@ mod tests {
         let version_spec = match_spec.version.unwrap();
         let version = Version::from_str("0.4.1").unwrap();
         assert!(version_spec.matches(&version));
+    }
+
+    #[test]
+    fn test_pixi_issue_6618() {
+        // A trailing underscore belongs to the version, not the build string
+        for strictness in [ParseStrictness::Lenient, ParseStrictness::Strict] {
+            let match_spec = MatchSpec::from_str("tmux=3.7b_", strictness).unwrap();
+            assert_eq!(
+                match_spec.version,
+                Some(VersionSpec::from_str("3.7b_.*", strictness).unwrap())
+            );
+            assert_eq!(match_spec.build, None);
+            assert!(
+                match_spec
+                    .version
+                    .unwrap()
+                    .matches(&Version::from_str("3.7b_").unwrap())
+            );
+
+            let match_spec = MatchSpec::from_str("tmux==3.7b_", strictness).unwrap();
+            assert_eq!(
+                match_spec.version,
+                Some(VersionSpec::from_str("==3.7b_", strictness).unwrap())
+            );
+            assert_eq!(match_spec.build, None);
+        }
     }
 
     #[test]
