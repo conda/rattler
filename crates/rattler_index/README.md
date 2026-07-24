@@ -25,7 +25,7 @@ Index an Azure Blob Storage channel:
 
 ```shell
 rattler-index --config ./rattler-config.toml azblob \
-    https://my-storage-account.blob.core.windows.net/my-container/my-channel \
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel \
     --azure-cli
 ```
 
@@ -51,7 +51,7 @@ export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
     --permissions rwlc --expiry 2026-01-01T00:00Z \
     --auth-mode login --as-user --https-only -o tsv)
 rattler-index --config ./rattler-config.toml azblob \
-    https://my-storage-account.blob.core.windows.net/my-container/my-channel
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel
 ```
 
 The `--config` flag points at the same TOML configuration file used by pixi. It
@@ -76,11 +76,15 @@ force-path-style = false
 
 Azure Blob Storage needs no such block: the storage account and blob endpoint
 are read directly from the channel URL
-(`https://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
+(`az://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
 container, and endpoint (including sovereign clouds) are fully determined by the
-URL you pass. Credentials are never stored in the config — they are resolved at
-runtime from `--account-key` / `--sas-token`, an `az login` session
-(`--azure-cli`), or the `DefaultCredentialProvider` chain.
+URL you pass. The `az://` scheme is required — it is the single canonical
+spelling for an Azure channel and is rewritten
+to `https://` internally; a bare `https://` URL is rejected. The host must be a
+dotted `<account>.blob.<suffix>` domain, so IP-literal / single-label hosts (and
+hence the Azurite emulator) are not supported. Credentials are never stored in
+the config — they are resolved at runtime from `--account-key` / `--sas-token`,
+an `az login` session (`--azure-cli`), or the `DefaultCredentialProvider` chain.
 
 ## Per-channel index configuration
 
