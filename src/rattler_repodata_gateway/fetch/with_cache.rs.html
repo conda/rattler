@@ -246,7 +246,7 @@
 <a href=#244 id=244 data-nosnippet>244</a>                // OR, The cache doesn't match the repodata.json that is on disk. This means the
 <a href=#245 id=245 data-nosnippet>245</a>                // cache is not usable.
 <a href=#246 id=246 data-nosnippet>246</a>                // OR, No cache available at all, and we cant refresh the data.
-<a href=#247 id=247 data-nosnippet>247</a>                </span><span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::NoCacheAvailable);
+<a href=#247 id=247 data-nosnippet>247</a>                </span><span class="kw">return </span><span class="prelude-val">Err</span>(FetchRepoDataError::NoCacheAvailable(subdir_url.clone()));
 <a href=#248 id=248 data-nosnippet>248</a>            }
 <a href=#249 id=249 data-nosnippet>249</a>            (
 <a href=#250 id=250 data-nosnippet>250</a>                ValidatedCacheState::OutOfDate(cache_state)
