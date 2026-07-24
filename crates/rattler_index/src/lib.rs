@@ -1965,16 +1965,16 @@ mod tests {
     #[test]
     fn azblob_config_derives_fields_from_url() {
         let channel =
-            Url::parse("https://stgrcondachannel.blob.core.windows.net/general/sub/dir").unwrap();
+            Url::parse("https://stcondachannel.blob.core.windows.net/general/sub/dir").unwrap();
         let credentials = AzureCredentials::SasToken("sv=token".to_string());
 
         let config = azblob_config(&credentials, &channel).unwrap();
 
         assert_eq!(
             config.endpoint.as_deref(),
-            Some("https://stgrcondachannel.blob.core.windows.net")
+            Some("https://stcondachannel.blob.core.windows.net")
         );
-        assert_eq!(config.account_name.as_deref(), Some("stgrcondachannel"));
+        assert_eq!(config.account_name.as_deref(), Some("stcondachannel"));
         assert_eq!(config.container, "general");
         assert_eq!(config.root.as_deref(), Some("/sub/dir"));
         assert_eq!(config.sas_token.as_deref(), Some("sv=token"));
@@ -1984,7 +1984,7 @@ mod tests {
     #[cfg(feature = "azure")]
     #[test]
     fn azblob_config_container_only_url() {
-        let channel = Url::parse("https://stgrcondachannel.blob.core.windows.net/general").unwrap();
+        let channel = Url::parse("https://stcondachannel.blob.core.windows.net/general").unwrap();
         let credentials = AzureCredentials::AccountKey("key".to_string());
 
         let config = azblob_config(&credentials, &channel).unwrap();

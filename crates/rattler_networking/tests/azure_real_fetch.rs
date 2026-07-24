@@ -8,7 +8,7 @@
 //! `Storage Blob Data Reader` on the container):
 //!
 //! ```text
-//! AZURE_TEST_ACCOUNT=stgrcondachannel \
+//! AZURE_TEST_ACCOUNT=stcondachannel \
 //! AZURE_TEST_CONTAINER=general \
 //! AZURE_TEST_PATH=noarch/repodata.json \
 //! cargo test -p rattler_networking --features azure --test azure_real_fetch -- --ignored --nocapture
@@ -36,7 +36,7 @@ async fn azure_middleware_fetches_real_repodata() {
         .build();
 
     // The `az://` host carries the full blob endpoint — same form used in a
-    // channel URL, e.g. `az://stgrcondachannel.blob.core.windows.net/general`.
+    // channel URL, e.g. `az://stcondachannel.blob.core.windows.net/general`.
     let url = format!("az://{host}/{container}/{path}");
     println!("fetching {url}");
     let resp = client
