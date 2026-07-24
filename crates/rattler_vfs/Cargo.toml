@@ -1,0 +1,66 @@
+[package]
+name = "rattler_vfs"
+version = "0.1.0"
+description = "Serve conda environments as a virtual filesystem (FUSE, NFS, or ProjFS) directly from the package cache"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+hex = { workspace = true }
+libc = { workspace = true }
+thiserror = { workspace = true }
+memchr = { workspace = true }
+memmap2 = { workspace = true }
+rattler = { workspace = true, default-features = false }
+reflink-copy = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+rattler_cache = { workspace = true, default-features = false }
+rattler_conda_types = { workspace = true }
+rattler_lock = { workspace = true }
+rattler_networking = { workspace = true, default-features = false }
+reqwest-middleware = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std", "io-util", "signal"] }
+tracing = { workspace = true }
+
+# NFS transport (optional)
+nfs3_server = { workspace = true, optional = true }
+nfs3_types = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+
+# FUSE always-on for Linux. Uses fuser's pure-rust mount path, which does a
+# direct mount(2) when privileged (CAP_SYS_ADMIN) and otherwise exec's the
+# host's setuid /usr/bin/fusermount3 for unprivileged mounts.
+[target.'cfg(target_os = "linux")'.dependencies]
+fuser = { workspace = true }
+
+# macOS-only dependencies:
+# - fuser is opt-in (requires macFUSE installed system-wide)
+[target.'cfg(target_os = "macos")'.dependencies]
+fuser = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = ["nfs"]
+nfs = ["dep:nfs3_server", "dep:nfs3_types"]
+fuse = ["dep:fuser"]  # only meaningful on macOS
+native-tls = [
+  "rattler/native-tls",
+  "rattler_cache/native-tls",
+  "rattler_networking/native-tls",
+]
+rustls = [
+  "rattler/rustls",
+  "rattler_cache/rustls",
+  "rattler_networking/rustls",
+]

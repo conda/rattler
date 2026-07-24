@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Literal
+from typing import TYPE_CHECKING, Any, List, Optional, Literal
 from rattler.rattler import (
     PyPathsJson,
     PyPathsEntry,
@@ -607,6 +607,48 @@ class PrefixPlaceholder:
         ```
         """
         return self._inner.placeholder
+
+    @property
+    def experimental_offsets(self) -> Optional[list[dict[str, Any]]]:
+        """
+        The placeholder's occurrences in the file, recorded per encoding.
+
+        Returns `None` when the field is absent, or a list of offset groups mirroring the JSON:
+        `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a `list[int]`
+        for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
+        Occurrences inside the shebang region (see `shebang_length`) are excluded.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.experimental_offsets
+        >>>
+        ```
+        """
+        return self._inner.experimental_offsets
+
+    @property
+    def experimental_shebang_length(self) -> Optional[int]:
+        """
+        The length in bytes of the file's shebang region (the first line including its trailing
+        newline), or `None` when the file has no recorded shebang region.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.experimental_shebang_length
+        >>>
+        ```
+        """
+        return self._inner.experimental_shebang_length
 
     @classmethod
     def _from_py_prefix_placeholder(cls, py_prefix_placeholder: PyPrefixPlaceholder) -> PrefixPlaceholder:
