@@ -92,7 +92,17 @@ impl CacheIndex {
     /// Both halves of the query come from the record, so its hashes and its
     /// origin cannot disagree - which is the failure mode of assembling the
     /// two by hand with [`Self::contains_url`].
+    ///
+    /// A `file:` URL is looked up by its path, because that is how the
+    /// installer stores it: local packages go through
+    /// [`PackageCache::get_or_fetch_from_path`], everything else through
+    /// [`PackageCache::get_or_fetch_from_url_with_retry`].
     pub fn contains_record(&self, record: &RepoDataRecord) -> bool {
+        if record.url.scheme() == "file"
+            && let Ok(path) = record.url.to_file_path()
+        {
+            return self.contains_path(&record.package_record, &path);
+        }
         self.contains_url(&record.package_record, &record.url)
     }
 
@@ -1836,6 +1846,51 @@ mod test {
         let index = cache.index().await.unwrap();
         assert!(index.contains_path(identifier.clone(), &package_path));
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
+    }
+
+    /// A `file:` record on an origin-keyed cache is stored through
+    /// `get_or_fetch_from_path`, which hashes the path. The record lookup has
+    /// to take that same branch or the origin hashes disagree and a cached
+    /// local package is reported absent.
+    ///
+    /// The path is derived from the URL on both sides, as the installer does:
+    /// the hash covers the literal path bytes, and only the URL round trip
+    /// yields the same spelling on every platform.
+    #[tokio::test]
+    async fn test_cache_index_contains_record_with_file_url_origin() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path()).with_cached_origin();
+        let record_url = Url::from_file_path(
+            get_test_data_dir()
+                .join("clobber/clobber-python-0.1.0-cpython.conda")
+                .canonicalize()
+                .unwrap(),
+        )
+        .unwrap();
+        let package_path = record_url.to_file_path().unwrap();
+
+        cache
+            .get_or_fetch_from_path(&package_path, None, None)
+            .await
+            .unwrap();
+
+        let record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("clobber-python"),
+                "0.1.0".parse::<VersionWithSource>().unwrap(),
+                "cpython".to_string(),
+            ),
+            url: record_url,
+            channel: None,
+            identifier: CondaArchiveIdentifier::try_from_path(&package_path)
+                .unwrap()
+                .into(),
+        };
+
+        assert!(
+            cache.index().await.unwrap().contains_record(&record),
+            "a file: record must be looked up the way the installer stores it"
+        );
     }
 
     /// The index must see past an earlier layer whose entry records a
