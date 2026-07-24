@@ -24,14 +24,27 @@ use url::Url;
 /// and derived by the consumer.
 ///
 /// The type deliberately has no `Serialize`/`Deserialize`: it holds raw account
-/// keys and SAS tokens, so serialization would risk leaking secrets to disk.
-#[derive(Debug, Clone)]
+/// keys and SAS tokens, so serialization would risk leaking secrets to disk. For
+/// the same reason `Debug` is implemented by hand to redact the secret values
+/// rather than derived.
+#[derive(Clone)]
 pub enum AzureCredentials {
     /// A shared storage account key.
     AccountKey(String),
 
     /// A shared access signature (SAS) token.
     SasToken(String),
+}
+
+impl std::fmt::Debug for AzureCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Print only the variant, never the secret it carries.
+        let variant = match self {
+            AzureCredentials::AccountKey(_) => "AccountKey",
+            AzureCredentials::SasToken(_) => "SasToken",
+        };
+        f.debug_tuple(variant).field(&"<redacted>").finish()
+    }
 }
 
 /// Strip a single leading `?` from a SAS token.
@@ -54,7 +67,8 @@ pub enum AzureUrlError {
     /// The URL carries userinfo (`user:pass@host`).
     #[error(
         "Azure blob URL must not contain userinfo (`user:pass@host`): the `user@host` form is a \
-         host-spoofing vector that can disguise the real target host"
+         host-spoofing vector that can disguise the real target host, and userinfo is invalid in \
+         blob URLs"
     )]
     UserInfoNotAllowed,
 
@@ -79,12 +93,26 @@ pub enum AzureUrlError {
          container names are restricted to that set"
     )]
     InvalidCharacters(String),
+
+    /// The channel URL string could not be parsed.
+    #[error("`{value}` is not a valid URL")]
+    InvalidUrl {
+        /// The offending input.
+        value: String,
+        /// The underlying parse error.
+        #[source]
+        source: url::ParseError,
+    },
+
+    /// The channel URL does not use the `az://` scheme.
+    #[error(
+        "Azure blob channel URL must use the `az://` scheme, e.g. \
+         `az://<account>.blob.core.windows.net/<container>/...`: got `{0}`"
+    )]
+    InvalidScheme(String),
 }
 
 /// The storage account and container an Azure Blob channel URL resolves to.
-///
-/// A named pair rather than a bare `(String, String)` so the two cannot be
-/// silently transposed at a call site.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AzureCoordinates {
     /// The storage account name (first label of the host).
@@ -117,6 +145,7 @@ pub fn account_and_container(url: &Url) -> Result<AzureCoordinates, AzureUrlErro
     if !matches!(url.host(), Some(url::Host::Domain(domain)) if domain.contains('.')) {
         return Err(AzureUrlError::InvalidHost(host.to_string()));
     }
+
     let account = host
         .split('.')
         .next()
@@ -127,18 +156,48 @@ pub fn account_and_container(url: &Url) -> Result<AzureCoordinates, AzureUrlErro
         .and_then(|mut segments| segments.next())
         .filter(|segment| !segment.is_empty())
         .ok_or(AzureUrlError::NoContainer)?;
+
     for component in [account, container] {
-        if !component
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        {
+        if !is_valid_component(component) {
             return Err(AzureUrlError::InvalidCharacters(component.to_string()));
         }
     }
+
     Ok(AzureCoordinates {
         account: account.to_string(),
         container: container.to_string(),
     })
+}
+
+fn is_valid_component(name: &str) -> bool {
+    name.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// Parse and validate an Azure Blob **channel** URL.
+///
+/// The only accepted form is the `az://` channel scheme —
+/// `az://<account>.blob.<suffix>/<container>/<prefix>` — which is rewritten to
+/// `https://` here so every consumer downstream works with a real wire URL and
+/// never sees the `az` scheme. A bare `http(s)://` URL is deliberately *not*
+/// accepted: `az://` is the single canonical spelling for an Azure channel
+/// (matching how it is written in configuration and used on the fetch path), and
+/// accepting the wire URL as a second spelling would only invite confusion. The
+/// host and container are validated via [`account_and_container`].
+pub fn parse_channel_url(value: &str) -> Result<Url, AzureUrlError> {
+    // Require the `az://` scheme, then rewrite to `https://` before parsing so
+    // the host is parsed by the URL crate's special-scheme host parser and the
+    // `az` scheme never leaks downstream.
+    let rest = value
+        .strip_prefix("az://")
+        .ok_or_else(|| AzureUrlError::InvalidScheme(value.to_string()))?;
+    let url =
+        Url::parse(&format!("https://{rest}")).map_err(|source| AzureUrlError::InvalidUrl {
+            value: value.to_string(),
+            source,
+        })?;
+    account_and_container(&url)?;
+    Ok(url)
 }
 
 /// Errors that can occur while minting a user-delegation SAS via the Azure CLI.
@@ -219,10 +278,7 @@ pub async fn mint_user_delegation_sas(
     // is not floored down to the enclosing whole minute.
     let expiry = expiry.strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-    #[cfg(windows)]
     let mut command = az_command()?;
-    #[cfg(not(windows))]
-    let mut command = az_command();
 
     let output = command
         .args([
@@ -268,21 +324,16 @@ pub async fn mint_user_delegation_sas(
 
 /// Build the [`tokio::process::Command`] used to invoke the Azure CLI.
 ///
-/// On Windows the Azure CLI is a `az.cmd` batch shim; the process spawner does
-/// not honor `PATHEXT`, so a bare `az` fails to resolve it. `which` applies `PATHEXT`
-/// to find the real `az`/`az.cmd` path, which is then invoked directly. Routing
-/// through the command interpreter (`cmd /C az ...`) is deliberately avoided: it
-/// would expose the command line to `cmd` metacharacter interpretation, an
-/// argument-injection vector.
-#[cfg(all(feature = "clap", windows))]
+/// `which` resolves `az` up front so a missing CLI surfaces as [`AzureCliSasError::AzResolve`]
+/// rather than an opaque spawn failure. It also matters on Windows, where the CLI
+/// is an `az.cmd` batch shim: the process spawner does not honor `PATHEXT`, so a
+/// bare `az` fails to resolve, but `which` applies `PATHEXT` to find the real path.
+/// The resolved path is invoked directly; routing through the command interpreter
+/// (`cmd /C az ...`) is deliberately avoided as an argument-injection vector.
+#[cfg(feature = "clap")]
 fn az_command() -> Result<tokio::process::Command, AzureCliSasError> {
     let path = which::which("az").map_err(AzureCliSasError::AzResolve)?;
     Ok(tokio::process::Command::new(path))
-}
-
-#[cfg(all(feature = "clap", not(windows)))]
-fn az_command() -> tokio::process::Command {
-    tokio::process::Command::new("az")
 }
 
 #[cfg(test)]
@@ -317,5 +368,60 @@ mod tests {
             account_and_container(&url),
             Err(AzureUrlError::InvalidCharacters(_))
         ));
+    }
+
+    #[test]
+    fn parse_channel_url_normalizes_az_to_https() {
+        let url = parse_channel_url("az://acct.blob.core.windows.net/general/noarch").unwrap();
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(
+            url.as_str(),
+            "https://acct.blob.core.windows.net/general/noarch"
+        );
+    }
+
+    #[test]
+    fn parse_channel_url_rejects_bare_http_and_https() {
+        for input in [
+            "https://acct.blob.core.windows.net/general",
+            "http://acct.blob.core.windows.net/general",
+            "ftp://acct.blob.core.windows.net/general",
+            "AZ://acct.blob.core.windows.net/general",
+            "acct.blob.core.windows.net/general",
+        ] {
+            assert!(
+                matches!(
+                    parse_channel_url(input),
+                    Err(AzureUrlError::InvalidScheme(_))
+                ),
+                "expected InvalidScheme for {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_channel_url_propagates_validation_errors() {
+        assert!(matches!(
+            parse_channel_url("az://acct.blob.core.windows.net@evil.example/general"),
+            Err(AzureUrlError::UserInfoNotAllowed)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod debug_redaction_tests {
+    use super::*;
+
+    #[test]
+    fn debug_never_prints_secret() {
+        for creds in [
+            AzureCredentials::AccountKey("supersecretkey".into()),
+            AzureCredentials::SasToken("sig=deadbeef".into()),
+        ] {
+            let out = format!("{creds:?}");
+            assert!(out.contains("<redacted>"), "not redacted: {out}");
+            assert!(!out.contains("supersecret"));
+            assert!(!out.contains("deadbeef"));
+        }
     }
 }

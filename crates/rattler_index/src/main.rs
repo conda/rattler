@@ -36,25 +36,6 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
     }
 }
 
-#[cfg(feature = "azure")]
-fn parse_azure_url(value: &str) -> Result<Url, String> {
-    let url: Url = Url::parse(value).map_err(|e| format!("`{value}` isn't a valid URL: {e}"))?;
-    // Require an `<account>.blob.<suffix>` host and a container segment, e.g.
-    // https://<account>.blob.core.windows.net/<container>/<prefix>. The account
-    // and container are derived exactly as the index path derives them, via
-    // `rattler_azure::account_and_container`, which rejects IP literals and
-    // single-label hosts (localhost, the Azurite emulator) and container-less
-    // URLs.
-    if !matches!(url.scheme(), "http" | "https")
-        || rattler_azure::account_and_container(&url).is_err()
-    {
-        return Err(format!(
-            "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
-        ));
-    }
-    Ok(url)
-}
-
 /// SAS permissions requested when minting a user-delegation SAS for indexing.
 /// Indexing does a read-modify-write of repodata and lists/reads packages, so it
 /// needs read, write, list, and create (`r` + `w` + `l` + `c`).
@@ -134,8 +115,9 @@ enum Commands {
     #[cfg(feature = "azure")]
     Azblob {
         /// The Azure Blob channel URL, e.g.
-        /// `https://<account>.blob.core.windows.net/<container>/<channel>`.
-        #[arg(value_parser = parse_azure_url)]
+        /// `az://<account>.blob.core.windows.net/<container>/<channel>`
+        /// (or the equivalent `https://` form).
+        #[arg(value_parser = rattler_azure::parse_channel_url)]
         channel: Url,
 
         #[clap(flatten)]

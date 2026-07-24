@@ -418,26 +418,6 @@ pub struct S3Opts {
     pub force: bool,
 }
 
-#[cfg(feature = "azure")]
-fn parse_azure_url(value: &str) -> Result<Url, String> {
-    let url: Url =
-        Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
-    // Require an `<account>.blob.<suffix>` host and a container segment, e.g.
-    // https://<account>.blob.core.windows.net/<container>/<prefix>. The account
-    // and container are derived exactly as the upload path derives them, via
-    // `rattler_azure::account_and_container`, which rejects IP literals and
-    // single-label hosts (localhost, the Azurite emulator) and container-less
-    // URLs.
-    if !matches!(url.scheme(), "http" | "https")
-        || rattler_azure::account_and_container(&url).is_err()
-    {
-        return Err(format!(
-            "Only Azure Blob URLs of format https://<account>.blob.core.windows.net/<container>/... can be used, not `{value}`"
-        ));
-    }
-    Ok(url)
-}
-
 /// Options for uploading to Azure Blob Storage.
 ///
 /// Authentication is supplied with either an account key or a shared access
@@ -446,8 +426,9 @@ fn parse_azure_url(value: &str) -> Result<Url, String> {
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct AzureOpts {
     /// The channel URL in the Azure Blob container to upload the package to,
-    /// e.g., `https://myaccount.blob.core.windows.net/my-container/my-channel`
-    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = parse_azure_url)]
+    /// e.g., `az://myaccount.blob.core.windows.net/my-container/my-channel`
+    /// (or the equivalent `https://` form)
+    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = rattler_azure::parse_channel_url)]
     pub channel: Url,
 
     #[clap(flatten)]
