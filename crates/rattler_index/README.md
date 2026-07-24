@@ -78,13 +78,12 @@ Azure Blob Storage needs no such block: the storage account and blob endpoint
 are read directly from the channel URL
 (`az://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
 container, and endpoint (including sovereign clouds) are fully determined by the
-URL you pass. The `az://` scheme is required — it is the single canonical
-spelling for an Azure channel and is rewritten
-to `https://` internally; a bare `https://` URL is rejected. The host must be a
-dotted `<account>.blob.<suffix>` domain, so IP-literal / single-label hosts (and
-hence the Azurite emulator) are not supported. Credentials are never stored in
-the config — they are resolved at runtime from `--account-key` / `--sas-token`,
-an `az login` session (`--azure-cli`), or the `DefaultCredentialProvider` chain.
+URL you pass. The `az://` scheme is required and is rewritten to `https://`
+internally; a bare `https://` URL is rejected. The host must be a dotted
+`<account>.blob.<suffix>` domain, so IP-literal / single-label hosts (and hence
+the Azurite emulator) are not supported. Credentials are never stored in the
+config — they are resolved at runtime from `--account-key` / `--sas-token`, an
+`az login` session (`--azure-cli`), or the `DefaultCredentialProvider` chain.
 
 ## Per-channel index configuration
 
