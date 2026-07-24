@@ -182,7 +182,8 @@ impl AzureMiddleware {
 
     /// Whether the URL carries userinfo (`user` and/or `:pass` before the host).
     /// Because the host is trusted verbatim, a `user:pass@host` authority is a
-    /// host-spoofing vector and must be refused.
+    /// host-spoofing vector and must be refused. Userinfo in a blob URL is invalid
+    /// regardless and safe to ignore.
     fn has_userinfo(url: &Url) -> bool {
         !url.username().is_empty() || url.password().is_some()
     }
