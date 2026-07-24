@@ -25,12 +25,16 @@ rattler_libsolv_c = { workspace = true, default-features = false, optional = tru
 resolvo = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+url = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 jiff = { workspace = true }
 once_cell = { workspace = true }
+rattler_cache = { workspace = true }
+rattler_digest = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
     "sparse",
 ] }
@@ -52,6 +56,10 @@ harness = false
 
 [[bench]]
 name = "sorting_bench"
+harness = false
+
+[[bench]]
+name = "exclusions_bench"
 harness = false
 
 [package.metadata.docs.rs]

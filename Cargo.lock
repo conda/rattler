@@ -5524,6 +5524,7 @@ dependencies = [
  "jiff",
  "libc",
  "once_cell",
+ "rattler_cache",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_libsolv_c",
@@ -5535,6 +5536,7 @@ dependencies = [
  "similar-asserts",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "tools",
  "tracing",
  "url",
@@ -5815,9 +5817,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc9b6c092a52fadb381b74d0f859b321ea7b9f4f8365acd7e4947f3a26517aa"
+checksum = "e1560db4f7a060680c14a93a927e049677bcc9a5a01fc0a2a57170dbee81e33a"
 dependencies = [
  "ahash",
  "bitvec",
