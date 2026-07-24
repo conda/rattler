@@ -1060,12 +1060,9 @@ mod resolvo {
         )
         .expect_err("the pinned candidate is excluded, no other may be picked");
 
-        // Resolvo's root-level conflict rendering names the pin as the culprit
-        // but skips exclusion reasons, so "not available locally" cannot show
-        // up here without an upstream change.
         assert!(
-            err.to_string().contains("is locked"),
-            "the pin conflict should be reported, got: {err}"
+            err.to_string().contains("not available locally"),
+            "the exclusion reason should be reported, got: {err}"
         );
     }
 

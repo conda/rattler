@@ -598,8 +598,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // the package is needed. Dropping the pin instead would let the
             // solver quietly select a different version of a deliberately
             // pinned package. The conflict report names the pin as the
-            // culprit; resolvo's root-level rendering does not include
-            // exclusion reasons.
+            // culprit together with the exclusion reason.
             exclude_if_requested(candidates, solvable, &locked_record.url);
             candidates.locked = Some(solvable);
         }
@@ -813,6 +812,9 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     locked: None,
                     excluded: Vec::new(),
                     hint_dependencies_available: HintDependenciesAvailable::All,
+                    // Spread the rest, so the literal compiles against every
+                    // resolvo version in the supported range.
+                    ..Default::default()
                 })
             }
         }
