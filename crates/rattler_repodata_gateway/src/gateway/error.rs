@@ -65,6 +65,9 @@ pub enum GatewayError {
     /// from the cache. Callers fall back to `repodata.json` for the subdir
     /// rather than failing: the sharded index is one way to read a channel,
     /// not the channel itself.
+    ///
+    /// The URL is redacted when the error is built, so it can be formatted
+    /// without leaking channel credentials.
     #[error("no sharded repodata index is cached for {0}")]
     ShardedIndexNotCached(Url),
 

@@ -202,7 +202,7 @@ pub async fn fetch_index(
                         // subdir has no sharded index we can read. The caller
                         // falls back to `repodata.json`.
                         return Err(GatewayError::ShardedIndexNotCached(
-                            channel_base_url.clone(),
+                            channel_base_url.clone().redact(),
                         ));
                     }
 
@@ -315,7 +315,7 @@ pub async fn fetch_index(
 
     if cache_action == CacheAction::ForceCacheOnly {
         return Err(GatewayError::ShardedIndexNotCached(
-            channel_base_url.clone(),
+            channel_base_url.clone().redact(),
         ));
     }
 
