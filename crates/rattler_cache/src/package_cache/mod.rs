@@ -287,14 +287,19 @@ impl PackageCacheLayer {
     }
 
     /// Validate the packages.
+    ///
+    /// An entry this cache object has not touched before is validated from
+    /// disk, just as [`Self::validate_or_fetch`] would: layers hold entries
+    /// written by other processes or earlier runs, and a lookup that only
+    /// believed its own in-memory bookkeeping would refetch all of those.
     pub async fn try_validate(
         &self,
         cache_key: &CacheKey,
     ) -> Result<CacheMetadata, PackageCacheLayerError> {
         let cache_entry = self
             .packages
-            .get(&cache_key.clone().into())
-            .ok_or(PackageCacheLayerError::PackageNotFound)?
+            .entry(cache_key.clone().into())
+            .or_default()
             .clone();
         let mut cache_entry = cache_entry.lock().await;
         let cache_path = self.path.join(cache_key.to_path_segment()?);
@@ -1988,6 +1993,24 @@ mod test {
             index.contains_path(&record, &package_path),
             "the matching hash in the later layer must be found"
         );
+
+        // What the index promises, lookup has to deliver: this cache object
+        // has never touched either entry, and still must serve the package
+        // from the later layer instead of fetching.
+        let key = CacheKey::from(CondaArchiveIdentifier::try_from_path(&package_path).unwrap())
+            .with_sha256(record.sha256.unwrap());
+        cache
+            .get_or_fetch(
+                key,
+                |_destination| async move {
+                    Err::<(), std::io::Error>(std::io::Error::other(
+                        "an indexed package must be served without fetching",
+                    ))
+                },
+                None,
+            )
+            .await
+            .expect("the package is served from the later layer");
     }
 
     #[tokio::test]
