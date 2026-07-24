@@ -1452,6 +1452,21 @@ fn channel_priority_flexible_prefers_first_channel() {
     );
 }
 
+#[cfg(feature = "libsolv_c")]
+#[test]
+fn channel_priority_flexible_prefers_first_channel_libsolv_c() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
+        "pytorch-cpu",
+        "https://conda.anaconda.org/conda-forge/",
+        repodata,
+        ChannelPriority::Flexible,
+    );
+}
+
 #[test]
 fn channel_priority_flexible_falls_back() {
     let repodata = vec![
@@ -1466,52 +1481,111 @@ fn channel_priority_flexible_falls_back() {
     );
 }
 
+#[cfg(feature = "libsolv_c")]
 #[test]
-fn channel_priority_flexible_in_memory() {
+fn channel_priority_flexible_falls_back_libsolv_c() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        ChannelPriority::Flexible,
+    );
+}
+
+fn execute_dependency_driven_fall_back_test<AbstractSolver: SolverImpl + Default>() {
     let channel_a = vec![
-        PackageBuilder::new("numpy")
-            .version("1.5.0")
+        PackageBuilder::new("pandas")
+            .version("1.0")
             .channel("channel-a")
+            .depends(["numpy"])
             .build(),
     ];
     let channel_b = vec![
+        PackageBuilder::new("pandas")
+            .version("2.0")
+            .channel("channel-b")
+            .depends(["numpy"])
+            .build(),
         PackageBuilder::new("numpy")
-            .version("1.6.0")
+            .version("1.0")
             .channel("channel-b")
             .build(),
     ];
+    let channel_c = vec![
+        PackageBuilder::new("numpy")
+            .version("3.0")
+            .channel("channel-c")
+            .build(),
+    ];
 
-    let solve = |priority| -> (String, String) {
-        let task = SolverTask {
-            specs: vec![MatchSpec::from_str("numpy", ParseStrictness::Lenient).unwrap()],
-            channel_priority: priority,
-            ..SolverTask::from_iter([&channel_a, &channel_b])
-        };
-        let records = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
-        let numpy = records
-            .iter()
-            .find(|r| r.package_record.name.as_normalized() == "numpy")
-            .expect("numpy should be in the solution");
-        (
-            numpy.package_record.version.to_string(),
-            numpy.channel.clone().unwrap(),
-        )
+    // Solving the dependencies with Flexible channel priority: we verify that
+    // numpy is taken from the second channel as it has higher priority
+    let task = SolverTask {
+        specs: vec![MatchSpec::from_str("pandas", ParseStrictness::Lenient).unwrap()],
+        channel_priority: ChannelPriority::Flexible,
+        ..SolverTask::from_iter([&channel_a, &channel_b, &channel_c])
     };
 
-    assert_eq!(
-        solve(ChannelPriority::Flexible),
-        ("1.5.0".to_string(), "channel-a".to_string()),
-    );
+    let records = AbstractSolver::default()
+        .solve(task)
+        .expect("flexible priority should solve the given environment")
+        .records;
 
-    assert_eq!(
-        solve(ChannelPriority::Disabled),
-        ("1.6.0".to_string(), "channel-b".to_string()),
-    );
+    let pandas = records
+        .iter()
+        .find(|r| r.package_record.name.as_normalized() == "pandas")
+        .expect("pandas should be in the solution");
+    let numpy = records
+        .iter()
+        .find(|r| r.package_record.name.as_normalized() == "numpy")
+        .expect("numpy should be in the solution");
 
-    assert_eq!(
-        solve(ChannelPriority::Strict),
-        ("1.5.0".to_string(), "channel-a".to_string()),
-    );
+    assert_eq!(pandas.channel.as_deref(), Some("channel-a"));
+    assert_eq!(pandas.package_record.version.to_string(), "1.0");
+    assert_eq!(numpy.channel.as_deref(), Some("channel-b"));
+    assert_eq!(numpy.package_record.version.to_string(), "1.0");
+
+    // Solving the dependencies with Disabled channel priority: we verify that
+    // both packages are solved with the highest versions
+    let task = SolverTask {
+        specs: vec![MatchSpec::from_str("pandas", ParseStrictness::Lenient).unwrap()],
+        channel_priority: ChannelPriority::Disabled,
+        ..SolverTask::from_iter([&channel_a, &channel_b, &channel_c])
+    };
+
+    let records = AbstractSolver::default()
+        .solve(task)
+        .expect("disabled priority should solve the given environment")
+        .records;
+
+    let pandas = records
+        .iter()
+        .find(|r| r.package_record.name.as_normalized() == "pandas")
+        .expect("pandas should be in the solution");
+    let numpy = records
+        .iter()
+        .find(|r| r.package_record.name.as_normalized() == "numpy")
+        .expect("numpy should be in the solution");
+
+    assert_eq!(pandas.channel.as_deref(), Some("channel-b"));
+    assert_eq!(pandas.package_record.version.to_string(), "2.0");
+    assert_eq!(numpy.channel.as_deref(), Some("channel-c"));
+    assert_eq!(numpy.package_record.version.to_string(), "3.0");
+}
+
+#[test]
+fn channel_priority_flexible_dependency_driven_fall_back() {
+    execute_dependency_driven_fall_back_test::<rattler_solve::resolvo::Solver>();
+}
+
+#[cfg(feature = "libsolv_c")]
+#[test]
+fn channel_priority_flexible_dependency_driven_fall_back_libsolv_c() {
+    execute_dependency_driven_fall_back_test::<rattler_solve::libsolv_c::Solver>();
 }
 
 #[cfg(feature = "libsolv_c")]

@@ -462,10 +462,10 @@ impl<'a> CondaDependencyProvider<'a> {
                 candidates.candidates.push(solvable_id);
 
                 // Record the priority rank of this channel (first-seen order).
-                let next_rank = channel_order.len() as u32;
-                channel_order
-                    .entry(record.channel.clone())
-                    .or_insert(next_rank);
+                if !channel_order.contains_key(&record.channel) {
+                    let next_rank = channel_order.len() as u32;
+                    channel_order.insert(record.channel.clone(), next_rank);
+                }
 
                 if let Some(config) = &exclude_newer
                     && config.is_excluded(
@@ -620,8 +620,9 @@ impl<'a> CondaDependencyProvider<'a> {
     }
 
     /// Returns the priority rank for a channel, where a lower rank indicates a
-    /// higher-priority channel. Channels not seen during construction (and
-    /// records without a channel that were never encountered) sort last.
+    /// higher-priority channel. Channels not seen during the construction sort last.
+    /// Channel strings are compared byte-for-byte as URL normalization is still missing
+    /// (see TODO: Normalize these channel names to urls above)
     fn channel_rank(&self, channel: &Option<String>) -> u32 {
         self.channel_order.get(channel).copied().unwrap_or(u32::MAX)
     }
