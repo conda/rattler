@@ -80,6 +80,7 @@ fs-err = { version = "3" }
 fslock = "0.2"
 futures = "0.3"
 futures-util = "0.3"
+fuser = { version = "0.17", default-features = false }
 # lots of other crates are still stuck on older version which breaks `deserialize`
 # pinning to 0.14.7 because 0.14.8 introduces deprecation notices.
 generic-array = "=0.14.7"
@@ -115,6 +116,8 @@ memchr = "2"
 memmap2 = "0.9"
 miette = "7"
 netrc-rs = "0.1"
+nfs3_server = { version = "0.10" }
+nfs3_types = { version = "0.5" }
 nom = "8"
 nom-language = "0.1"
 num_cpus = "1"
@@ -199,6 +202,7 @@ uuid = { version = "1", default-features = false }
 walkdir = "2"
 wasmtimer = "0.4"
 which = "8"
+windows = { version = "0.62", features = ["Win32_Storage_ProjectedFileSystem", "Win32_Foundation", "Win32_System_LibraryLoader"] }
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"
 winver = { version = "1" }
@@ -232,6 +236,7 @@ rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.25", defaul
 rattler_shell = { path = "crates/rattler_shell", version = "=0.27.10", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=7.2.2", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.9.0", default-features = false }
+rattler_vfs = { path = "crates/rattler_vfs", version = "=0.1.0", default-features = false }
 rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=3.0.4", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version

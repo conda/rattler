@@ -1,0 +1,14 @@
+---
+source: crates/rattler/src/install/link.rs
+assertion_line: 1427
+expression: replaced
+---
+#!/usr/bin/env executable -m 123123
+
+# just a comment
+
+import sys
+import re
+
+main(...)
+

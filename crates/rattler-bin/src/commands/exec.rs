@@ -1,18 +1,16 @@
 use clap::{Parser, ValueHint};
 use miette::{Context, IntoDiagnostic};
-use rattler::{
-    default_cache_dir,
-    install::{IndicatifReporter, Installer},
-    package_cache::PackageCache,
-};
+use rattler::{default_cache_dir, package_cache::PackageCache};
 use rattler_cache::EXEC_ENVS_DIR;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform,
 };
+use rattler_lock::{DEFAULT_ENVIRONMENT_NAME, LockFile, PlatformData, PlatformName};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_shell::shell::ShellEnum;
 use rattler_solve::{SolverImpl, SolverTask, resolvo::Solver};
+use rattler_vfs::{MountConfig, MountHandle, Transport, build_and_mount, force_unmount};
 use rattler_virtual_packages::{VirtualPackage, VirtualPackageOverrides};
 use sha2::{Digest, Sha256};
 use std::{
@@ -23,12 +21,9 @@ use std::{
 };
 use tokio;
 
-use crate::{
-    commands::{
-        client::{create_client_with_middleware, repodata_cache_action},
-        progress::{wrap_in_async_progress, wrap_in_progress},
-    },
-    global_multi_progress,
+use crate::commands::{
+    client::{create_client_with_middleware, repodata_cache_action},
+    progress::{wrap_in_async_progress, wrap_in_progress},
 };
 
 /// Run a command and install it in a temporary environment.
@@ -62,7 +57,7 @@ pub struct Opt {
     pub force_reinstall: bool,
 
     /// Before executing the command, list packages in the environment
-    /// Specify `--list=some_regex` to filter the shown packages    
+    /// Specify `--list=some_regex` to filter the shown packages
     #[clap(long = "list", num_args = 0..=1, default_missing_value = "", require_equals = true)]
     pub list: Option<String>,
 
@@ -100,13 +95,13 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
     // Guess a package from the command if no specs were provided at all OR if --with is used
     let should_guess = opt.specs.is_empty() || !opt.with.is_empty();
 
+    // Pick between either local install or the mount.
     let mut install_specs = explicit_specs.clone();
     install_specs.extend(with_specs.clone());
     if should_guess {
         install_specs.push(guess_package_spec(command));
     }
 
-    // Locate / create the shared rattler cache
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine cache directory: {}", e))?;
     rattler_cache::ensure_cache_dir(&cache_dir)
@@ -114,8 +109,11 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
 
     let dir_prefix = exec_dir_prefix(&install_specs, Some(command), should_guess);
 
-    // Solve + install (or reuse) the cached environment
-    let prefix = create_exec_prefix(CreateExecPrefixOptions {
+    // Solve the environment and mount it as a virtual conda prefix. The mount
+    // is served lazily from the shared package cache — no files are extracted
+    // to disk. `mount_handle` must stay alive until the child process exits;
+    // dropping it unmounts the prefix.
+    let (prefix, mount_handle) = create_exec_prefix(CreateExecPrefixOptions {
         specs: &install_specs,
         channels: &channels,
         platform: opt.platform,
@@ -176,6 +174,13 @@ pub async fn exec(opt: Opt, offline: bool) -> miette::Result<()> {
             .await
             .map_err(|e| miette::miette!("failed to execute '{}': {}", command, e))?;
 
+    // `std::process::exit` skips destructors, so the mount would leak (leaving a
+    // stale mount at the prefix) unless we tear it down explicitly here.
+    mount_handle
+        .unmount()
+        .await
+        .map_err(|e| miette::miette!("failed to unmount environment: {e}"))?;
+
     std::process::exit(status.code().unwrap_or(1));
 }
 
@@ -190,8 +195,16 @@ struct CreateExecPrefixOptions<'a> {
     offline: bool,
 }
 
-/// Creates a prefix for the `rattler exec` command.
-async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Result<PathBuf> {
+/// Solves (or reuses) an environment and mounts it as a virtual conda prefix
+/// via [`rattler_vfs`].
+///
+/// Unlike a classic install, nothing is extracted to `prefix`: the packages are
+/// fetched into the shared package cache and served lazily through the mount.
+/// The returned [`MountHandle`] owns the live mount — keep it alive for as long
+/// as the prefix is in use and unmount it (or drop it) afterwards.
+async fn create_exec_prefix(
+    options: CreateExecPrefixOptions<'_>,
+) -> miette::Result<(PathBuf, MountHandle)> {
     let CreateExecPrefixOptions {
         specs,
         channels,
@@ -211,23 +224,30 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     };
 
     let prefix = cache_dir.join(EXEC_ENVS_DIR).join(&dir_name);
+    let package_cache = PackageCache::new(cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR));
 
-    let sentinel = prefix.join(".exec-ready");
+    // The VFS mount has no persistent on-disk prefix, so we cache the solved
+    // lock file instead. On a warm run we skip repodata + solve entirely and
+    // mount straight from the cached lock file.
+    let lockfile_path = prefix.join(".exec-lock.yml");
 
-    // If the environment already exists, and we are not forcing a
-    // reinstallation, we can return early.
-    if sentinel.exists() && !force_reinstall {
-        tracing::info!("reusing existing environment in {}", prefix.display());
-        return Ok(prefix);
+    if lockfile_path.exists() && !force_reinstall {
+        tracing::info!(
+            "reusing solved environment from {}",
+            lockfile_path.display()
+        );
+        let lockfile = LockFile::from_path(&lockfile_path)
+            .into_diagnostic()
+            .context("failed to read cached lock file")?;
+        let handle = mount_prefix(&lockfile, platform, &package_cache, &prefix, &env_hash).await?;
+        return Ok((prefix, handle));
     }
 
     let download_client = create_client_with_middleware(offline)?;
 
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
+        .with_package_cache(package_cache.clone())
         .with_client(download_client.clone())
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
@@ -280,42 +300,123 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
         .into_diagnostic()
         .context("failed to solve environment")?;
 
-    // Solve the environment
-    tracing::info!(
-        "installing environment in {}",
-        dunce::canonicalize(&prefix)
-            .as_deref()
-            .unwrap_or(&prefix)
-            .display()
-    );
-
-    Installer::new()
-        .with_target_platform(platform)
-        .with_download_client(download_client)
-        .with_package_cache(PackageCache::new(
-            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
-        ))
-        .with_reporter(
-            IndicatifReporter::builder()
-                .with_multi_progress(global_multi_progress())
-                .clear_when_done(true)
-                .finish(),
-        )
-        .install(&prefix, solved.records.clone())
-        .await
-        .into_diagnostic()
-        .context("failed to install environment")?;
-
-    // Mark the environment as ready so future runs can skip solve+install
-    std::fs::write(&sentinel, b"")
-        .into_diagnostic()
-        .context("failed to write sentinel file")?;
-
     if let Some(regex) = list {
         list_environment(specs, &solved.records, regex)?;
     }
 
-    Ok(prefix)
+    // Turn the solved records into an in-memory lock file that `rattler_vfs`
+    // consumes. A single `default` environment/platform is enough here.
+    let lockfile = lockfile_from_records(&solved.records, platform)
+        .context("failed to build lock file from solved records")?;
+
+    // Persist the lock file so subsequent runs can reuse the solve.
+    std::fs::create_dir_all(&prefix)
+        .into_diagnostic()
+        .context("failed to create environment directory")?;
+    lockfile
+        .to_path(&lockfile_path)
+        .into_diagnostic()
+        .context("failed to write cached lock file")?;
+
+    tracing::info!("mounting environment at {}", prefix.display());
+    let handle = mount_prefix(&lockfile, platform, &package_cache, &prefix, &env_hash).await?;
+
+    Ok((prefix, handle))
+}
+
+/// Builds an in-memory [`LockFile`] with a single `default` environment holding
+/// the solved conda records for `platform`.
+fn lockfile_from_records(
+    records: &[rattler_conda_types::RepoDataRecord],
+    platform: Platform,
+) -> miette::Result<LockFile> {
+    let mut builder = LockFile::builder()
+        .with_platforms(vec![PlatformData {
+            name: PlatformName::from(&platform),
+            subdir: platform,
+            virtual_packages: Vec::new(),
+        }])
+        .into_diagnostic()?;
+    for record in records {
+        builder
+            .add_conda_package(
+                DEFAULT_ENVIRONMENT_NAME,
+                platform.as_str(),
+                record.clone().into(),
+            )
+            .into_diagnostic()?;
+    }
+    Ok(builder.finish())
+}
+
+/// Whether we should attempt to force-unmount `path` before mounting.
+///
+/// Returns `true` when `path` is a mount point (it lives on a different
+/// filesystem than its parent) or when its state can't be determined (a stat
+/// error can indicate a stale mount whose userspace server has died). Returns
+/// `false` for an ordinary directory, so the common "nothing mounted" case
+/// skips the `umount` subprocess entirely.
+#[cfg(unix)]
+fn should_force_unmount(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        // Ambiguous (possibly a stale/dead mount): fall back to cleanup.
+        Err(_) => return true,
+    };
+    match path.parent().and_then(|p| std::fs::metadata(p).ok()) {
+        Some(parent_meta) => meta.dev() != parent_meta.dev(),
+        None => false,
+    }
+}
+
+/// On non-Unix targets there is no cheap portable mount-point probe, so keep
+/// the previous always-attempt-cleanup behaviour.
+#[cfg(not(unix))]
+fn should_force_unmount(_path: &Path) -> bool {
+    true
+}
+
+/// Mounts `lockfile` at `prefix` via `rattler_vfs`, returning the live mount
+/// handle. Clears any stale mount left behind by a previous crashed run first.
+async fn mount_prefix(
+    lockfile: &LockFile,
+    platform: Platform,
+    package_cache: &PackageCache,
+    prefix: &Path,
+    env_hash: &str,
+) -> miette::Result<MountHandle> {
+    std::fs::create_dir_all(prefix)
+        .into_diagnostic()
+        .context("failed to create mount point")?;
+
+    // A previous run that was killed (SIGKILL, power loss) can leave a stale
+    // mount at this path; clear it so the fresh mount can take over. Only do
+    // this when the path actually looks mounted (or its state is ambiguous) —
+    // otherwise every invocation would spawn a pointless `umount` subprocess
+    // (adding latency + run-to-run jitter) and print a spurious
+    // "not currently mounted" error.
+    if should_force_unmount(prefix) {
+        let _ = force_unmount(prefix, Transport::Auto);
+    }
+
+    // ProjFS on Windows has no read-only mode, so ask for read-only where it is
+    // supported and let it fall through to writable on Windows.
+    let config = MountConfig::new_read_only_if_supported(
+        prefix.to_path_buf(),
+        Transport::Auto,
+        env_hash.to_string(),
+    );
+
+    build_and_mount(
+        lockfile,
+        DEFAULT_ENVIRONMENT_NAME,
+        platform,
+        package_cache,
+        &config,
+    )
+    .await
+    .map_err(|e| miette::miette!("failed to mount environment: {e}"))
 }
 
 fn parse_specs(raw: &[String]) -> miette::Result<Vec<MatchSpec>> {

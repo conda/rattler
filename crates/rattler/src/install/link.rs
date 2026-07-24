@@ -4,7 +4,10 @@ use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::Platform;
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
+use rattler_conda_types::package::{
+    FileMode, OffsetGroup, OffsetRanges, PathType, PathsEntry, PrefixPlaceholder,
+    select_utf8_offset_ranges,
+};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -176,6 +179,8 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
+        experimental_offsets: offsets,
+        experimental_shebang_length: shebang_length,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -214,16 +219,66 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placeholders(
-            source.as_ref(),
-            &mut destination_writer,
-            placeholder,
-            &target_prefix,
-            &target_platform,
-            *file_mode,
-        )
-        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+        // depending on the availability of the offsets
+        match offsets {
+            Some(offsets) => {
+                // The offsets/`shebang_length` come from the (untrusted) `paths.json`. If they are
+                // inconsistent with the file contents we do not fail the install: we fall back to
+                // the search-based path with a warning. The offset function guarantees it wrote
+                // nothing before reporting an inconsistency, so the fallback reuses the same
+                // (empty) destination.
+                match copy_and_replace_placeholders_with_offsets(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                    offsets,
+                    *shebang_length,
+                ) {
+                    Ok(()) => {}
+                    Err(OffsetReplaceError::InconsistentMetadata(reason)) => {
+                        tracing::warn!(
+                            "prefix replacement offsets for '{}' are inconsistent ({reason}); \
+                             falling back to search-based replacement",
+                            path_json_entry.relative_path.display()
+                        );
+                        copy_and_replace_placeholders(
+                            source.as_ref(),
+                            &mut destination_writer,
+                            placeholder,
+                            &target_prefix,
+                            &target_platform,
+                            *file_mode,
+                        )
+                        .map_err(|err| {
+                            LinkFileError::IoError(String::from("replacing placeholders"), err)
+                        })?;
+                    }
+                    Err(OffsetReplaceError::Io(err)) => {
+                        return Err(LinkFileError::IoError(
+                            String::from("replacing placeholders"),
+                            err,
+                        ));
+                    }
+                }
+            }
+            None => {
+                // Replace the prefix placeholder in the file with the new placeholder
+                copy_and_replace_placeholders(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                )
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
+        }
 
         let (mut file, current_hash) = destination_writer.finalize();
 
@@ -237,11 +292,13 @@ pub fn link_file(
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
+        let executable = has_executable_permissions(&metadata.permissions());
+
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
+        if (executable || file_type == Some(FileType::MachO))
             && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
@@ -650,6 +707,122 @@ pub fn copy_and_replace_placeholders(
     Ok(())
 }
 
+/// Error returned by the offset-based prefix replacement functions
+/// ([`copy_and_replace_placeholders_with_offsets`] and the specialized
+/// text/binary variants it dispatches to).
+///
+/// The `offsets` and `shebang_length` recorded in `paths.json` come from the
+/// package producer and are not trusted. When they are inconsistent with the
+/// file contents or with each other (see the CEP "Prefix placeholder offsets
+/// in `paths.json`"), the install MUST NOT fail: the caller falls back to the
+/// search-based replacement path. Genuine IO errors that occur while writing
+/// the patched file are surfaced separately so they are not mistaken for
+/// producer non-conformance.
+///
+/// The offset functions guarantee that they write nothing to the destination
+/// before returning [`OffsetReplaceError::InconsistentMetadata`]; this is what
+/// lets the caller reuse the same (still empty) destination for the fallback.
+#[derive(Debug, thiserror::Error)]
+pub enum OffsetReplaceError {
+    /// The recorded `offsets`/`shebang_length` are inconsistent with the file
+    /// contents or with each other. Callers SHOULD fall back to search-based
+    /// replacement rather than failing the install.
+    #[error("inconsistent prefix replacement metadata: {0}")]
+    InconsistentMetadata(String),
+
+    /// A genuine IO error occurred while writing the patched file.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
+impl OffsetReplaceError {
+    fn inconsistent(msg: impl Into<String>) -> Self {
+        OffsetReplaceError::InconsistentMetadata(msg.into())
+    }
+}
+
+/// Given the contents of a file copy it to the `destination` and in the process replace the
+/// `prefix_placeholder` text with the `target_prefix` text, using the offset groups recorded in
+/// `paths.json` instead of searching the file contents.
+///
+/// Per the CEP, an installer applies exactly the groups whose encodings its own search-based
+/// replacement covers. rattler's search-based replacement covers UTF-8 only, so the UTF-8 group's
+/// ranges (selected and structurally validated by [`select_utf8_offset_ranges`]) are spliced by
+/// [`copy_and_replace_textual_placeholder_offsets`] or
+/// [`copy_and_replace_cstring_placeholder_offsets`]; groups for the other defined encodings are
+/// skipped, since their occurrences would not have been replaced by the search either. Valid
+/// metadata without a UTF-8 group means there is nothing to splice: the file is copied through
+/// unchanged apart from the shebang handling of text files.
+///
+/// `shebang_length` bounds the leading shebang region for text files and is ignored for binary
+/// files. Returns [`OffsetReplaceError::InconsistentMetadata`] (having written nothing) when the
+/// metadata does not match the file, so the caller can fall back to search-based replacement.
+#[allow(clippy::too_many_arguments)]
+pub fn copy_and_replace_placeholders_with_offsets(
+    source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+    offsets: &[OffsetGroup],
+    shebang_length: Option<usize>,
+) -> Result<(), OffsetReplaceError> {
+    let ranges = select_utf8_offset_ranges(offsets, file_mode, shebang_length.is_some())
+        .map_err(|err| OffsetReplaceError::inconsistent(err.to_string()))?;
+
+    match (file_mode, ranges) {
+        (FileMode::Text, None | Some(OffsetRanges::Text(_))) => {
+            // With no UTF-8 group, only the shebang region transforms (still
+            // validated against `shebang_length`); the body copies verbatim.
+            let body_offsets = match ranges {
+                Some(OffsetRanges::Text(offsets)) => offsets.as_slice(),
+                _ => &[],
+            };
+            copy_and_replace_textual_placeholder_offsets(
+                source_bytes,
+                destination,
+                prefix_placeholder,
+                target_prefix,
+                target_platform,
+                body_offsets,
+                shebang_length,
+            )?;
+        }
+        (FileMode::Binary, ranges) => {
+            // conda does not replace the prefix in the binary files on windows
+            // DLLs are loaded quite differently anyways (there is no rpath, for example).
+            match ranges {
+                Some(OffsetRanges::Binary(groups)) if !target_platform.is_windows() => {
+                    copy_and_replace_cstring_placeholder_offsets(
+                        source_bytes,
+                        destination,
+                        prefix_placeholder,
+                        target_prefix,
+                        groups,
+                    )?;
+                }
+                None | Some(OffsetRanges::Binary(_)) => {
+                    destination.write_all(source_bytes)?;
+                }
+                Some(OffsetRanges::Text(_)) => {
+                    // Unreachable: the shape is validated by `select_utf8_offset_ranges`.
+                    return Err(OffsetReplaceError::inconsistent(
+                        "ranges shape does not match file mode",
+                    ));
+                }
+            }
+        }
+        (FileMode::Text, Some(OffsetRanges::Binary(_))) => {
+            // Unreachable: the shape is validated by `select_utf8_offset_ranges`.
+            return Err(OffsetReplaceError::inconsistent(
+                "ranges shape does not match file mode",
+            ));
+        }
+    }
+    Ok(())
+}
+
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
     // ^(#!      pretty much the whole match string
     // (?:[ ]*)  allow spaces between #! and beginning of
@@ -745,6 +918,64 @@ fn replace_shebang<'a>(
     }
 }
 
+/// Transform the shebang region (the first `shebang_length` bytes of a text file) exactly as the
+/// installer does when writing the patched file, returning the region's contribution to the output.
+///
+/// On targets with shebang handling ([`Platform::is_unix`]) the region minus its trailing newline
+/// is rewritten by `replace_shebang` (which may collapse an over-long line to the
+/// `#!/usr/bin/env <program>` form) and the trailing newline, if present, is appended unchanged. On
+/// other targets the region receives plain placeholder replacement (searching at most
+/// `shebang_length` bytes).
+///
+/// This is the single source of truth for how the shebang region is transformed, shared by the
+/// install-time replacement here and the mount-time ranged reads in `rattler_vfs`, so the two stay
+/// byte-identical.
+pub fn replace_shebang_region(
+    region: &[u8],
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+) -> Vec<u8> {
+    if region.is_empty() {
+        return Vec::new();
+    }
+
+    if target_platform.is_unix() {
+        // Feed the region minus its trailing newline to the shebang rules; the newline byte, when
+        // present, is appended unchanged.
+        let has_newline = region[region.len() - 1] == b'\n';
+        let line_end = if has_newline {
+            region.len() - 1
+        } else {
+            region.len()
+        };
+        let first_line = String::from_utf8_lossy(&region[..line_end]);
+        let new_shebang = replace_shebang(
+            first_line,
+            (prefix_placeholder, target_prefix),
+            target_platform,
+        );
+        let mut out = new_shebang.into_owned().into_bytes();
+        if has_newline {
+            out.extend_from_slice(&region[line_end..]);
+        }
+        out
+    } else {
+        // Non-rewriting target (e.g. Windows for a noarch package): plain placeholder replacement.
+        let old_prefix = prefix_placeholder.as_bytes();
+        let new_prefix = target_prefix.as_bytes();
+        let mut out = Vec::with_capacity(region.len());
+        let mut last = 0;
+        for index in memchr::memmem::find_iter(region, old_prefix) {
+            out.extend_from_slice(&region[last..index]);
+            out.extend_from_slice(new_prefix);
+            last = index + old_prefix.len();
+        }
+        out.extend_from_slice(&region[last..]);
+        out
+    }
+}
+
 /// Given the contents of a file copy it to the `destination` and in the process replace the
 /// `prefix_placeholder` text with the `target_prefix` text.
 ///
@@ -766,9 +997,16 @@ pub fn copy_and_replace_textual_placeholder(
     // check if we have a shebang. We need to handle it differently because it has a maximum length
     // that can be exceeded in very long target prefix's.
     if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
-        // extract first line
-        let (first, rest) =
-            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
+        // Extract the first line. When the file has no newline the whole file is
+        // the shebang line; using the file length (rather than `0`) keeps the
+        // `#!` prefix in `first_line` so `replace_shebang`'s `starts_with("#!")`
+        // assertion holds instead of panicking.
+        let (first, rest) = source_bytes.split_at(
+            source_bytes
+                .iter()
+                .position(|&c| c == b'\n')
+                .unwrap_or(source_bytes.len()),
+        );
         let first_line = String::from_utf8_lossy(first);
         let new_shebang = replace_shebang(
             first_line,
@@ -789,6 +1027,154 @@ pub fn copy_and_replace_textual_placeholder(
     }
 
     // Write remaining bytes
+    if last_match < source_bytes.len() {
+        destination.write_all(&source_bytes[last_match..])?;
+    }
+
+    Ok(())
+}
+
+/// Writes `source[start..end]` to `destination`, returning an [`std::io::ErrorKind::InvalidData`]
+/// error instead of panicking when the range is invalid (out of bounds or out of order).
+///
+/// The offsets driving the prefix replacement come from a package's `paths.json`, which is not
+/// trusted input. A malformed or malicious entry (an offset past the end of the file, or offsets
+/// that are not sorted/overlapping) must surface as a recoverable error rather than crash the
+/// process (which for e.g. a FUSE/NFS mount would take down the whole mount).
+fn write_replacement_range<W: Write>(
+    destination: &mut W,
+    source: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<(), std::io::Error> {
+    let slice = source.get(start..end).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "invalid prefix replacement offsets: range {start}..{end} is out of bounds or out \
+                 of order for content of length {}",
+                source.len()
+            ),
+        )
+    })?;
+    destination.write_all(slice)
+}
+
+/// Given the contents of a file copy it to the `destination` and in the process replace the
+/// `prefix_placeholder` text with the `target_prefix` text using the offsets from the `paths.json`.
+///
+/// This is a text based version where the complete string is replaced. This works fine for text
+/// files but will not work correctly for binary files where the length of the string is often
+/// important. See [`copy_and_replace_cstring_placeholder_offsets`] when you are dealing with binary
+/// content.
+///
+/// `offsets` are absolute byte positions in `source_bytes` and, per the CEP, **exclude** any
+/// occurrence inside the shebang region. Each listed offset is spliced uniformly. The shebang
+/// region — the first `shebang_length` bytes, present exactly when the file starts with `#!` — is
+/// handled separately: on targets with shebang handling ([`Platform::is_unix`]) the region minus
+/// its trailing newline is rewritten by `replace_shebang` and the newline byte copied through
+/// verbatim; on other targets the region gets plain placeholder replacement.
+///
+/// The recorded metadata is validated before anything is written, so a mismatch surfaces as
+/// [`OffsetReplaceError::InconsistentMetadata`] with an untouched destination the caller can hand
+/// to search-based replacement.
+pub fn copy_and_replace_textual_placeholder_offsets(
+    source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    offsets: &[usize],
+    shebang_length: Option<usize>,
+) -> Result<(), OffsetReplaceError> {
+    let old_prefix = prefix_placeholder.as_bytes();
+    let new_prefix = target_prefix.as_bytes();
+
+    // Determine the shebang region from the recorded `shebang_length` rather than re-deriving it
+    // from the file contents. Per the CEP `shebang_length` is present exactly when the file starts
+    // with `#!`, and its value is the offset of the first newline plus one (or the file size when
+    // there is no newline). The first `shebang_length` bytes form the shebang region.
+    let starts_with_shebang = source_bytes.starts_with(b"#!");
+    let region_end = if starts_with_shebang {
+        let len = shebang_length.ok_or_else(|| {
+            OffsetReplaceError::inconsistent("file starts with #! but shebang_length is absent")
+        })?;
+        // Validate the recorded value against the actual contents.
+        let expected = source_bytes
+            .iter()
+            .position(|&c| c == b'\n')
+            .map_or(source_bytes.len(), |i| i + 1);
+        if len != expected {
+            return Err(OffsetReplaceError::inconsistent(format!(
+                "shebang_length {len} does not match the first newline position + 1 ({expected})"
+            )));
+        }
+        len
+    } else {
+        if shebang_length.is_some() {
+            return Err(OffsetReplaceError::inconsistent(
+                "shebang_length present but the file does not start with #!",
+            ));
+        }
+        0
+    };
+
+    // Validate the offsets before writing anything so that, on inconsistent metadata, the caller
+    // can fall back to search-based replacement using the still-empty destination. Offsets must be
+    // in range, sorted in strictly increasing non-overlapping order, at or after the shebang
+    // region, and the placeholder bytes must actually be present at each one.
+    let mut prev_end = region_end;
+    for &offset in offsets {
+        if offset < region_end {
+            return Err(OffsetReplaceError::inconsistent(format!(
+                "offset {offset} lies inside the shebang region (< {region_end})"
+            )));
+        }
+        if offset < prev_end {
+            return Err(OffsetReplaceError::inconsistent(
+                "offsets are not sorted in strictly increasing, non-overlapping order",
+            ));
+        }
+        let end = offset
+            .checked_add(old_prefix.len())
+            .filter(|&end| end <= source_bytes.len())
+            .ok_or_else(|| {
+                OffsetReplaceError::inconsistent(format!(
+                    "offset {offset} is out of range for content of length {}",
+                    source_bytes.len()
+                ))
+            })?;
+        if &source_bytes[offset..end] != old_prefix {
+            return Err(OffsetReplaceError::inconsistent(format!(
+                "placeholder bytes are not present at recorded offset {offset}"
+            )));
+        }
+        prev_end = end;
+    }
+
+    // --- The metadata is consistent; write the patched file. ---
+
+    // Handle the shebang region via the shared helper, so that install-time and
+    // mount-time (rattler_vfs) replacement stay byte-identical.
+    if region_end > 0 {
+        let region_out = replace_shebang_region(
+            &source_bytes[..region_end],
+            prefix_placeholder,
+            target_prefix,
+            target_platform,
+        );
+        destination.write_all(&region_out)?;
+    }
+
+    // Splice the recorded body offsets.
+    let mut last_match = region_end;
+    for &offset in offsets {
+        write_replacement_range(&mut destination, source_bytes, last_match, offset)?;
+        destination.write_all(new_prefix)?;
+        last_match = offset + old_prefix.len();
+    }
+
+    // Write any remaining bytes after the final replacement.
     if last_match < source_bytes.len() {
         destination.write_all(&source_bytes[last_match..])?;
     }
@@ -871,6 +1257,133 @@ pub fn copy_and_replace_cstring_placeholder(
     }
 }
 
+/// Given the contents & offsets of a file, copies it to the `destination` and in the process replace
+/// any binary c-style string that contains the text `prefix_placeholder` with a binary compatible
+/// c-string where the `prefix_placeholder` text is replaced with the `target_prefix` text.
+///
+/// The length of the input will match the output.
+///
+/// Offsets are grouped by c-string: each inner slice lists the prefix start
+/// positions followed by the position of the NUL terminator, or the file size
+/// when the final c-string is unterminated at end-of-file (the padding then
+/// runs to EOF, still preserving the length). For example, `[[5, 39], [22, 30,
+/// 39]]` means one c-string with the prefix at offset 5 (NUL at 39), and
+/// another with prefixes at 22 and 30 (NUL at 39).
+///
+/// The metadata is validated before anything is written, so a mismatch surfaces as
+/// [`OffsetReplaceError::InconsistentMetadata`] with an untouched destination the caller can hand
+/// to search-based replacement.
+pub fn copy_and_replace_cstring_placeholder_offsets(
+    source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    groups: &[Vec<usize>],
+) -> Result<(), OffsetReplaceError> {
+    let old_prefix = prefix_placeholder.as_bytes();
+    let new_prefix = target_prefix.as_bytes();
+
+    if new_prefix.len() > old_prefix.len() {
+        return Err(OffsetReplaceError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "target prefix cannot be longer than the placeholder prefix",
+        )));
+    }
+
+    // The binary form must list at least one c-string.
+    if groups.is_empty() {
+        return Err(OffsetReplaceError::inconsistent(
+            "binary offsets outer list is empty",
+        ));
+    }
+
+    // Validate every group before writing so that, on inconsistent metadata, the caller can fall
+    // back to search-based replacement using the still-empty destination. Within each group the
+    // prefix offsets must be in range (before the terminator), sorted in strictly increasing
+    // non-overlapping order — also across groups — and the placeholder bytes must be present.
+    let mut prev_end = 0usize;
+    for group in groups {
+        // Each group lists the prefix offsets followed by the NUL terminator position.
+        let Some((&nul_pos, prefix_offsets)) = group.split_last() else {
+            return Err(OffsetReplaceError::inconsistent(
+                "binary offset group is empty",
+            ));
+        };
+        if prefix_offsets.is_empty() {
+            return Err(OffsetReplaceError::inconsistent(
+                "binary offset group has no prefix offsets",
+            ));
+        }
+        if nul_pos > source_bytes.len() {
+            return Err(OffsetReplaceError::inconsistent(format!(
+                "NUL offset {nul_pos} is out of range for content of length {}",
+                source_bytes.len()
+            )));
+        }
+        for &offset in prefix_offsets {
+            if offset < prev_end {
+                return Err(OffsetReplaceError::inconsistent(
+                    "binary offsets are not sorted / c-string ranges overlap",
+                ));
+            }
+            let end = offset
+                .checked_add(old_prefix.len())
+                .filter(|&end| end <= nul_pos)
+                .ok_or_else(|| {
+                    OffsetReplaceError::inconsistent(format!(
+                        "offset {offset} does not fit before its NUL terminator {nul_pos}"
+                    ))
+                })?;
+            if &source_bytes[offset..end] != old_prefix {
+                return Err(OffsetReplaceError::inconsistent(format!(
+                    "placeholder bytes are not present at recorded offset {offset}"
+                )));
+            }
+            prev_end = end;
+        }
+        prev_end = nul_pos;
+    }
+
+    // --- The metadata is consistent; write the patched file. ---
+    let length_change = old_prefix.len() - new_prefix.len();
+    let mut last_pos = 0;
+
+    for group in groups {
+        // Validated above: non-empty group, terminator in range, offsets ordered and in range.
+        let (&nul_pos, prefix_offsets) =
+            group.split_last().expect("group validated to be non-empty");
+
+        for &offset in prefix_offsets {
+            // Write bytes between last position and this prefix
+            write_replacement_range(&mut destination, source_bytes, last_pos, offset)?;
+            // Write the new prefix
+            destination.write_all(new_prefix)?;
+            // Advance past old prefix in source
+            last_pos = offset + old_prefix.len();
+        }
+
+        // Write remaining bytes from last prefix end to the NUL position (or EOF for an
+        // unterminated final c-string, where `nul_pos == source_bytes.len()`).
+        write_replacement_range(&mut destination, source_bytes, last_pos, nul_pos)?;
+
+        // Pad with zeros to preserve total length. For an unterminated final c-string this padding
+        // runs to the end of the file.
+        let padding = prefix_offsets.len() * length_change;
+        if padding > 0 {
+            destination.write_all(&vec![0; padding])?;
+        }
+
+        last_pos = nul_pos;
+    }
+
+    // Write any remaining bytes after the last c-string
+    if last_pos < source_bytes.len() {
+        destination.write_all(&source_bytes[last_pos..])?;
+    }
+
+    Ok(())
+}
+
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     return fs_err::os::windows::fs::symlink_file(source_path, destination_path);
@@ -929,8 +1442,18 @@ mod test {
     use super::PYTHON_REGEX;
     use fs_err as fs;
     use rattler_conda_types::Platform;
+    use rattler_conda_types::package::{OffsetEncoding, OffsetGroup, OffsetRanges};
     use rstest::rstest;
     use std::io::Cursor;
+
+    /// Builds the UTF-8 offset group a CEP-conformant producer would emit.
+    fn utf8_group(ranges: OffsetRanges) -> OffsetGroup {
+        OffsetGroup {
+            encoding: OffsetEncoding::Utf8,
+            ranges,
+            has_unknown_members: false,
+        }
+    }
 
     /// Patched files must receive `modification_time` rather than preserving
     /// the source file's mtime. Without this, Python reuses stale .pyc files
@@ -966,6 +1489,8 @@ mod test {
             prefix_placeholder: Some(PrefixPlaceholder {
                 file_mode: FileMode::Text,
                 placeholder: "/old/placeholder/path".to_string(),
+                experimental_offsets: None,
+                experimental_shebang_length: None,
             }),
             sha256: None,
             size_in_bytes: None,
@@ -1459,5 +1984,714 @@ mod test {
             "destination should be a regular file, not a symlink"
         );
         assert_eq!(fs::read(&dest_path).unwrap(), b"hello world");
+    }
+
+    #[rstest]
+    #[case("Hello, cruel world!", [7].to_vec(), "cruel", "fabulous", "Hello, fabulous world!")]
+    #[case(
+        "prefix_placeholder",
+        [0].to_vec(),
+        "prefix_placeholder",
+        "target_prefix",
+        "target_prefix"
+    )]
+    pub fn test_copy_and_replace_textual_placeholder_with_offsets(
+        #[case] input: &str,
+        #[case] offsets: Vec<usize>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+        #[case] expected_output: &str,
+    ) {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            input.as_bytes(),
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            &String::from_utf8_lossy(&output.into_inner()),
+            expected_output
+        );
+    }
+
+    /// Records only the body occurrences in `offsets`, filtering out the ones inside the shebang
+    /// region — exactly what a CEP-conformant producer emits.
+    fn conformant_text_offsets(input: &[u8], placeholder: &str) -> (Vec<usize>, Option<usize>) {
+        let shebang_length = input.starts_with(b"#!").then(|| {
+            input
+                .iter()
+                .position(|&c| c == b'\n')
+                .map_or(input.len(), |i| i + 1)
+        });
+        let region_end = shebang_length.unwrap_or(0);
+        let offsets = memchr::memmem::find_iter(input, placeholder.as_bytes())
+            .filter(|&o| o >= region_end)
+            .collect();
+        (offsets, shebang_length)
+    }
+
+    /// CEP test vector 1: a Unix target with a short target prefix. The occurrence inside the
+    /// shebang line (excluded from `offsets`) is rewritten by the shebang rules and, being short
+    /// enough, the patched line is kept; the body occurrence is spliced at its recorded offset.
+    #[test]
+    fn test_textual_offsets_shebang_kept_short_prefix() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input =
+            format!("#!{prefix_placeholder}/python\nimport sys  # see {prefix_placeholder}/lib\n")
+                .into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+        assert_eq!(offsets.len(), 1, "only the body occurrence is recorded");
+        assert_eq!(shebang_length, Some(30));
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        let expected = format!("#!{target_prefix}/python\nimport sys  # see {target_prefix}/lib\n");
+        assert_eq!(String::from_utf8_lossy(&output.into_inner()), expected);
+    }
+
+    /// CEP test vector 3: a non-rewriting target (Windows, e.g. a `noarch` package) with an
+    /// occurrence inside the shebang region. There is no shebang machinery, so the region MUST get
+    /// plain placeholder replacement even though its occurrence is not in `offsets`.
+    #[test]
+    fn test_textual_offsets_shebang_windows_plain_region() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input =
+            format!("#!{prefix_placeholder}/python\nimport sys  # see {prefix_placeholder}/lib\n")
+                .into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Win64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        // The shebang region's occurrence is replaced by the plain in-region path, not left behind.
+        let expected = format!("#!{target_prefix}/python\nimport sys  # see {target_prefix}/lib\n");
+        assert_eq!(String::from_utf8_lossy(&output.into_inner()), expected);
+    }
+
+    /// CEP test vector 4: a shebang file with no trailing newline, where `shebang_length` equals
+    /// the file size. The whole file is the shebang line and there is no newline to copy through.
+    #[test]
+    fn test_textual_offsets_shebang_no_trailing_newline() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input = format!("#!{prefix_placeholder}/python").into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+        assert!(offsets.is_empty(), "the only occurrence is in the shebang");
+        assert_eq!(shebang_length, Some(input.len()));
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        assert_eq!(
+            String::from_utf8_lossy(&output.into_inner()),
+            format!("#!{target_prefix}/python")
+        );
+    }
+
+    /// CEP test vector 5: a file whose only occurrence is in the shebang line, so `offsets` is the
+    /// empty list. The shebang is short enough to keep.
+    #[test]
+    fn test_textual_offsets_only_shebang_occurrence_empty_offsets() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input = format!("#!{prefix_placeholder}/python\nimport sys\n").into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+        assert!(offsets.is_empty());
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        assert_eq!(
+            String::from_utf8_lossy(&output.into_inner()),
+            format!("#!{target_prefix}/python\nimport sys\n")
+        );
+    }
+
+    /// CEP test vector 6: multiple occurrences within one shebang line. All of them are in the
+    /// region (so `offsets` is empty) and the shebang rules replace them all.
+    #[test]
+    fn test_textual_offsets_multiple_occurrences_in_shebang() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input =
+            format!("#!{prefix_placeholder}/python -S {prefix_placeholder}/site\nprint(1)\n")
+                .into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+        assert!(
+            offsets.is_empty(),
+            "both occurrences are inside the shebang line"
+        );
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        assert_eq!(
+            String::from_utf8_lossy(&output.into_inner()),
+            format!("#!{target_prefix}/python -S {target_prefix}/site\nprint(1)\n")
+        );
+    }
+
+    /// CEP test vector 7: a shebang line longer than the kernel limit that contains no occurrence
+    /// of the placeholder. `shebang_length` is still present (the file starts with `#!`) and the
+    /// over-long line collapses to the `#!/usr/bin/env <program>` form regardless.
+    #[test]
+    fn test_textual_offsets_overlong_shebang_no_occurrence() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let long_shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
+        assert!(long_shebang.len() > 127);
+        let input = format!("{long_shebang}\nprint(1)\n").into_bytes();
+
+        let (offsets, shebang_length) = conformant_text_offsets(&input, prefix_placeholder);
+        assert!(offsets.is_empty(), "the placeholder does not occur at all");
+        assert_eq!(shebang_length, Some(long_shebang.len() + 1));
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            shebang_length,
+        )
+        .unwrap();
+
+        assert_eq!(
+            String::from_utf8_lossy(&output.into_inner()),
+            "#!/usr/bin/env executable -o test -x\nprint(1)\n"
+        );
+    }
+
+    /// A CEP-conformant producer never lists a shebang-region occurrence in `offsets`. If a
+    /// non-conformant producer does, the offset function reports inconsistent metadata (writing
+    /// nothing) so the installer falls back to search-based replacement — which produces the same
+    /// bytes.
+    #[test]
+    fn test_textual_offsets_shebang_occurrence_in_offsets_is_inconsistent() {
+        let prefix_placeholder = "/this/is/placeholder";
+        let target_prefix = "/opt/conda";
+        let input =
+            format!("#!{prefix_placeholder}/python\nimport sys  # see {prefix_placeholder}/lib\n")
+                .into_bytes();
+        let shebang_length = input.iter().position(|&c| c == b'\n').unwrap() + 1;
+
+        // Non-conformant: lists BOTH occurrences, including the in-region one at offset 2.
+        let non_conformant: Vec<usize> =
+            memchr::memmem::find_iter(&input, prefix_placeholder.as_bytes()).collect();
+        assert_eq!(non_conformant.len(), 2);
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &non_conformant,
+            Some(shebang_length),
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "in-region offset must be rejected: {result:?}"
+        );
+        assert!(
+            output.into_inner().is_empty(),
+            "nothing is written, so the fallback starts from a clean destination"
+        );
+
+        // The search-based fallback produces the correct bytes.
+        let mut fallback = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder(
+            &input,
+            &mut fallback,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+        )
+        .unwrap();
+        let expected = format!("#!{target_prefix}/python\nimport sys  # see {target_prefix}/lib\n");
+        assert_eq!(String::from_utf8_lossy(&fallback.into_inner()), expected);
+    }
+
+    /// A file that starts with `#!` but carries no `shebang_length` is producer non-conformance and
+    /// must be reported as inconsistent metadata rather than mishandled.
+    #[test]
+    fn test_textual_offsets_shebang_length_absent_is_inconsistent() {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_textual_placeholder_offsets(
+            b"#!/this/is/placeholder/python\n",
+            &mut output,
+            "/this/is/placeholder",
+            "/opt/conda",
+            &Platform::Linux64,
+            &[],
+            None,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "{result:?}"
+        );
+        assert!(output.into_inner().is_empty());
+    }
+
+    /// A `shebang_length` that disagrees with the first-newline position is inconsistent.
+    #[test]
+    fn test_textual_offsets_shebang_length_mismatch_is_inconsistent() {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_textual_placeholder_offsets(
+            b"#!/this/is/placeholder/python\nbody\n",
+            &mut output,
+            "/this/is/placeholder",
+            "/opt/conda",
+            &Platform::Linux64,
+            &[],
+            Some(20), // the correct value is 30
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "{result:?}"
+        );
+        assert!(output.into_inner().is_empty());
+    }
+
+    /// Regression for the search-based path: a `#!` file with no trailing newline must not panic.
+    /// Previously the missing newline yielded an empty "first line", tripping an assertion inside
+    /// `replace_shebang`.
+    #[test]
+    fn test_scan_path_shebang_without_newline_does_not_panic() {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder(
+            b"#!/this/is/placeholder/python",
+            &mut output,
+            "/this/is/placeholder",
+            "/opt/conda",
+            &Platform::Linux64,
+        )
+        .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&output.into_inner()),
+            "#!/opt/conda/python"
+        );
+    }
+
+    /// CEP test vector 8: a binary file whose final C string is unterminated at end-of-file. The
+    /// group's last value is the file size and the length-preserving padding runs to EOF.
+    #[test]
+    fn test_binary_offsets_unterminated_final_cstring() {
+        let input = b"AAAA/placeholder";
+        let groups = vec![vec![4, input.len()]];
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            "/placeholder",
+            "/opt",
+            &groups,
+        )
+        .unwrap();
+
+        let out = output.into_inner();
+        assert_eq!(out, b"AAAA/opt\0\0\0\0\0\0\0\0");
+        assert_eq!(out.len(), input.len(), "length must be preserved");
+    }
+
+    /// The dispatcher applies the UTF-8 group's ranges for a text file.
+    #[test]
+    fn test_offset_groups_text_utf8_group_applied() {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_placeholders_with_offsets(
+            b"Hello, cruel world!",
+            &mut output,
+            "cruel",
+            "fabulous",
+            &Platform::Linux64,
+            super::FileMode::Text,
+            &[utf8_group(OffsetRanges::Text(vec![7]))],
+            None,
+        )
+        .unwrap();
+        assert_eq!(output.into_inner(), b"Hello, fabulous world!");
+    }
+
+    /// CEP test vector 9: a binary file with occurrences under more than one
+    /// encoding. rattler's search-based replacement covers UTF-8 only, so the
+    /// UTF-8 group is spliced and the UTF-16-LE wide string is left untouched
+    /// — exactly as rattler's own search would leave it. The file length is
+    /// preserved either way.
+    #[test]
+    fn test_offset_groups_binary_multi_encoding_vector9() {
+        let placeholder = "/pfx";
+        let target = "/np";
+
+        // A UTF-8 c-string with the placeholder at offset 1 (NUL at 9),
+        // followed by a UTF-16-LE wide string with the placeholder at offset
+        // 10 (two-byte NUL terminator starting at 28), followed by a tail.
+        let wide: Vec<u8> = "/pfx/wide"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        let mut input = b"A/pfx/lib\0".to_vec();
+        assert_eq!(input.len(), 10);
+        input.extend_from_slice(&wide);
+        input.extend_from_slice(&[0, 0]);
+        input.extend_from_slice(b"tail");
+
+        let groups = [
+            OffsetGroup {
+                encoding: OffsetEncoding::Utf16Le,
+                ranges: OffsetRanges::Binary(vec![vec![10, 28]]),
+                has_unknown_members: false,
+            },
+            utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+        ];
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_placeholders_with_offsets(
+            &input,
+            &mut output,
+            placeholder,
+            target,
+            &Platform::Linux64,
+            super::FileMode::Binary,
+            &groups,
+            None,
+        )
+        .unwrap();
+
+        let out = output.into_inner();
+        assert_eq!(out.len(), input.len(), "length must be preserved");
+        // The UTF-8 c-string is patched, with padding restoring its length.
+        assert_eq!(&out[..10], b"A/np/lib\0\0");
+        // Everything from the wide string onwards is byte-identical.
+        assert_eq!(&out[10..], &input[10..], "wide string must be untouched");
+    }
+
+    /// Valid metadata whose only groups are wide-string encodings records no
+    /// UTF-8 occurrences: the file is copied through unchanged rather than
+    /// treated as inconsistent.
+    #[test]
+    fn test_offset_groups_without_utf8_group_copies_verbatim() {
+        let input = b"no utf-8 occurrences here";
+        for (file_mode, ranges) in [
+            (
+                super::FileMode::Binary,
+                OffsetRanges::Binary(vec![vec![10, 28]]),
+            ),
+            (super::FileMode::Text, OffsetRanges::Text(vec![10])),
+        ] {
+            let groups = [OffsetGroup {
+                encoding: OffsetEncoding::Utf16Le,
+                ranges,
+                has_unknown_members: false,
+            }];
+            let mut output = Cursor::new(Vec::new());
+            super::copy_and_replace_placeholders_with_offsets(
+                input,
+                &mut output,
+                "/pfx",
+                "/np",
+                &Platform::Linux64,
+                file_mode,
+                &groups,
+                None,
+            )
+            .unwrap();
+            assert_eq!(output.into_inner(), input, "mode {file_mode:?}");
+        }
+    }
+
+    /// Structurally invalid group lists — an unrecognized encoding, duplicate
+    /// encodings, or an empty list for a binary file — surface as inconsistent
+    /// metadata (with nothing written) so the installer falls back to the
+    /// search-based replacement.
+    #[rstest]
+    #[case::unknown_encoding(vec![OffsetGroup {
+        encoding: OffsetEncoding::Unknown(String::from("utf-64-xe")),
+        ranges: OffsetRanges::Binary(vec![vec![1, 9]]),
+        has_unknown_members: false,
+    }])]
+    #[case::duplicate_encoding(vec![
+        utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+        utf8_group(OffsetRanges::Binary(vec![vec![1, 9]])),
+    ])]
+    #[case::empty_list(vec![])]
+    fn test_offset_groups_invalid_is_inconsistent(#[case] groups: Vec<OffsetGroup>) {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_placeholders_with_offsets(
+            b"A/pfx/lib\0",
+            &mut output,
+            "/pfx",
+            "/np",
+            &Platform::Linux64,
+            super::FileMode::Binary,
+            &groups,
+            None,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "{result:?}"
+        );
+        assert!(
+            output.into_inner().is_empty(),
+            "nothing is written, so the fallback starts from a clean destination"
+        );
+    }
+
+    /// Offsets come from the (untrusted) `paths.json`. Malformed offsets must return a recoverable
+    /// error rather than panic and take down the caller (e.g. a FUSE/NFS read thread).
+    #[rstest]
+    // Offset past the end of the file.
+    #[case(vec![1000])]
+    // Offsets out of order (second starts before the first prefix ends).
+    #[case(vec![7, 0])]
+    fn test_textual_offsets_invalid_returns_error(#[case] offsets: Vec<usize>) {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_textual_placeholder_offsets(
+            b"Hello, cruel world!",
+            &mut output,
+            "cruel",
+            "fabulous",
+            &Platform::Linux64,
+            &offsets,
+            None,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "malformed offsets should surface as inconsistent metadata, not a panic: {result:?}"
+        );
+        // Nothing must be written when the metadata is rejected, so the caller can reuse the
+        // destination for search-based replacement.
+        assert!(output.into_inner().is_empty());
+    }
+
+    /// Malformed binary offset groups must also return an error rather than panic (empty group,
+    /// out-of-range NUL position, ...).
+    #[rstest]
+    // Empty group would underflow `group.len() - 1`.
+    #[case(vec![vec![]])]
+    // Prefix offset and NUL position beyond the end of the file.
+    #[case(vec![vec![1000, 2000]])]
+    fn test_binary_offsets_invalid_returns_error(#[case] groups: Vec<Vec<usize>>) {
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder_offsets(
+            b"12345Hello, fabulous world!\x006789",
+            &mut output,
+            "fabulous",
+            "cruel",
+            &groups,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(super::OffsetReplaceError::InconsistentMetadata(_))
+            ),
+            "malformed offsets should surface as inconsistent metadata, not a panic: {result:?}"
+        );
+        // Nothing must be written when the metadata is rejected.
+        assert!(output.into_inner().is_empty());
+    }
+
+    #[rstest]
+    // The NUL terminator sits at offset 27 (the `\x00` byte), not 28. The last value of the group
+    // is the NUL position, per the CEP.
+    #[case(
+        b"12345Hello, fabulous world!\x006789",
+        vec![vec![12, 27]],
+        "fabulous",
+        "cruel",
+        b"12345Hello, cruel world!\x00\x00\x00\x006789"
+    )]
+    pub fn test_copy_and_replace_binary_placeholder_offsets(
+        #[case] input: &[u8],
+        #[case] groups: Vec<Vec<usize>>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+        #[case] expected_output: &[u8],
+    ) {
+        assert_eq!(
+            expected_output.len(),
+            input.len(),
+            "input and expected output must have the same length"
+        );
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &groups,
+        )
+        .unwrap();
+        assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[rstest]
+    #[case(b"short\x00", vec![vec![0, 5]], "short", "verylong")]
+    #[case(b"short1234\x00", vec![vec![0, 9]], "short", "verylong")]
+    pub fn test_shorter_binary_placeholder_offsets(
+        #[case] input: &[u8],
+        #[case] groups: Vec<Vec<usize>>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+    ) {
+        assert!(target_prefix.len() > prefix_placeholder.len());
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &groups,
+        );
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext",
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        vec![vec![20, 43, 61]]
+    )]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/another/placeholder/:\x00somemoretext",
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/another/target/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        vec![vec![20, 43, 67, 81]],
+    )]
+    fn replace_binary_path_var_offsets(
+        #[case] input: &[u8],
+        #[case] result: &[u8],
+        #[case] groups: Vec<Vec<usize>>,
+    ) {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            "/placeholder",
+            "/target",
+            &groups,
+        )
+        .unwrap();
+        let out = &output.into_inner();
+        assert_eq!(out, result);
+        assert_eq!(out.len(), input.len());
+    }
+
+    /// CEP test vectors 2 and 5: the placeholder occurs only inside the shebang line, so a
+    /// conformant producer records `offsets: []`. With a target prefix well over the 127-byte
+    /// Linux limit the patched shebang collapses to the `#!/usr/bin/env <program>` form.
+    #[test]
+    fn test_replace_long_prefix_in_text_file_offsets() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_file = test_data_dir.join("shebang_test.txt");
+        let prefix_placeholder = "/this/is/placeholder";
+        let mut target_prefix = "/super/long/".to_string();
+        for _ in 0..15 {
+            target_prefix.push_str("verylongstring/");
+        }
+        let input = fs::read(test_file).unwrap();
+
+        // The only occurrence is inside the shebang region, so `offsets` is empty.
+        // Derive `shebang_length` (first-newline index + 1) from the file rather than
+        // hardcoding it, so the test is robust to a CRLF checkout on Windows — where the
+        // extra carriage return shifts the newline and thus the region length.
+        let offsets: Vec<usize> = Vec::new();
+        let shebang_length = input
+            .iter()
+            .position(|&c| c == b'\n')
+            .map_or(input.len(), |i| i + 1);
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            &target_prefix,
+            &Platform::Linux64,
+            &offsets,
+            Some(shebang_length),
+        )
+        .unwrap();
+
+        let output = output.into_inner();
+        let replaced = String::from_utf8_lossy(&output);
+        insta::assert_snapshot!(replaced);
     }
 }
