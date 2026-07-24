@@ -68,6 +68,13 @@ pub enum GatewayError {
     #[error("no sharded repodata index is cached for {0}")]
     ShardedIndexNotCached(Url),
 
+    /// A cache-only query needed a shard that was never fetched. Nothing is
+    /// known about the package then, which is not the same as the package
+    /// having no records; see `SourceConfig::missing_shards_are_empty` for
+    /// callers that want the latter reading.
+    #[error("the shard for package '{0}' is not in the cache")]
+    ShardNotCached(String),
+
     #[error("direct url queries are not supported ({0})")]
     DirectUrlQueryNotSupported(String),
 

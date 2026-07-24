@@ -29,7 +29,7 @@ cfg_if! {
         pub use wasm::ShardedSubdir;
     } else {
         mod tokio;
-        pub use tokio::ShardedSubdir;
+        pub use tokio::{ShardCachePolicy, ShardedSubdir};
         // Re-exported for use in tests
         #[cfg(test)]
         pub(crate) use tokio::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
@@ -190,7 +190,7 @@ mod tests {
     use tokio::sync::oneshot;
     use url::Url;
 
-    use super::ShardedSubdir;
+    use super::{ShardCachePolicy, ShardedSubdir};
 
     /// A mock server that serves a sharded repodata index but returns
     /// configurable responses for shard requests.
@@ -303,7 +303,10 @@ mod tests {
             "linux-64".to_string(),
             client,
             cache_dir.path().to_path_buf(),
-            CacheAction::NoCache,
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
             None,
             None,
         )
@@ -368,7 +371,10 @@ mod tests {
             "linux-64".to_string(),
             client,
             cache_dir.path().to_path_buf(),
-            CacheAction::NoCache,
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
             None,
             None,
         )
@@ -406,7 +412,10 @@ mod tests {
             "linux-64".to_string(),
             client,
             cache_dir.path().to_path_buf(),
-            CacheAction::NoCache,
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
             None,
             None,
         )
@@ -435,6 +444,7 @@ mod tests {
     async fn cache_only_subdir_with_cold_shard(
         cache_dir: &Path,
         server: &MockShardedServer,
+        missing_shards_are_empty: bool,
     ) -> ShardedSubdir {
         let client = rattler_networking::LazyClient::default();
 
@@ -443,7 +453,10 @@ mod tests {
             "linux-64".to_string(),
             client.clone(),
             cache_dir.to_path_buf(),
-            CacheAction::CacheOrFetch,
+            ShardCachePolicy {
+                action: CacheAction::CacheOrFetch,
+                missing_shards_are_empty: false,
+            },
             None,
             None,
         )
@@ -455,7 +468,10 @@ mod tests {
             "linux-64".to_string(),
             client,
             cache_dir.to_path_buf(),
-            CacheAction::ForceCacheOnly,
+            ShardCachePolicy {
+                action: CacheAction::ForceCacheOnly,
+                missing_shards_are_empty,
+            },
             None,
             None,
         )
@@ -477,7 +493,10 @@ mod tests {
             "linux-64".to_string(),
             rattler_networking::LazyClient::default(),
             cache_dir.path().to_path_buf(),
-            CacheAction::ForceCacheOnly,
+            ShardCachePolicy {
+                action: CacheAction::ForceCacheOnly,
+                missing_shards_are_empty: true,
+            },
             None,
             None,
         )
@@ -491,20 +510,42 @@ mod tests {
         );
     }
 
-    /// A shard that was never fetched reports the package as having no
-    /// records, which lets a caller that restricts a solve to locally
-    /// available packages fail on the restriction instead of on the cache.
+    /// Without the opt-in, a cold shard fails a cache-only query with a
+    /// distinct error: nothing is known about the package, which is not the
+    /// same as the package having no records.
     #[tokio::test]
-    async fn cold_shard_is_empty_in_cache_only_mode() {
+    async fn cold_shard_is_an_error_by_default() {
         let server = MockShardedServer::new(MockShardResponse::Empty).await;
         let cache_dir = tempfile::tempdir().unwrap();
 
-        let subdir = cache_only_subdir_with_cold_shard(cache_dir.path(), &server).await;
+        let subdir = cache_only_subdir_with_cold_shard(cache_dir.path(), &server, false).await;
+
+        let err = subdir
+            .fetch_package_records(&"test-package".parse().unwrap(), None)
+            .await
+            .expect_err("a cold shard fails a cache-only query");
+
+        assert!(
+            matches!(err, GatewayError::ShardNotCached(name) if name == "test-package"),
+            "the error names the package whose shard is missing"
+        );
+    }
+
+    /// With `missing_shards_are_empty` the same query reports the package as
+    /// having no records, which lets a caller that restricts a solve to
+    /// locally available packages fail on the restriction instead of on the
+    /// cache.
+    #[tokio::test]
+    async fn cold_shard_is_empty_when_opted_in() {
+        let server = MockShardedServer::new(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let subdir = cache_only_subdir_with_cold_shard(cache_dir.path(), &server, true).await;
 
         let records = subdir
             .fetch_package_records(&"test-package".parse().unwrap(), None)
             .await
-            .expect("a cold shard is not an error");
+            .expect("a cold shard is not an error when opted in");
 
         assert!(records.records.is_empty());
     }
