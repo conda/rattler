@@ -400,14 +400,18 @@ impl<'a> CondaDependencyProvider<'a> {
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
-                // Determine if this record will be excluded by exclude_newer.
-                let excluded = exclude_newer.as_ref().is_some_and(|config| {
-                    config.is_excluded(
-                        &record.package_record.name,
-                        record.channel.as_deref(),
-                        record.package_record.timestamp.as_ref(),
-                    )
-                });
+                // Determine if this record will be excluded by the caller or
+                // by exclude_newer. Both count here: keeping an excluded
+                // record over its other-format twin would throw away the only
+                // candidate the solver may still pick.
+                let excluded = excluded_candidates.contains_key(&record.url)
+                    || exclude_newer.as_ref().is_some_and(|config| {
+                        config.is_excluded(
+                            &record.package_record.name,
+                            record.channel.as_deref(),
+                            record.package_record.timestamp.as_ref(),
+                        )
+                    });
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;

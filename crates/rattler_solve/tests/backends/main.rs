@@ -794,7 +794,7 @@ mod libsolv_c {
 
 #[cfg(feature = "resolvo")]
 mod resolvo {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, sync::Arc};
 
     use rattler_conda_types::{
         MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
@@ -882,6 +882,11 @@ mod resolvo {
 
     /// Excluding the candidate the solver would otherwise pick makes it fall
     /// back to the next one instead of failing.
+    ///
+    /// The dummy channel carries the preferred version as both `.conda` and
+    /// `.tar.bz2`. Excluding the `.conda` must surface the same-version
+    /// `.tar.bz2` rather than downgrade: archive dedup may not throw away a
+    /// record whose preferred twin the caller ruled out.
     #[test]
     fn test_excluded_candidate_falls_back_to_next() {
         let preferred = solve::<rattler_solve::resolvo::Solver>(
@@ -917,7 +922,15 @@ mod resolvo {
             .expect("the solve should still contain bors");
 
         assert_ne!(chosen.url, preferred.url);
-        assert!(chosen.package_record.version < preferred.package_record.version);
+        assert_eq!(
+            chosen.package_record.version, preferred.package_record.version,
+            "the same-version .tar.bz2 should be picked instead of a downgrade"
+        );
+        assert!(
+            chosen.url.as_str().ends_with(".tar.bz2"),
+            "expected the .tar.bz2 twin, got {}",
+            chosen.url
+        );
     }
 
     /// When an exclusion is what makes a solve impossible, the reason the
@@ -938,20 +951,25 @@ mod resolvo {
         .expect("the solve should contain bors");
 
         // Ask for exactly the version that was just excluded, so no other
-        // candidate can satisfy the request.
+        // candidate can satisfy the request. The version exists as both
+        // `.conda` and `.tar.bz2`, and both have to be ruled out or the
+        // other format satisfies the spec.
         let spec = format!("bors =={}", preferred.package_record.version);
+        let reason: Arc<str> = "not available locally".into();
+        let tarball_url =
+            Url::parse(&preferred.url.as_str().replace(".conda", ".tar.bz2")).unwrap();
         let err = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &[&spec],
-                excluded_candidates: HashMap::from([(
-                    preferred.url.clone(),
-                    "not available locally".into(),
-                )]),
+                excluded_candidates: HashMap::from([
+                    (preferred.url.clone(), Arc::clone(&reason)),
+                    (tarball_url, reason),
+                ]),
                 ..SimpleSolveTask::default()
             },
         )
-        .expect_err("the only candidate was excluded");
+        .expect_err("every candidate of the requested version was excluded");
 
         assert!(
             err.to_string().contains("not available locally"),
