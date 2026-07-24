@@ -491,7 +491,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     let next_rank = channel_order.len() as u32;
                     channel_order.insert(record.channel.clone(), next_rank);
                 }
-                
+
                 // Exclusions the caller derived from outside the repodata, for
                 // example from what a local package cache holds.
                 exclude_if_requested(candidates, solvable_id, &record.url);
