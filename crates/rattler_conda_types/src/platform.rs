@@ -364,7 +364,9 @@ impl Platform {
         )
     }
 
-    /// Return only the platform (linux, win, or osx from the platform enum)
+    /// Return only the OS part of the platform (e.g. `linux`, `win`, `osx`,
+    /// `freebsd`, `ios`, `iossimulator`, `android`), or `None` for `noarch`
+    /// and unknown platforms.
     pub fn only_platform(&self) -> Option<&str> {
         match self {
             Platform::NoArch | Platform::Unknown => None,

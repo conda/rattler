@@ -487,6 +487,9 @@ pub enum DetectVirtualPackageError {
 ///
 /// Use `VirtualPackageOverrides::from_env()` to create an instance of this
 /// struct with all overrides set to the default environment variables.
+// Non-exhaustive so that adding new virtual package overrides (like `ios` and
+// `android`) is not a breaking change for downstream crates.
+#[non_exhaustive]
 #[derive(Default, Clone, Debug)]
 pub struct VirtualPackageOverrides {
     /// The override for the win virtual package
@@ -1009,7 +1012,7 @@ pub struct Ios {
 impl Ios {
     /// Returns the iOS version of the current platform.
     ///
-    /// rattler does not run on iOS as a build host, so this always returns
+    /// Runtime version detection is not implemented yet, so this always returns
     /// `None`. The `__ios` virtual package is instead produced when
     /// cross-compiling to an `ios-*` subdir (see
     /// [`VirtualPackages::detect_for_platform`]) or via the
@@ -1069,7 +1072,7 @@ pub struct Android {
 impl Android {
     /// Returns the Android API level of the current platform.
     ///
-    /// rattler does not run on Android as a build host, so this always returns
+    /// Runtime version detection is not implemented yet, so this always returns
     /// `None`. The `__android` virtual package is instead produced when
     /// cross-compiling to an `android-*` subdir (see
     /// [`VirtualPackages::detect_for_platform`]) or via the
