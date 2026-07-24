@@ -160,12 +160,29 @@ impl From<PackageCacheLayerError> for PackageCacheError {
     }
 }
 
+/// Returns `true` if `path` lives on a filesystem that is *mounted* read-only.
+///
+/// Permission bits miss filesystems mounted read-only (CVMFS, squashfs,
+/// read-only bind mounts): a mode-0755 directory still reports as writable, so
+/// we additionally check the `ST_RDONLY` mount flag via `statvfs(3)`.
+#[cfg(unix)]
+fn is_mounted_readonly(path: &Path) -> bool {
+    rustix::fs::statvfs(path)
+        .is_ok_and(|s| s.f_flag.contains(rustix::fs::StatVfsMountFlags::RDONLY))
+}
+
+#[cfg(not(unix))]
+fn is_mounted_readonly(_path: &Path) -> bool {
+    false
+}
+
 impl PackageCacheLayer {
     /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
         self.path
             .metadata()
             .is_ok_and(|m| m.permissions().readonly())
+            || is_mounted_readonly(&self.path)
     }
 
     /// Validate the packages.

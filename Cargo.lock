@@ -5014,6 +5014,7 @@ dependencies = [
  "rayon",
  "reqwest",
  "rstest",
+ "rustix 1.1.4",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",

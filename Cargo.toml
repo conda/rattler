@@ -146,6 +146,7 @@ rmp = { version = "0.8" }
 rmp-serde = { version = "1" }
 rstest = { version = "0.26" }
 rstest_reuse = "0.7"
+rustix = { version = "1.1", default-features = false }
 simd-json = { version = "0.17", features = ["serde_impl"] }
 self_cell = "1"
 serde = { version = "1" }
