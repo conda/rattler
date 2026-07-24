@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.48.1...rattler_conda_types-v0.49.0) - 2026-07-24
+
+### Added
+
+- add iOS and Android subdirs and __ios/__android virtual packages ([#2613](https://github.com/conda/rattler/pull/2613))
+
+### Fixed
+
+- render build only match specs with a version placeholder ([#2610](https://github.com/conda/rattler/pull/2610))
+- keep trailing underscores in matchspec versions ([#2606](https://github.com/conda/rattler/pull/2606))
+
 ## [0.48.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.48.0...rattler_conda_types-v0.48.1) - 2026-07-14
 
 ### Other

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0](https://github.com/conda/rattler/compare/rattler-v0.47.1...rattler-v0.48.0) - 2026-07-24
+
+### Added
+
+- add iOS and Android subdirs and __ios/__android virtual packages ([#2613](https://github.com/conda/rattler/pull/2613))
+- add `auth token` subcommand ([#2614](https://github.com/conda/rattler/pull/2614))
+
 ## [0.47.1](https://github.com/conda/rattler/compare/rattler-v0.47.0...rattler-v0.47.1) - 2026-07-14
 
 ### Other
