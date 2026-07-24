@@ -24,7 +24,7 @@ rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 Index an Azure Blob Storage channel:
 
 ```shell
-rattler-index --config ./rattler-config.toml azblob \
+rattler-index --config ./rattler-config.toml az \
     az://my-storage-account.blob.core.windows.net/my-container/my-channel \
     --azure-cli
 ```
@@ -50,7 +50,7 @@ export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
     --account-name my-storage-account --name my-container \
     --permissions rwlc --expiry 2026-01-01T00:00Z \
     --auth-mode login --as-user --https-only -o tsv)
-rattler-index --config ./rattler-config.toml azblob \
+rattler-index --config ./rattler-config.toml az \
     az://my-storage-account.blob.core.windows.net/my-container/my-channel
 ```
 

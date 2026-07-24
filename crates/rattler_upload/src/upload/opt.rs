@@ -124,6 +124,7 @@ pub enum ServerType {
     #[cfg(feature = "s3")]
     S3(S3Opts),
     #[cfg(feature = "azure")]
+    #[command(name = "az")]
     Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),

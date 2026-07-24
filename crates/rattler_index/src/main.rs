@@ -113,6 +113,7 @@ enum Commands {
 
     /// Index a channel stored in an Azure Blob container.
     #[cfg(feature = "azure")]
+    #[command(name = "az")]
     Azblob {
         /// The Azure Blob channel URL, e.g.
         /// `az://<account>.blob.core.windows.net/<container>/<channel>`.
