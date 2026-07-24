@@ -5048,6 +5048,7 @@ dependencies = [
  "itertools 0.15.0",
  "jiff",
  "lazy-regex",
+ "memchr",
  "memmap2",
  "nom 8.0.0",
  "nom-language",

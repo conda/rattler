@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 
 use pyo3::{
-    Bound, Py, PyAny, PyErr, PyResult, Python, exceptions::PyValueError, pyclass, pymethods,
-    types::PyBytes,
+    Bound, Py, PyAny, PyErr, PyResult, Python,
+    exceptions::PyValueError,
+    pyclass, pymethods,
+    types::{PyBytes, PyDict, PyDictMethods, PyList, PyListMethods},
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{
-    FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
+    FileMode, OffsetRanges, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
 };
 use rattler_package_streaming::seek::read_package_file;
 use url::Url;
@@ -395,6 +397,8 @@ impl PyPrefixPlaceholder {
             inner: PrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
+                experimental_offsets: None,
+                experimental_shebang_length: None,
             },
         })
     }
@@ -423,6 +427,37 @@ impl PyPrefixPlaceholder {
     #[setter]
     pub fn set_placeholder(&mut self, placeholder: String) {
         self.inner.placeholder = placeholder;
+    }
+
+    /// The placeholder's occurrences in the file, recorded per encoding.
+    ///
+    /// Returns `None` when the field is absent, or a list of offset groups mirroring the JSON:
+    /// `[{"encoding": str, "ranges": list[int] | list[list[int]]}]`. `ranges` is a `list[int]`
+    /// for text-mode files and a `list[list[int]]` for binary-mode files (grouped by c-string).
+    /// Occurrences inside the shebang region (see `shebang_length`) are excluded.
+    #[getter]
+    pub fn experimental_offsets<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let Some(groups) = &self.inner.experimental_offsets else {
+            return Ok(None);
+        };
+        let list = PyList::empty(py);
+        for group in groups {
+            let entry = PyDict::new(py);
+            entry.set_item("encoding", group.encoding.as_str())?;
+            match &group.ranges {
+                OffsetRanges::Text(positions) => entry.set_item("ranges", positions.clone())?,
+                OffsetRanges::Binary(cstrings) => entry.set_item("ranges", cstrings.clone())?,
+            }
+            list.append(entry)?;
+        }
+        Ok(Some(list.into_any()))
+    }
+
+    /// The length in bytes of the file's shebang region (first line including its newline), or
+    /// `None` when the file has no recorded shebang region.
+    #[getter]
+    pub fn experimental_shebang_length(&self) -> Option<usize> {
+        self.inner.experimental_shebang_length
     }
 }
 
