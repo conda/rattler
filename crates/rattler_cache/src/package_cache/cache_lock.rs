@@ -12,6 +12,44 @@ use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheLayerError;
 
+/// Layout of a cache metadata file: a big-endian `u64` revision, optionally
+/// followed by a 32-byte sha256. Everything that reads or writes the file goes
+/// through this module so the layout is described in exactly one place.
+const REVISION_LEN: usize = 8;
+const SHA256_LEN: usize = 32;
+
+/// Returns the path of the metadata file belonging to a cache entry.
+///
+/// The suffix is appended to the raw `OsString` rather than through
+/// `set_extension`, which would replace a suffix the directory name already
+/// has.
+pub(crate) fn metadata_path(cache_path: &Path) -> PathBuf {
+    let mut path = cache_path.as_os_str().to_owned();
+    path.push(".lock");
+    PathBuf::from(path)
+}
+
+/// Reads the sha256 recorded for a cache entry without taking a handle on it.
+///
+/// Meant for taking a point-in-time snapshot of many entries at once, where
+/// coordinating with writers is neither possible nor useful. A missing, short
+/// or half-written file simply yields `None`, which every caller has to handle
+/// anyway because entries written before hashes were recorded have none.
+pub(crate) fn peek_sha256(cache_path: &Path) -> Option<Sha256Hash> {
+    let bytes = fs_err::read(metadata_path(cache_path)).ok()?;
+    let hash = bytes.get(REVISION_LEN..REVISION_LEN + SHA256_LEN)?;
+    Sha256Hash::try_from(hash).ok()
+}
+
+/// Whether a wanted sha256 contradicts the one recorded for a cache entry.
+///
+/// A mismatch requires both hashes to be known: an entry that predates hash
+/// recording, or a request that carries no hash of its own, cannot contradict
+/// anything and is treated as a match.
+pub(crate) fn sha256_mismatch(wanted: Option<&Sha256Hash>, cached: Option<&Sha256Hash>) -> bool {
+    matches!((wanted, cached), (Some(wanted), Some(cached)) if wanted != cached)
+}
+
 /// A validated cache entry with its associated metadata.
 ///
 /// This struct represents a cache entry that has been validated and is ready for use.
@@ -242,7 +280,7 @@ impl CacheMetadataFile {
                 e,
             )
         })?;
-        let mut buf = [0; 8];
+        let mut buf = [0; REVISION_LEN];
         match (&*self.file).read_exact(&mut buf) {
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
@@ -260,8 +298,6 @@ impl CacheMetadataFile {
 
     /// Reads the sha256 hash from the cache metadata file.
     pub fn read_sha256(&mut self) -> Result<Option<Sha256Hash>, PackageCacheLayerError> {
-        const SHA256_LEN: usize = 32;
-        const REVISION_LEN: u64 = 8;
         (&*self.file).rewind().map_err(|e| {
             PackageCacheLayerError::LockError(
                 "failed to rewind cache lock for reading sha256".to_string(),
@@ -270,7 +306,7 @@ impl CacheMetadataFile {
         })?;
         let mut buf = [0; SHA256_LEN];
         let _ = (&*self.file)
-            .seek(SeekFrom::Start(REVISION_LEN))
+            .seek(SeekFrom::Start(REVISION_LEN as u64))
             .map_err(|e| {
                 PackageCacheLayerError::LockError(
                     "failed to seek to sha256 in cache lock".to_string(),

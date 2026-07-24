@@ -1,4 +1,4 @@
-use std::{hint::black_box, path::Path};
+use std::{collections::HashMap, hint::black_box, path::Path};
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use futures::FutureExt;
@@ -42,6 +42,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     None,
                     rattler_solve::SolveStrategy::Highest,
                     Vec::new(),
+                    &HashMap::default(),
                 )
                 .expect("failed to create dependency provider");
 
