@@ -12,7 +12,9 @@
 
 const repo_root = path self ..
 const public_target_kinds = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"]
-const workspace_files = ["Cargo.toml", "Cargo.lock", "rust-toolchain", "rust-toolchain.toml"]
+# cargo-semver-checks builds each side through an isolated placeholder project and
+# runs `cargo update`, so the workspace lockfile is not an input to its API comparison.
+const workspace_files = ["rust-toolchain", "rust-toolchain.toml"]
 const comment_marker = "<!-- cargo-semver-checks-comment -->"
 const breaking_summary = "semver requires new major version:"
 
@@ -78,9 +80,11 @@ export def select-changed-crates [
     current_metadata: record
     baseline_metadata: record
     changed_files: list<string>
+    changed_workspace_dependencies: list<string> = []
+    force_all: bool = false
 ] {
     let baseline_packages = ($baseline_metadata.packages | get name)
-    let check_all = ($changed_files | any {|file|
+    let check_all = $force_all or ($changed_files | any {|file|
         ($file in $workspace_files) or ($file | str starts-with ".cargo/")
     })
 
@@ -100,13 +104,49 @@ export def select-changed-crates [
                 | str replace --all "\\" "/"
         }
         | where {|package|
-            $check_all or ($changed_files | any {|file|
-                $file | str starts-with $"($package.directory)/"
-            })
+            [
+                $check_all
+                ($changed_files | any {|file| $file | str starts-with $"($package.directory)/" })
+                ($package.dependencies? | default [] | any {|dependency|
+                    $dependency.name in $changed_workspace_dependencies
+                })
+            ] | any {|should_check| $should_check}
         }
         | get name
         | sort
         | uniq
+}
+
+# A root Cargo.toml change that only touches workspace dependencies can affect
+# only packages using those dependencies. Conservatively check every crate for
+# any other root-manifest change.
+export def workspace-dependency-impact [
+    current_manifest: record
+    baseline_manifest: record
+] {
+    let current_without_dependencies = ($current_manifest | reject workspace.dependencies)
+    let baseline_without_dependencies = ($baseline_manifest | reject workspace.dependencies)
+
+    if (($current_without_dependencies | to json) != ($baseline_without_dependencies | to json)) {
+        return {force_all: true, dependencies: []}
+    }
+
+    let current_dependencies = ($current_manifest.workspace.dependencies? | default {})
+    let baseline_dependencies = ($baseline_manifest.workspace.dependencies? | default {})
+    let dependency_names = (($current_dependencies | columns)
+        | append ($baseline_dependencies | columns)
+        | sort
+        | uniq)
+    {
+        force_all: false
+        dependencies: ($dependency_names | where {|name|
+            ($current_dependencies | get -o $name) != ($baseline_dependencies | get -o $name)
+        })
+    }
+}
+
+def workspace-dependency-impact-from-root [baseline_root: string] {
+    workspace-dependency-impact (open ($repo_root | path join "Cargo.toml")) (open ($baseline_root | path join "Cargo.toml"))
 }
 
 # Render the exact Markdown body used by the privileged comment workflow.
@@ -176,31 +216,67 @@ def changed-files [base_ref: string] {
     $committed | append $working | append $untracked | where {|path| not ($path | is-empty) } | uniq
 }
 
+# cargo-semver-checks stores a separate compilation target for each checked
+# local crate. It does not reuse those targets, so remove them after each crate
+# to bound peak disk use to one baseline/current pair.
+export def clean-semver-target [target_directory: string] {
+    let semver_target = ($target_directory | path join "semver-checks")
+    if ($semver_target | path exists) {
+        rm --recursive --force $semver_target
+    }
+}
+
 # Run cargo-semver-checks while streaming its output and retaining both streams
 # for the PR comment.
-def semver-check [packages: list<string>, baseline_root: string] {
-    let package_args = ($packages | each {|package| ["--package", $package] } | flatten)
-    let args = [
-        "semver-checks"
-        "check-release"
-        "--manifest-path"
-        ($repo_root | path join "Cargo.toml")
-        "--baseline-root"
-        $baseline_root
-        "--release-type"
-        "minor"
-    ] | append $package_args
+def semver-check [
+    packages: list<string>
+    baseline_root: string
+    current_target_directory: string
+    baseline_target_directory: string
+] {
+    clean-semver-target $current_target_directory
+    clean-semver-target $baseline_target_directory
 
-    print $"Checking API compatibility for: ($packages | str join ', ')"
-    let command_result = (with-env {NO_COLOR: "1", CARGO_TERM_COLOR: "never"} {
-        ^cargo ...$args | complete
-    })
-    print --no-newline $command_result.stdout
-    print --stderr --no-newline $command_result.stderr
+    mut result = "success"
+    mut logs = []
+    mut exit_code = 0
+    for package in $packages {
+        let args = [
+            "semver-checks"
+            "check-release"
+            "--manifest-path"
+            ($repo_root | path join "Cargo.toml")
+            "--baseline-root"
+            $baseline_root
+            "--release-type"
+            "minor"
+            "--package"
+            $package
+        ]
+
+        print $"Checking API compatibility for: ($package)"
+        let command_result = (with-env {NO_COLOR: "1", CARGO_TERM_COLOR: "never"} {
+            ^cargo ...$args | complete
+        })
+        print --no-newline $command_result.stdout
+        print --stderr --no-newline $command_result.stderr
+        let package_result = (classify-result $command_result.exit_code $command_result.stderr)
+        if $package_result == "error" {
+            $result = "error"
+            $exit_code = $command_result.exit_code
+        } else if $package_result == "failure" and $result == "success" {
+            $result = "failure"
+            $exit_code = $command_result.exit_code
+        }
+        $logs = ($logs | append (clean-log $"($command_result.stdout)($command_result.stderr)"))
+
+        clean-semver-target $current_target_directory
+        clean-semver-target $baseline_target_directory
+    }
     {
-        result: (classify-result $command_result.exit_code $command_result.stderr)
-        logs: (clean-log $"($command_result.stdout)($command_result.stderr)")
-        exit_code: $command_result.exit_code
+        result: $result
+        logs: (clean-log ($logs | str join "\n"))
+        exit_code: $exit_code
     }
 }
 
@@ -225,12 +301,27 @@ def check-ref [base_ref: string] {
         let baseline_metadata = (run-command "reading baseline cargo metadata" {
             ^cargo metadata --manifest-path ($baseline_root | path join "Cargo.toml") --no-deps --format-version 1
         } | from json)
-        let packages = (select-changed-crates $current_metadata $baseline_metadata (changed-files $base_ref))
+        let changed_files = (changed-files $base_ref)
+        let workspace_dependency_impact = (if "Cargo.toml" in $changed_files {
+            workspace-dependency-impact-from-root $baseline_root
+        } else {
+            {force_all: false, dependencies: []}
+        })
+        let packages = (select-changed-crates
+            $current_metadata
+            $baseline_metadata
+            $changed_files
+            $workspace_dependency_impact.dependencies
+            $workspace_dependency_impact.force_all)
 
         let outcome = (if ($packages | is-empty) {
             {result: "success", logs: "", exit_code: 0, packages: []}
         } else {
-            let check = (semver-check $packages $baseline_root)
+            let check = (semver-check
+                $packages
+                $baseline_root
+                $current_metadata.target_directory
+                $baseline_metadata.target_directory)
             $check | insert packages $packages
         })
         {ok: true, outcome: $outcome}
