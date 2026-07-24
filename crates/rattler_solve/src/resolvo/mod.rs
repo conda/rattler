@@ -589,12 +589,15 @@ impl<'a> CondaDependencyProvider<'a> {
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
 
-            // A locked record that is excluded makes the solve unsatisfiable,
-            // which is correct: the caller pinned a package it also said may
-            // not be used, and the reason explains which constraint bit.
-            if !exclude_if_requested(candidates, solvable, &locked_record.url) {
-                candidates.locked = Some(solvable);
-            }
+            // The pin and the exclusion are applied independently. A locked
+            // record that is also excluded makes the solve unsatisfiable when
+            // the package is needed. Dropping the pin instead would let the
+            // solver quietly select a different version of a deliberately
+            // pinned package. The conflict report names the pin as the
+            // culprit; resolvo's root-level rendering does not include
+            // exclusion reasons.
+            exclude_if_requested(candidates, solvable, &locked_record.url);
+            candidates.locked = Some(solvable);
         }
 
         // The dependencies for all candidates are always available.

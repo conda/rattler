@@ -1007,6 +1007,79 @@ mod resolvo {
         );
     }
 
+    /// A pinned record that is also excluded makes the solve unsatisfiable
+    /// when the package is needed.
+    ///
+    /// The pin says "only this one", the exclusion says "not this one".
+    /// Dropping either constraint silently would let the solver pick a
+    /// different version of a package the caller pinned on purpose.
+    #[test]
+    fn test_excluded_candidate_keeps_its_pin() {
+        let pinned = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|record| record.package_record.name.as_normalized() == "bors")
+        .expect("the solve should contain bors");
+
+        let err = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["bors"],
+                pinned_packages: vec![pinned.clone()],
+                excluded_candidates: HashMap::from([(
+                    pinned.url.clone(),
+                    "not available locally".into(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .expect_err("the pinned candidate is excluded, no other may be picked");
+
+        // Resolvo's root-level conflict rendering names the pin as the culprit
+        // but skips exclusion reasons, so "not available locally" cannot show
+        // up here without an upstream change.
+        assert!(
+            err.to_string().contains("is locked"),
+            "the pin conflict should be reported, got: {err}"
+        );
+    }
+
+    /// A pinned record that is excluded but not needed by any spec does not
+    /// poison the solve.
+    #[test]
+    fn test_excluded_pin_of_an_unrequested_package_is_harmless() {
+        let pinned = installed_package("conda-forge", "linux-64", "bors", "1.0", "bla_1", 1);
+
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["foo"],
+                pinned_packages: vec![pinned.clone()],
+                excluded_candidates: HashMap::from([(
+                    pinned.url.clone(),
+                    "not available locally".into(),
+                )]),
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert!(
+            result
+                .records
+                .iter()
+                .all(|record| record.package_record.name.as_normalized() != "bors"),
+            "the excluded pinned package should simply not be part of the solution"
+        );
+    }
+
     /// The `libsolv_c` backend cannot honour exclusions, so it must refuse the
     /// task rather than quietly solve without them.
     #[cfg(feature = "libsolv_c")]

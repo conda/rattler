@@ -438,10 +438,10 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// The reason is shared rather than owned per entry, because callers
     /// typically rule out thousands of records for the same handful of reasons.
     ///
-    /// A record that is both excluded and pinned through `locked_packages`
-    /// makes the solve unsatisfiable, and a record that is excluded and
-    /// favored through `installed_packages` stays excluded: an exclusion is
-    /// never overruled by a preference.
+    /// A record that is both excluded and pinned through `pinned_packages`
+    /// makes the solve unsatisfiable when the package is needed, and a record
+    /// that is excluded and favored through `locked_packages` stays excluded:
+    /// an exclusion is never overruled by a preference.
     ///
     /// Only the `resolvo` backend supports this. Other backends reject a task
     /// that sets it rather than silently solving without the restriction.
