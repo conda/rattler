@@ -77,9 +77,11 @@ pub struct PackageCacheLayer {
 #[derive(Debug, Clone)]
 pub struct CacheIndex {
     /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
-    /// the sha256 recorded for that entry (absent when the entry predates
-    /// hash recording, or its metadata could not be read).
-    entries: HashMap<String, Option<Sha256Hash>>,
+    /// the sha256 each layer records for that entry (absent when the entry
+    /// predates hash recording, or its metadata could not be read). Every
+    /// layer holding the name contributes, in layer order: lookup walks past
+    /// a layer whose hash does not match, so the index must too.
+    entries: HashMap<String, Vec<Option<Sha256Hash>>>,
     cache_origin: bool,
 }
 
@@ -124,7 +126,7 @@ impl CacheIndex {
         let Ok(segment) = cache_key.to_path_segment() else {
             return false;
         };
-        let Some(cached_sha256) = self.entries.get(&segment) else {
+        let Some(cached_sha256s) = self.entries.get(&segment) else {
             return false;
         };
 
@@ -132,8 +134,12 @@ impl CacheIndex {
         // under the same name, version and build string shares an entry with
         // the one on disk. `get_or_fetch` re-downloads on a hash mismatch, so
         // reporting such an entry as present would promise an install that
-        // still needs the network. Apply the very same rule here.
-        !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), cached_sha256.as_ref())
+        // still needs the network. Apply the very same rule here, to every
+        // layer: lookup continues past a mismatching layer, so a match
+        // anywhere is a match.
+        cached_sha256s.iter().any(|cached_sha256| {
+            !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), cached_sha256.as_ref())
+        })
     }
 
     /// Returns the number of packages in the snapshot.
@@ -443,7 +449,7 @@ impl PackageCache {
         let cache_origin = self.cache_origin;
 
         let scan = tokio::task::spawn_blocking(move || {
-            let mut entries: HashMap<String, Option<Sha256Hash>> = HashMap::new();
+            let mut entries: HashMap<String, Vec<Option<Sha256Hash>>> = HashMap::new();
             for layer_path in layer_paths {
                 let dir = match fs_err::read_dir(&layer_path) {
                     Ok(dir) => dir,
@@ -457,8 +463,9 @@ impl PackageCache {
                         && let Some(name) = entry.file_name().to_str()
                     {
                         let sha256 = cache_lock::peek_sha256(&entry.path());
-                        // Layers are queried in order, so an earlier layer wins.
-                        entries.entry(name.to_owned()).or_insert(sha256);
+                        // Every layer holding the name contributes: lookup
+                        // walks past a layer whose hash does not match.
+                        entries.entry(name.to_owned()).or_default().push(sha256);
                     }
                 }
             }
@@ -1145,7 +1152,7 @@ mod test {
     use tokio_stream::StreamExt;
     use url::Url;
 
-    use super::{PackageCache, rename_with_retry};
+    use super::{PackageCache, cache_lock, rename_with_retry};
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
         validation::{ValidationMode, validate_package_directory},
@@ -1829,6 +1836,63 @@ mod test {
         let index = cache.index().await.unwrap();
         assert!(index.contains_path(identifier.clone(), &package_path));
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
+    }
+
+    /// The index must see past an earlier layer whose entry records a
+    /// different hash: `get_or_fetch` walks on to a later layer and serves
+    /// the matching entry from there, so the index has to report it present.
+    #[tokio::test]
+    async fn test_cache_index_sees_past_a_conflicting_layer() {
+        let layer1_dir = tempdir().unwrap();
+        let layer2_dir = tempdir().unwrap();
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".to_string(),
+        );
+        record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
+
+        // The later layer holds the real package with its real hash.
+        PackageCache::new(layer2_dir.path())
+            .get_or_fetch_from_path(&package_path, Some(&record), None)
+            .await
+            .unwrap();
+
+        // The earlier layer holds an entry of the same name whose recorded
+        // hash disagrees, as a rebuilt package under an unchanged version and
+        // build string would leave behind.
+        let segment = fs_err::read_dir(layer2_dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+            .expect("the populated layer holds the package directory")
+            .file_name();
+        let conflicting_path = layer1_dir.path().join(&segment);
+        fs_err::create_dir(&conflicting_path).unwrap();
+        let bogus_sha = parse_digest_from_hex::<Sha256>(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+        .unwrap();
+        cache_lock::CacheMetadataFile::acquire(&cache_lock::metadata_path(&conflicting_path))
+            .await
+            .unwrap()
+            .write_revision_and_sha(1, Some(&bogus_sha))
+            .await
+            .unwrap();
+
+        let cache = PackageCache::new_layered(
+            [layer1_dir.path(), layer2_dir.path()],
+            false,
+            ValidationMode::default(),
+        );
+        let index = cache.index().await.unwrap();
+
+        assert!(
+            index.contains_path(&record, &package_path),
+            "the matching hash in the later layer must be found"
+        );
     }
 
     #[tokio::test]
