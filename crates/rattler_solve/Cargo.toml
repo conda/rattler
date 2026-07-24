@@ -32,6 +32,9 @@ criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 jiff = { workspace = true }
 once_cell = { workspace = true }
+rattler_cache = { workspace = true }
+rattler_digest = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
     "sparse",
 ] }

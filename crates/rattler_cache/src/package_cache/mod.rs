@@ -1848,6 +1848,46 @@ mod test {
         assert!(!index.contains_path(identifier, Path::new("/somewhere/else.conda")));
     }
 
+    /// An entry whose metadata is unreadable stays present in the index.
+    ///
+    /// Entries written before hashes were recorded have no readable hash
+    /// either, and kicking those out would remove every older cache from
+    /// offline availability. Presence has never promised validity: the entry
+    /// is validated on use, exactly as `get_or_fetch` would.
+    #[tokio::test]
+    async fn test_cache_index_keeps_entries_with_unreadable_metadata() {
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked("clobber-python"),
+            "0.1.0".parse::<VersionWithSource>().unwrap(),
+            "cpython".to_string(),
+        );
+        record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
+
+        cache
+            .get_or_fetch_from_path(&package_path, Some(&record), None)
+            .await
+            .unwrap();
+
+        // Truncate the metadata of every entry, as an interrupted write or an
+        // entry from before hash recording would leave it.
+        for entry in fs_err::read_dir(packages_dir.path()).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                fs_err::write(cache_lock::metadata_path(&entry.path()), b"x").unwrap();
+            }
+        }
+
+        let index = cache.index().await.unwrap();
+        assert!(
+            index.contains_path(&record, &package_path),
+            "an unreadable hash must not remove the entry from the index"
+        );
+    }
+
     /// A `file:` record on an origin-keyed cache is stored through
     /// `get_or_fetch_from_path`, which hashes the path. The record lookup has
     /// to take that same branch or the origin hashes disagree and a cached

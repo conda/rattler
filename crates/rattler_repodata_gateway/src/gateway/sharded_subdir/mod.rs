@@ -187,6 +187,10 @@ mod tests {
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use std::path::Path;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     use tokio::sync::oneshot;
     use url::Url;
 
@@ -196,6 +200,7 @@ mod tests {
     /// configurable responses for shard requests.
     struct MockShardedServer {
         local_addr: SocketAddr,
+        shard_requests: Arc<AtomicUsize>,
         _shutdown_sender: oneshot::Sender<()>,
     }
 
@@ -226,6 +231,7 @@ mod tests {
             let index_bytes = rmp_serde::to_vec(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
+            let shard_requests = Arc::new(AtomicUsize::new(0));
             let app = Router::new()
                 .route(
                     "/linux-64/repodata_shards.msgpack.zst",
@@ -233,24 +239,31 @@ mod tests {
                         Response::builder()
                             .status(StatusCode::OK)
                             .header("Content-Type", "application/octet-stream")
+                            // Keep the cached copy fresh, so `UseCacheOnly`
+                            // accepts it in the cold-shard tests.
+                            .header("Cache-Control", "max-age=3600")
                             .body(Body::from(compressed_index.clone()))
                             .unwrap()
                     }),
                 )
                 .route(
                     "/linux-64/shards/{shard_file}",
-                    get(move || async move {
-                        match shard_response {
-                            MockShardResponse::Empty => Response::builder()
-                                .status(StatusCode::OK)
-                                .body(Body::empty())
-                                .unwrap(),
-                            MockShardResponse::Truncated => {
-                                // Return some bytes that look like zstd but are truncated
-                                Response::builder()
+                    get({
+                        let shard_requests = Arc::clone(&shard_requests);
+                        move || async move {
+                            shard_requests.fetch_add(1, Ordering::SeqCst);
+                            match shard_response {
+                                MockShardResponse::Empty => Response::builder()
                                     .status(StatusCode::OK)
-                                    .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
-                                    .unwrap()
+                                    .body(Body::empty())
+                                    .unwrap(),
+                                MockShardResponse::Truncated => {
+                                    // Return some bytes that look like zstd but are truncated
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .body(Body::from(vec![0x28, 0xb5, 0x2f, 0xfd]))
+                                        .unwrap()
+                                }
                             }
                         }
                     }),
@@ -271,6 +284,7 @@ mod tests {
 
             Self {
                 local_addr,
+                shard_requests,
                 _shutdown_sender: tx,
             }
         }
@@ -281,6 +295,12 @@ mod tests {
 
         fn channel(&self) -> Channel {
             Channel::from_url(self.url())
+        }
+
+        /// How many shard downloads the server has answered so far. The index
+        /// request is not counted.
+        fn shard_request_count(&self) -> usize {
+            self.shard_requests.load(Ordering::SeqCst)
         }
     }
 
@@ -444,6 +464,7 @@ mod tests {
     async fn cache_only_subdir_with_cold_shard(
         cache_dir: &Path,
         server: &MockShardedServer,
+        cache_only_action: CacheAction,
         missing_shards_are_empty: bool,
     ) -> ShardedSubdir {
         let client = rattler_networking::LazyClient::default();
@@ -469,7 +490,7 @@ mod tests {
             client,
             cache_dir.to_path_buf(),
             ShardCachePolicy {
-                action: CacheAction::ForceCacheOnly,
+                action: cache_only_action,
                 missing_shards_are_empty,
             },
             None,
@@ -478,6 +499,10 @@ mod tests {
         .await
         .expect("the index comes from the cache")
     }
+
+    /// The cache-only modes a cold shard behaves the same under.
+    const CACHE_ONLY_ACTIONS: [CacheAction; 2] =
+        [CacheAction::UseCacheOnly, CacheAction::ForceCacheOnly];
 
     /// A cache-only build with no index cached must report
     /// [`GatewayError::ShardedIndexNotCached`] and nothing else: that is the
@@ -512,41 +537,58 @@ mod tests {
 
     /// Without the opt-in, a cold shard fails a cache-only query with a
     /// distinct error: nothing is known about the package, which is not the
-    /// same as the package having no records.
+    /// same as the package having no records. Neither mode may touch the
+    /// network to find out.
     #[tokio::test]
     async fn cold_shard_is_an_error_by_default() {
-        let server = MockShardedServer::new(MockShardResponse::Empty).await;
-        let cache_dir = tempfile::tempdir().unwrap();
+        for action in CACHE_ONLY_ACTIONS {
+            let server = MockShardedServer::new(MockShardResponse::Empty).await;
+            let cache_dir = tempfile::tempdir().unwrap();
 
-        let subdir = cache_only_subdir_with_cold_shard(cache_dir.path(), &server, false).await;
+            let subdir =
+                cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, false).await;
 
-        let err = subdir
-            .fetch_package_records(&"test-package".parse().unwrap(), None)
-            .await
-            .expect_err("a cold shard fails a cache-only query");
+            let err = subdir
+                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .await
+                .expect_err("a cold shard fails a cache-only query");
 
-        assert!(
-            matches!(err, GatewayError::ShardNotCached(name) if name == "test-package"),
-            "the error names the package whose shard is missing"
-        );
+            assert!(
+                matches!(err, GatewayError::ShardNotCached(name) if name == "test-package"),
+                "the error names the package whose shard is missing"
+            );
+            assert_eq!(
+                server.shard_request_count(),
+                0,
+                "{action:?} may not download a shard"
+            );
+        }
     }
 
     /// With `missing_shards_are_empty` the same query reports the package as
     /// having no records, which lets a caller that restricts a solve to
     /// locally available packages fail on the restriction instead of on the
-    /// cache.
+    /// cache. Neither mode may touch the network to find out.
     #[tokio::test]
     async fn cold_shard_is_empty_when_opted_in() {
-        let server = MockShardedServer::new(MockShardResponse::Empty).await;
-        let cache_dir = tempfile::tempdir().unwrap();
+        for action in CACHE_ONLY_ACTIONS {
+            let server = MockShardedServer::new(MockShardResponse::Empty).await;
+            let cache_dir = tempfile::tempdir().unwrap();
 
-        let subdir = cache_only_subdir_with_cold_shard(cache_dir.path(), &server, true).await;
+            let subdir =
+                cache_only_subdir_with_cold_shard(cache_dir.path(), &server, action, true).await;
 
-        let records = subdir
-            .fetch_package_records(&"test-package".parse().unwrap(), None)
-            .await
-            .expect("a cold shard is not an error when opted in");
+            let records = subdir
+                .fetch_package_records(&"test-package".parse().unwrap(), None)
+                .await
+                .expect("a cold shard is not an error when opted in");
 
-        assert!(records.records.is_empty());
+            assert!(records.records.is_empty());
+            assert_eq!(
+                server.shard_request_count(),
+                0,
+                "{action:?} may not download a shard"
+            );
+        }
     }
 }
