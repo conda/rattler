@@ -4118,6 +4118,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "jiff",
+ "opendal",
+ "percent-encoding",
  "thiserror 2.0.18",
  "tokio",
  "url",
@@ -4248,7 +4250,6 @@ dependencies = [
  "indicatif",
  "jiff",
  "opendal",
- "percent-encoding",
  "rattler_azure",
  "rattler_conda_types",
  "rattler_config",
