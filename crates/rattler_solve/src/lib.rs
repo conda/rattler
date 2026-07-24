@@ -20,6 +20,7 @@ use jiff::Timestamp;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult, utils::TimestampMs,
 };
+use url::Url;
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
@@ -421,6 +422,31 @@ pub struct SolverTask<'a, TAvailablePackagesIterator> {
     /// Dependency overrides that replace dependencies of matching packages.
     pub dependency_overrides: Vec<(MatchSpec, MatchSpec)>,
 
+    /// Candidates the solver may not select, keyed by the record's URL and
+    /// mapped to the reason they were ruled out.
+    ///
+    /// The reason is reported back as part of the error when the solve fails
+    /// because of it, so it should read as an explanation to a user, e.g.
+    /// "not available locally".
+    ///
+    /// This is meant for restrictions the caller derives from outside the
+    /// repodata, such as what is present in a local package cache. Records
+    /// that are simply irrelevant should be left out of `available_packages`
+    /// instead; excluding a record keeps it visible to error reporting, which
+    /// is the whole point of using this rather than filtering up front.
+    ///
+    /// The reason is shared rather than owned per entry, because callers
+    /// typically rule out thousands of records for the same handful of reasons.
+    ///
+    /// A record that is both excluded and pinned through `pinned_packages`
+    /// makes the solve unsatisfiable when the package is needed, and a record
+    /// that is excluded and favored through `locked_packages` stays excluded:
+    /// an exclusion is never overruled by a preference.
+    ///
+    /// Only the `resolvo` backend supports this. Other backends reject a task
+    /// that sets it rather than silently solving without the restriction.
+    pub excluded_candidates: HashMap<Url, Arc<str>>,
+
     /// An optional token that can be used to cancel an in-flight solve.
     ///
     /// When the token's [`CancellationToken::cancel`] method is invoked from
@@ -448,6 +474,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             exclude_newer: None,
             strategy: SolveStrategy::default(),
             dependency_overrides: Vec::new(),
+            excluded_candidates: HashMap::new(),
             cancellation_token: None,
         }
     }

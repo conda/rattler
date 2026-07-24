@@ -59,8 +59,8 @@ pub enum FetchRepoDataError {
     #[error("failed to write cache state")]
     FailedToWriteCacheState(#[source] std::io::Error),
 
-    #[error("there is no cache available")]
-    NoCacheAvailable,
+    #[error("no usable repodata cache for {0}")]
+    NoCacheAvailable(Url),
 
     #[error("the operation was cancelled")]
     Cancelled,
