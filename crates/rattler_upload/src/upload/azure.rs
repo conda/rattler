@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
 use miette::IntoDiagnostic;
-use opendal::{Configurator, ErrorKind, Operator, services::AzblobConfig};
+use opendal::{Configurator, ErrorKind, Operator};
 use rattler_azure::AzureCredentials;
 use tokio::io::AsyncReadExt;
 use tokio_util::bytes::BytesMut;
@@ -40,7 +40,7 @@ pub async fn upload_package_to_azure(
     package_files: &[PathBuf],
     force: bool,
 ) -> miette::Result<()> {
-    let config = azblob_config(&credentials, &channel)?;
+    let config = rattler_azure::azblob_config(&credentials, &channel).into_diagnostic()?;
 
     let builder = config.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();
@@ -94,7 +94,7 @@ async fn upload_single_package(
     // does nothing for large uploads. An explicit `stat` closes that gap at all
     // sizes. The residual stat->write TOCTOU (another writer could create the
     // blob between this check and `close`) is acceptable: it is strictly better
-    // than today's silent clobber, and the writer-level `if_not_exists` still
+    // than a silent clobber, and the writer-level `if_not_exists` still
     // guards the small-file and racing-writer cases.
     if !force {
         match op.stat(&key).await {
@@ -177,62 +177,6 @@ async fn upload_single_package(
     }
 
     Ok(())
-}
-
-/// Build an opendal [`AzblobConfig`] from a channel URL and credentials.
-///
-/// The account name, endpoint, container, and root prefix are all derived from
-/// the URL (`https://<account>.blob.core.windows.net/<container>/<prefix>`); the
-/// credentials supply only the account key or SAS token.
-fn azblob_config(credentials: &AzureCredentials, channel: &Url) -> miette::Result<AzblobConfig> {
-    let rattler_azure::AzureCoordinates {
-        account: account_name,
-        container,
-    } = rattler_azure::account_and_container(channel).into_diagnostic()?;
-
-    let mut segments = channel
-        .path_segments()
-        .ok_or_else(|| miette::miette!("No path in Azure blob URL"))?;
-    // Skip the container segment; the remainder is the root prefix. Percent-decode
-    // each segment before joining: `path_segments()` yields still-encoded segments,
-    // and opendal percent-encodes the root again, so passing them through verbatim
-    // would double-encode prefixes containing spaces or `+`.
-    segments.next();
-    let root = format!(
-        "/{}",
-        segments
-            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
-            .collect::<Vec<_>>()
-            .join("/")
-    );
-
-    // Preserve a non-default port if one is present; real Azure uses the scheme
-    // default (443).
-    let host = channel
-        .host_str()
-        .ok_or_else(|| miette::miette!("No host in Azure blob URL"))?;
-    let authority = match channel.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_string(),
-    };
-
-    let (account_key, sas_token) = match credentials {
-        AzureCredentials::AccountKey(key) => (Some(key.clone()), None),
-        AzureCredentials::SasToken(token) => (
-            None,
-            Some(rattler_azure::normalize_sas_token(token).to_string()),
-        ),
-    };
-
-    Ok(AzblobConfig {
-        endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
-        account_name: Some(account_name),
-        container,
-        root: Some(root),
-        account_key,
-        sas_token,
-        ..Default::default()
-    })
 }
 
 #[cfg(test)]

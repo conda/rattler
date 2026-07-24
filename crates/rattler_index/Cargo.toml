@@ -28,7 +28,7 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
-azure = ["opendal/services-azblob", "dep:rattler_azure", "dep:percent-encoding"]
+azure = ["opendal/services-azblob", "dep:rattler_azure", "rattler_azure/opendal"]
 
 [[bin]]
 name = "rattler-index"
@@ -75,7 +75,6 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
-percent-encoding = { workspace = true, optional = true }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
 

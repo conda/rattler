@@ -25,8 +25,6 @@ use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 #[cfg(any(feature = "s3", feature = "azure"))]
 use opendal::layers::RetryLayer;
-#[cfg(feature = "azure")]
-use opendal::services::AzblobConfig;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
@@ -1549,67 +1547,6 @@ pub struct IndexAzureConfig {
     // exposing a knob whose enabled state always fails.
 }
 
-/// Build an opendal `AzblobConfig` from a channel URL and credentials.
-///
-/// The account name, endpoint, container, and root prefix are all derived from
-/// the URL (`https://<account>.blob.core.windows.net/<container>/<prefix>`); the
-/// credentials supply only the account key or SAS token.
-#[cfg(feature = "azure")]
-fn azblob_config(
-    credentials: &AzureCredentials,
-    channel: &Url,
-) -> Result<AzblobConfig, anyhow::Error> {
-    let rattler_azure::AzureCoordinates {
-        account: account_name,
-        container,
-    } = rattler_azure::account_and_container(channel)?;
-
-    let host = channel
-        .host_str()
-        .ok_or_else(|| anyhow::anyhow!("No host in Azure blob URL"))?;
-
-    let mut segments = channel
-        .path_segments()
-        .ok_or_else(|| anyhow::anyhow!("No path in Azure blob URL"))?;
-    // Skip the container segment; the remainder is the root prefix. Percent-decode
-    // each segment before joining: `path_segments()` yields still-encoded segments,
-    // and opendal percent-encodes the root again, so passing them through verbatim
-    // would double-encode prefixes containing spaces or `+`.
-    segments.next();
-    let root = format!(
-        "/{}",
-        segments
-            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
-            .collect::<Vec<_>>()
-            .join("/")
-    );
-
-    // Preserve a non-default port if one is present; real Azure uses the scheme
-    // default (443).
-    let authority = match channel.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_string(),
-    };
-
-    let (account_key, sas_token) = match credentials {
-        AzureCredentials::AccountKey(key) => (Some(key.clone()), None),
-        AzureCredentials::SasToken(token) => (
-            None,
-            Some(rattler_azure::normalize_sas_token(token).to_string()),
-        ),
-    };
-
-    Ok(AzblobConfig {
-        endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
-        account_name: Some(account_name),
-        container,
-        root: Some(root),
-        account_key,
-        sas_token,
-        ..Default::default()
-    })
-}
-
 /// Create a new `repodata.json` for all packages in the channel at the given
 /// Azure Blob URL.
 #[cfg(feature = "azure")]
@@ -1636,7 +1573,7 @@ pub async fn index_azure_with_channel_metadata(
     }: IndexAzureConfig,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let azblob_config = azblob_config(&credentials, &channel)?;
+    let azblob_config = rattler_azure::azblob_config(&credentials, &channel)?;
     let builder = azblob_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
@@ -1968,7 +1905,7 @@ mod tests {
             Url::parse("https://stcondachannel.blob.core.windows.net/general/sub/dir").unwrap();
         let credentials = AzureCredentials::SasToken("sv=token".to_string());
 
-        let config = azblob_config(&credentials, &channel).unwrap();
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
 
         assert_eq!(
             config.endpoint.as_deref(),
@@ -1987,7 +1924,7 @@ mod tests {
         let channel = Url::parse("https://stcondachannel.blob.core.windows.net/general").unwrap();
         let credentials = AzureCredentials::AccountKey("key".to_string());
 
-        let config = azblob_config(&credentials, &channel).unwrap();
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
 
         assert_eq!(config.container, "general");
         assert_eq!(config.root.as_deref(), Some("/"));
@@ -2002,7 +1939,7 @@ mod tests {
             Url::parse("http://devstoreaccount1.blob.localhost:10000/testcontainer/ch").unwrap();
         let credentials = AzureCredentials::AccountKey("key".to_string());
 
-        let config = azblob_config(&credentials, &channel).unwrap();
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
 
         assert_eq!(
             config.endpoint.as_deref(),

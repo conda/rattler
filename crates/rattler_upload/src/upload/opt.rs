@@ -427,7 +427,6 @@ pub struct S3Opts {
 pub struct AzureOpts {
     /// The channel URL in the Azure Blob container to upload the package to,
     /// e.g., `az://myaccount.blob.core.windows.net/my-container/my-channel`
-    /// (or the equivalent `https://` form)
     #[arg(short, long, env = "AZURE_CHANNEL", value_parser = rattler_azure::parse_channel_url)]
     pub channel: Url,
 

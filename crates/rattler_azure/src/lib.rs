@@ -200,6 +200,61 @@ pub fn parse_channel_url(value: &str) -> Result<Url, AzureUrlError> {
     Ok(url)
 }
 
+/// Build an opendal [`AzblobConfig`](opendal::services::AzblobConfig) from a
+/// channel URL and credentials.
+///
+/// The account name, endpoint, container, and root prefix are all derived from
+/// the URL (`https://<account>.blob.core.windows.net/<container>/<prefix>`); the
+/// credentials supply only the account key or SAS token. The URL is expected to
+/// already be validated and normalized to `https://` (see [`parse_channel_url`]).
+#[cfg(feature = "opendal")]
+pub fn azblob_config(
+    credentials: &AzureCredentials,
+    channel: &Url,
+) -> Result<opendal::services::AzblobConfig, AzureUrlError> {
+    let AzureCoordinates { account, container } = account_and_container(channel)?;
+
+    // Preserve a non-default port if one is present; real Azure uses the scheme
+    // default (443).
+    let host = channel.host_str().ok_or(AzureUrlError::NoHost)?;
+    let authority = match channel.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    };
+
+    // Root prefix = the path after the container segment. Percent-decode each
+    // segment: `path_segments()` yields still-encoded segments, and opendal
+    // percent-encodes the root again, so passing them through verbatim would
+    // double-encode prefixes containing spaces or `+`. `account_and_container`
+    // has already confirmed there is at least the container segment.
+    let root = format!(
+        "/{}",
+        channel
+            .path_segments()
+            .into_iter()
+            .flatten()
+            .skip(1)
+            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+
+    let (account_key, sas_token) = match credentials {
+        AzureCredentials::AccountKey(key) => (Some(key.clone()), None),
+        AzureCredentials::SasToken(token) => (None, Some(normalize_sas_token(token).to_string())),
+    };
+
+    Ok(opendal::services::AzblobConfig {
+        endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
+        account_name: Some(account),
+        container,
+        root: Some(root),
+        account_key,
+        sas_token,
+        ..Default::default()
+    })
+}
+
 /// Errors that can occur while minting a user-delegation SAS via the Azure CLI.
 #[cfg(feature = "clap")]
 #[derive(Debug, thiserror::Error)]

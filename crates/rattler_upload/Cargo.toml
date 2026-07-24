@@ -29,7 +29,7 @@ native-tls = [
   "sigstore-sign?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal", "opendal/services-s3"]
-azure = ["dep:rattler_azure", "dep:opendal", "opendal/services-azblob", "dep:percent-encoding"]
+azure = ["dep:rattler_azure", "rattler_azure/opendal", "dep:opendal", "opendal/services-azblob"]
 sigstore-sign = ["dep:sigstore-sign", "dep:sigstore-trust-root"]
 
 [package.metadata.docs.rs]
@@ -62,7 +62,6 @@ reqwest = { workspace = true, default-features = false, features = [
   "stream",
 ] }
 url = { workspace = true }
-percent-encoding = { workspace = true, optional = true }
 tracing = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 serde_yaml = { workspace = true }

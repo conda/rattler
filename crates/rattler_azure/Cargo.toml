@@ -15,10 +15,16 @@ default = []
 # SAS by shelling out to the Azure CLI (which needs `jiff` for the expiry and
 # `tokio` to run `az` without blocking the async runtime).
 clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
+# `azblob_config`: build an opendal `AzblobConfig` from a channel URL.
+opendal = ["dep:opendal", "dep:percent-encoding"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
+opendal = { workspace = true, default-features = false, features = [
+  "services-azblob",
+], optional = true }
+percent-encoding = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process"], optional = true }
 url = { workspace = true }

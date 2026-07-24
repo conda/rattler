@@ -115,8 +115,7 @@ enum Commands {
     #[cfg(feature = "azure")]
     Azblob {
         /// The Azure Blob channel URL, e.g.
-        /// `az://<account>.blob.core.windows.net/<container>/<channel>`
-        /// (or the equivalent `https://` form).
+        /// `az://<account>.blob.core.windows.net/<container>/<channel>`.
         #[arg(value_parser = rattler_azure::parse_channel_url)]
         channel: Url,
 
