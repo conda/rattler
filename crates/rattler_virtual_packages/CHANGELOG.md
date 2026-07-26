@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v3.0.4...rattler_virtual_packages-v4.0.0) - 2026-07-24
+
+### Added
+
+- add iOS and Android subdirs and __ios/__android virtual packages ([#2613](https://github.com/conda/rattler/pull/2613))
+
 ## [3.0.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v3.0.3...rattler_virtual_packages-v3.0.4) - 2026-07-14
 
 ### Other

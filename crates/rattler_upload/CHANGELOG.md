@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/conda/rattler/compare/rattler_upload-v0.9.0...rattler_upload-v0.10.0) - 2026-07-24
+
+### Added
+
+- *(rattler_upload)* support basic Artifactory auth again ([#2595](https://github.com/conda/rattler/pull/2595))
+
 ## [0.9.0](https://github.com/conda/rattler/compare/rattler_upload-v0.8.3...rattler_upload-v0.9.0) - 2026-07-14
 
 ### Fixed

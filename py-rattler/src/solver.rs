@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use jiff::Timestamp;
 use pyo3::{
@@ -136,6 +136,7 @@ pub fn py_solve<'a>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                excluded_candidates: HashMap::default(),
                 cancellation_token: None,
             };
 
@@ -242,6 +243,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 exclude_newer,
                 strategy: strategy.map_or_else(Default::default, |v| v.0),
                 dependency_overrides: Vec::new(),
+                excluded_candidates: HashMap::default(),
                 cancellation_token: None,
             };
 

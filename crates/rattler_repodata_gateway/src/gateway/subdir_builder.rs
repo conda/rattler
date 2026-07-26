@@ -71,6 +71,16 @@ impl<'g> SubdirBuilder<'g> {
                         );
                         None
                     }
+                    Err(GatewayError::ShardedIndexNotCached(_)) => {
+                        // Cache-only mode with no usable sharded index. The
+                        // channel may still be readable from a cached
+                        // `repodata.json`; if it is not, the fallback reports
+                        // that itself, which is the more useful error.
+                        tracing::info!(
+                            "no sharded repodata index is cached for {url}, falling back to repodata.json files",
+                        );
+                        None
+                    }
                     Err(err) => return Err(err),
                 }
             } else {
@@ -142,7 +152,10 @@ impl<'g> SubdirBuilder<'g> {
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             #[cfg(not(target_arch = "wasm32"))]
-            _source_config.cache_action,
+            sharded_subdir::ShardCachePolicy {
+                action: _source_config.cache_action,
+                missing_shards_are_empty: _source_config.missing_shards_are_empty,
+            },
             self.gateway.concurrent_requests_semaphore.clone(),
             self.reporter.as_deref(),
         )

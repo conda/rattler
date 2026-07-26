@@ -197,7 +197,7 @@ pub async fn simple_solve(
     let task = SolverTask {
         specs,
         locked_packages: installed_packages.iter().collect(),
-        ..repodata.iter().collect::<SolverTask<_>>()
+        ..repodata.iter().collect::<SolverTask<'_, _>>()
     };
 
     let solved = rattler_solve::resolvo::Solver.solve(task)?;

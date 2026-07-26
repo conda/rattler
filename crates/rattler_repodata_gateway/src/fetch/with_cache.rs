@@ -244,7 +244,7 @@ pub async fn fetch_repo_data(
                 // OR, The cache doesn't match the repodata.json that is on disk. This means the
                 // cache is not usable.
                 // OR, No cache available at all, and we cant refresh the data.
-                return Err(FetchRepoDataError::NoCacheAvailable);
+                return Err(FetchRepoDataError::NoCacheAvailable(subdir_url.clone()));
             }
             (
                 ValidatedCacheState::OutOfDate(cache_state)
