@@ -4067,7 +4067,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.47.1"
+version = "0.48.0"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4128,7 +4128,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4149,6 +4149,7 @@ dependencies = [
  "rattler_redaction",
  "rayon",
  "reqwest",
+ "rustix 1.1.4",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
@@ -4160,7 +4161,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.48.1"
+version = "0.49.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4200,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4235,7 +4236,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.9"
+version = "0.30.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4274,7 +4275,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.5"
+version = "0.31.6"
 dependencies = [
  "ahash",
  "file_url",
@@ -4309,7 +4310,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.70"
+version = "0.2.71"
 dependencies = [
  "configparser",
  "dirs",
@@ -4338,7 +4339,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4381,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.26.8"
+version = "0.26.9"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4439,7 +4440,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.30.1"
+version = "0.31.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4501,7 +4502,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4517,7 +4518,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.10"
+version = "0.27.11"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4536,7 +4537,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "7.2.2"
+version = "8.0.0"
 dependencies = [
  "futures",
  "hex",
@@ -4549,11 +4550,12 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "url",
 ]
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "3.0.4"
+version = "4.0.0"
 dependencies = [
  "archspec",
  "libloading",
@@ -4829,9 +4831,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc9b6c092a52fadb381b74d0f859b321ea7b9f4f8365acd7e4947f3a26517aa"
+checksum = "e1560db4f7a060680c14a93a927e049677bcc9a5a01fc0a2a57170dbee81e33a"
 dependencies = [
  "ahash",
  "bitvec",
