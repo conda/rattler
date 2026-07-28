@@ -42,6 +42,12 @@ enum OciMiddlewareError {
 }
 
 /// Middleware to handle `oci://` URLs
+///
+/// Authentication follows the registry's `WWW-Authenticate` challenge: a
+/// `Bearer` challenge is exchanged for a scoped token at its realm, anything
+/// else sends stored credentials directly. Anonymous without
+/// [`with_authentication_storage`](Self::with_authentication_storage), which is
+/// enough for public registries.
 #[derive(Debug, Clone)]
 pub struct OciMiddleware {
     /// Shared HTTP client reused across all OCI requests to avoid creating a
@@ -76,8 +82,13 @@ impl OciMiddleware {
 
     /// Credentials stored for the registry, if any. [`AuthenticationStorage`]
     /// resolves by host, so the `oci://` scheme is not a problem.
-    fn stored_credentials(&self, url: &Url) -> Option<Authentication> {
-        match self.auth_storage.as_ref()?.get_by_url(url.clone()) {
+    async fn stored_credentials(&self, url: &Url) -> Option<Authentication> {
+        match self
+            .auth_storage
+            .as_ref()?
+            .get_by_url_refreshed(url.clone())
+            .await
+        {
             Ok((_, credentials)) => credentials,
             Err(e) => {
                 tracing::warn!("OCI Mirror: could not look up credentials for {url}: {e}");
@@ -99,7 +110,10 @@ impl OciMiddleware {
             return cached;
         }
 
-        let auth = self.probe_registry_auth(host).await;
+        // Don't cache a failed probe in case it's a temporary error.
+        let Some(auth) = self.probe_registry_auth(host).await else {
+            return RegistryAuth::Direct;
+        };
 
         // Concurrent first requests to the same host can both probe it. The
         // answer is the same either way, so one duplicate request is cheaper
@@ -113,21 +127,24 @@ impl OciMiddleware {
     }
 
     /// Ask the registry how it wants to be authenticated with the OCI API
-    /// version check (`GET /v2/`), whose `WWW-Authenticate` challenge is the
-    /// registry's own answer. Assuming a Docker-style `/token` endpoint instead
-    /// is what locked out registries that have none, such as Amazon ECR.
-    async fn probe_registry_auth(&self, host: &str) -> RegistryAuth {
+    /// version check (`GET /v2/`).
+    ///
+    /// `None` when the registry did not answer, which is not the same as it
+    /// answering that it wants no negotiation.
+    async fn probe_registry_auth(&self, host: &str) -> Option<RegistryAuth> {
         let Ok(url) = format!("https://{host}/v2/").parse::<Url>() else {
-            return RegistryAuth::Direct;
+            return Some(RegistryAuth::Direct);
         };
 
         match self.client.client().get(url.clone()).send().await {
-            Ok(response) => registry_auth_from_challenges(&parse_challenges(response.headers())),
+            Ok(response) => Some(registry_auth_from_challenges(&parse_challenges(
+                response.headers(),
+            ))),
             Err(e) => {
                 // The artifact request that follows reports a better error than
                 // we could here, so a failed probe must not be fatal.
                 tracing::debug!("OCI Mirror: could not probe {url} for its auth challenge: {e}");
-                RegistryAuth::Direct
+                None
             }
         }
     }
@@ -139,7 +156,7 @@ impl OciMiddleware {
         oci_url: &OCIUrl,
         action: OciAction,
     ) -> Result<Option<HeaderValue>, OciMiddlewareError> {
-        let credentials = self.stored_credentials(&oci_url.url);
+        let credentials = self.stored_credentials(&oci_url.url).await;
 
         // A stored bearer token already *is* a registry token, so there is
         // nothing to exchange it for.
