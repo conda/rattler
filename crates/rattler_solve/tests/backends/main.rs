@@ -327,6 +327,39 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn channel_priority_flexible_prefers_first_channel() {
+            let repodata = vec![
+                super::read_conda_forge_sparse_repo_data(),
+                super::read_pytorch_sparse_repo_data(),
+            ];
+            super::solve_to_get_channel_of_spec::<$T>(
+                "pytorch-cpu",
+                "https://conda.anaconda.org/conda-forge/",
+                repodata,
+                super::ChannelPriority::Flexible,
+            );
+        }
+
+        #[test]
+        fn channel_priority_flexible_falls_back() {
+            let repodata = vec![
+                super::read_conda_forge_sparse_repo_data(),
+                super::read_pytorch_sparse_repo_data(),
+            ];
+            super::solve_to_get_channel_of_spec::<$T>(
+                "pytorch-cpu=0.4.1=py36_cpu_1",
+                "https://conda.anaconda.org/pytorch/",
+                repodata,
+                super::ChannelPriority::Flexible,
+            );
+        }
+
+        #[test]
+        fn channel_priority_flexible_dependency_driven_fall_back() {
+            super::execute_dependency_driven_fall_back_test::<$T>();
+        }
+
+        #[test]
         fn test_solve_with_error() {
             let result = solve::<$T>(
                 &[dummy_channel_json_path()],
@@ -1686,64 +1719,6 @@ fn channel_priority_disabled() {
     );
 }
 
-#[test]
-fn channel_priority_flexible_prefers_first_channel() {
-    let repodata = vec![
-        read_conda_forge_sparse_repo_data(),
-        read_pytorch_sparse_repo_data(),
-    ];
-    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
-        "pytorch-cpu",
-        "https://conda.anaconda.org/conda-forge/",
-        repodata,
-        ChannelPriority::Flexible,
-    );
-}
-
-#[cfg(feature = "libsolv_c")]
-#[test]
-fn channel_priority_flexible_prefers_first_channel_libsolv_c() {
-    let repodata = vec![
-        read_conda_forge_sparse_repo_data(),
-        read_pytorch_sparse_repo_data(),
-    ];
-    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
-        "pytorch-cpu",
-        "https://conda.anaconda.org/conda-forge/",
-        repodata,
-        ChannelPriority::Flexible,
-    );
-}
-
-#[test]
-fn channel_priority_flexible_falls_back() {
-    let repodata = vec![
-        read_conda_forge_sparse_repo_data(),
-        read_pytorch_sparse_repo_data(),
-    ];
-    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
-        "pytorch-cpu=0.4.1=py36_cpu_1",
-        "https://conda.anaconda.org/pytorch/",
-        repodata,
-        ChannelPriority::Flexible,
-    );
-}
-
-#[cfg(feature = "libsolv_c")]
-#[test]
-fn channel_priority_flexible_falls_back_libsolv_c() {
-    let repodata = vec![
-        read_conda_forge_sparse_repo_data(),
-        read_pytorch_sparse_repo_data(),
-    ];
-    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
-        "pytorch-cpu=0.4.1=py36_cpu_1",
-        "https://conda.anaconda.org/pytorch/",
-        repodata,
-        ChannelPriority::Flexible,
-    );
-}
-
 fn execute_dependency_driven_fall_back_test<AbstractSolver: SolverImpl + Default>() {
     let channel_a = vec![
         PackageBuilder::new("pandas")
@@ -1823,17 +1798,6 @@ fn execute_dependency_driven_fall_back_test<AbstractSolver: SolverImpl + Default
     assert_eq!(pandas.package_record.version.to_string(), "2.0");
     assert_eq!(numpy.channel.as_deref(), Some("channel-c"));
     assert_eq!(numpy.package_record.version.to_string(), "3.0");
-}
-
-#[test]
-fn channel_priority_flexible_dependency_driven_fall_back() {
-    execute_dependency_driven_fall_back_test::<rattler_solve::resolvo::Solver>();
-}
-
-#[cfg(feature = "libsolv_c")]
-#[test]
-fn channel_priority_flexible_dependency_driven_fall_back_libsolv_c() {
-    execute_dependency_driven_fall_back_test::<rattler_solve::libsolv_c::Solver>();
 }
 
 #[cfg(feature = "libsolv_c")]
