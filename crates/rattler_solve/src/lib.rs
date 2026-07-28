@@ -347,13 +347,13 @@ pub enum ChannelPriority {
     #[default]
     Strict,
 
-    // Conda also has "Flexible" as an option, where packages present in multiple channels
-    // are only taken from lower-priority channels when this prevents unsatisfiable environment
-    // errors, but this would need implementation in the solvers.
-    // Flexible,
     /// Packages can be retrieved from any channel as package version takes
     /// precedence.
     Disabled,
+
+    /// For a given package, candidates from higher-priority channel's are exhausted
+    /// before falling back to the next channel, regardless of the version.
+    Flexible,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends

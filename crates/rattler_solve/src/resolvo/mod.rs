@@ -318,6 +318,18 @@ pub struct CondaDependencyProvider<'a> {
     direct_dependencies: HashSet<NameId>,
 
     dependency_overrides: HashMap<PackageName, Vec<PreparedDependencyOverride>>,
+
+    /// The channel priority mode used for this solve.
+    channel_priority: ChannelPriority,
+
+    /// Maps a channel to its priority rank. Lower ranks indicate
+    /// higher-priority channels. Ranks are assigned in the order
+    /// channels are first encountered in the repodata,
+    /// which matches the order in which channels were provided to the solver.
+    ///
+    /// This is only populated (and consulted) for
+    /// [`ChannelPriority::Flexible`].
+    channel_order: HashMap<Option<String>, u32>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -381,6 +393,11 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Hashmap that maps the package name to the channel it was first found in.
         let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+
+        // Maps each channel to a priority rank in the order channels are first
+        // encountered (which matches the order channels were provided). Lower
+        // rank == higher priority. Used by `ChannelPriority::Flexible`.
+        let mut channel_order = HashMap::<Option<String>, u32>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -468,6 +485,12 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Update records with all entries in a single mutable borrow
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
+
+                // Record the priority rank of this channel (first-seen order).
+                if !channel_order.contains_key(&record.channel) {
+                    let next_rank = channel_order.len() as u32;
+                    channel_order.insert(record.channel.clone(), next_rank);
+                }
 
                 // Exclusions the caller derived from outside the repodata, for
                 // example from what a local package cache holds.
@@ -635,7 +658,17 @@ impl<'a> CondaDependencyProvider<'a> {
             strategy,
             direct_dependencies,
             dependency_overrides: override_map,
+            channel_priority,
+            channel_order,
         })
+    }
+
+    /// Returns the priority rank for a channel, where a lower rank indicates a
+    /// higher-priority channel. Channels not seen during the construction sort last.
+    /// Channel strings are compared byte-for-byte as URL normalization is still missing
+    /// (see TODO: Normalize these channel names to urls above)
+    fn channel_rank(&self, channel: &Option<String>) -> u32 {
+        self.channel_order.get(channel).copied().unwrap_or(u32::MAX)
     }
 
     /// Returns all package names

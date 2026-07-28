@@ -90,6 +90,10 @@ pub enum PyChannelPriority {
     /// for that package.
     Strict,
 
+    /// For a given package, candidates from higher-priority channel's are exhausted
+    /// before falling back to the next channel, regardless of the version.
+    Flexible,
+
     /// Packages can be retrieved from any channel as package version takes precedence.
     Disabled,
 }
@@ -98,6 +102,7 @@ impl From<ChannelPriority> for PyChannelPriority {
     fn from(channel_priority: ChannelPriority) -> Self {
         match channel_priority {
             ChannelPriority::Strict => PyChannelPriority::Strict,
+            ChannelPriority::Flexible => PyChannelPriority::Flexible,
             ChannelPriority::Disabled => PyChannelPriority::Disabled,
         }
     }
@@ -107,6 +112,7 @@ impl From<PyChannelPriority> for ChannelPriority {
     fn from(py_channel_priority: PyChannelPriority) -> Self {
         match py_channel_priority {
             PyChannelPriority::Strict => ChannelPriority::Strict,
+            PyChannelPriority::Flexible => ChannelPriority::Flexible,
             PyChannelPriority::Disabled => ChannelPriority::Disabled,
         }
     }

@@ -170,8 +170,18 @@ impl super::SolverImpl for Solver {
         // in priority value. If not strict, the highest priority value will be
         // 0 and the channel priority map will not be populated as it will
         // not be used.
+        // Both `Strict` and `Flexible` channel priority assign descending
+        // priorities to the channels in order. The difference is only in the
+        // `SOLVER_FLAG_STRICT_REPO_PRIORITY` flag set below: with it enabled
+        // the solver never crosses channel boundaries, while with it
+        // disabled the solver prefers higher-priority channels but
+        // falls back to lower-priority ones when required to find a solution.
+        let use_channel_priority = matches!(
+            task.channel_priority,
+            ChannelPriority::Strict | ChannelPriority::Flexible
+        );
         let mut highest_priority: i32 = 0;
-        let channel_priority = if task.channel_priority == ChannelPriority::Strict {
+        let channel_priority = if use_channel_priority {
             let mut seen_channels = HashSet::new();
             let mut channel_order = Vec::new();
             for channel in repodatas
@@ -214,7 +224,7 @@ impl super::SolverImpl for Solver {
             let channel_name = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
-            let priority: i32 = if task.channel_priority == ChannelPriority::Strict {
+            let priority: i32 = if use_channel_priority {
                 *channel_priority.get(channel_name).unwrap()
             } else {
                 0
