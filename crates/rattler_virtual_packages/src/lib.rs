@@ -905,11 +905,35 @@ impl Archspec {
     /// Constructs an `Archspec` from the given `archspec_name`. Creates a
     /// "generic" architecture if the name is not known.
     pub fn from_name(archspec_name: &str) -> Self {
+        Self::from_known_name(archspec_name).unwrap_or_else(|| {
+            Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name)).into()
+        })
+    }
+
+    /// Constructs an `Archspec` when `archspec_name` is a microarchitecture
+    /// known to the bundled archspec database, `None` otherwise. Unlike
+    /// [`Self::from_name`] this never invents a "generic" architecture, so
+    /// callers can reject or diagnose unknown names.
+    pub fn from_known_name(archspec_name: &str) -> Option<Self> {
         Microarchitecture::known_targets()
             .get(archspec_name)
             .cloned()
-            .unwrap_or_else(|| Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name)))
-            .into()
+            .map(Into::into)
+    }
+
+    /// Returns true if a host with this microarchitecture can run code built
+    /// for the `required` microarchitecture: they are equal, or this one is a
+    /// descendant of the requirement in the microarchitecture DAG. An
+    /// `Unknown` host is only compatible with an `Unknown` requirement, while
+    /// an `Unknown` requirement constrains nothing.
+    pub fn is_compatible_with(&self, required: &Self) -> bool {
+        match (self, required) {
+            (_, Archspec::Unknown) => true,
+            (Archspec::Unknown, Archspec::Microarchitecture(_)) => false,
+            (Archspec::Microarchitecture(host), Archspec::Microarchitecture(required)) => {
+                host.name() == required.name() || host.is_strict_superset(required)
+            }
+        }
     }
 }
 
@@ -932,10 +956,24 @@ impl From<Archspec> for VirtualPackage {
 impl EnvOverride for Archspec {
     fn parse_version(value: &str) -> Result<Self, ParseVirtualPackageOverrideError> {
         if value == "0" {
-            Ok(Archspec::Unknown)
-        } else {
-            Ok(Self::from_name(value))
+            return Ok(Archspec::Unknown);
         }
+        if let Some(archspec) = Self::from_known_name(value) {
+            return Ok(archspec);
+        }
+        // An unknown name would silently become a "generic" node that no real
+        // host microarchitecture is compatible with, so reject it instead.
+        let underscored = value.replace('-', "_");
+        let suggestion = if Self::from_known_name(&underscored).is_some() {
+            format!(", did you mean '{underscored}'?")
+        } else {
+            String::from(
+                "; use a known microarchitecture name (e.g. 'x86_64_v3') or '0' to disable",
+            )
+        };
+        Err(ParseVirtualPackageOverrideError::validation_error(format!(
+            "'{value}' is not a known archspec microarchitecture{suggestion}"
+        )))
     }
 
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_ARCHSPEC";
@@ -1188,6 +1226,68 @@ mod test {
             VirtualPackages::detect(&VirtualPackageOverrides::default()).unwrap();
         println!("{virtual_packages:#?}");
     }
+
+    #[test]
+    fn archspec_compatibility() {
+        let arch = Archspec::from_name;
+
+        // A descendant microarchitecture satisfies its ancestors, including
+        // through multiple inheritance (m2 derives from both m1 and armv8.5a).
+        assert!(arch("skylake").is_compatible_with(&arch("x86_64_v3")));
+        assert!(arch("m2").is_compatible_with(&arch("m1")));
+        assert!(arch("m2").is_compatible_with(&arch("armv8.5a")));
+        assert!(arch("x86_64_v3").is_compatible_with(&arch("x86_64_v3")));
+
+        // An ancestor does not satisfy a more specific requirement.
+        assert!(!arch("haswell").is_compatible_with(&arch("skylake")));
+        assert!(!arch("x86_64").is_compatible_with(&arch("x86_64_v3")));
+
+        // Different microarchitecture families are never compatible.
+        assert!(!arch("m2").is_compatible_with(&arch("x86_64")));
+        assert!(!arch("skylake").is_compatible_with(&arch("aarch64")));
+
+        // Unknown-name (generic, parentless) nodes only match themselves.
+        assert!(arch("not-a-real-arch").is_compatible_with(&arch("not-a-real-arch")));
+        assert!(!arch("skylake").is_compatible_with(&arch("not-a-real-arch")));
+
+        // An Unknown host fails any specific requirement; an Unknown
+        // requirement constrains nothing.
+        assert!(!Archspec::Unknown.is_compatible_with(&arch("x86_64")));
+        assert!(Archspec::Unknown.is_compatible_with(&Archspec::Unknown));
+        assert!(arch("skylake").is_compatible_with(&Archspec::Unknown));
+    }
+
+    #[test]
+    fn archspec_from_known_name() {
+        assert_eq!(
+            Archspec::from_known_name("skylake").map(|a| a.as_str().to_string()),
+            Some("skylake".to_string())
+        );
+        assert_eq!(Archspec::from_known_name("x86-64-v3"), None);
+        assert_eq!(Archspec::from_known_name("nonsense"), None);
+    }
+
+    #[test]
+    fn archspec_override_rejects_unknown_names() {
+        assert_eq!(
+            Archspec::parse_version("skylake").unwrap().as_str(),
+            "skylake"
+        );
+        assert_eq!(Archspec::parse_version("0").unwrap(), Archspec::Unknown);
+
+        // The dashed spelling gets a did-you-mean hint.
+        let error = Archspec::parse_version("x86-64-v3").unwrap_err();
+        assert!(error.to_string().contains("did you mean 'x86_64_v3'"));
+
+        // Other unknown names name the generic fix.
+        let error = Archspec::parse_version("nonsense").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("'nonsense' is not a known archspec microarchitecture")
+        );
+    }
+
     #[test]
     fn parse_libc() {
         let v = "1.23";
