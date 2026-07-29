@@ -206,7 +206,7 @@ enum RegistryAuth {
 
 /// Pick the authentication flow from the challenges of a `GET /v2/` response.
 ///
-/// A `Bearer` challenge whose `realm` is missing or unparseable degrades to
+/// A `Bearer` challenge whose `realm` is missing or unparsable degrades to
 /// [`RegistryAuth::Direct`] rather than erroring: a registry we cannot
 /// negotiate with may still accept stored credentials directly.
 fn registry_auth_from_challenges(challenges: &[Challenge]) -> RegistryAuth {
