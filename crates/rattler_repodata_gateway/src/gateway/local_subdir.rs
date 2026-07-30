@@ -1,5 +1,7 @@
 use std::{path::Path, sync::Arc};
 
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{Channel, ChannelRelations, PackageName, RepodataRevisions};
 
 use crate::{
@@ -120,5 +122,10 @@ impl SubdirClient for LocalSubdirClient {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sparse.channel_relations()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        self.sparse.virtual_package_plugins()
     }
 }

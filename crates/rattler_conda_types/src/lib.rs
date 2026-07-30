@@ -78,6 +78,8 @@ pub use rattler_conda_version::version_spec::{
 };
 pub use rattler_conda_version::{ParseStrictness, Version, VersionSpec};
 pub use record_traits::HasArtifactIdentificationRefs;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use repo_data::VirtualPackagePlugins;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
     RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,

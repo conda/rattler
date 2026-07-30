@@ -1,0 +1,12 @@
+{
+  "info": {
+    "subdir": "noarch",
+    "base_url": "../noarch",
+    "virtual_package_plugins": {
+      "cuda-detect": ["__cuda", "__cuda_arch"],
+      "rocm-detect": ["__rocm"]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2
+}
