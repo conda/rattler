@@ -28,6 +28,10 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
+experimental-virtual-package-plugins = [
+  "rattler_conda_types/experimental-virtual-package-plugins",
+  "rattler_repodata_gateway/experimental-virtual-package-plugins",
+]
 
 [[bin]]
 name = "rattler-index"

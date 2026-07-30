@@ -34,6 +34,10 @@ rustls = [
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
 oauth = ["rattler/oauth"]
+experimental-virtual-package-plugins = [
+  "rattler_repodata_gateway/experimental-virtual-package-plugins",
+  "rattler_index/experimental-virtual-package-plugins",
+]
 
 [dependencies]
 anyhow = { workspace = true }

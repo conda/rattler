@@ -66,6 +66,8 @@ pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use repo_data::VirtualPackagePlugins;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
     RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,
