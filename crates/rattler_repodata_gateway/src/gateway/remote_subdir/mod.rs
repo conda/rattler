@@ -1,5 +1,7 @@
 use crate::gateway::subdir::{PackageRecords, SubdirClient};
 use crate::{GatewayError, Reporter};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{ChannelRelations, PackageName, RepodataRevisions};
 
 cfg_if::cfg_if! {
@@ -33,5 +35,10 @@ impl SubdirClient for RemoteSubdirClient {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sparse.channel_relations()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        self.sparse.virtual_package_plugins()
     }
 }

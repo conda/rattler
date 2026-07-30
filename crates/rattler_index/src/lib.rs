@@ -28,6 +28,8 @@ use opendal::layers::RetryLayer;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{
     ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
     ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
@@ -931,6 +933,8 @@ async fn index_subdir_inner(
             base_url: channel_metadata.base_url,
             repodata_revisions: repodata_revisions_for_packages(&repodata_revisions, &v3),
             channel_relations: channel_metadata.channel_relations,
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins: VirtualPackagePlugins::default(),
         }),
         packages,
         conda_packages,
@@ -1281,6 +1285,8 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             },
             shards: shards
                 .iter()
@@ -1719,6 +1725,8 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
             base_url: channel_metadata.base_url,
             repodata_revisions: RepodataRevisions::new(),
             channel_relations: channel_metadata.channel_relations,
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins: VirtualPackagePlugins::default(),
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),

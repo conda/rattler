@@ -183,6 +183,8 @@ mod tests {
         routing::get,
     };
     use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    use rattler_conda_types::{PackageName, VirtualPackagePlugins};
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -223,12 +225,17 @@ mod tests {
                     created_at: Some(jiff::Timestamp::now()),
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
+                    #[cfg(feature = "experimental-virtual-package-plugins")]
+                    virtual_package_plugins: mock_virtual_package_plugins(),
                 },
                 shards,
             };
 
             // Encode the index as msgpack and compress with zstd
-            let index_bytes = rmp_serde::to_vec(&sharded_index).unwrap();
+            // Named encoding, matching what the indexer writes for real
+            // channels; positional encoding misaligns as soon as a skipped
+            // field precedes a present one.
+            let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
             let shard_requests = Arc::new(AtomicUsize::new(0));
@@ -308,6 +315,48 @@ mod tests {
     enum MockShardResponse {
         Empty,
         Truncated,
+    }
+
+    /// Registrations served by the mock index, so the sharded path is covered
+    /// end to end through msgpack encoding and the HTTP fetch.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn mock_virtual_package_plugins() -> VirtualPackagePlugins {
+        [(
+            PackageName::new_unchecked("cuda-detect"),
+            vec![
+                PackageName::new_unchecked("__cuda"),
+                PackageName::new_unchecked("__cuda_arch"),
+            ],
+        )]
+        .into_iter()
+        .collect()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_sharded_index_reports_virtual_package_plugins() {
+        let server = MockShardedServer::new(MockShardResponse::Empty).await;
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        let subdir = ShardedSubdir::new(
+            server.channel(),
+            "linux-64".to_string(),
+            rattler_networking::LazyClient::default(),
+            cache_dir.path().to_path_buf(),
+            ShardCachePolicy {
+                action: CacheAction::NoCache,
+                missing_shards_are_empty: false,
+            },
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            subdir.virtual_package_plugins(),
+            &mock_virtual_package_plugins()
+        );
     }
 
     #[tokio::test]
