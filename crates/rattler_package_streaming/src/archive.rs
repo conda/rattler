@@ -324,8 +324,7 @@ impl PackageArchive {
         let archive_type = CondaArchiveType::try_from(Path::new(url.path()))
             .ok_or(ExtractError::UnsupportedArchiveType)?;
 
-        if archive_type == CondaArchiveType::Conda
-            && options.sparse_policy != SparsePolicy::Disable
+        if archive_type == CondaArchiveType::Conda && options.sparse_policy != SparsePolicy::Disable
         {
             if let Some(archive) = Self::try_open_sparse(client.clone(), url.clone()).await? {
                 return Ok(archive);
@@ -665,8 +664,7 @@ impl PackageArchive {
             .error_for_status()
             .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
-        if let (Some(limit), Some(content_length)) =
-            (max_spool_size, response.content_length())
+        if let (Some(limit), Some(content_length)) = (max_spool_size, response.content_length())
             && content_length > limit
         {
             return Err(ExtractError::SpoolLimitExceeded { limit });
@@ -1475,8 +1473,7 @@ mod tests {
     async fn test_remote_access_policy() {
         let url = test_server::serve_file_no_ranges(conda_test_file()).await;
         let (client, requests) = counting_client();
-        let options =
-            RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Require);
+        let options = RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Require);
         let error = match PackageArchive::from_url_with_options(client, url, options).await {
             Ok(_) => panic!("range support should have been required"),
             Err(error) => error,
@@ -1486,8 +1483,7 @@ mod tests {
 
         let url = test_server::serve_file(conda_test_file()).await;
         let (client, requests) = counting_client();
-        let options =
-            RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Disable);
+        let options = RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Disable);
         let archive = PackageArchive::from_url_with_options(client, url, options)
             .await
             .unwrap();
