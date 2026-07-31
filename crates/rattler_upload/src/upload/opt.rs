@@ -389,20 +389,6 @@ pub struct AnacondaOpts {
     pub force: bool,
 }
 
-/// Parse an `az://` channel URL into the wire URL the upload path still works
-/// with.
-///
-/// The scheme is fixed to https because a clap `value_parser` runs before any
-/// config is loaded, so the host's `azure-options` entry — which decides the
-/// scheme — is not known yet. The plumbing step that loads those options carries
-/// the [`rattler_azure::AzureChannelUrl`] itself instead, which is what lets a
-/// custom-scheme (emulator) endpoint be uploaded to.
-#[cfg(feature = "azure")]
-fn parse_azure_channel_url(value: &str) -> Result<Url, rattler_azure::AzureUrlError> {
-    rattler_azure::AzureChannelUrl::parse(value)
-        .map(|channel| channel.wire(rattler_azure::AzureScheme::Https))
-}
-
 #[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url =
@@ -442,8 +428,12 @@ pub struct S3Opts {
 pub struct AzureOpts {
     /// The channel URL in the Azure Blob container to upload the package to,
     /// e.g., `az://myaccount.blob.core.windows.net/my-container/my-channel`
-    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = parse_azure_channel_url)]
-    pub channel: Url,
+    ///
+    /// Kept as an [`AzureChannelUrl`](rattler_azure::AzureChannelUrl) rather than
+    /// a wire `Url`, so the scheme the request goes out over is chosen where the
+    /// endpoint options are known instead of being fixed at parse time.
+    #[arg(short, long, env = "AZURE_CHANNEL")]
+    pub channel: rattler_azure::AzureChannelUrl,
 
     #[clap(flatten)]
     pub credentials: rattler_azure::clap::AzureCredentialsOpts,

@@ -84,12 +84,22 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         #[cfg(feature = "azure")]
         ServerType::Azure(azure_opts) => {
             let channel = azure_opts.channel;
+            // ponytail: the endpoint options are the anonymous https host-style
+            // defaults, because `upload_from_args` reads no configuration file at
+            // all — it only opens the auth store — so there is nowhere for an
+            // `[azure-options."<host>"]` entry to come from. That ceiling is
+            // exactly real Azure: an emulator or path-style endpoint cannot be
+            // uploaded to from this entry point. Lifting it means giving
+            // `rattler_upload` a `--config` of its own (rattler-build, its only
+            // caller, already parses one) and passing the host's entry through
+            // here; the plumbing below it already honours whatever it is handed.
+            let options = rattler_azure::AzureEndpointOptions::default();
             let credentials = azure_opts
                 .credentials
                 .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, || {
                     Ok(rattler_azure::account_and_container(
-                        &channel,
-                        rattler_azure::Addressing::HostStyle,
+                        &channel.wire(options.scheme),
+                        options.addressing,
                     )?)
                 })
                 .await
@@ -97,6 +107,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             upload::upload_package_to_azure(
                 channel,
                 credentials,
+                options,
                 &args.package_files,
                 azure_opts.force,
             )

@@ -518,9 +518,12 @@ impl From<AzureHost> for String {
 /// [`parse`](Self::parse) runs as a clap `value_parser` — before any config file
 /// is read. A stored scheme would therefore have to be a guess made at parse time
 /// and corrected later, which is exactly the drift this type exists to prevent.
-/// Passing it in at call time keeps the choice at the site that makes it. Nothing
-/// ties the argument to an options entry, and until options are threaded through
-/// the CLI both callers pass [`AzureScheme::Https`].
+/// Passing it in at call time keeps the choice at the site that makes it.
+///
+/// Nothing in the type ties the argument to an options entry. `rattler-index`
+/// takes it from the channel host's entry; `rattler_upload` passes the default,
+/// because it reads no config file at all (see the `ponytail:` note in
+/// `rattler_upload::upload_from_args`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {
     /// The authority, normalized independently of any scheme.
@@ -588,12 +591,11 @@ impl AzureChannelUrl {
 
     /// The `az://host/path` spelling: the channel's identity.
     ///
-    /// This is what users write and what is shown back to them, and it is the
-    /// spelling config keys are meant to be matched against. Today only the
-    /// `azure-options` host key actually goes through this type (via
-    /// [`Self::host`]); `rattler_index` still matches `[index-config."…"]` against
-    /// the https wire string, which is reviewer issue 5 and moves onto
-    /// `canonical()` in the index/upload plumbing step.
+    /// This is what users write, what is shown back to them, and what config keys
+    /// are matched against: `rattler-index` resolves `[index-config."az://…"]`
+    /// through this spelling, and `[azure-options."…"]` through [`Self::host`].
+    /// Matching the wire string instead was reviewer issue 5 — the two spellings
+    /// exist so a config key never has to guess which one a channel was stored as.
     pub fn canonical(&self) -> Url {
         self.spelled("az")
     }
@@ -665,54 +667,77 @@ fn strip_az_scheme(value: &str) -> Option<&str> {
 }
 
 /// Build an opendal [`AzblobConfig`](opendal::services::AzblobConfig) from a
-/// channel URL and credentials.
+/// channel URL, the endpoint options of its host, and credentials.
 ///
-/// The account name, endpoint, container, and root prefix are all derived from the
-/// URL; the credentials supply only the account key or SAS token. The URL is
-/// expected to already be validated and in wire form (see
-/// [`AzureChannelUrl::wire`]).
+/// The account name, endpoint, container and root prefix are all derived from the
+/// channel URL, read the way `options.addressing` says to read it and reached over
+/// `options.scheme`; the credentials supply only the account key or SAS token.
+/// `options.auth` is not consulted — this is the write path, where the credential
+/// has already been chosen by the caller.
 ///
-/// **Host-style addressing only.** The URL must read as
-/// `<account>.blob.<suffix>/<container>/<prefix>`; an IP or single-label endpoint
-/// is rejected by [`account_and_container`].
+/// Taking the [`AzureChannelUrl`] rather than a wire `Url` is what keeps the
+/// scheme in the config from disagreeing with the scheme in the endpoint: both
+/// come from the same `options`.
+///
+/// # The two addressing shapes
+///
+/// opendal's azblob core builds every request URI as `{endpoint}/{container}/{path}`
+/// and its core struct carries no account field at all, so under path-style the
+/// account can only reach the URL through `endpoint`:
+///
+/// - [`Addressing::HostStyle`]: `endpoint` is `{scheme}://{host}[:{port}]`, the
+///   account is the first host label, and `root` is the path after the container.
+/// - [`Addressing::PathStyle`]: `endpoint` is
+///   `{scheme}://{host}[:{port}]/{account}`, the account is the first path
+///   segment, and `root` is the path after *both* the account and the container.
+///
+/// `account_name` is set under both styles, and is mandatory under both: opendal
+/// infers it only from three known Azure suffixes and returns `None` — not an
+/// error — for anything else, so omitting it from a path-style config makes
+/// shared-key signing quietly never engage, and the failure surfaces as a 403
+/// rather than as a config error.
+///
+/// Neither endpoint ends in a slash. `AzblobBuilder::endpoint` trims one, but this
+/// builds the config struct literally, where nothing does, and a stray slash would
+/// yield `//{container}/…`.
 #[cfg(feature = "opendal")]
 pub fn azblob_config(
     credentials: &AzureCredentials,
-    channel: &Url,
+    channel: &AzureChannelUrl,
+    options: AzureEndpointOptions,
 ) -> Result<opendal::services::AzblobConfig, AzureUrlError> {
-    // ponytail: host-style is hardcoded, which matches every caller today — none
-    // has an options entry to pass in yet. The hazard is not an IP or emulator
-    // host, which `account_and_container` rejects outright: it is a *dotted* host
-    // whose options say `path-style = true`. That combination does not error here.
-    // It reads the account from the host label, the container from the segment that
-    // actually holds the account, and `root` then skips one segment too few — so
-    // writes land in the wrong container. Honouring path-style also needs the
-    // endpoint built differently: opendal appends `container/root` to `endpoint`,
-    // so the account has to be appended to the *endpoint* (`http://host/<account>`).
-    // Both are deferred to the plumbing step that threads the options entry here.
-    let AzureCoordinates { account, container } =
-        account_and_container(channel, Addressing::HostStyle)?;
+    let wire = channel.wire(options.scheme);
+    let AzureCoordinates { account, container } = account_and_container(&wire, options.addressing)?;
 
-    // Preserve a non-default port if one is present; real Azure uses the scheme
-    // default (443).
-    let host = channel.host_str().ok_or(AzureUrlError::NoHost)?;
-    let authority = match channel.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_string(),
+    // The authority comes from `AzureHost`, not from the wire URL: a `Url` has
+    // already dropped a port equal to its scheme's default, so reading it back
+    // would turn a written `:443` into no port at all.
+    let authority = channel.host();
+    let endpoint = match options.addressing {
+        Addressing::HostStyle => format!("{}://{authority}", options.scheme),
+        Addressing::PathStyle => format!("{}://{authority}/{account}", options.scheme),
     };
 
-    // Root prefix = the path after the container segment. Percent-decode each
-    // segment: `path_segments()` yields still-encoded segments, and opendal
-    // percent-encodes the root again, so passing them through verbatim would
-    // double-encode prefixes containing spaces or `+`. `account_and_container`
-    // has already confirmed there is at least the container segment.
+    // Root prefix = the path after the segments the coordinates already consumed:
+    // the container, plus the account when path-style put it in the path. Skipping
+    // one too few there leaves the account segment inside `root`, so every blob is
+    // written one directory deeper than the channel actually lives — silently, and
+    // in the right container, which is what makes it hard to spot.
+    let consumed = match options.addressing {
+        Addressing::HostStyle => 1,
+        Addressing::PathStyle => 2,
+    };
+
+    // Percent-decode each segment: `path_segments()` yields still-encoded segments
+    // and opendal percent-encodes `root + path` again, so passing them through
+    // verbatim would double-encode a prefix containing a space or a `+`.
+    // `account_and_container` has already confirmed the consumed segments exist.
     let root = format!(
         "/{}",
-        channel
-            .path_segments()
+        wire.path_segments()
             .into_iter()
             .flatten()
-            .skip(1)
+            .skip(consumed)
             .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
             .collect::<Vec<_>>()
             .join("/")
@@ -724,7 +749,7 @@ pub fn azblob_config(
     };
 
     Ok(opendal::services::AzblobConfig {
-        endpoint: Some(format!("{}://{}", channel.scheme(), authority)),
+        endpoint: Some(endpoint),
         account_name: Some(account),
         container,
         root: Some(root),
@@ -1306,6 +1331,120 @@ mod tests {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         host.hash(&mut hasher);
         hasher.finish()
+    }
+
+    /// The path-style recipe, asserted string by string, because every field but
+    /// `container` differs from host-style and each one fails silently when it is
+    /// wrong: a missing `account_name` becomes a 403, a trailing slash becomes
+    /// `//container/…`, and a `root` that skips one segment too few writes the
+    /// whole channel one directory too deep.
+    #[cfg(feature = "opendal")]
+    #[test]
+    fn azblob_config_under_path_style() {
+        let channel =
+            AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general/mychannel")
+                .unwrap();
+        let options = AzureEndpointOptions {
+            auth: Auth::DefaultChain,
+            scheme: AzureScheme::Http,
+            addressing: Addressing::PathStyle,
+        };
+
+        let config = azblob_config(
+            &AzureCredentials::AccountKey("key".to_string()),
+            &channel,
+            options,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.endpoint.as_deref(),
+            Some("http://127.0.0.1:10000/devstoreaccount1")
+        );
+        assert_eq!(config.account_name.as_deref(), Some("devstoreaccount1"));
+        assert_eq!(config.container, "general");
+        assert_eq!(config.root.as_deref(), Some("/mychannel"));
+        assert_eq!(config.account_key.as_deref(), Some("key"));
+
+        let endpoint = config.endpoint.unwrap();
+        assert!(!endpoint.ends_with('/'), "{endpoint}");
+        let root = config.root.unwrap();
+        assert!(
+            !root.contains("general"),
+            "the container must not appear in the root: {root}"
+        );
+        assert!(
+            !root.contains("devstoreaccount1"),
+            "the account must not appear in the root: {root}"
+        );
+    }
+
+    /// A channel that is a bare `account/container` leaves nothing for the root,
+    /// which must still be `/` and not the empty string opendal would treat as a
+    /// relative path.
+    #[cfg(feature = "opendal")]
+    #[test]
+    fn azblob_config_path_style_without_a_prefix() {
+        let channel =
+            AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general").unwrap();
+        let config = azblob_config(
+            &AzureCredentials::SasToken("?sv=token".to_string()),
+            &channel,
+            AzureEndpointOptions {
+                auth: Auth::Anonymous,
+                scheme: AzureScheme::Http,
+                addressing: Addressing::PathStyle,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(config.root.as_deref(), Some("/"));
+        assert_eq!(config.container, "general");
+        // The leading `?` is stripped exactly once, wherever the token came from.
+        assert_eq!(config.sas_token.as_deref(), Some("sv=token"));
+    }
+
+    /// Host-style is the shape every existing caller uses, so honouring
+    /// path-style must not have moved it.
+    #[cfg(feature = "opendal")]
+    #[test]
+    fn azblob_config_under_host_style_is_unchanged() {
+        let channel =
+            AzureChannelUrl::parse("az://stcondachannel.blob.core.windows.net/general/sub/dir")
+                .unwrap();
+        let config = azblob_config(
+            &AzureCredentials::SasToken("sv=token".to_string()),
+            &channel,
+            AzureEndpointOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.endpoint.as_deref(),
+            Some("https://stcondachannel.blob.core.windows.net")
+        );
+        assert_eq!(config.account_name.as_deref(), Some("stcondachannel"));
+        assert_eq!(config.container, "general");
+        assert_eq!(config.root.as_deref(), Some("/sub/dir"));
+        assert_eq!(config.sas_token.as_deref(), Some("sv=token"));
+        assert_eq!(config.account_key, None);
+    }
+
+    /// A prefix with a space arrives here percent-encoded and opendal encodes
+    /// `root + path` again, so the root has to be handed over decoded.
+    #[cfg(feature = "opendal")]
+    #[test]
+    fn azblob_config_decodes_the_root() {
+        let channel =
+            AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/with%20space").unwrap();
+        let config = azblob_config(
+            &AzureCredentials::AccountKey("key".to_string()),
+            &channel,
+            AzureEndpointOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(config.root.as_deref(), Some("/with space"));
     }
 
     /// Account and container derivation is deliberately *not* part of parsing: the

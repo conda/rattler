@@ -74,16 +74,41 @@ region = "eu-central-1"
 force-path-style = false
 ```
 
-Azure Blob Storage needs no such block: the storage account and blob endpoint
-are read directly from the channel URL
-(`az://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
-container, and endpoint (including sovereign clouds) are fully determined by the
-URL you pass. The `az://` scheme is required and is rewritten to `https://`
-internally; a bare `https://` URL is rejected. The host must be a dotted
-`<account>.blob.<suffix>` domain, so IP-literal / single-label hosts (and hence
-the Azurite emulator) are not supported. Credentials are never stored in the
-config — they are resolved at runtime from `--account-key` / `--sas-token`, an
-`az login` session (`--azure-cli`), or the `DefaultCredentialProvider` chain.
+Azure Blob channels need no block for the common case: the account, container and
+endpoint (including sovereign clouds) are all read from the channel URL
+`az://<account>.blob.core.windows.net/<container>/<channel>`. The `az://` scheme
+is required and is rewritten to `https://` for the request; a bare `https://` URL
+is rejected. Credentials are never stored in the config — they are resolved at
+runtime from `--account-key` / `--sas-token`, an `az login` session
+(`--azure-cli`), or the `DefaultCredentialProvider` chain.
+
+A host that is not a plain `<account>.blob.<suffix>` domain, or that is not
+reached over https, needs an entry under `[azure-options."<host>"]`. The key is
+the host with its port when the URL has one:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `auth` | boolean | Whether credentials may be sent to this host. Defaults to `false`, which fetches anonymously. This is the only way a credential attaches to a host, so keep these entries in your user-level config file, never in a checked-in project file. |
+| `scheme` | string | The scheme `az://` is rewritten to: `"https"` (default) or `"http"`. Use `http` for local emulators only. |
+| `path-style` | boolean | Where the storage account is found. `false` (default) reads it from the first host label. `true` reads it from the first path segment instead, which is the only form that works for an IP-literal or single-label host. |
+
+Indexing a channel in the Azurite emulator needs all three:
+
+```toml
+[azure-options."127.0.0.1:10000"]
+auth = true
+scheme = "http"
+path-style = true
+```
+
+```shell
+export AZURE_STORAGE_KEY=<the Azurite account key>
+rattler-index --config ./rattler-config.toml az \
+    az://127.0.0.1:10000/devstoreaccount1/general/my-channel
+```
+
+Without the entry, that URL fails: host-style addressing cannot read an account
+name out of `127.0.0.1`, and the error tells you which line to add.
 
 ## Per-channel index configuration
 

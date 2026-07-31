@@ -5375,6 +5375,7 @@ dependencies = [
  "itertools 0.15.0",
  "keyring-core",
  "netrc-rs",
+ "rattler_azure",
  "rattler_config",
  "regex",
  "reqsign-azure-storage",

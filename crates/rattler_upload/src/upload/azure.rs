@@ -3,10 +3,9 @@ use std::path::{Path, PathBuf};
 use futures::{StreamExt, TryStreamExt};
 use miette::IntoDiagnostic;
 use opendal::{Configurator, ErrorKind, Operator};
-use rattler_azure::AzureCredentials;
+use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpointOptions};
 use tokio::io::AsyncReadExt;
 use tokio_util::bytes::BytesMut;
-use url::Url;
 
 use crate::upload::package::ExtractedPackage;
 
@@ -28,21 +27,20 @@ pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "rcw";
 
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
-/// The channel URL must be of the form
-/// `https://<account>.blob.core.windows.net/<container>/<prefix>`; the account
-/// name, endpoint, container, and root prefix are all derived from it (see
-/// `azblob_config`). Because the account is derived from the host, upload
-/// requires this dotted `<account>.blob...` form and does not support
-/// path-style or emulator (Azurite) endpoints. The full blob host lives in the
-/// channel URL itself, so no separate account/endpoint configuration is needed.
-/// The [`AzureCredentials`] supply only the account key or SAS token.
+/// The account name, endpoint, container and root prefix are all derived from the
+/// channel URL together with `options` (see `azblob_config`): `options.addressing`
+/// decides whether the account is the first host label or the first path segment,
+/// and `options.scheme` decides what `az://` is sent over. A path-style entry is
+/// therefore what makes an IP, single-label or emulator (Azurite) endpoint
+/// uploadable. The [`AzureCredentials`] supply only the account key or SAS token.
 pub async fn upload_package_to_azure(
-    channel: Url,
+    channel: AzureChannelUrl,
     credentials: AzureCredentials,
+    options: AzureEndpointOptions,
     package_files: &[PathBuf],
     force: bool,
 ) -> miette::Result<()> {
-    let config = rattler_azure::azblob_config(&credentials, &channel).into_diagnostic()?;
+    let config = rattler_azure::azblob_config(&credentials, &channel, options).into_diagnostic()?;
 
     let builder = config.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();
@@ -65,7 +63,7 @@ pub async fn upload_package_to_azure(
 /// Uploads a single package file to the Azure Blob container via the given operator.
 async fn upload_single_package(
     op: &Operator,
-    channel: &Url,
+    channel: &AzureChannelUrl,
     package_file: &Path,
     force: bool,
 ) -> miette::Result<()> {
@@ -78,14 +76,10 @@ async fn upload_single_package(
         .ok_or_else(|| miette::miette!("Failed to get filename"))?;
     let key = format!("{subdir}/{filename}");
 
-    // The blob's on-the-wire address, used only for diagnostics. `channel.path()`
-    // already carries `/<container>/<prefix>`, so the full `az://` URL is the host
-    // followed by that path and the key; do not prepend the container again.
-    let blob_url = format!(
-        "az://{}{}/{key}",
-        channel.host_str().unwrap_or_default(),
-        channel.path()
-    );
+    // The blob's address as the user wrote the channel, used only for
+    // diagnostics. The canonical spelling already carries `/<container>/<prefix>`,
+    // so the key is appended to it; do not prepend the container again.
+    let blob_url = format!("{}/{key}", channel.canonical());
 
     // Guard against overwriting an existing blob when `--force` was not passed.
     // opendal 0.57 only honours `if_not_exists` on the single-shot Put Blob path,
@@ -182,7 +176,7 @@ async fn upload_single_package(
 #[cfg(test)]
 mod test {
     use opendal::{Operator, services::Memory};
-    use url::Url;
+    use rattler_azure::AzureChannelUrl;
 
     use super::upload_single_package;
     use crate::upload::package::ExtractedPackage;
@@ -192,8 +186,8 @@ mod test {
         Operator::new(Memory::default()).unwrap().finish()
     }
 
-    fn test_channel() -> Url {
-        Url::parse("https://account.blob.core.windows.net/container/prefix").unwrap()
+    fn test_channel() -> AzureChannelUrl {
+        AzureChannelUrl::parse("az://account.blob.core.windows.net/container/prefix").unwrap()
     }
 
     fn package_key() -> String {
