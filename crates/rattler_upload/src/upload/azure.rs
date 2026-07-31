@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use miette::IntoDiagnostic;
 use opendal::{Configurator, ErrorKind, Operator};
 use rattler_azure::AzureCredentials;
@@ -21,8 +21,10 @@ const PART_CONCURRENCY: usize = 4;
 const PACKAGE_CONCURRENCY: usize = 4;
 
 /// SAS permissions requested when minting a user-delegation SAS for uploads.
-/// Uploading only needs to create and write blobs (`c` + `w`).
-pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "cw";
+/// Creating and writing blobs needs `c` + `w`; `r` is required on top of those
+/// because the overwrite guard `stat`s each blob before writing it, and a
+/// `stat` (HEAD Blob) is a read. The SAS stays container-scoped and short-lived.
+pub(crate) const AZURE_UPLOAD_SAS_PERMISSIONS: &str = "rcw";
 
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
@@ -46,18 +48,16 @@ pub async fn upload_package_to_azure(
     let op = Operator::new(builder).into_diagnostic()?.finish();
 
     // Upload multiple packages concurrently. Each package is written to its own
-    // key, so the individual uploads are independent.
+    // key, so the individual uploads are independent. The first failure aborts
+    // the remaining uploads rather than letting them run to completion.
     futures::stream::iter(package_files.iter())
-        .map(|package_file| {
+        .map(Ok)
+        .try_for_each_concurrent(PACKAGE_CONCURRENCY, |package_file| {
             let op = op.clone();
             let channel = &channel;
             async move { upload_single_package(&op, channel, package_file, force).await }
         })
-        .buffer_unordered(PACKAGE_CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<miette::Result<Vec<_>>>()?;
+        .await?;
 
     Ok(())
 }
