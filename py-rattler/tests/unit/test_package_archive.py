@@ -97,10 +97,25 @@ async def test_symlinks_surfaced_not_followed(test_data_dir: str) -> None:
 
     async for entry in archive.stream("pkg"):
         if entry.name == "lib/liblink.so":
-            assert entry.is_symlink and not entry.is_file
+            assert entry.is_link and entry.is_symlink
+            assert not entry.is_hardlink and not entry.is_file
             assert entry.link_target == "libreal.so.1"
             with pytest.raises(OSError, match="links are not followed"):
                 await entry.read()
+
+    async for entry in archive.stream("pkg"):
+        if entry.name == "lib/libhard.so":
+            assert entry.is_link and entry.is_hardlink
+            assert not entry.is_symlink and not entry.is_file
+            assert entry.link_target == "lib/libreal.so.1"
+
+
+@pytest.mark.asyncio
+async def test_invalid_archive_paths(conda_package: str) -> None:
+    archive = await PackageArchive.from_path(conda_package)
+    for path in ["", "../clobber", "/clobber"]:
+        with pytest.raises(OSError, match="invalid package-relative archive path"):
+            await archive.read_file(path)
 
 
 @pytest.mark.asyncio
@@ -115,9 +130,30 @@ async def test_from_url_spooled_fallback(conda_package: str) -> None:
         from rattler.networking.client import Client
 
         url = f"http://127.0.0.1:{server.server_port}/{os.path.basename(conda_package)}"
-        archive = await PackageArchive.open(Client(), url)
+        archive = await PackageArchive.from_url(Client(), url)
         assert archive.access == "spooled"
         assert await archive.read_file("clobber") == b"clobber-fd-1\n"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.asyncio
+async def test_remote_fallback_policy(conda_package: str) -> None:
+    """Callers can reject or limit a full-download fallback."""
+    directory = os.path.dirname(conda_package)
+    handler = lambda *args: http.server.SimpleHTTPRequestHandler(*args, directory=directory)  # noqa: E731
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        from rattler.networking.client import Client
+
+        url = f"http://127.0.0.1:{server.server_port}/{os.path.basename(conda_package)}"
+        with pytest.raises(OSError, match="does not support sparse"):
+            await PackageArchive.from_url(Client(), url, sparse="require")
+        with pytest.raises(OSError, match="exceeds the configured 1 byte limit"):
+            await PackageArchive.from_url(Client(), url, max_spool_size=1)
     finally:
         server.shutdown()
         server.server_close()

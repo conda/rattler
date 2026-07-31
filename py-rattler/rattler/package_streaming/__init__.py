@@ -107,9 +107,19 @@ class ArchiveEntry:
         return self._inner.is_file
 
     @property
-    def is_symlink(self) -> bool:
+    def is_link(self) -> bool:
         """True if the entry is a symbolic or hard link."""
+        return self._inner.is_link
+
+    @property
+    def is_symlink(self) -> bool:
+        """True if the entry is a symbolic link."""
         return self._inner.is_symlink
+
+    @property
+    def is_hardlink(self) -> bool:
+        """True if the entry is a hard link."""
+        return self._inner.is_hardlink
 
     @property
     def link_target(self) -> Optional[str]:
@@ -143,7 +153,7 @@ class PackageArchive:
     Examples
     --------
     ```python
-    pkg = await PackageArchive.open(client, url)
+    pkg = await PackageArchive.from_url(client, url)
     paths = await pkg.paths_json()
     libs = [p.relative_path for p in paths.paths if str(p.relative_path).endswith(".so")]
     files = await pkg.read_files(libs)
@@ -156,12 +166,26 @@ class PackageArchive:
         self._inner = inner
 
     @staticmethod
-    async def open(client: Client, url: str) -> PackageArchive:
+    async def from_url(
+        client: Client,
+        url: str,
+        *,
+        sparse: Literal["prefer", "require", "disable"] = "prefer",
+        max_spool_size: Optional[int] = None,
+    ) -> PackageArchive:
         """
-        Opens a remote package archive. For `.conda` archives on servers with
-        range support this costs a single HTTP range request.
+        Opens a remote package archive.
+
+        `sparse="prefer"` uses range requests when possible and otherwise
+        spools one full download. Use `"require"` to reject servers without
+        range support, or `"disable"` to skip the range probe. Setting
+        `max_spool_size` limits any fallback download.
         """
-        return PackageArchive(await PyPackageArchive.from_url(client._client, url))
+        return PackageArchive(
+            await PyPackageArchive.from_url(
+                client._client, url, sparse, max_spool_size
+            )
+        )
 
     @staticmethod
     async def from_path(path: PathLike[str] | str) -> PackageArchive:
@@ -178,7 +202,7 @@ class PackageArchive:
         return PackageArchive(await PyPackageArchive.from_path(path))
 
     @property
-    def access(self) -> Literal["sparse", "local", "spooled"]:
+    def access(self) -> Literal["sparse", "local", "spooled", "unknown"]:
         """How the archive is accessed."""
         return self._inner.access()  # type: ignore[return-value]
 

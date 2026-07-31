@@ -54,6 +54,21 @@ pub enum ExtractError {
     #[error("a component is missing from the Conda archive")]
     MissingComponent,
 
+    #[error("invalid package-relative archive path: {0}")]
+    InvalidArchivePath(PathBuf),
+
+    #[cfg(feature = "reqwest")]
+    #[error("the server does not support sparse package access")]
+    SparseAccessUnsupported,
+
+    #[cfg(feature = "reqwest")]
+    #[error("spooled package download exceeds the configured {limit} byte limit")]
+    SpoolLimitExceeded { limit: u64 },
+
+    #[cfg(feature = "reqwest")]
+    #[error("the remote archive changed after it was opened; reopen the archive")]
+    RemoteArchiveChanged,
+
     #[error("cannot read {}: links are not followed", .0.join(", "))]
     LinksNotFollowed(Vec<String>),
 

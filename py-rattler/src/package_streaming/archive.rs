@@ -7,7 +7,8 @@ use pyo3::types::{PyBytes, PyDict};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::package::{AboutJson, IndexJson, PathsJson, RunExportsJson};
 use rattler_package_streaming::archive::{
-    ArchiveAccess, PackageArchive, Section, SectionEntry, SectionStream,
+    ArchiveAccess, ArchiveEntryKind, PackageArchive, RemoteArchiveOptions, Section, SectionEntry,
+    SectionStream, SparsePolicy,
 };
 use tokio::io::AsyncReadExt;
 use url::Url;
@@ -18,6 +19,17 @@ use crate::index_json::PyIndexJson;
 use crate::networking::client::PyClientWithMiddleware;
 use crate::paths_json::PyPathsJson;
 use crate::run_exports_json::PyRunExportsJson;
+
+fn parse_sparse_policy(policy: &str) -> PyResult<SparsePolicy> {
+    match policy {
+        "prefer" => Ok(SparsePolicy::Prefer),
+        "require" => Ok(SparsePolicy::Require),
+        "disable" => Ok(SparsePolicy::Disable),
+        _ => Err(PyValueError::new_err(format!(
+            "invalid sparse policy {policy:?}: expected 'prefer', 'require' or 'disable'"
+        ))),
+    }
+}
 
 fn parse_section(section: &str) -> PyResult<Section> {
     match section {
@@ -46,11 +58,18 @@ impl PyPackageArchive {
         py: Python<'a>,
         client: PyClientWithMiddleware,
         url: String,
+        sparse: String,
+        max_spool_size: Option<u64>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let url = Url::parse(&url)
             .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))?;
+        let mut options =
+            RemoteArchiveOptions::new().with_sparse_policy(parse_sparse_policy(&sparse)?);
+        if let Some(max_spool_size) = max_spool_size {
+            options = options.with_max_spool_size(max_spool_size);
+        }
         future_into_py(py, async move {
-            let inner = PackageArchive::from_url(client.into(), url)
+            let inner = PackageArchive::from_url_with_options(client.into(), url, options)
                 .await
                 .map_err(io_error)?;
             Ok(Self { inner })
@@ -72,6 +91,7 @@ impl PyPackageArchive {
             ArchiveAccess::Sparse => "sparse",
             ArchiveAccess::Local => "local",
             ArchiveAccess::Spooled => "spooled",
+            _ => "unknown",
         }
     }
 
@@ -208,21 +228,17 @@ impl PySectionStream {
             match guard.stream.next_entry().await.map_err(io_error)? {
                 None => Err(PyStopAsyncIteration::new_err(())),
                 Some(entry) => {
-                    let name = entry
-                        .path()
-                        .map_err(io_error)?
-                        .to_string_lossy()
-                        .into_owned();
-                    let header = entry.header();
-                    let size = header.size().map_err(io_error)?;
-                    let kind = header.entry_type();
-                    let is_file = kind.is_file();
-                    let is_symlink = kind.is_symlink() || kind.is_hard_link();
+                    let name = entry.path().to_string_lossy().into_owned();
+                    let size = entry.size().map_err(io_error)?;
+                    let kind = entry.kind();
+                    let is_file = kind == ArchiveEntryKind::File;
+                    let is_symlink = kind == ArchiveEntryKind::Symlink;
+                    let is_hardlink = kind == ArchiveEntryKind::Hardlink;
+                    let is_link = kind.is_link();
                     let link_target = entry
-                        .link_name()
-                        .ok()
-                        .flatten()
-                        .map(|t| t.to_string_lossy().into_owned());
+                        .link_target()
+                        .map_err(io_error)?
+                        .map(|target| target.to_string_lossy().into_owned());
                     guard.generation += 1;
                     let generation = guard.generation;
                     guard.current = Some(entry);
@@ -231,7 +247,9 @@ impl PySectionStream {
                         name,
                         size,
                         is_file,
+                        is_link,
                         is_symlink,
+                        is_hardlink,
                         link_target,
                         generation,
                         state: state.clone(),
@@ -253,7 +271,11 @@ pub struct PyArchiveEntry {
     #[pyo3(get)]
     is_file: bool,
     #[pyo3(get)]
+    is_link: bool,
+    #[pyo3(get)]
     is_symlink: bool,
+    #[pyo3(get)]
+    is_hardlink: bool,
     #[pyo3(get)]
     link_target: Option<String>,
     generation: u64,
@@ -278,9 +300,7 @@ impl PyArchiveEntry {
                 .current
                 .as_mut()
                 .ok_or_else(|| PyRuntimeError::new_err("entry has already been read"))?;
-            let buf = rattler_package_streaming::archive::read_entry_contents(entry)
-                .await
-                .map_err(io_error)?;
+            let buf = entry.read().await.map_err(io_error)?;
             guard.current = None;
             Python::attach(|py| Ok(PyBytes::new(py, &buf).unbind()))
         })

@@ -94,7 +94,7 @@ pub enum Section {
 
 impl Section {
     /// Returns the section a path inside the package belongs to.
-    pub fn containing(path: &Path) -> Section {
+    pub(crate) fn containing(path: &Path) -> Section {
         let first = path
             .components()
             .find(|c| !matches!(c, std::path::Component::CurDir));
@@ -113,8 +113,54 @@ impl Section {
     }
 }
 
+/// How a remote archive should be opened.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SparsePolicy {
+    /// Prefer sparse access and fall back to a spooled download.
+    #[default]
+    Prefer,
+    /// Require sparse access and fail when the server does not support it.
+    Require,
+    /// Skip the range probe and download the archive immediately.
+    Disable,
+}
+
+/// Options for opening a remote package archive.
+#[derive(Debug, Clone, Default)]
+pub struct RemoteArchiveOptions {
+    sparse_policy: SparsePolicy,
+    max_spool_size: Option<u64>,
+}
+
+impl RemoteArchiveOptions {
+    /// Creates options using the default sparse-access policy.
+    pub const fn new() -> Self {
+        Self {
+            sparse_policy: SparsePolicy::Prefer,
+            max_spool_size: None,
+        }
+    }
+
+    /// Sets how HTTP range support and full-download fallback are handled.
+    pub const fn with_sparse_policy(mut self, policy: SparsePolicy) -> Self {
+        self.sparse_policy = policy;
+        self
+    }
+
+    /// Limits the number of bytes that may be downloaded for a spooled
+    /// fallback. By default there is no limit.
+    pub const fn with_max_spool_size(mut self, max_size: u64) -> Self {
+        self.max_spool_size = Some(max_size);
+        self
+    }
+}
+
 /// How a [`PackageArchive`] accesses the underlying archive.
+///
+/// This is diagnostic information. Use [`RemoteArchiveOptions`] to control
+/// whether a remote archive may fall back to a spooled download.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ArchiveAccess {
     /// Remote archive read sparsely with HTTP range requests.
     Sparse,
@@ -184,26 +230,114 @@ pub struct PackageArchive {
 
 /// A boxed reader used for the section decompression pipelines.
 type DynReader = Box<dyn AsyncRead + Send + Unpin>;
+type RawSectionEntry = tokio_tar::Entry<tokio_tar::Archive<DynReader>>;
 
-/// A tar entry yielded by [`SectionStream::next_entry`]. Exposes `path()`,
-/// `header()` and implements [`AsyncRead`] for the entry body.
-pub type SectionEntry = tokio_tar::Entry<tokio_tar::Archive<DynReader>>;
+/// The kind of an entry in a package archive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ArchiveEntryKind {
+    /// A regular file.
+    File,
+    /// A directory.
+    Directory,
+    /// A symbolic link.
+    Symlink,
+    /// A hard link.
+    Hardlink,
+    /// Another tar entry type.
+    Other,
+}
+
+impl ArchiveEntryKind {
+    /// Returns whether this entry is a symbolic or hard link.
+    pub fn is_link(self) -> bool {
+        matches!(self, Self::Symlink | Self::Hardlink)
+    }
+}
+
+/// An entry yielded by [`SectionStream::next_entry`].
+///
+/// The underlying tar implementation is intentionally hidden so it can be
+/// changed without affecting callers.
+pub struct SectionEntry {
+    inner: RawSectionEntry,
+    path: PathBuf,
+}
+
+impl SectionEntry {
+    /// Returns the normalized package-relative path of this entry.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the entry kind.
+    pub fn kind(&self) -> ArchiveEntryKind {
+        let kind = self.inner.header().entry_type();
+        if kind.is_file() {
+            ArchiveEntryKind::File
+        } else if kind.is_dir() {
+            ArchiveEntryKind::Directory
+        } else if kind.is_symlink() {
+            ArchiveEntryKind::Symlink
+        } else if kind.is_hard_link() {
+            ArchiveEntryKind::Hardlink
+        } else {
+            ArchiveEntryKind::Other
+        }
+    }
+
+    /// Returns the declared entry size.
+    pub fn size(&self) -> Result<u64, ExtractError> {
+        Ok(self.inner.header().size()?)
+    }
+
+    /// Returns the raw link target for a symbolic or hard link.
+    pub fn link_target(&self) -> Result<Option<PathBuf>, ExtractError> {
+        Ok(self.inner.link_name()?.map(|path| path.into_owned()))
+    }
+
+    /// Reads the complete entry body.
+    ///
+    /// Links are surfaced by the iterator but are never followed.
+    pub async fn read(&mut self) -> Result<Vec<u8>, ExtractError> {
+        if let Some(link) = describe_link(self)? {
+            return Err(ExtractError::LinksNotFollowed(vec![link]));
+        }
+        read_raw_entry_contents(&mut self.inner).await
+    }
+}
 
 impl PackageArchive {
     /// Opens a remote package archive with a single range request, falling
     /// back to a one-time spooled download for `.tar.bz2` archives and
     /// servers without range support.
     pub async fn from_url(client: ClientWithMiddleware, url: Url) -> Result<Self, ExtractError> {
+        Self::from_url_with_options(client, url, RemoteArchiveOptions::default()).await
+    }
+
+    /// Opens a remote package archive using the supplied access policy.
+    pub async fn from_url_with_options(
+        client: ClientWithMiddleware,
+        url: Url,
+        options: RemoteArchiveOptions,
+    ) -> Result<Self, ExtractError> {
         let archive_type = CondaArchiveType::try_from(Path::new(url.path()))
             .ok_or(ExtractError::UnsupportedArchiveType)?;
 
         if archive_type == CondaArchiveType::Conda
-            && let Some(archive) = Self::try_open_sparse(client.clone(), url.clone()).await?
+            && options.sparse_policy != SparsePolicy::Disable
         {
-            return Ok(archive);
+            if let Some(archive) = Self::try_open_sparse(client.clone(), url.clone()).await? {
+                return Ok(archive);
+            }
+            if options.sparse_policy == SparsePolicy::Require {
+                return Err(ExtractError::SparseAccessUnsupported);
+            }
+        } else if options.sparse_policy == SparsePolicy::Require {
+            return Err(ExtractError::SparseAccessUnsupported);
         }
 
-        Self::open_spooled(client, url, archive_type).await
+        Self::open_spooled(client, url, archive_type, options.max_spool_size).await
     }
 
     /// Opens a package archive from a local file.
@@ -265,7 +399,7 @@ impl PackageArchive {
     /// # }
     /// ```
     pub async fn read_file(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, ExtractError> {
-        let path = normalize(path.as_ref()).into_owned();
+        let path = normalize(path.as_ref())?.into_owned();
         let mut result = self.read_files([path.clone()]).await?;
         Ok(result.remove(&path).flatten())
     }
@@ -303,8 +437,11 @@ impl PackageArchive {
     ) -> Result<HashMap<PathBuf, Option<Vec<u8>>>, ExtractError> {
         let paths: Vec<PathBuf> = paths
             .into_iter()
-            .map(|p| normalize(&p.into()).into_owned())
-            .collect();
+            .map(|path| {
+                let path: PathBuf = path.into();
+                normalize(&path).map(|path| path.into_owned())
+            })
+            .collect::<Result<_, _>>()?;
         if paths.is_empty() {
             return Ok(HashMap::new());
         }
@@ -393,9 +530,11 @@ impl PackageArchive {
         let mut stream = self.stream(section).await?;
         let mut paths = Vec::new();
         while let Some(entry) = stream.next_entry().await? {
-            let kind = entry.header().entry_type();
-            if kind.is_file() || kind.is_symlink() || kind.is_hard_link() {
-                paths.push(entry_path(&entry)?);
+            if matches!(
+                entry.kind(),
+                ArchiveEntryKind::File | ArchiveEntryKind::Symlink | ArchiveEntryKind::Hardlink
+            ) {
+                paths.push(entry.path().to_owned());
             }
         }
         Ok(paths)
@@ -412,14 +551,12 @@ impl PackageArchive {
     /// # async fn main() {
     /// # let archive = rattler_package_streaming::archive::PackageArchive::from_path("pkg.conda").await.unwrap();
     /// use rattler_package_streaming::archive::Section;
-    /// use tokio::io::AsyncReadExt;
     ///
     /// let mut stream = archive.stream(Section::Content).await.unwrap();
     /// while let Some(mut entry) = stream.next_entry().await.unwrap() {
-    ///     let path = entry.path().unwrap().into_owned();
+    ///     let path = entry.path().to_owned();
     ///     if path.extension().is_some_and(|ext| ext == "so") {
-    ///         let mut bytes = Vec::new();
-    ///         entry.read_to_end(&mut bytes).await.unwrap();
+    ///         let bytes = entry.read().await.unwrap();
     ///         println!("{}: {} bytes", path.display(), bytes.len());
     ///     } // entries that are not read are skipped cheaply
     /// }
@@ -519,6 +656,7 @@ impl PackageArchive {
         client: ClientWithMiddleware,
         url: Url,
         archive_type: CondaArchiveType,
+        max_spool_size: Option<u64>,
     ) -> Result<Self, ExtractError> {
         let response = client
             .get(url.clone())
@@ -527,13 +665,31 @@ impl PackageArchive {
             .error_for_status()
             .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
+        if let (Some(limit), Some(content_length)) =
+            (max_spool_size, response.content_length())
+            && content_length > limit
+        {
+            return Err(ExtractError::SpoolLimitExceeded { limit });
+        }
+
         // Spool to disk rather than memory: packages can be arbitrarily
         // large (multi-GB), so an in-memory copy is not an option.
         let temp = tempfile::NamedTempFile::new()?;
         let (file, temp_path) = temp.into_parts();
         let mut file = tokio::fs::File::from_std(file);
-        let mut body = StreamReader::new(response.bytes_stream().map_err(std::io::Error::other));
-        tokio::io::copy(&mut body, &mut file).await?;
+        let body = StreamReader::new(response.bytes_stream().map_err(std::io::Error::other));
+        let copied = if let Some(limit) = max_spool_size {
+            let mut body = body.take(limit.saturating_add(1));
+            tokio::io::copy(&mut body, &mut file).await?
+        } else {
+            let mut body = body;
+            tokio::io::copy(&mut body, &mut file).await?
+        };
+        if let Some(limit) = max_spool_size
+            && copied > limit
+        {
+            return Err(ExtractError::SpoolLimitExceeded { limit });
+        }
         file.flush().await?;
 
         Self::open_local(temp_path.to_path_buf(), archive_type, Some(temp_path)).await
@@ -619,9 +775,7 @@ impl PackageArchive {
                 if response.status() != ::reqwest::StatusCode::PARTIAL_CONTENT {
                     // An honored `If-Range` mismatch (the archive changed since
                     // it was opened) or a server that stopped honoring ranges.
-                    return Err(ExtractError::IoError(std::io::Error::other(
-                        "remote archive changed while reading it (range request returned a full response)",
-                    )));
+                    return Err(ExtractError::RemoteArchiveChanged);
                 }
                 let mut reader =
                     StreamReader::new(response.bytes_stream().map_err(std::io::Error::other));
@@ -672,13 +826,16 @@ impl SectionStream {
         use futures_util::StreamExt;
         while let Some(entry) = self.entries.next().await {
             let entry = entry?;
-            if let Some(section) = self.filter {
+            let path = {
                 let path = entry.path()?;
-                if Section::containing(&path) != section {
-                    continue;
-                }
+                normalize(&path)?.into_owned()
+            };
+            if let Some(section) = self.filter
+                && Section::containing(&path) != section
+            {
+                continue;
             }
-            return Ok(Some(entry));
+            return Ok(Some(SectionEntry { inner: entry, path }));
         }
         Ok(None)
     }
@@ -697,18 +854,15 @@ async fn scan_stream(
         let Some(mut entry) = stream.next_entry().await? else {
             break;
         };
-        let path = entry_path(&entry)?;
+        let path = entry.path().to_owned();
         if remaining.remove(&path) {
             // Finish the scan so the error names every offending link
             // instead of discarding the whole batch on the first one.
-            if let Some(link) = describe_link(&entry, &path) {
+            if let Some(link) = describe_link(&entry)? {
                 links.push(link);
                 continue;
             }
-            // The header size is untrusted; cap the upfront allocation.
-            let size = entry.header().size()?;
-            let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
-            entry.read_to_end(&mut buf).await?;
+            let buf = entry.read().await?;
             out.insert(path, Some(buf));
         }
     }
@@ -770,31 +924,25 @@ fn find_section_member(
 
 /// Describes a link entry for [`ExtractError::LinksNotFollowed`], or `None`
 /// for regular entries.
-pub(crate) fn describe_link<R: AsyncRead + Unpin>(
-    entry: &tokio_tar::Entry<R>,
-    path: &Path,
-) -> Option<String> {
-    let kind = entry.header().entry_type();
-    (kind.is_symlink() || kind.is_hard_link()).then(|| {
-        let target = entry
-            .link_name()
-            .ok()
-            .flatten()
-            .map(|t| t.display().to_string())
-            .unwrap_or_default();
-        format!("'{}' (links to '{target}')", path.display())
-    })
+fn describe_link(entry: &SectionEntry) -> Result<Option<String>, ExtractError> {
+    if !entry.kind().is_link() {
+        return Ok(None);
+    }
+    let target = entry
+        .link_target()?
+        .map(|target| target.display().to_string())
+        .unwrap_or_default();
+    Ok(Some(format!(
+        "'{}' (links to '{target}')",
+        entry.path().display()
+    )))
 }
 
-/// Reads the contents of a tar entry, rejecting link entries and capping the
-/// upfront allocation derived from the untrusted header size.
-pub async fn read_entry_contents<R: AsyncRead + Unpin>(
+/// Reads the contents of a raw tar entry while capping the upfront allocation
+/// derived from its untrusted header.
+pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
     entry: &mut tokio_tar::Entry<R>,
 ) -> Result<Vec<u8>, ExtractError> {
-    let path = normalize(&entry.path()?).into_owned();
-    if let Some(link) = describe_link(entry, &path) {
-        return Err(ExtractError::LinksNotFollowed(vec![link]));
-    }
     let size = entry.header().size()?;
     let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
     entry.read_to_end(&mut buf).await?;
@@ -807,27 +955,35 @@ pub(crate) fn parse_package_file<P: PackageFile>(bytes: &[u8]) -> Result<P, Extr
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 
-/// Strips `.` components so `./info/index.json` matches `info/index.json`.
-/// Borrows when the path is already normal (the common case).
-pub(crate) fn normalize(path: &Path) -> std::borrow::Cow<'_, Path> {
-    if path
-        .components()
-        .any(|c| matches!(c, std::path::Component::CurDir))
-    {
-        std::borrow::Cow::Owned(
-            path.components()
-                .filter(|c| !matches!(c, std::path::Component::CurDir))
-                .collect(),
-        )
-    } else {
-        std::borrow::Cow::Borrowed(path)
+/// Validates a package-relative path and strips `.` components.
+///
+/// Package paths may not be empty, absolute, or contain parent components.
+pub(crate) fn normalize(path: &Path) -> Result<std::borrow::Cow<'_, Path>, ExtractError> {
+    let mut needs_normalization = false;
+    let mut has_component = false;
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(_) => has_component = true,
+            std::path::Component::CurDir => needs_normalization = true,
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => {
+                return Err(ExtractError::InvalidArchivePath(path.to_owned()));
+            }
+        }
     }
-}
-
-/// The normalized path of a tar entry as it is exposed by this API
-/// (`list_files`, `read_files` keys, entry names).
-pub fn entry_path(entry: &SectionEntry) -> Result<PathBuf, ExtractError> {
-    Ok(normalize(&entry.path()?).into_owned())
+    if !has_component {
+        return Err(ExtractError::InvalidArchivePath(path.to_owned()));
+    }
+    if needs_normalization {
+        Ok(std::borrow::Cow::Owned(
+            path.components()
+                .filter(|component| !matches!(component, std::path::Component::CurDir))
+                .collect(),
+        ))
+    } else {
+        Ok(std::borrow::Cow::Borrowed(path))
+    }
 }
 
 /// Parses a ZIP local file header at the start of `buf` and returns the
@@ -970,7 +1126,7 @@ mod tests {
         let mut names = Vec::new();
         let mut stream = archive.stream(Section::Info).await.unwrap();
         while let Some(entry) = stream.next_entry().await.unwrap() {
-            names.push(entry.path().unwrap().display().to_string());
+            names.push(entry.path().display().to_string());
         }
         assert!(names.iter().any(|n| n == "info/index.json"), "{names:?}");
     }
@@ -1003,7 +1159,7 @@ mod tests {
         let mut stream = archive.stream(Section::Content).await.unwrap();
         let mut names = Vec::new();
         while let Some(entry) = stream.next_entry().await.unwrap() {
-            names.push(entry.path().unwrap().display().to_string());
+            names.push(entry.path().display().to_string());
         }
         assert!(names.iter().all(|n| !n.starts_with("info/")), "{names:?}");
         assert!(names.iter().any(|n| n == "clobber.txt"), "{names:?}");
@@ -1115,6 +1271,20 @@ mod tests {
         // ...their targets read fine...
         let real = archive.read_file("lib/libreal.so.1").await.unwrap();
         assert_eq!(real.as_deref(), Some(b"real library bytes".as_slice()));
+
+        let mut stream = archive.stream(Section::Content).await.unwrap();
+        let mut kinds = HashMap::new();
+        while let Some(entry) = stream.next_entry().await.unwrap() {
+            kinds.insert(entry.path().to_owned(), entry.kind());
+        }
+        assert_eq!(
+            kinds[Path::new("lib/liblink.so")],
+            ArchiveEntryKind::Symlink
+        );
+        assert_eq!(
+            kinds[Path::new("lib/libhard.so")],
+            ArchiveEntryKind::Hardlink
+        );
 
         // ...but reading a link itself is an error, for both link kinds.
         for link in ["lib/liblink.so", "lib/libhard.so"] {
@@ -1299,6 +1469,56 @@ mod tests {
             Section::containing(Path::new("lib/libz.so")),
             Section::Content
         );
+    }
+
+    #[tokio::test]
+    async fn test_remote_access_policy() {
+        let url = test_server::serve_file_no_ranges(conda_test_file()).await;
+        let (client, requests) = counting_client();
+        let options =
+            RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Require);
+        let error = match PackageArchive::from_url_with_options(client, url, options).await {
+            Ok(_) => panic!("range support should have been required"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, ExtractError::SparseAccessUnsupported));
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+
+        let url = test_server::serve_file(conda_test_file()).await;
+        let (client, requests) = counting_client();
+        let options =
+            RemoteArchiveOptions::new().with_sparse_policy(SparsePolicy::Disable);
+        let archive = PackageArchive::from_url_with_options(client, url, options)
+            .await
+            .unwrap();
+        assert_eq!(archive.access(), ArchiveAccess::Spooled);
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_spool_size_limit() {
+        let url = test_server::serve_file_no_ranges(conda_test_file()).await;
+        let (client, _) = counting_client();
+        let options = RemoteArchiveOptions::new().with_max_spool_size(1);
+        let error = match PackageArchive::from_url_with_options(client, url, options).await {
+            Ok(_) => panic!("the spool limit should have rejected the download"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            ExtractError::SpoolLimitExceeded { limit: 1 }
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_archive_paths() {
+        let archive = PackageArchive::from_path(conda_test_file()).await.unwrap();
+        for path in ["", ".", "../clobber", "/clobber"] {
+            assert!(matches!(
+                archive.read_file(path).await,
+                Err(ExtractError::InvalidArchivePath(_))
+            ));
+        }
     }
 
     #[tokio::test]
