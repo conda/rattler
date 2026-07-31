@@ -60,8 +60,8 @@ impl PyPackageArchive {
         sparse: String,
         max_spool_size: Option<u64>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let url = Url::parse(&url)
-            .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))?;
+        let url =
+            Url::parse(&url).map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))?;
         let mut options =
             RemoteArchiveOptions::new().with_sparse_policy(parse_sparse_policy(&sparse)?);
         if let Some(max_spool_size) = max_spool_size {
