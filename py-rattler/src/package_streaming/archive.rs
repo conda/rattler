@@ -10,7 +10,6 @@ use rattler_package_streaming::archive::{
     ArchiveAccess, ArchiveEntryKind, PackageArchive, RemoteArchiveOptions, Section, SectionEntry,
     SectionStream, SparsePolicy,
 };
-use tokio::io::AsyncReadExt;
 use url::Url;
 
 use super::io_error;
