@@ -83,9 +83,7 @@ async def test_run_exports_json_absent(conda_package: str) -> None:
 
 @pytest.mark.asyncio
 async def test_symlinks_surfaced_not_followed(test_data_dir: str) -> None:
-    archive = await PackageArchive.from_path(
-        os.path.join(test_data_dir, "sparse/symlink-test-1.0.0-0.conda")
-    )
+    archive = await PackageArchive.from_path(os.path.join(test_data_dir, "sparse/symlink-test-1.0.0-0.conda"))
 
     files = await archive.list_files("pkg")
     assert "lib/liblink.so" in files and "lib/libreal.so.1" in files

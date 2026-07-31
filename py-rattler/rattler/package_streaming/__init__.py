@@ -181,11 +181,7 @@ class PackageArchive:
         range support, or `"disable"` to skip the range probe. Setting
         `max_spool_size` limits any fallback download.
         """
-        return PackageArchive(
-            await PyPackageArchive.from_url(
-                client._client, url, sparse, max_spool_size
-            )
-        )
+        return PackageArchive(await PyPackageArchive.from_url(client._client, url, sparse, max_spool_size))
 
     @staticmethod
     async def from_path(path: PathLike[str] | str) -> PackageArchive:
