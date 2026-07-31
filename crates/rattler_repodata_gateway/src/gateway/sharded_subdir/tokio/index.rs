@@ -41,14 +41,29 @@ use url::Url;
 /// policy is never weakened.
 const SHARD_INDEX_SYNTHETIC_CACHE_CONTROL: &str = "max-age=60";
 
+/// Scheme of a channel served from Azure Blob Storage.
+///
+/// The gateway keeps the channel URL in its `az://` form throughout; the
+/// networking middleware rewrites the scheme only at send time, on its own copy
+/// of the request. So the scheme observed here still identifies an Azure
+/// channel.
+const AZURE_CHANNEL_SCHEME: &str = "az";
+
 /// Build a [`CachePolicy`] for a shard-index response.
 ///
-/// Responses that already carry a `Cache-Control` header are used as-is.
-/// Responses without one (notably Azure Blob Storage) are given a small
-/// synthetic `max-age` so freshness accumulates instead of forcing a
-/// revalidation on every fetch. Validators are preserved either way.
+/// Responses that already carry a `Cache-Control` header are used as-is. An
+/// `az://` channel that answers without one is given a small synthetic `max-age`
+/// so freshness accumulates instead of forcing a revalidation on every fetch.
+/// Validators are preserved either way.
+///
+/// The synthesis is limited to `az://` because a missing `Cache-Control` is
+/// only known to be an unconfigurable property of the origin for Azure Blob
+/// Storage. For any other origin the absence is a deliberate policy that the
+/// client must not override.
 fn shard_index_cache_policy(request: &SimpleRequest, response: &Response) -> CachePolicy {
-    if response.headers().contains_key(http::header::CACHE_CONTROL) {
+    if response.headers().contains_key(http::header::CACHE_CONTROL)
+        || request.uri().scheme_str() != Some(AZURE_CHANNEL_SCHEME)
+    {
         return CachePolicy::new(request, response);
     }
 
@@ -642,15 +657,43 @@ mod tests {
         reqwest::Response::from(builder.body(Vec::new()).unwrap())
     }
 
+    /// Shard index URL for a channel, in the scheme the gateway holds it in.
+    fn shards_url(scheme: &str) -> Url {
+        Url::parse(&format!(
+            "{scheme}://example.blob.core.windows.net/channel/noarch/repodata_shards.msgpack.zst"
+        ))
+        .unwrap()
+    }
+
+    /// The synthesis is scoped to Azure channels: an `az://` response without a
+    /// `Cache-Control` gains a freshness window, while any other origin keeps the
+    /// zero-freshness policy that the absent header implies.
+    #[test]
+    fn synthesis_is_limited_to_azure_channels() {
+        let now = SystemTime::now();
+        let no_cache_control = || response(StatusCode::OK, "\"v1\"", None);
+
+        let azure = SimpleRequest::get(&shards_url("az"));
+        assert!(
+            shard_index_cache_policy(&azure, &no_cache_control()).time_to_live(now)
+                > Duration::ZERO,
+            "an az:// shard index must be given a synthetic freshness window"
+        );
+
+        let https = SimpleRequest::get(&shards_url("https"));
+        assert_eq!(
+            shard_index_cache_policy(&https, &no_cache_control()).time_to_live(now),
+            Duration::ZERO,
+            "a non-Azure origin's missing Cache-Control must be honoured as-is"
+        );
+    }
+
     /// A 304 revalidation must persist a policy that keeps a non-zero freshness
     /// window, so a fetch within that window is a local cache hit instead of yet
     /// another conditional round-trip.
     #[test]
     fn revalidation_policy_retains_freshness() {
-        let url = Url::parse(
-            "https://example.blob.core.windows.net/channel/noarch/repodata_shards.msgpack.zst",
-        )
-        .unwrap();
+        let url = shards_url("az");
         let request = SimpleRequest::get(&url);
         let now = SystemTime::now();
 
