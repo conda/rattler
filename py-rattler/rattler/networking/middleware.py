@@ -159,7 +159,11 @@ class GCSMiddleware:
 
 class AzureMiddleware:
     """
-    Middleware to work with az:// URLs
+    Middleware to work with az:// URLs.
+
+    Fetches are anonymous: the per-host `azure-options` table (credential grants,
+    `scheme`, `path-style`) is not exposed to Python yet — that mirrors what
+    `S3Config` does for buckets and is follow-up work.
 
     Examples
     --------

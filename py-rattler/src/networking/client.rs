@@ -85,7 +85,12 @@ impl PyClientWithMiddleware {
                     client = client.with(GCSMiddleware::from(middleware));
                 }
                 PyMiddleware::Azure(_middleware) => {
-                    client = client.with(AzureMiddleware::new(reqwest_client.clone()));
+                    // Anonymous only: the options table is not exposed to Python
+                    // yet. See `PyAzureMiddleware`.
+                    client = client.with(AzureMiddleware::new(
+                        reqwest_client.clone(),
+                        std::collections::HashMap::new(),
+                    ));
                 }
                 PyMiddleware::S3(middleware) => {
                     client = client.with(S3Middleware::new(

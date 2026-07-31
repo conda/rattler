@@ -18,6 +18,7 @@ rustls = ["reqwest/rustls", "ambient-id/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 azure = [
+    "dep:rattler_azure",
     "dep:reqsign-core",
     "dep:reqsign-azure-storage",
     "dep:reqsign-command-execute-tokio",
@@ -75,6 +76,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
+rattler_azure = { workspace = true, optional = true }
 rattler_config = { workspace = true, optional = true }
 reqsign-core = { workspace = true, optional = true }
 reqsign-azure-storage = { workspace = true, optional = true }

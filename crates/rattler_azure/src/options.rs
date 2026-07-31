@@ -7,11 +7,6 @@
 //! suffix classification carries no security weight, and the absence of the list
 //! is what lets custom endpoints and the Azurite emulator work at all.
 //!
-//! ponytail: that is the intent, not yet the behaviour. `AzureMiddleware` still
-//! decides whether to sign a request from whether Azure credentials happen to be
-//! present in the environment, and never reads this table at all; the middleware
-//! rewrite is what makes the grant model real.
-//!
 //! # Why enums for what the config spells as bools
 //!
 //! The TOML surface stays `auth = true` / `path-style = true`, because that is

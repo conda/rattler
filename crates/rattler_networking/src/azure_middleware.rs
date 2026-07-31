@@ -1,5 +1,8 @@
 //! Middleware to handle `az://` URLs to pull artifacts from Azure Blob Storage.
+use std::collections::HashMap;
+
 use async_trait::async_trait;
+use rattler_azure::{Auth, AzureChannelUrl, AzureEndpointOptions, AzureHost};
 use reqsign_azure_storage::{Credential, DefaultCredentialProvider, RequestSigner};
 use reqsign_command_execute_tokio::TokioCommandExecute;
 use reqsign_core::{Context, OsEnv, ProvideCredential, Signer};
@@ -12,116 +15,79 @@ use url::Url;
 /// The Azure Storage REST API version sent on every request.
 const X_MS_VERSION: &str = "2021-12-02";
 
-/// Whether an Azure credential source appears configured in the process
-/// environment.
-///
-/// Used to distinguish "no credential at all" (fall back to an unsigned,
-/// anonymous request) from "a credential is configured but signing failed"
-/// (a hard error). It is a presence check only — it does not validate that the
-/// values are usable; reqsign does that when it actually signs.
-///
-/// A persisted `az login` session (a profile on disk) counts as a source too;
-/// see [`azure_cli_session_present`].
-///
-/// This result gates whether credentials are resolved at all: when it is
-/// `false`, [`AzureMiddleware::sign`] sends the request unsigned *without*
-/// probing, so anonymous public-container reads do not block on the
-/// managed-identity / IMDS timeout. The tradeoff is that a *bare* system-assigned
-/// managed identity — one reached only via the IMDS endpoint with no
-/// `IDENTITY_ENDPOINT` / `MSI_ENDPOINT` / federated-token env var set — is not
-/// detected here, so its requests go unsigned. App Service, Functions, Cloud
-/// Shell and AKS workload identity all set one of those env vars and are
-/// unaffected; a bare `IaaS` VM identity must export `MSI_ENDPOINT` (or supply an
-/// explicit credential) to be used.
-fn azure_credential_source_present() -> bool {
-    // Explicit Shared Key or SAS token.
-    if std::env::var_os("AZURE_STORAGE_ACCOUNT_KEY").is_some()
-        || std::env::var_os("AZURE_STORAGE_SAS_TOKEN").is_some()
-    {
-        return true;
-    }
-    // Service-principal flows need both a client and a tenant to be meaningful.
-    if std::env::var_os("AZURE_CLIENT_ID").is_some()
-        && std::env::var_os("AZURE_TENANT_ID").is_some()
-    {
-        return true;
-    }
-    // Workload identity federation (e.g. AKS).
-    if std::env::var_os("AZURE_FEDERATED_TOKEN_FILE").is_some() {
-        return true;
-    }
-    // Managed identity endpoints (App Service / Functions / Cloud Shell / IMDS
-    // override).
-    if std::env::var_os("MSI_ENDPOINT").is_some() || std::env::var_os("IDENTITY_ENDPOINT").is_some()
-    {
-        return true;
-    }
-    // Persisted `az login` session.
-    azure_cli_session_present()
-}
-
-/// Whether a persisted `az login` session exists on disk.
-///
-/// `az login` writes an `azureProfile.json` into the Azure CLI config dir
-/// (`$AZURE_CONFIG_DIR`, else `~/.azure`). Its presence means a login was
-/// performed at some point, so a *broken* az-login credential hard-errors
-/// rather than silently downgrading to an unsigned request. This is a presence
-/// check only — reqsign validates the token when it actually signs, so a stale
-/// profile with no usable token still yields a hard error, never anonymous.
-fn azure_cli_session_present() -> bool {
-    let config_dir = match std::env::var_os("AZURE_CONFIG_DIR") {
-        Some(dir) => std::path::PathBuf::from(dir),
-        None => match std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-            Some(home) => std::path::PathBuf::from(home).join(".azure"),
-            None => return false,
-        },
-    };
-    config_dir.join("azureProfile.json").exists()
-}
-
-/// Middleware that rewrites `az://` URLs to HTTPS Azure Blob Storage URLs and
-/// signs them.
+/// Middleware that rewrites `az://` URLs to their wire form and, where a host is
+/// granted credentials, signs them.
 ///
 /// The `az://` URL carries the full blob endpoint in its host, so rewriting is a
 /// plain scheme swap: `az://{host}/{path}` → `https://{host}/{path}`. A conda
 /// channel is therefore addressed the same way it is on the wire, e.g.
 /// `az://myaccount.blob.core.windows.net/mycontainer` — no separate account or
-/// endpoint configuration is needed. Sovereign clouds and emulators (Azurite)
-/// work automatically because the endpoint is spelled out in the host.
+/// endpoint configuration is needed. Sovereign clouds work with no configuration
+/// at all; an emulator needs only the `scheme = "http"` line below.
 ///
 /// # Trust model
 ///
-/// The URL host is **trusted verbatim**: it becomes the HTTPS request target
-/// unchanged, with no allow-list of accounts or endpoints. Whatever ambient
-/// AAD / Shared-Key credential resolves below is applied to that host — so a
-/// channel author who controls the `az://` URL controls where the request, and
-/// any credential material, is sent. Because of this, **userinfo is rejected**:
-/// an `az://user:pass@host/...` authority is a host-spoofing vector (the real
-/// host can be hidden behind userinfo) and such requests are refused before any
-/// rewrite or signing.
+/// **Anonymous by default.** With no entry for a host, its requests are sent
+/// unsigned and *no credential is resolved at all* — so no ambient Azure
+/// credential can leak to a host the user never named, and an anonymous read of a
+/// public container does not block on the managed-identity / IMDS probe.
 ///
-/// Credentials are resolved by reqsign's [`DefaultCredentialProvider`] chain, in
-/// its usual order: environment variables, then workload/managed identity, then
-/// the Azure CLI (`az login`). rattler's [`crate::AuthenticationStorage`] is not
-/// consulted for Azure — there is no `Authentication` Azure variant — so
-/// per-host credentials configured there do not apply to `az://` requests.
+/// A credential attaches to a host only because an [`AzureEndpointOptions`] entry
+/// for it says [`Auth::DefaultChain`], which comes from the user's `azure-options`
+/// config table:
 ///
-/// When **no credential source is detected**, the request is sent **unsigned**
-/// rather than failing, so public/anonymous containers remain reachable with
-/// zero ambient credentials. When a credential source *is* configured
-/// (see `azure_credential_source_present`) but signing fails, that is a
-/// **hard error** — reqsign collapses "no credential" and "broken credential"
-/// into the same [`reqsign_core::ErrorKind::CredentialInvalid`], so a broken credential must
-/// not be silently downgraded to an anonymous request.
+/// ```toml
+/// [azure-options."mycompany.blob.core.windows.net"]
+/// auth = true
+///
+/// [azure-options."127.0.0.1:10000"]   # Azurite
+/// auth = true
+/// scheme = "http"
+/// ```
+///
+/// Two consequences of the grant being explicit:
+///
+/// - **Nothing is inferred from the host name.** There is no allow-list of
+///   "official" Azure suffixes, and none is needed: a host nobody granted gets
+///   nothing regardless of what it is called, and an entry for a custom host *is*
+///   the declaration that the user trusts that endpoint.
+/// - **A broken credential is a hard error.** Because the user asked for signing,
+///   an unusable credential must be reported, not silently downgraded to an
+///   anonymous request that Azure will answer with a confusing 404.
+///
+/// Entries are user-scoped by contract: a project- or workspace-level manifest
+/// must never be allowed to write one, since that would let a checked-out
+/// repository name a host and receive the user's credentials.
+///
+/// `az://user:pass@host/...` is refused outright. The host becomes the request
+/// target verbatim, so userinfo is a host-spoofing vector — the real authority can
+/// hide behind it — and userinfo is invalid in a blob URL anyway.
+///
+/// Granted credentials are resolved by reqsign's [`DefaultCredentialProvider`]
+/// chain, in its usual order: environment variables, then workload/managed
+/// identity, then the Azure CLI (`az login`). rattler's
+/// [`crate::AuthenticationStorage`] is not consulted for Azure — there is no
+/// `Authentication` Azure variant — so per-host credentials configured there do
+/// not apply to `az://` requests.
 #[derive(Clone)]
 pub struct AzureMiddleware {
     /// reqsign signer; caches the resolved credential internally.
     signer: Signer<Credential>,
-    /// Whether an Azure credential source appears configured in the process
-    /// environment. Captured at construction. When `true`, a signing failure is
-    /// propagated as a hard error instead of falling back to an unsigned
-    /// request.
-    credential_source_present: bool,
+
+    /// Per-host endpoint options, keyed by the same normalized authority the
+    /// `azure-options` config table is keyed by. An absent host is *defined* to
+    /// behave as a defaulted entry (anonymous, https), so a miss is never a
+    /// separate code path.
+    ///
+    /// ponytail: a plain `HashMap` rather than `rattler_config::AzureOptionsMap`,
+    /// mirroring [`crate::S3Middleware`]. No caller has a `rattler_config::Config`
+    /// in hand today — every one of them passes an empty table — so taking the
+    /// config type would buy a mandatory `rattler_config` edge on the `azure`
+    /// feature for zero saved conversions. When a caller does grow one, add a
+    /// `#[cfg(feature = "rattler_config")]` helper next to
+    /// [`crate::s3_middleware::compute_s3_config_from_config`] rather than
+    /// changing this signature.
+    options: HashMap<AzureHost, AzureEndpointOptions>,
 }
 
 impl AzureMiddleware {
@@ -131,25 +97,23 @@ impl AzureMiddleware {
     /// identity / AAD token fetches), so it must be the caller's configured
     /// client — proxy, CA bundle, and TLS settings carry through to those
     /// requests.
-    pub fn new(client: Client) -> Self {
-        Self::with_credential_provider(
-            client,
-            DefaultCredentialProvider::new(),
-            azure_credential_source_present(),
-        )
+    ///
+    /// `options` is the `azure-options` table: the per-host grants. An empty map
+    /// means every `az://` request is anonymous.
+    pub fn new(client: Client, options: HashMap<AzureHost, AzureEndpointOptions>) -> Self {
+        Self::with_credential_provider(client, DefaultCredentialProvider::new(), options)
     }
 
     /// Build the middleware around an explicit credential provider.
     ///
-    /// [`AzureMiddleware::new`] wires up the [`DefaultCredentialProvider`] chain
-    /// and detects the credential source from the environment; tests use this
-    /// seam to inject a deterministic provider (e.g. an empty chain, or a static
-    /// key) and an explicit `credential_source_present` flag without touching the
+    /// [`AzureMiddleware::new`] wires up the [`DefaultCredentialProvider`] chain;
+    /// tests use this seam to inject a deterministic provider (an empty chain
+    /// standing in for a broken credential, or a static key) without touching the
     /// ambient environment.
     fn with_credential_provider(
         client: Client,
         provider: impl ProvideCredential<Credential = Credential> + 'static,
-        credential_source_present: bool,
+        options: HashMap<AzureHost, AzureEndpointOptions>,
     ) -> Self {
         let ctx = Context::new()
             .with_file_read(TokioFileRead)
@@ -157,21 +121,34 @@ impl AzureMiddleware {
             .with_command_execute(TokioCommandExecute)
             .with_env(OsEnv);
         let signer = Signer::new(ctx, provider, RequestSigner::new());
-        Self {
-            signer,
-            credential_source_present,
-        }
+        Self { signer, options }
     }
 
-    /// Rewrite an `az://{host}/{path}` URL to its HTTPS equivalent by swapping
-    /// the scheme. Host, path, query and fragment are preserved verbatim.
-    fn rewrite_url(az_url: &Url) -> MiddlewareResult<Url> {
-        let https = az_url.as_str().replacen("az://", "https://", 1);
-        Url::parse(&https).map_err(|e| {
-            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                "failed to parse constructed azure URL '{https}': {e}"
-            ))
-        })
+    /// Resolve an `az://` request URL to the channel URL it names and the options
+    /// configured for its host.
+    ///
+    /// Going through [`AzureChannelUrl`] is what keeps this middleware from owning
+    /// a second copy of rules that live in `rattler_azure`: that parser is what
+    /// rejects userinfo, and it normalizes the authority into the exact spelling
+    /// the options table is keyed by, so a grant cannot miss over case, a trailing
+    /// dot, an IDNA name or an IP literal written oddly.
+    ///
+    /// [`AzureEndpointOptions::addressing`] is deliberately unused here: the fetch
+    /// path never needs an account name, it only forwards a path. Addressing
+    /// matters to the write path, which derives coordinates via
+    /// `rattler_azure::account_and_container`.
+    fn resolve(&self, url: &Url) -> MiddlewareResult<(AzureChannelUrl, AzureEndpointOptions)> {
+        let channel = AzureChannelUrl::parse(url.as_str()).map_err(|e| {
+            // The URL is not echoed back: the one rejection a user hits here is
+            // userinfo, and quoting it would print their password.
+            reqwest_middleware::Error::Middleware(anyhow::Error::from(e))
+        })?;
+        let options = self
+            .options
+            .get(channel.host())
+            .copied()
+            .unwrap_or_default();
+        Ok((channel, options))
     }
 
     /// Whether the URL already carries an explicit SAS token (a `sig` query
@@ -180,33 +157,24 @@ impl AzureMiddleware {
         url.query_pairs().any(|(key, _)| key == "sig")
     }
 
-    /// Whether the URL carries userinfo (`user` and/or `:pass` before the host).
-    /// Because the host is trusted verbatim, a `user:pass@host` authority is a
-    /// host-spoofing vector and must be refused. Userinfo in a blob URL is invalid
-    /// regardless and safe to ignore.
-    fn has_userinfo(url: &Url) -> bool {
-        !url.username().is_empty() || url.password().is_some()
-    }
-
-    /// Sign a reqwest `Request` in place using reqsign.
+    /// Sign a reqwest `Request` in place using reqsign, when `auth` grants it.
     ///
-    /// Two cases short-circuit without invoking reqsign at all:
+    /// Two cases return without invoking reqsign at all:
     /// - The URL already carries an explicit SAS (`?...&sig=...`). Signing would
     ///   add an `Authorization` header that Azure prefers over the SAS, silently
     ///   overriding the caller's explicit token.
-    /// - No credential source was detected (`credential_source_present` is
-    ///   `false`). The request is sent unsigned so public/anonymous containers
-    ///   stay reachable — and crucially, credential *resolution* is skipped
-    ///   entirely. Otherwise reqsign would probe the managed-identity / IMDS
-    ///   endpoint and block until it times out (~30s on a machine with no
-    ///   metadata service) before we could fall back, making every anonymous
-    ///   public-channel read pay that timeout.
+    /// - [`Auth::Anonymous`] — no grant. Crucially the credential is not *resolved*
+    ///   either: reqsign would otherwise probe the managed-identity / IMDS endpoint
+    ///   and block until it times out (~30s on a machine with no metadata service)
+    ///   before we could decide not to use the result, making every anonymous
+    ///   public-channel read pay that timeout — and it would pull an ambient
+    ///   credential into memory for a host the user never granted.
     ///
-    /// If a credential source *is* configured but signing fails with
-    /// [`reqsign_core::ErrorKind::CredentialInvalid`] (a broken key/token, not
-    /// an absent one), the error is propagated rather than downgraded to an
-    /// unsigned request.
-    async fn sign(&self, req: &mut Request) -> MiddlewareResult<()> {
+    /// Under [`Auth::DefaultChain`] any signing failure is propagated. reqsign
+    /// collapses "no credential" and "broken credential" into the same
+    /// [`reqsign_core::ErrorKind::CredentialInvalid`], and since the user asked for
+    /// signing there is no case left where going anonymous is the right answer.
+    async fn sign(&self, req: &mut Request, auth: Auth) -> MiddlewareResult<()> {
         if Self::has_sas_token(req.url()) {
             return Ok(());
         }
@@ -216,13 +184,18 @@ impl AzureMiddleware {
                 .insert("x-ms-version", http::HeaderValue::from_static(X_MS_VERSION));
         }
 
-        // No credential source detected: send unsigned without probing. See the
-        // doc comment above — probing here would block on the IMDS timeout.
-        if !self.credential_source_present {
-            tracing::debug!(
-                "no Azure credential source detected; sending `az://` request unsigned"
-            );
-            return Ok(());
+        match auth {
+            Auth::Anonymous => {
+                // The authority, not `host_str()`: a message naming a host the user
+                // could act on must carry the port, or it names a host that is not
+                // the one in their config.
+                tracing::debug!(
+                    "no `azure-options` auth grant for `{}`; sending `az://` request unsigned",
+                    req.url().authority()
+                );
+                return Ok(());
+            }
+            Auth::DefaultChain => {}
         }
 
         let mut builder = http::Request::builder()
@@ -238,10 +211,6 @@ impl AzureMiddleware {
         })?;
         let (mut parts, ()) = http_req.into_parts();
 
-        // A credential source is present (the absent case short-circuited to
-        // unsigned above). reqsign reports a broken key/token as
-        // `CredentialInvalid`; that must surface as a hard error rather than
-        // silently going anonymous, so any signing failure is propagated.
         self.signer
             .sign(&mut parts, None)
             .await
@@ -272,63 +241,153 @@ impl Middleware for AzureMiddleware {
             return next.run(req, extensions).await;
         }
 
-        // The host is trusted verbatim as the request target, so userinfo is a
-        // host-spoofing vector (`az://user:pass@real.host/...` can hide the real
-        // authority). Reject it before rewriting or signing. This mirrors the
-        // same rejection in `rattler_azure::account_and_container`; the check is
-        // inlined here because this middleware does not depend on rattler_azure.
-        if Self::has_userinfo(req.url()) {
-            return Err(reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                "userinfo is not allowed in `az://` URLs (host-spoofing vector); \
-                 remove the `user:pass@` component"
-            )));
+        let (channel, options) = self.resolve(req.url())?;
+        *req.url_mut() = channel.wire(options.scheme);
+        self.sign(&mut req, options.auth).await?;
+
+        let response = next.run(req, extensions).await?;
+
+        // Azure answers an unauthorized read of a private container with 404, not
+        // 403, so "no grant" and "no such blob" are the same status on the wire.
+        // Say so once, naming the config the user would have to write — spelled
+        // through `AzureHost` so the key printed is the key a lookup arrives with.
+        if response.status() == http::StatusCode::NOT_FOUND && !options.auth.is_granted() {
+            // One line, and spelled the way `AzureUrlError::InvalidHost` spells its
+            // fix: a wrapped multi-line hint is harder to grep out of a log, and
+            // the two guided messages should read as the same instruction.
+            tracing::warn!(
+                "`{}` returned 404 and this host has no `azure-options` auth grant. Azure answers \
+                 an anonymous read of a *private* container with 404 rather than 403, so a missing \
+                 grant looks exactly like a missing file. If the container is private, grant it in \
+                 your user configuration with `[azure-options.\"{}\"]` and `auth = true`.",
+                channel.canonical(),
+                channel.host()
+            );
         }
 
-        let https_url = Self::rewrite_url(&req.url().clone())?;
-        *req.url_mut() = https_url;
-        self.sign(&mut req).await?;
-        next.run(req, extensions).await
+        Ok(response)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rattler_azure::AzureScheme;
+
     use super::*;
 
-    #[test]
-    fn swaps_scheme_to_https() {
-        let rewritten = AzureMiddleware::rewrite_url(
-            &Url::parse("az://myacct.blob.core.windows.net/mychannel/noarch/repodata.json")
-                .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            rewritten.as_str(),
-            "https://myacct.blob.core.windows.net/mychannel/noarch/repodata.json"
-        );
+    /// The `azure-options` table for one host, as a caller would build it.
+    fn options(
+        authority: &str,
+        options: AzureEndpointOptions,
+    ) -> HashMap<AzureHost, AzureEndpointOptions> {
+        HashMap::from([(AzureHost::parse(authority).expect("test host"), options)])
     }
 
+    /// A grant with everything else defaulted: anonymous is the only interesting
+    /// axis in most of these tests.
+    fn granted() -> AzureEndpointOptions {
+        AzureEndpointOptions {
+            auth: Auth::DefaultChain,
+            ..Default::default()
+        }
+    }
+
+    fn middleware(options: HashMap<AzureHost, AzureEndpointOptions>) -> AzureMiddleware {
+        AzureMiddleware::new(Client::new(), options)
+    }
+
+    /// Resolve a URL and hand back the wire spelling its options ask for.
+    fn wire_of(middleware: &AzureMiddleware, url: &str) -> String {
+        let (channel, options) = middleware
+            .resolve(&Url::parse(url).expect("test url"))
+            .expect("url should resolve");
+        channel.wire(options.scheme).to_string()
+    }
+
+    /// With no entry the scheme defaults to https, and path, query and fragment
+    /// survive the rewrite untouched.
     #[test]
-    fn preserves_query_and_fragment() {
-        let rewritten = AzureMiddleware::rewrite_url(
-            &Url::parse("az://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc#frag").unwrap(),
-        )
-        .unwrap();
+    fn rewrites_to_https_without_an_entry() {
+        let middleware = middleware(HashMap::new());
         assert_eq!(
-            rewritten.as_str(),
+            wire_of(
+                &middleware,
+                "az://myacct.blob.core.windows.net/mychannel/noarch/repodata.json"
+            ),
+            "https://myacct.blob.core.windows.net/mychannel/noarch/repodata.json"
+        );
+        assert_eq!(
+            wire_of(
+                &middleware,
+                "az://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc#frag"
+            ),
             "https://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc#frag"
         );
     }
 
+    /// An emulator entry is the only thing that can send an `az://` URL in
+    /// cleartext, and the port has to survive — `:10000` is not any scheme's
+    /// default, but `:443` would be under https and must not be dropped either.
     #[test]
-    fn rewrites_azurite_style_host_and_port() {
-        let rewritten = AzureMiddleware::rewrite_url(
-            &Url::parse("az://127.0.0.1:10000/devstoreaccount1/noarch/repodata.json").unwrap(),
-        )
-        .unwrap();
+    fn rewrites_to_http_for_an_emulator_entry() {
+        let emulator = middleware(options(
+            "127.0.0.1:10000",
+            AzureEndpointOptions {
+                auth: Auth::DefaultChain,
+                scheme: AzureScheme::Http,
+                addressing: rattler_azure::Addressing::PathStyle,
+            },
+        ));
         assert_eq!(
-            rewritten.as_str(),
+            wire_of(
+                &emulator,
+                "az://127.0.0.1:10000/devstoreaccount1/noarch/repodata.json"
+            ),
+            "http://127.0.0.1:10000/devstoreaccount1/noarch/repodata.json"
+        );
+
+        // The same host with no entry stays on https: an emulator grant must not
+        // generalize to a scheme downgrade for anyone else.
+        assert_eq!(
+            wire_of(
+                &middleware(HashMap::new()),
+                "az://127.0.0.1:10000/devstoreaccount1/noarch/repodata.json"
+            ),
             "https://127.0.0.1:10000/devstoreaccount1/noarch/repodata.json"
+        );
+    }
+
+    /// A grant written in any spelling of a host must apply to a request for that
+    /// host: a silent miss reads as a 404, i.e. "not found" for what is really
+    /// "not authorized". Delegating to `AzureHost` on both sides is what buys this.
+    #[test]
+    fn a_grant_applies_regardless_of_how_the_host_is_spelled() {
+        let middleware = middleware(options("MyCompany.blob.core.windows.net.", granted()));
+        let (_, resolved) = middleware
+            .resolve(&Url::parse("az://mycompany.blob.core.windows.net/c/x.json").unwrap())
+            .unwrap();
+        assert!(resolved.auth.is_granted());
+    }
+
+    /// Userinfo is refused before any rewrite or signing: the host is the request
+    /// target verbatim, so `user:pass@real.host` can hide the real authority.
+    /// (Rejection lives in `AzureHost::parse`, so there is one copy of the rule.)
+    #[test]
+    fn rejects_userinfo() {
+        let middleware = middleware(HashMap::new());
+        for url in [
+            "az://user:pass@acct.blob.core.windows.net/c/x.json",
+            "az://user@acct.blob.core.windows.net/c/x.json",
+        ] {
+            let err = middleware
+                .resolve(&Url::parse(url).unwrap())
+                .expect_err("userinfo must be refused");
+            assert!(err.to_string().contains("userinfo"), "{err}");
+        }
+        assert!(
+            middleware
+                .resolve(&Url::parse("az://acct.blob.core.windows.net/c/x.json").unwrap())
+                .is_ok()
         );
     }
 
@@ -336,7 +395,7 @@ mod tests {
     async fn passes_through_non_az_schemes_unchanged() {
         use reqwest_middleware::ClientBuilder;
         let client = ClientBuilder::new(Client::new())
-            .with(AzureMiddleware::new(Client::new()))
+            .with(middleware(HashMap::new()))
             .build();
         // A non-`az` request must not be rewritten; it should be attempted as-is
         // (and fail on DNS), proving the middleware left it untouched.
@@ -347,104 +406,16 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn detects_sas_token_in_query() {
-        assert!(AzureMiddleware::has_sas_token(
-            &Url::parse("https://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc").unwrap()
-        ));
-        assert!(!AzureMiddleware::has_sas_token(
-            &Url::parse("https://acct.blob.core.windows.net/c/x.json?sv=2021").unwrap()
-        ));
-    }
-
-    /// With no credential resolvable, a signable `az://` request must be passed
-    /// through UNSIGNED (not errored), so public/anonymous containers work with
-    /// zero ambient credentials. An empty provider chain resolves nothing, which
-    /// reqsign reports as `CredentialInvalid`.
+    /// A host with no grant is sent unsigned, and its credential is never even
+    /// resolved — so nothing blocks on the IMDS probe and no ambient credential is
+    /// pulled into memory for a host the user never named. The provider flips a
+    /// flag if it is ever asked.
     #[tokio::test]
-    async fn passes_request_through_unsigned_when_no_credential() {
-        use reqsign_core::ProvideCredentialChain;
-
-        let middleware = AzureMiddleware::with_credential_provider(
-            Client::new(),
-            ProvideCredentialChain::<Credential>::new(),
-            false,
-        );
-        let mut req = Client::new()
-            .get("https://acct.blob.core.windows.net/pub/noarch/repodata.json")
-            .build()
-            .unwrap();
-
-        middleware
-            .sign(&mut req)
-            .await
-            .expect("a request with no resolvable credential must pass through unsigned");
-
-        assert!(
-            req.headers().get(http::header::AUTHORIZATION).is_none(),
-            "unsigned request must not carry an Authorization header"
-        );
-        assert!(
-            !req.url().query_pairs().any(|(k, _)| k == "sig"),
-            "unsigned request must not gain a SAS query parameter"
-        );
-    }
-
-    /// A URL that already carries a SAS token must not be re-signed even when a
-    /// credential is available: no `Authorization` header is added.
-    #[tokio::test]
-    async fn does_not_sign_url_that_already_has_sas() {
-        use reqsign_azure_storage::StaticCredentialProvider;
-
-        // A valid base64 account key so the static provider yields a usable
-        // SharedKey credential that would otherwise sign the request.
-        let middleware = AzureMiddleware::with_credential_provider(
-            Client::new(),
-            StaticCredentialProvider::new_shared_key("acct", "dGVzdF9rZXk="),
-            true,
-        );
-        let mut req = Client::new()
-            .get("https://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc")
-            .build()
-            .unwrap();
-
-        middleware.sign(&mut req).await.unwrap();
-
-        assert!(
-            req.headers().get(http::header::AUTHORIZATION).is_none(),
-            "a URL carrying an explicit SAS must not be re-signed"
-        );
-        assert!(
-            !req.headers().contains_key("x-ms-version"),
-            "a self-authenticating SAS URL is left untouched"
-        );
-    }
-
-    /// A URL carrying userinfo must be recognised so the fetch path can reject
-    /// it: the host is trusted verbatim, so `user:pass@host` is a host-spoofing
-    /// vector. (A request built through reqwest's client strips userinfo into a
-    /// header before the middleware runs, so the predicate — not the whole
-    /// client path — is what guards direct `Request` construction.)
-    #[test]
-    fn detects_userinfo_in_url() {
-        assert!(AzureMiddleware::has_userinfo(
-            &Url::parse("az://user:pass@acct.blob.core.windows.net/c/x.json").unwrap()
-        ));
-        assert!(AzureMiddleware::has_userinfo(
-            &Url::parse("az://user@acct.blob.core.windows.net/c/x.json").unwrap()
-        ));
-        assert!(!AzureMiddleware::has_userinfo(
-            &Url::parse("az://acct.blob.core.windows.net/c/x.json").unwrap()
-        ));
-    }
-
-    /// With no credential source detected, `sign` must NOT invoke the credential
-    /// provider at all — resolution is skipped so anonymous reads don't block on
-    /// the IMDS timeout. Uses a provider that flips a flag if it is ever asked.
-    #[tokio::test]
-    async fn skips_credential_resolution_when_no_source() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
+    async fn an_ungranted_host_sends_unsigned_without_resolving_a_credential() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
 
         #[derive(Debug)]
         struct RecordingProvider(Arc<AtomicBool>);
@@ -463,72 +434,189 @@ mod tests {
         let middleware = AzureMiddleware::with_credential_provider(
             Client::new(),
             RecordingProvider(probed.clone()),
-            false,
+            HashMap::new(),
         );
         let mut req = Client::new()
             .get("https://acct.blob.core.windows.net/pub/noarch/repodata.json")
             .build()
             .unwrap();
 
-        middleware.sign(&mut req).await.unwrap();
+        middleware
+            .sign(&mut req, Auth::Anonymous)
+            .await
+            .expect("an ungranted request must pass through unsigned");
 
         assert!(
             !probed.load(Ordering::SeqCst),
-            "credential provider must not be probed when no source is detected"
+            "credential provider must not be probed without a grant"
         );
         assert!(
             req.headers().get(http::header::AUTHORIZATION).is_none(),
             "unsigned request must not carry an Authorization header"
         );
+        assert!(
+            !req.url().query_pairs().any(|(k, _)| k == "sig"),
+            "unsigned request must not gain a SAS query parameter"
+        );
     }
 
-    /// A persisted `az login` profile counts as a credential source (so a
-    /// broken az-login session hard-errors instead of going anonymous), while
-    /// an empty config dir does not.
-    #[test]
-    fn detects_az_login_profile_on_disk() {
-        let dir = tempfile::tempdir().unwrap();
-        temp_env::with_var("AZURE_CONFIG_DIR", Some(dir.path().as_os_str()), || {
-            assert!(
-                !azure_cli_session_present(),
-                "no profile file yet ⇒ not a credential source"
-            );
-            std::fs::write(dir.path().join("azureProfile.json"), "{}").unwrap();
-            assert!(
-                azure_cli_session_present(),
-                "azureProfile.json present ⇒ credential source"
-            );
-        });
-    }
-
-    /// When a credential source is detected but signing fails
-    /// (`CredentialInvalid`), the failure must be a hard error rather than an
-    /// unsigned fallback: a broken credential must not silently go anonymous. An
-    /// empty provider chain yields `CredentialInvalid`, standing in for a broken
-    /// credential.
+    /// A granted host is actually signed: the credential resolves and the request
+    /// comes back carrying Shared Key authorization.
     #[tokio::test]
-    async fn errors_when_credential_source_present_but_signing_fails() {
-        use reqsign_core::ProvideCredentialChain;
+    async fn a_granted_host_is_signed() {
+        use reqsign_azure_storage::StaticCredentialProvider;
 
         let middleware = AzureMiddleware::with_credential_provider(
             Client::new(),
-            ProvideCredentialChain::<Credential>::new(),
-            true,
+            // A valid base64 account key, so the provider yields a usable
+            // SharedKey credential.
+            StaticCredentialProvider::new_shared_key("acct", "dGVzdF9rZXk="),
+            options("acct.blob.core.windows.net", granted()),
         );
         let mut req = Client::new()
             .get("https://acct.blob.core.windows.net/c/noarch/repodata.json")
             .build()
             .unwrap();
 
-        let result = middleware.sign(&mut req).await;
+        middleware.sign(&mut req, Auth::DefaultChain).await.unwrap();
+
+        let authorization = req
+            .headers()
+            .get(http::header::AUTHORIZATION)
+            .expect("a granted host must be signed");
+        assert!(
+            authorization.to_str().unwrap().starts_with("SharedKey "),
+            "{authorization:?}"
+        );
+    }
+
+    /// The inversion this design turns on: with a grant, an unusable credential is
+    /// a hard error. It must never degrade to an anonymous request, which Azure
+    /// would answer with a 404 the user has no way to read as "auth failed". An
+    /// empty provider chain resolves nothing, which reqsign reports the same way it
+    /// reports a broken credential.
+    #[tokio::test]
+    async fn a_granted_host_with_broken_credentials_is_a_hard_error() {
+        use reqsign_core::ProvideCredentialChain;
+
+        let middleware = AzureMiddleware::with_credential_provider(
+            Client::new(),
+            ProvideCredentialChain::<Credential>::new(),
+            options("acct.blob.core.windows.net", granted()),
+        );
+        let mut req = Client::new()
+            .get("https://acct.blob.core.windows.net/c/noarch/repodata.json")
+            .build()
+            .unwrap();
+
+        let result = middleware.sign(&mut req, Auth::DefaultChain).await;
 
         assert!(
             result.is_err(),
-            "a configured-but-failing credential must be a hard error, not unsigned"
+            "a granted-but-failing credential must be a hard error, not unsigned"
         );
         assert!(
             req.headers().get(http::header::AUTHORIZATION).is_none(),
             "a failed signing attempt must not leave a partial Authorization header"
         );
+    }
+
+    /// A URL that already carries a SAS token must not be re-signed even where the
+    /// host is granted: Azure prefers an `Authorization` header over the SAS, so
+    /// signing would silently override the caller's explicit token.
+    #[tokio::test]
+    async fn a_sas_in_the_url_passes_through() {
+        use reqsign_azure_storage::StaticCredentialProvider;
+
+        let middleware = AzureMiddleware::with_credential_provider(
+            Client::new(),
+            StaticCredentialProvider::new_shared_key("acct", "dGVzdF9rZXk="),
+            options("acct.blob.core.windows.net", granted()),
+        );
+        let mut req = Client::new()
+            .get("https://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc")
+            .build()
+            .unwrap();
+
+        middleware.sign(&mut req, Auth::DefaultChain).await.unwrap();
+
+        assert!(
+            req.headers().get(http::header::AUTHORIZATION).is_none(),
+            "a URL carrying an explicit SAS must not be re-signed"
+        );
+        assert!(
+            !req.headers().contains_key("x-ms-version"),
+            "a self-authenticating SAS URL is left untouched"
+        );
+        assert_eq!(
+            req.url().as_str(),
+            "https://acct.blob.core.windows.net/c/x.json?sv=2021&sig=abc"
+        );
+    }
+
+    /// Serve 404 for everything, over http on localhost, standing in for a private
+    /// container answering an anonymous read.
+    async fn spawn_404_server() -> AzureHost {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let router = axum::Router::new().fallback(axum::http::StatusCode::NOT_FOUND);
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        AzureHost::parse(&addr.to_string()).unwrap()
+    }
+
+    /// An emulator-shaped entry (http, path-style) with the grant taken from the
+    /// caller, so one server can exercise both sides of the hint.
+    fn emulator_entry(auth: Auth) -> AzureEndpointOptions {
+        AzureEndpointOptions {
+            auth,
+            scheme: AzureScheme::Http,
+            addressing: rattler_azure::Addressing::PathStyle,
+        }
+    }
+
+    async fn get_az(middleware: AzureMiddleware, host: &AzureHost) -> reqwest::StatusCode {
+        reqwest_middleware::ClientBuilder::new(Client::new())
+            .with(middleware)
+            .build()
+            .get(format!(
+                "az://{host}/devstoreaccount1/c/noarch/repodata.json"
+            ))
+            .send()
+            .await
+            .expect("request through azure middleware failed")
+            .status()
+    }
+
+    /// The 404 hint must name the config block to add, keyed exactly as the table
+    /// is keyed — including the port, which an earlier version of this hint
+    /// dropped, printing a key that could never match.
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn the_404_hint_names_the_config_block_for_an_ungranted_host() {
+        let host = spawn_404_server().await;
+        let middleware = middleware(options(&host.to_string(), emulator_entry(Auth::Anonymous)));
+
+        assert_eq!(get_az(middleware, &host).await, 404);
+
+        assert!(logs_contain(&format!("[azure-options.\"{host}\"]")));
+        assert!(logs_contain("auth = true"));
+    }
+
+    /// With a grant in place a 404 means what it says, so the hint would be noise.
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn the_404_hint_is_silent_for_a_granted_host() {
+        use reqsign_azure_storage::StaticCredentialProvider;
+
+        let host = spawn_404_server().await;
+        let middleware = AzureMiddleware::with_credential_provider(
+            Client::new(),
+            StaticCredentialProvider::new_shared_key("devstoreaccount1", "dGVzdF9rZXk="),
+            options(&host.to_string(), emulator_entry(Auth::DefaultChain)),
+        );
+
+        assert_eq!(get_az(middleware, &host).await, 404);
+
+        assert!(!logs_contain("azure-options"));
     }
 }
