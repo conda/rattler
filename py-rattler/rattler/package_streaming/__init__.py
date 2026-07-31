@@ -204,7 +204,7 @@ class PackageArchive:
     @property
     def access(self) -> Literal["sparse", "local", "spooled", "unknown"]:
         """How the archive is accessed."""
-        return self._inner.access()  # type: ignore[return-value]
+        return self._inner.access()
 
     async def read_file(self, path: str) -> Optional[bytes]:
         """

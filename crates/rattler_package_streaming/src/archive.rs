@@ -293,7 +293,7 @@ impl SectionEntry {
 
     /// Returns the raw link target for a symbolic or hard link.
     pub fn link_target(&self) -> Result<Option<PathBuf>, ExtractError> {
-        Ok(self.inner.link_name()?.map(|path| path.into_owned()))
+        Ok(self.inner.link_name()?.map(std::borrow::Cow::into_owned))
     }
 
     /// Reads the complete entry body.
@@ -438,7 +438,7 @@ impl PackageArchive {
             .into_iter()
             .map(|path| {
                 let path: PathBuf = path.into();
-                normalize(&path).map(|path| path.into_owned())
+                normalize(&path).map(std::borrow::Cow::into_owned)
             })
             .collect::<Result<_, _>>()?;
         if paths.is_empty() {
@@ -941,6 +941,20 @@ fn describe_link(entry: &SectionEntry) -> Result<Option<String>, ExtractError> {
 pub(crate) async fn read_raw_entry_contents<R: AsyncRead + Unpin>(
     entry: &mut tokio_tar::Entry<R>,
 ) -> Result<Vec<u8>, ExtractError> {
+    let kind = entry.header().entry_type();
+    if kind.is_symlink() || kind.is_hard_link() {
+        let path = normalize(&entry.path()?)?.into_owned();
+        let target = entry
+            .link_name()?
+            .map(std::borrow::Cow::into_owned)
+            .unwrap_or_default();
+        return Err(ExtractError::LinksNotFollowed(vec![format!(
+            "'{}' (links to '{}')",
+            path.display(),
+            target.display()
+        )]));
+    }
+
     let size = entry.header().size()?;
     let mut buf = Vec::with_capacity(size.min(MAX_PREALLOC) as usize);
     entry.read_to_end(&mut buf).await?;

@@ -35,7 +35,7 @@ async def test_read_files(conda_package: str) -> None:
 async def test_typed_metadata(conda_package: str) -> None:
     archive = await PackageArchive.from_path(conda_package)
     index = await archive.index_json()
-    assert index.name is not None and index.name.normalized == "clobber-fd-1"
+    assert index.name.normalized == "clobber-fd-1"
     about = await archive.about_json()
     assert about is not None
 
