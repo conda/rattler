@@ -17,8 +17,10 @@ default = []
 clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
 # `azblob_config`: build an opendal `AzblobConfig` from a channel URL.
 opendal = ["dep:opendal", "dep:percent-encoding"]
-# Per-host endpoint options (the `azure-options` config table). Pulls in `serde`
-# only, so config crates can depend on this crate with default features off.
+# Serde derives for the `azure-options` config table: the per-host endpoint
+# options and the `AzureHost` used as their map key. The types themselves are
+# always compiled; only the derives are gated. Pulls in `serde` alone, so config
+# crates can depend on this crate with default features off.
 serde = ["dep:serde"]
 
 [dependencies]

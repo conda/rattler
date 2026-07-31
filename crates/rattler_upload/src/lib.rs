@@ -87,7 +87,10 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             let credentials = azure_opts
                 .credentials
                 .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, || {
-                    Ok(rattler_azure::account_and_container(&channel)?)
+                    Ok(rattler_azure::account_and_container(
+                        &channel,
+                        rattler_azure::Addressing::HostStyle,
+                    )?)
                 })
                 .await
                 .into_diagnostic()?;

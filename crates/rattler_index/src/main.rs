@@ -36,6 +36,21 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
     }
 }
 
+/// Parse an `az://` channel URL into the wire URL the rest of this binary still
+/// works with.
+///
+/// The scheme is fixed to https here because a clap `value_parser` runs before
+/// the config file is read, so the host's `azure-options` entry — which decides
+/// the scheme — is not available yet. The plumbing step that loads
+/// `azure-options` carries the [`rattler_azure::AzureChannelUrl`] through
+/// instead, so `--config` can select the scheme and config keys can be matched
+/// against its canonical `az://` spelling.
+#[cfg(feature = "azure")]
+fn parse_azure_channel_url(value: &str) -> Result<Url, rattler_azure::AzureUrlError> {
+    rattler_azure::AzureChannelUrl::parse(value)
+        .map(|channel| channel.wire(rattler_azure::AzureScheme::Https))
+}
+
 /// SAS permissions requested when minting a user-delegation SAS for indexing.
 /// Indexing does a read-modify-write of repodata and lists/reads packages, so it
 /// needs read, write, list, and create (`r` + `w` + `l` + `c`).
@@ -117,7 +132,7 @@ enum Commands {
     Azblob {
         /// The Azure Blob channel URL, e.g.
         /// `az://<account>.blob.core.windows.net/<container>/<channel>`.
-        #[arg(value_parser = rattler_azure::parse_channel_url)]
+        #[arg(value_parser = parse_azure_channel_url)]
         channel: Url,
 
         #[clap(flatten)]
@@ -250,7 +265,10 @@ async fn main() -> anyhow::Result<()> {
 
             let credentials = credentials
                 .resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
-                    Ok(rattler_azure::account_and_container(&channel)?)
+                    Ok(rattler_azure::account_and_container(
+                        &channel,
+                        rattler_azure::Addressing::HostStyle,
+                    )?)
                 })
                 .await?;
 
