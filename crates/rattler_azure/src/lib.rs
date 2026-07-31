@@ -13,6 +13,12 @@
 #[cfg(feature = "clap")]
 pub mod clap;
 
+#[cfg(feature = "serde")]
+pub mod options;
+
+#[cfg(feature = "serde")]
+pub use options::{Addressing, Auth, AzureEndpointOptions, Scheme};
+
 use url::Url;
 
 /// Credentials for authenticating to Azure Blob storage.

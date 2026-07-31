@@ -206,6 +206,20 @@ expression: "(unused, normalized(config))"
                     },
                 },
             ),
+            azure_options: AzureOptionsMap(
+                {
+                    "127.0.0.1:10000": AzureEndpointOptions {
+                        auth: DefaultChain,
+                        scheme: Http,
+                        path_style: PathStyle,
+                    },
+                    "mycompany.blob.core.windows.net": AzureEndpointOptions {
+                        auth: DefaultChain,
+                        scheme: Https,
+                        path_style: HostStyle,
+                    },
+                },
+            ),
             index_config: IndexConfig {
                 default: IndexChannelConfig {
                     write_zst: Some(

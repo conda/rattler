@@ -5057,8 +5057,10 @@ dependencies = [
  "jiff",
  "opendal",
  "percent-encoding",
+ "serde",
  "thiserror 2.0.19",
  "tokio",
+ "toml",
  "url",
  "which",
 ]
@@ -5164,6 +5166,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.14.0",
  "insta",
+ "rattler_azure",
  "rattler_conda_types",
  "serde",
  "serde_ignored",

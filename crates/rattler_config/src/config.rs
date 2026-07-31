@@ -20,12 +20,14 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use url::Url;
 
+use crate::config::azure::AzureOptionsMap;
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
     build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
 
+pub mod azure;
 pub mod build;
 pub mod channel_config;
 pub mod concurrency;
@@ -194,6 +196,14 @@ pub struct CommonConfig {
     #[serde(skip_serializing_if = "S3OptionsMap::is_default")]
     pub s3_options: S3OptionsMap,
 
+    /// Configuration for Azure Blob.
+    ///
+    /// User-scoped by contract: an entry grants a host credentials, so this must
+    /// never be read from a project- or workspace-level manifest.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "AzureOptionsMap::is_default")]
+    pub azure_options: AzureOptionsMap,
+
     /// Per-channel configuration for `rattler-index`.
     #[serde(default, skip_serializing_if = "IndexConfig::is_empty")]
     pub index_config: IndexConfig,
@@ -251,6 +261,7 @@ impl Default for CommonConfig {
             concurrency: ConcurrencyConfig::default(),
             proxy_config: ProxyConfig::default(),
             s3_options: S3OptionsMap::default(),
+            azure_options: AzureOptionsMap::default(),
             index_config: IndexConfig::default(),
             run_post_link_scripts: None,
             allow_symbolic_links: None,
@@ -305,6 +316,7 @@ impl Config for CommonConfig {
             concurrency: self.concurrency.merge_config(&other.concurrency)?,
             proxy_config: self.proxy_config.merge_config(&other.proxy_config)?,
             s3_options: self.s3_options.merge_config(&other.s3_options)?,
+            azure_options: self.azure_options.merge_config(&other.azure_options)?,
             index_config: self.index_config.merge_config(&other.index_config)?,
             run_post_link_scripts: other
                 .run_post_link_scripts
@@ -322,6 +334,7 @@ impl Config for CommonConfig {
         self.concurrency.validate()?;
         self.proxy_config.validate()?;
         self.s3_options.validate()?;
+        self.azure_options.validate()?;
         self.index_config.validate()?;
         Ok(())
     }
@@ -348,6 +361,7 @@ impl Config for CommonConfig {
         keys.extend(prefixed_keys("concurrency", self.concurrency.keys()));
         keys.extend(prefixed_keys("proxy-config", self.proxy_config.keys()));
         keys.extend(prefixed_keys("s3-options", self.s3_options.keys()));
+        keys.extend(prefixed_keys("azure-options", self.azure_options.keys()));
         keys
     }
 }

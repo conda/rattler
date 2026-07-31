@@ -39,6 +39,16 @@ endpoint-url = "https://s3.example.com"
 region = "eu-central-1"
 force-path-style = true
 
+# A private channel on real Azure: the grant is the whole entry.
+[azure-options."mycompany.blob.core.windows.net"]
+auth = true
+
+# A local Azurite emulator: the entry is also the endpoint trust declaration.
+[azure-options."127.0.0.1:10000"]
+auth = true
+scheme = "http"
+path-style = true
+
 [index-config]
 write-zst = true
 write-shards = false

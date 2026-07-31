@@ -136,6 +136,9 @@ expression: "(unused, normalized(config))"
                     },
                 },
             ),
+            azure_options: AzureOptionsMap(
+                {},
+            ),
             index_config: IndexConfig {
                 default: IndexChannelConfig {
                     write_zst: None,
