@@ -45,7 +45,10 @@ pub enum AzureCredentialsError {
 /// reason about combinations. Only [`AzureAuthSource::AzureCli`] carries state
 /// (the minting TTL), which is why account/container derivation is needed for
 /// that arm alone.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Two of the three arms carry a secret, so `Debug` is implemented by hand to
+/// redact them rather than derived (see [`AzureCredentials`]).
+#[derive(Clone, PartialEq, Eq)]
 pub enum AzureAuthSource {
     /// Use a shared storage account key verbatim.
     AccountKey(String),
@@ -59,6 +62,22 @@ pub enum AzureAuthSource {
         /// How long the minted SAS should remain valid.
         ttl: Duration,
     },
+}
+
+impl std::fmt::Debug for AzureAuthSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Print only the variant, never the secret it carries.
+            AzureAuthSource::AccountKey(_) => {
+                f.debug_tuple("AccountKey").field(&"<redacted>").finish()
+            }
+            AzureAuthSource::SasToken(_) => f.debug_tuple("SasToken").field(&"<redacted>").finish(),
+            // The TTL is not a secret.
+            AzureAuthSource::AzureCli { ttl } => {
+                f.debug_struct("AzureCli").field("ttl", ttl).finish()
+            }
+        }
+    }
 }
 
 impl AzureAuthSource {
@@ -94,7 +113,12 @@ impl AzureAuthSource {
 /// exported *and* `--azure-cli` is passed), so [`AzureCredentialsOpts::source`]
 /// applies an explicit precedence rather than treating the combination as an
 /// error — see that method for the exact ordering.
-#[derive(Clone, Debug, PartialEq, Parser)]
+///
+/// `account_key` and `sas_token` are secrets, so `Debug` is implemented by hand
+/// to redact them rather than derived (see [`AzureCredentials`]). This matters
+/// more here than elsewhere: these options are typically part of a larger clap
+/// struct that gets logged wholesale on a parse or startup failure.
+#[derive(Clone, PartialEq, Parser)]
 pub struct AzureCredentialsOpts {
     /// The Azure Storage account key.
     ///
@@ -139,6 +163,20 @@ pub struct AzureCredentialsOpts {
         help_heading = "Azure Credentials"
     )]
     pub azure_cli_sas_ttl_minutes: u64,
+}
+
+impl std::fmt::Debug for AzureCredentialsOpts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Whether a secret was supplied is useful for diagnosing precedence; the
+        // secret itself never is.
+        let redact = |value: &Option<String>| value.as_ref().map(|_| "<redacted>");
+        f.debug_struct("AzureCredentialsOpts")
+            .field("account_key", &redact(&self.account_key))
+            .field("sas_token", &redact(&self.sas_token))
+            .field("azure_cli", &self.azure_cli)
+            .field("azure_cli_sas_ttl_minutes", &self.azure_cli_sas_ttl_minutes)
+            .finish()
+    }
 }
 
 impl AzureCredentialsOpts {
@@ -303,6 +341,43 @@ mod tests {
             .map(|_| ())
             .expect_err("passing both --account-key and --sas-token must be rejected");
         assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    /// Neither the resolved source nor the raw options may print a secret. Both
+    /// types hand-write `Debug` precisely so that a wholesale `{:?}` of an
+    /// enclosing CLI struct cannot leak a key or token into a log.
+    #[test]
+    fn debug_never_prints_secrets() {
+        let sources = [
+            AzureAuthSource::AccountKey("supersecretkey".into()),
+            AzureAuthSource::SasToken("sig=deadbeef".into()),
+        ];
+        for source in &sources {
+            let out = format!("{source:?}");
+            assert!(out.contains("<redacted>"), "not redacted: {out}");
+            assert!(!out.contains("supersecret"), "leaked key: {out}");
+            assert!(!out.contains("deadbeef"), "leaked token: {out}");
+        }
+
+        // The TTL arm carries no secret, so it stays fully printable.
+        let cli = AzureAuthSource::AzureCli {
+            ttl: Duration::from_secs(60),
+        };
+        assert!(format!("{cli:?}").contains("60"));
+
+        let out = format!("{:?}", opts(Some("supersecretkey"), None, false));
+        assert!(out.contains("<redacted>"), "not redacted: {out}");
+        assert!(!out.contains("supersecret"), "leaked key: {out}");
+
+        let out = format!("{:?}", opts(None, Some("sig=deadbeef"), false));
+        assert!(out.contains("<redacted>"), "not redacted: {out}");
+        assert!(!out.contains("deadbeef"), "leaked token: {out}");
+
+        // Absent secrets print as `None`, so the redaction cannot be mistaken for
+        // a supplied-but-hidden value.
+        let out = format!("{:?}", opts(None, None, true));
+        assert!(out.contains("account_key: None"), "unexpected: {out}");
+        assert!(out.contains("sas_token: None"), "unexpected: {out}");
     }
 
     /// A zero TTL is rejected, and the maximum is capped so `minutes * 60`
