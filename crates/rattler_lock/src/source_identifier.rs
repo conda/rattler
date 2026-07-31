@@ -692,6 +692,71 @@ mod tests {
         insta::assert_yaml_snapshot!(hashes);
     }
 
+    /// The identifier hash of a package with git sources must not depend on
+    /// an absent `lfs` field: lock files written before the field existed
+    /// carry the same hash. The pinned literal below is that pre-`lfs` hash;
+    /// if this test fails, the hash algorithm changed in a way that would
+    /// alter existing lock files (see also [`compute_test_data_hashes`]).
+    #[test]
+    fn test_git_source_identifier_hash_ignores_absent_lfs() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+        use url::Url;
+
+        use crate::CondaSourceData;
+        use crate::source::{GitSourceLocation, SourceLocation};
+
+        fn git_source_identifier(lfs: Option<bool>) -> String {
+            let name = PackageName::from_str("git-package").unwrap();
+            let mut package_record = PackageRecord::new(
+                name,
+                VersionWithSource::from_str("1.0.0").unwrap(),
+                "pyhbf21a9e_0".to_string(),
+            );
+            package_record.subdir = "noarch".to_string();
+
+            let sources = BTreeMap::from([(
+                "dependency".to_string(),
+                SourceLocation::Git(GitSourceLocation {
+                    git: Url::parse("https://github.com/example/dependency.git").unwrap(),
+                    rev: None,
+                    subdirectory: None,
+                    lfs,
+                }),
+            )]);
+
+            let source_data = CondaSourceData::full(
+                UrlOrPath::from_str("git-package").unwrap(),
+                None,
+                BTreeMap::new(),
+                None,
+                package_record,
+                sources,
+            );
+
+            SourceIdentifier::from_source_data(&source_data)
+                .hash()
+                .to_string()
+        }
+
+        assert_eq!(git_source_identifier(None), "9f510e4a");
+
+        // The three states must stay distinguishable from each other.
+        assert_ne!(
+            git_source_identifier(Some(true)),
+            git_source_identifier(None)
+        );
+        assert_ne!(
+            git_source_identifier(Some(false)),
+            git_source_identifier(None)
+        );
+        assert_ne!(
+            git_source_identifier(Some(true)),
+            git_source_identifier(Some(false))
+        );
+    }
+
     #[test]
     fn test_into_full_returns_none_for_partial() {
         use std::collections::BTreeMap;
