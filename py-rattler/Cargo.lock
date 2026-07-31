@@ -4275,7 +4275,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.6"
+version = "0.31.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -4537,7 +4537,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "8.0.0"
+version = "9.0.0"
 dependencies = [
  "futures",
  "hex",
@@ -4555,7 +4555,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "archspec",
  "libloading",
