@@ -1,0 +1,91 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - crates/rattler_azure/**
+      - crates/rattler_index/**
+      - crates/rattler_networking/**
+      - crates/rattler_upload/**
+      - pixi.toml
+      - pixi.lock
+      - .github/workflows/e2e-azure-tests.yml
+
+name: E2E Azure Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-azurite-test:
+    name: E2E Index/Fetch [Azurite]
+    runs-on: ubuntu-latest
+
+    env:
+      # Enable sccache.
+      #
+      # This environment variable is picked up by pixi build which will then
+      # set up the rust build using sccache.
+      SCCACHE_GHA_ENABLED: "true"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          submodules: recursive
+
+      # Not a `services:` container. A service container's command cannot be
+      # overridden, and `--skipApiVersionCheck` is required: opendal pins an
+      # `x-ms-version` at or beyond what Azurite V3 accepts on its own. Launching
+      # the server from the job also matches how the Minio E2E job does it.
+      #
+      # No secrets: the emulator's `devstoreaccount1` credentials are published
+      # constants, spelled out in the tests, and only ever reach loopback.
+      - name: Start Azurite
+        run: |
+          docker run --detach --name azurite --publish 10000:10000 \
+            mcr.microsoft.com/azure-storage/azurite \
+            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+
+      # An unsigned request answered with any status means the blob service is
+      # listening; 403 is the expected answer and is as good a readiness signal as
+      # 200 would be.
+      - name: Wait for Azurite
+        run: |
+          for _ in $(seq 1 60); do
+            if curl --silent --output /dev/null "http://127.0.0.1:10000/devstoreaccount1?comp=list"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Azurite did not become ready within 120 seconds"
+          docker logs azurite
+          exit 1
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          environments: default
+
+      # The feature is package-qualified because `azure` is a default feature of
+      # rattler_index but opt-in for rattler_networking, so an unqualified name
+      # across both packages would be ambiguous.
+      - name: Run the Azurite integration tests
+        run: |
+          pixi run -vv -- cargo nextest run --run-ignored all \
+            --features rattler_networking/azure \
+            -p rattler_index --test azure_azurite \
+            -p rattler_networking --test azure_azurite_fetch
+
+      - name: Azurite logs
+        if: always()
+        run: docker logs azurite
+
+      - name: Stop Azurite
+        if: always()
+        run: docker rm --force azurite

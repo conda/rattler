@@ -84,3 +84,14 @@ rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-featu
 ] }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
+# `AzureMiddleware` is the only shared-key signer reachable from a test here, and
+# the Azurite tests need one to create a container: opendal has no
+# container-creation operation.
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+  "azure",
+] }
+reqwest-middleware = { workspace = true }
+# Puts Azurite's development credentials in the environment for reqsign's env
+# provider without an unsafe `set_var`.
+temp-env = { workspace = true }
