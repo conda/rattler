@@ -522,7 +522,7 @@ impl From<AzureHost> for String {
 ///
 /// Nothing in the type ties the argument to an options entry. `rattler-index`
 /// takes it from the channel host's entry; `rattler_upload` passes the default,
-/// because it reads no config file at all (see the `ponytail:` note in
+/// because it reads no config file at all (see the note in
 /// `rattler_upload::upload_from_args`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {

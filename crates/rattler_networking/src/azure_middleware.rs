@@ -79,14 +79,14 @@ pub struct AzureMiddleware {
     /// behave as a defaulted entry (anonymous, https), so a miss is never a
     /// separate code path.
     ///
-    /// ponytail: a plain `HashMap` rather than `rattler_config::AzureOptionsMap`,
-    /// mirroring [`crate::S3Middleware`]. No caller has a `rattler_config::Config`
-    /// in hand today — every one of them passes an empty table — so taking the
-    /// config type would buy a mandatory `rattler_config` edge on the `azure`
-    /// feature for zero saved conversions. When a caller does grow one, add a
+    /// A plain `HashMap` rather than `rattler_config::AzureOptionsMap`, mirroring
+    /// [`crate::S3Middleware`]. No caller has a `rattler_config::Config` in hand
+    /// today — every one of them passes an empty table — so taking the config type
+    /// would buy a mandatory `rattler_config` edge on the `azure` feature for zero
+    /// saved conversions. When a caller does grow one, add a
     /// `#[cfg(feature = "rattler_config")]` helper next to
-    /// [`crate::s3_middleware::compute_s3_config_from_config`] rather than
-    /// changing this signature.
+    /// [`crate::s3_middleware::compute_s3_config_from_config`] rather than changing
+    /// this signature.
     options: HashMap<AzureHost, AzureEndpointOptions>,
 }
 
