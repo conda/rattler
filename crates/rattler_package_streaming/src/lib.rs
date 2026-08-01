@@ -141,9 +141,12 @@ pub struct ExtractResult {
 pub trait DownloadReporter: Send + Sync {
     /// Called when the download starts.
     fn on_download_start(&self);
-    /// Called when the download makes progress.
+    /// Called as downloaded archive bytes are consumed by the extractor.
+    ///
+    /// `total_bytes` is the compressed archive size when it is known.
     fn on_download_progress(&self, bytes_downloaded: u64, total_bytes: Option<u64>);
-    /// Called when the download finishes.
+    /// Called when the response body has been fully consumed or the download reader
+    /// is dropped. Extraction may still be in progress when this is called.
     fn on_download_complete(&self);
 }
 
