@@ -34,40 +34,39 @@ jobs:
       # set up the rust build using sccache.
       SCCACHE_GHA_ENABLED: "true"
 
+    # A service container, so the runner does the waiting and the log collection:
+    # the health check gates every step below on the blob service actually
+    # listening, and the runner prints the container's logs when the job ends.
+    # The S3 E2E job is not a precedent either way — its Minio is a native binary
+    # spawned by `scripts/e2e/s3-minio.nu`, not a container.
+    #
+    # The image's default command is used as-is, since a service container cannot
+    # override one. That starts queue and table alongside blob; only the blob port
+    # is published, and the tests are unaffected.
+    #
+    # `nc -z` and not an HTTP request: every unsigned request is answered with a
+    # 4xx, which most HTTP clients treat as failure, so a listening socket is both
+    # the simplest and the most honest readiness signal. `curl` is not in the image
+    # anyway.
+    #
+    # No secrets: the emulator's `devstoreaccount1` credentials are published
+    # constants, spelled out in the tests, and only ever reach loopback.
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.36.0
+        ports:
+          - 10000:10000
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 10000"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: recursive
-
-      # Not a `services:` container, for the same reason the Minio E2E job is not
-      # one: launching the server from the job keeps `docker logs` available as a
-      # diagnosis step when a test fails. A service container would work here —
-      # the image's default command already binds the blob host to 0.0.0.0 — so
-      # this is precedent, not necessity.
-      #
-      # No secrets: the emulator's `devstoreaccount1` credentials are published
-      # constants, spelled out in the tests, and only ever reach loopback.
-      - name: Start Azurite
-        run: |
-          docker run --detach --name azurite --publish 10000:10000 \
-            mcr.microsoft.com/azure-storage/azurite \
-            azurite-blob --blobHost 0.0.0.0
-
-      # An unsigned request answered with any status means the blob service is
-      # listening; 403 is the expected answer and is as good a readiness signal as
-      # 200 would be.
-      - name: Wait for Azurite
-        run: |
-          for _ in $(seq 1 60); do
-            if curl --silent --output /dev/null "http://127.0.0.1:10000/devstoreaccount1?comp=list"; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Azurite did not become ready within 120 seconds"
-          docker logs azurite
-          exit 1
 
       - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
@@ -79,11 +78,3 @@ jobs:
             --features rattler_networking/azure \
             -p rattler_index --test azure_azurite \
             -p rattler_networking --test azure_azurite_fetch
-
-      - name: Azurite logs
-        if: always()
-        run: docker logs azurite
-
-      - name: Stop Azurite
-        if: always()
-        run: docker rm --force azurite
