@@ -22,12 +22,15 @@
 //!
 //! ```text
 //! docker run --rm -p 10000:10000 mcr.microsoft.com/azure-storage/azurite \
-//!     azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+//!     azurite-blob --blobHost 0.0.0.0
 //! cargo nextest run -p rattler_index --test azure_azurite --run-ignored all
 //! ```
 //!
-//! `--skipApiVersionCheck` is required: opendal pins an `x-ms-version` at or
-//! beyond what Azurite V3 accepts on its own.
+//! No `--skipApiVersionCheck` needed: the `x-ms-version` opendal pins is older
+//! than what current Azurite accepts. Verified on 3.36.0, which answers that
+//! version with `AuthorizationFailure` rather than `InvalidHeaderValue`, i.e. it
+//! validates the signature instead of rejecting the version. Add the flag only if
+//! an older emulator rejects the version outright.
 #![cfg(feature = "azure")]
 
 use std::{collections::HashMap, path::PathBuf};

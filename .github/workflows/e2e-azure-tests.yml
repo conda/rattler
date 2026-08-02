@@ -40,10 +40,11 @@ jobs:
         with:
           submodules: recursive
 
-      # Not a `services:` container. A service container's command cannot be
-      # overridden, and `--skipApiVersionCheck` is required: opendal pins an
-      # `x-ms-version` at or beyond what Azurite V3 accepts on its own. Launching
-      # the server from the job also matches how the Minio E2E job does it.
+      # Not a `services:` container, for the same reason the Minio E2E job is not
+      # one: launching the server from the job keeps `docker logs` available as a
+      # diagnosis step when a test fails. A service container would work here —
+      # the image's default command already binds the blob host to 0.0.0.0 — so
+      # this is precedent, not necessity.
       #
       # No secrets: the emulator's `devstoreaccount1` credentials are published
       # constants, spelled out in the tests, and only ever reach loopback.
@@ -51,7 +52,7 @@ jobs:
         run: |
           docker run --detach --name azurite --publish 10000:10000 \
             mcr.microsoft.com/azure-storage/azurite \
-            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+            azurite-blob --blobHost 0.0.0.0
 
       # An unsigned request answered with any status means the blob service is
       # listening; 403 is the expected answer and is as good a readiness signal as
@@ -72,9 +73,6 @@ jobs:
         with:
           environments: default
 
-      # The feature is package-qualified because `azure` is a default feature of
-      # rattler_index but opt-in for rattler_networking, so an unqualified name
-      # across both packages would be ambiguous.
       - name: Run the Azurite integration tests
         run: |
           pixi run -vv -- cargo nextest run --run-ignored all \
