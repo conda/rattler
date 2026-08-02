@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+#[cfg(feature = "s3")]
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{
@@ -49,7 +51,9 @@ pub fn create_client_with_middleware(
         )))
         .with_arc(Arc::new(AuthChallengeMiddleware::default()));
 
-    let client = client.with(rattler_networking::OciMiddleware::new(download_client));
+    let client = client.with(rattler_networking::OciMiddleware::new(
+        download_client.clone(),
+    ));
     #[cfg(feature = "s3")]
     let client = client.with(rattler_networking::S3Middleware::new(
         HashMap::new(),
@@ -57,6 +61,12 @@ pub fn create_client_with_middleware(
     ));
     #[cfg(feature = "gcs")]
     let client = client.with(rattler_networking::GCSMiddleware::default());
+    // `az://` URLs carry the full blob endpoint, so the middleware needs no
+    // configuration — it just swaps the scheme and signs via reqsign. It reuses
+    // the configured download client for reqsign's credential resolution so
+    // proxy/CA/TLS settings carry through.
+    #[cfg(feature = "azure")]
+    let client = client.with(rattler_networking::AzureMiddleware::new(download_client));
 
     Ok(client.build())
 }

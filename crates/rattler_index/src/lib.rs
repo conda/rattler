@@ -23,11 +23,13 @@ use fs_err::{self as fs};
 use futures::{StreamExt, stream::FuturesUnordered};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use opendal::layers::RetryLayer;
 #[cfg(feature = "s3")]
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
+#[cfg(feature = "azure")]
+use rattler_azure::AzureCredentials;
 use rattler_conda_types::{
     ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
     ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
@@ -54,7 +56,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use url::Url;
 
 /// Channel metadata written into generated repodata.
@@ -1513,6 +1515,88 @@ pub async fn index_s3_with_channel_metadata(
     .map(|_| ())
 }
 
+/// Configuration for `index_azure`
+#[cfg(feature = "azure")]
+pub struct IndexAzureConfig {
+    /// The channel to index, as an Azure Blob URL
+    /// (`https://<account>.blob.core.windows.net/<container>/<prefix>`).
+    pub channel: Url,
+    /// The credentials to use for Azure Blob access.
+    pub credentials: AzureCredentials,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Repodata revisions to advertise in generated repodata.
+    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    /// How packages are assigned to repodata revisions.
+    pub package_revision_assignment: PackageRevisionAssignment,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+    // NOTE: no `precondition_checks` field. opendal's azblob service does not
+    // support conditional (`if_match`) writes, so precondition checks can only
+    // ever be disabled here; the Azure path hardcodes `Disabled` rather than
+    // exposing a knob whose enabled state always fails.
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// Azure Blob URL.
+#[cfg(feature = "azure")]
+pub async fn index_azure(config: IndexAzureConfig) -> anyhow::Result<()> {
+    index_azure_with_channel_metadata(config, ChannelMetadata::default()).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// Azure Blob URL and write channel metadata into the generated repodata.
+#[cfg(feature = "azure")]
+pub async fn index_azure_with_channel_metadata(
+    IndexAzureConfig {
+        channel,
+        credentials,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+    }: IndexAzureConfig,
+    channel_metadata: ChannelMetadata,
+) -> anyhow::Result<()> {
+    let azblob_config = rattler_azure::azblob_config(&credentials, &channel)?;
+    let builder = azblob_config.into_builder();
+    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+
+    index_with_channel_metadata(
+        target_platform,
+        op,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        repodata_revisions,
+        package_revision_assignment,
+        force,
+        max_parallel,
+        multi_progress,
+        // opendal's azblob service can't do conditional writes, so preconditions
+        // must be disabled (matching the filesystem backend).
+        PreconditionChecks::Disabled,
+        channel_metadata,
+    )
+    .await
+    .map(|_| ())
+}
+
 /// Create a new `repodata.json` for all packages in the given operator's root.
 ///
 /// If `target_platform` is `Some`, only that specific subdir is indexed.
@@ -1813,6 +1897,58 @@ mod tests {
     };
 
     use super::*;
+
+    #[cfg(feature = "azure")]
+    #[test]
+    fn azblob_config_derives_fields_from_url() {
+        let channel =
+            Url::parse("https://stcondachannel.blob.core.windows.net/general/sub/dir").unwrap();
+        let credentials = AzureCredentials::SasToken("sv=token".to_string());
+
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
+
+        assert_eq!(
+            config.endpoint.as_deref(),
+            Some("https://stcondachannel.blob.core.windows.net")
+        );
+        assert_eq!(config.account_name.as_deref(), Some("stcondachannel"));
+        assert_eq!(config.container, "general");
+        assert_eq!(config.root.as_deref(), Some("/sub/dir"));
+        assert_eq!(config.sas_token.as_deref(), Some("sv=token"));
+        assert_eq!(config.account_key, None);
+    }
+
+    #[cfg(feature = "azure")]
+    #[test]
+    fn azblob_config_container_only_url() {
+        let channel = Url::parse("https://stcondachannel.blob.core.windows.net/general").unwrap();
+        let credentials = AzureCredentials::AccountKey("key".to_string());
+
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
+
+        assert_eq!(config.container, "general");
+        assert_eq!(config.root.as_deref(), Some("/"));
+        assert_eq!(config.account_key.as_deref(), Some("key"));
+        assert_eq!(config.sas_token, None);
+    }
+
+    #[cfg(feature = "azure")]
+    #[test]
+    fn azblob_config_preserves_non_default_port() {
+        let channel =
+            Url::parse("http://devstoreaccount1.blob.localhost:10000/testcontainer/ch").unwrap();
+        let credentials = AzureCredentials::AccountKey("key".to_string());
+
+        let config = rattler_azure::azblob_config(&credentials, &channel).unwrap();
+
+        assert_eq!(
+            config.endpoint.as_deref(),
+            Some("http://devstoreaccount1.blob.localhost:10000")
+        );
+        assert_eq!(config.account_name.as_deref(), Some("devstoreaccount1"));
+        assert_eq!(config.container, "testcontainer");
+        assert_eq!(config.root.as_deref(), Some("/ch"));
+    }
 
     #[test]
     fn package_records_from_repodata_preserves_v3_wheels() {

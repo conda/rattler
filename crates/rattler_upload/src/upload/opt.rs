@@ -123,6 +123,9 @@ pub enum ServerType {
     Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
+    #[cfg(feature = "azure")]
+    #[command(name = "az")]
+    Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
 }
@@ -410,6 +413,26 @@ pub struct S3Opts {
 
     #[clap(flatten)]
     pub credentials: rattler_s3::clap::S3CredentialsOpts,
+
+    /// Replace files if it already exists.
+    #[arg(long)]
+    pub force: bool,
+}
+
+/// Options for uploading to Azure Blob Storage.
+///
+/// Authentication is supplied with either an account key or a shared access
+/// signature (SAS) token; the two are mutually exclusive.
+#[cfg(feature = "azure")]
+#[derive(Clone, Debug, PartialEq, Parser)]
+pub struct AzureOpts {
+    /// The channel URL in the Azure Blob container to upload the package to,
+    /// e.g., `az://myaccount.blob.core.windows.net/my-container/my-channel`
+    #[arg(short, long, env = "AZURE_CHANNEL", value_parser = rattler_azure::parse_channel_url)]
+    pub channel: Url,
+
+    #[clap(flatten)]
+    pub credentials: rattler_azure::clap::AzureCredentialsOpts,
 
     /// Replace files if it already exists.
     #[arg(long)]

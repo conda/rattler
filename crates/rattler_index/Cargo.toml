@@ -13,7 +13,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls", "s3"]
+default = ["rustls", "s3", "azure"]
 native-tls = [
   "reqwest/native-tls",
   "rattler_package_streaming/native-tls",
@@ -28,6 +28,7 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
+azure = ["opendal/services-azblob", "dep:rattler_azure", "rattler_azure/opendal"]
 
 [[bin]]
 name = "rattler-index"
@@ -58,6 +59,7 @@ rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 hex = { workspace = true }
+rattler_azure = { workspace = true, optional = true, features = ["clap"] }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",

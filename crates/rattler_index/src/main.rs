@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "s3")]
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
@@ -7,16 +8,20 @@ use rattler_conda_types::Platform;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
+#[cfg(feature = "s3")]
+use rattler_index::PreconditionChecks;
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
 };
+#[cfg(feature = "azure")]
+use rattler_index::{IndexAzureConfig, index_azure_with_channel_metadata};
 #[cfg(feature = "s3")]
-use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
+use rattler_index::{IndexS3Config, index_s3_with_channel_metadata};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
 use rattler_s3::S3Credentials;
-#[cfg(feature = "s3")]
+#[cfg(any(feature = "s3", feature = "azure"))]
 use url::Url;
 
 #[cfg(feature = "s3")]
@@ -30,6 +35,12 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
         ))
     }
 }
+
+/// SAS permissions requested when minting a user-delegation SAS for indexing.
+/// Indexing does a read-modify-write of repodata and lists/reads packages, so it
+/// needs read, write, list, and create (`r` + `w` + `l` + `c`).
+#[cfg(feature = "azure")]
+const AZURE_INDEX_SAS_PERMISSIONS: &str = "rwlc";
 
 /// The `rattler-index` CLI.
 #[derive(Parser)]
@@ -98,6 +109,19 @@ enum Commands {
 
         #[clap(flatten)]
         credentials: rattler_s3::clap::S3CredentialsOpts,
+    },
+
+    /// Index a channel stored in an Azure Blob container.
+    #[cfg(feature = "azure")]
+    #[command(name = "az")]
+    Azblob {
+        /// The Azure Blob channel URL, e.g.
+        /// `az://<account>.blob.core.windows.net/<container>/<channel>`.
+        #[arg(value_parser = rattler_azure::parse_channel_url)]
+        channel: Url,
+
+        #[clap(flatten)]
+        credentials: rattler_azure::clap::AzureCredentialsOpts,
     },
 }
 
@@ -208,6 +232,41 @@ async fn main() -> anyhow::Result<()> {
                     max_parallel,
                     multi_progress: Some(multi_progress),
                     precondition_checks,
+                },
+                channel_metadata,
+            )
+            .await
+        }
+        #[cfg(feature = "azure")]
+        Commands::Azblob {
+            channel,
+            credentials,
+        } => {
+            let target = channel.to_string();
+            let resolved = resolve_index_channel_config(&config, &target);
+            let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
+                effective_index_options(&resolved);
+            let channel_metadata = ChannelMetadata::from_index_config(&resolved);
+
+            let credentials = credentials
+                .resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
+                    Ok(rattler_azure::account_and_container(&channel)?)
+                })
+                .await?;
+
+            index_azure_with_channel_metadata(
+                IndexAzureConfig {
+                    channel,
+                    credentials,
+                    target_platform: cli.target_platform,
+                    repodata_patch: cli.repodata_patch,
+                    write_zst,
+                    write_shards,
+                    repodata_revisions,
+                    package_revision_assignment,
+                    force: cli.force,
+                    max_parallel,
+                    multi_progress: Some(multi_progress),
                 },
                 channel_metadata,
             )

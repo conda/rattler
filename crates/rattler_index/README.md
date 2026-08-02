@@ -2,7 +2,10 @@
 
 `rattler_index` creates or updates conda channel indexes by writing
 `repodata.json`, optional compressed repodata, and optional sharded repodata for
-packages stored on a local filesystem or in S3.
+packages stored on a local filesystem, in S3, or in Azure Blob Storage.
+
+S3 support requires the `s3` feature; Azure Blob Storage support requires the
+`azure` feature.
 
 ## CLI Usage
 
@@ -18,13 +21,69 @@ Index an S3 channel:
 rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 ```
 
+Index an Azure Blob Storage channel:
+
+```shell
+rattler-index --config ./rattler-config.toml az \
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel \
+    --azure-cli
+```
+
+Indexing writes to the container through opendal, which only accepts a storage
+account key or a shared access signature (SAS) token — it cannot use an `az
+login` AAD bearer token directly. Supply one of:
+
+- `--azure-cli`: mint a short-lived user-delegation SAS from the current `az
+  login` session automatically. Requires the Azure CLI (`az`) on `PATH` and a
+  prior `az login`. The minted SAS is scoped to the target container, granted
+  only the permissions indexing needs, and expires after 30 minutes (a SAS
+  cannot be individually revoked, so it is kept short-lived on purpose).
+- `--account-key` / `AZURE_STORAGE_KEY`: a storage account key.
+- `--sas-token` / `AZURE_STORAGE_SAS_TOKEN`: a SAS token you supply yourself.
+
+To mint a SAS manually instead of using `--azure-cli` (for example, to reuse it
+across several commands), generate one from your `az login` session and pass it
+via `--sas-token`:
+
+```shell
+export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
+    --account-name my-storage-account --name my-container \
+    --permissions rwlc --expiry 2026-01-01T00:00Z \
+    --auth-mode login --as-user --https-only -o tsv)
+rattler-index --config ./rattler-config.toml az \
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel
+```
+
 The `--config` flag points at the same TOML configuration file used by pixi. It
-configures S3 credentials, concurrency, and per-channel index options under the
-`[index-config]` section.
+configures S3 and Azure credentials, concurrency, and per-channel index options
+under the `[index-config]` section.
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
 `from-index-json` revision assignment, no channel metadata).
+
+## Remote storage credentials
+
+S3 endpoint and region settings live under `[s3-options.<bucket>]`, keyed by
+bucket name:
+
+```toml
+[s3-options.my-bucket]
+endpoint-url = "https://my-bucket.s3.amazonaws.com"
+region = "eu-central-1"
+force-path-style = false
+```
+
+Azure Blob Storage needs no such block: the storage account and blob endpoint
+are read directly from the channel URL
+(`az://<account>.blob.core.windows.net/<container>/<channel>`), so the account,
+container, and endpoint (including sovereign clouds) are fully determined by the
+URL you pass. The `az://` scheme is required and is rewritten to `https://`
+internally; a bare `https://` URL is rejected. The host must be a dotted
+`<account>.blob.<suffix>` domain, so IP-literal / single-label hosts (and hence
+the Azurite emulator) are not supported. Credentials are never stored in the
+config — they are resolved at runtime from `--account-key` / `--sas-token`, an
+`az login` session (`--azure-cli`), or the `DefaultCredentialProvider` chain.
 
 ## Per-channel index configuration
 

@@ -81,6 +81,24 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "azure")]
+        ServerType::Azure(azure_opts) => {
+            let channel = azure_opts.channel;
+            let credentials = azure_opts
+                .credentials
+                .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, || {
+                    Ok(rattler_azure::account_and_container(&channel)?)
+                })
+                .await
+                .into_diagnostic()?;
+            upload::upload_package_to_azure(
+                channel,
+                credentials,
+                &args.package_files,
+                azure_opts.force,
+            )
+            .await
+        }
         ServerType::CondaForge(conda_forge_opts) => {
             let conda_forge_data = CondaForgeData::from(conda_forge_opts);
             upload::conda_forge::upload_packages_to_conda_forge(

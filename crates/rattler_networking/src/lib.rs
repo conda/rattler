@@ -21,6 +21,11 @@ pub mod s3_middleware;
 #[cfg(feature = "s3")]
 pub use s3_middleware::S3Middleware;
 
+#[cfg(feature = "azure")]
+pub mod azure_middleware;
+#[cfg(feature = "azure")]
+pub use azure_middleware::AzureMiddleware;
+
 pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod challenge_middleware;
