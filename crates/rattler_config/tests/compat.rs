@@ -185,6 +185,11 @@ const EDIT_MATRIX: &[(&str, &str)] = &[
         "s3-options.some-bucket",
         r#"{"endpoint-url": "https://s3.example.com", "region": "auto", "force-path-style": true}"#,
     ),
+    // Quoted, because every Azure authority contains dots.
+    (
+        r#"azure-options."acct.blob.core.windows.net""#,
+        r#"{"auth": true}"#,
+    ),
 ];
 
 /// Every key in the matrix can be set on a fully populated config, the

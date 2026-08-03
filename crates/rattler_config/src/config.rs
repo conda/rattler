@@ -351,6 +351,7 @@ impl Config for CommonConfig {
             "allow-hard-links".to_string(),
             "allow-ref-links".to_string(),
             "s3-options".to_string(),
+            "azure-options".to_string(),
             "index-config".to_string(),
         ];
         keys.extend(prefixed_keys("build", self.build.keys()));
@@ -446,6 +447,9 @@ where
     /// should surface these to the user as warnings (they are typos or
     /// keys of other tools).
     pub fn from_toml_str(input: &str) -> Result<(Self, BTreeSet<String>), toml::de::Error> {
+        azure::ensure_no_colliding_hosts(&input.parse()?)
+            .map_err(serde::de::Error::custom::<String>)?;
+
         // The document is deserialized twice: once into the common
         // configuration and once into the extension. Each pass records the
         // keys it did not recognize; only keys unknown to *both* passes are
