@@ -97,7 +97,7 @@ fn azurite_options() -> AzureEndpointOptions {
 /// hand-written stand-in.
 fn production_operator(channel: &AzureChannelUrl) -> Operator {
     let config = rattler_azure::azblob_config(
-        &AzureCredentials::AccountKey(ACCOUNT_KEY.to_string()),
+        &AzureCredentials::AccountKey(ACCOUNT_KEY.into()),
         channel,
         azurite_options(),
     )
@@ -180,7 +180,7 @@ async fn with_azurite_credentials<F: Future<Output = ()>>(body: F) {
 fn index_config(channel: AzureChannelUrl) -> IndexAzureConfig {
     IndexAzureConfig {
         channel,
-        credentials: AzureCredentials::AccountKey(ACCOUNT_KEY.to_string()),
+        credentials: AzureCredentials::AccountKey(ACCOUNT_KEY.into()),
         options: azurite_options(),
         target_platform: None,
         repodata_patch: None,

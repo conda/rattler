@@ -78,8 +78,14 @@ async fn upload_single_package(
 
     // The blob's address as the user wrote the channel, used only for
     // diagnostics. The canonical spelling already carries `/<container>/<prefix>`,
-    // so the key is appended to it; do not prepend the container again.
-    let blob_url = format!("{}/{key}", channel.canonical());
+    // so the key is appended to it; do not prepend the container again. Query and
+    // fragment go first, or an inline SAS would land in the middle of the path.
+    let blob_url = {
+        let mut channel_url = channel.canonical();
+        channel_url.set_query(None);
+        channel_url.set_fragment(None);
+        format!("{channel_url}/{key}")
+    };
 
     // Guard against overwriting an existing blob when `--force` was not passed.
     // opendal 0.57 only honours `if_not_exists` on the single-shot Put Blob path,

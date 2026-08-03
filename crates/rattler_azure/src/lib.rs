@@ -22,6 +22,7 @@ pub mod options;
 
 pub use options::{Addressing, Auth, AzureEndpointOptions, AzureScheme};
 
+pub use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
 /// Credentials for authenticating to Azure Blob storage.
@@ -32,28 +33,16 @@ use url::Url;
 /// by the consumer from the channel URL together with the host's addressing
 /// style (see [`account_and_container`]).
 ///
-/// The type deliberately has no `Serialize`/`Deserialize`: it holds raw account
-/// keys and SAS tokens, so serialization would risk leaking secrets to disk. For
-/// the same reason `Debug` is implemented by hand to redact the secret values
-/// rather than derived.
-#[derive(Clone)]
+/// Both variants hold a [`SecretString`], so `Debug` redacts them, the bytes are
+/// zeroized on drop, and every read is a visible `expose_secret()`. The type has
+/// no `Serialize`/`Deserialize` either, so it cannot reach disk.
+#[derive(Clone, Debug)]
 pub enum AzureCredentials {
     /// A shared storage account key.
-    AccountKey(String),
+    AccountKey(SecretString),
 
     /// A shared access signature (SAS) token.
-    SasToken(String),
-}
-
-impl std::fmt::Debug for AzureCredentials {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Print only the variant, never the secret it carries.
-        let variant = match self {
-            AzureCredentials::AccountKey(_) => "AccountKey",
-            AzureCredentials::SasToken(_) => "SasToken",
-        };
-        f.debug_tuple(variant).field(&"<redacted>").finish()
-    }
+    SasToken(SecretString),
 }
 
 /// Strip a single leading `?` from a SAS token.
@@ -471,7 +460,7 @@ impl From<AzureHost> for String {
 /// takes it from the channel host's entry; `rattler_upload` passes the default,
 /// because it reads no config file at all (see the note in
 /// `rattler_upload::upload_from_args`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AzureChannelUrl {
     /// The authority, normalized independently of any scheme.
     host: AzureHost,
@@ -543,26 +532,31 @@ impl AzureChannelUrl {
     /// through this spelling, and `[azure-options."…"]` through [`Self::host`].
     /// Matching the wire string instead was reviewer issue 5 — the two spellings
     /// exist so a config key never has to guess which one a channel was stored as.
+    /// A SAS written inline is masked: this spelling is the one that reaches logs
+    /// and error messages, and [`Self::wire`] is the only way to the signature.
     pub fn canonical(&self) -> Url {
-        self.spelled("az")
+        self.spelled("az", Sas::Masked)
     }
 
     /// The `http(s)://host/path` spelling used for actual requests, over the
     /// scheme the host's options entry asks for.
     pub fn wire(&self, scheme: AzureScheme) -> Url {
-        self.spelled(scheme.as_str())
+        self.spelled(scheme.as_str(), Sas::Exposed)
     }
 
     /// Build one spelling of this URL.
     ///
     /// Both public spellings go through here, so they cannot differ in anything
-    /// but the scheme: the host, port, path, query and fragment they are built
-    /// from are literally the same values.
-    fn spelled(&self, scheme: &str) -> Url {
+    /// but the scheme and whether the signature is masked: the host, port, path,
+    /// query and fragment they are built from are literally the same values.
+    fn spelled(&self, scheme: &str, sas: Sas) -> Url {
         let mut text = format!("{scheme}://{}{}", self.host, self.path);
         if let Some(query) = &self.query {
             text.push('?');
-            text.push_str(query);
+            match sas {
+                Sas::Exposed => text.push_str(query),
+                Sas::Masked => text.push_str(&mask_sas_signature(query)),
+            }
         }
         if let Some(fragment) = &self.fragment {
             text.push('#');
@@ -592,6 +586,40 @@ impl std::fmt::Display for AzureChannelUrl {
         // keyed by, so it is the only sensible thing to print.
         write!(f, "{}", self.canonical())
     }
+}
+
+impl std::fmt::Debug for AzureChannelUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Derived, this would print the raw query and hand a `{:?}` on any struct
+        // holding a channel the signature that `canonical()` exists to withhold.
+        f.debug_tuple("AzureChannelUrl")
+            .field(&self.canonical().as_str())
+            .finish()
+    }
+}
+
+/// Whether a spelling of a channel URL may carry the SAS signature.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Sas {
+    /// For the wire: the signature is what makes the request authentic.
+    Exposed,
+    /// For anything a human or a log sees.
+    Masked,
+}
+
+/// Replace the value of a query's `sig` parameter, leaving the rest intact.
+///
+/// The other SAS parameters (`sv`, `se`, `sp`, …) describe the grant and are worth
+/// showing; `sig` is the secret that makes it usable.
+fn mask_sas_signature(query: &str) -> String {
+    query
+        .split('&')
+        .map(|parameter| match parameter.split_once('=') {
+            Some((name, _)) if name.eq_ignore_ascii_case("sig") => format!("{name}=REDACTED"),
+            _ => parameter.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 impl std::str::FromStr for AzureChannelUrl {
@@ -691,8 +719,11 @@ pub fn azblob_config(
     );
 
     let (account_key, sas_token) = match credentials {
-        AzureCredentials::AccountKey(key) => (Some(key.clone()), None),
-        AzureCredentials::SasToken(token) => (None, Some(normalize_sas_token(token).to_string())),
+        AzureCredentials::AccountKey(key) => (Some(key.expose_secret().to_string()), None),
+        AzureCredentials::SasToken(token) => (
+            None,
+            Some(normalize_sas_token(token.expose_secret()).to_string()),
+        ),
     };
 
     Ok(opendal::services::AzblobConfig {
@@ -769,7 +800,7 @@ pub async fn mint_user_delegation_sas(
     container: &str,
     permissions: &str,
     valid_for: std::time::Duration,
-) -> Result<String, AzureCliSasError> {
+) -> Result<SecretString, AzureCliSasError> {
     /// Slack for a client clock running up to two minutes slow, since the expiry
     /// is computed here and evaluated by Azure.
     const CLOCK_SKEW_HEADROOM: std::time::Duration = std::time::Duration::from_secs(120);
@@ -824,7 +855,7 @@ pub async fn mint_user_delegation_sas(
     if token.is_empty() {
         return Err(AzureCliSasError::EmptyOutput);
     }
-    Ok(token)
+    Ok(token.into())
 }
 
 /// Build the [`tokio::process::Command`] used to invoke the Azure CLI.
@@ -1297,7 +1328,7 @@ mod tests {
         };
 
         let config = azblob_config(
-            &AzureCredentials::AccountKey("key".to_string()),
+            &AzureCredentials::AccountKey("key".into()),
             &channel,
             options,
         )
@@ -1334,7 +1365,7 @@ mod tests {
         let channel =
             AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general").unwrap();
         let config = azblob_config(
-            &AzureCredentials::SasToken("?sv=token".to_string()),
+            &AzureCredentials::SasToken("?sv=token".into()),
             &channel,
             AzureEndpointOptions {
                 auth: Auth::Anonymous,
@@ -1359,7 +1390,7 @@ mod tests {
             AzureChannelUrl::parse("az://stcondachannel.blob.core.windows.net/general/sub/dir")
                 .unwrap();
         let config = azblob_config(
-            &AzureCredentials::SasToken("sv=token".to_string()),
+            &AzureCredentials::SasToken("sv=token".into()),
             &channel,
             AzureEndpointOptions::default(),
         )
@@ -1384,7 +1415,7 @@ mod tests {
         let channel =
             AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/with%20space").unwrap();
         let config = azblob_config(
-            &AzureCredentials::AccountKey("key".to_string()),
+            &AzureCredentials::AccountKey("key".into()),
             &channel,
             AzureEndpointOptions::default(),
         )
@@ -1419,9 +1450,38 @@ mod debug_redaction_tests {
             AzureCredentials::SasToken("sig=deadbeef".into()),
         ] {
             let out = format!("{creds:?}");
-            assert!(out.contains("<redacted>"), "not redacted: {out}");
+            assert!(out.contains("REDACTED"), "not redacted: {out}");
             assert!(!out.contains("supersecret"));
             assert!(!out.contains("deadbeef"));
         }
+    }
+
+    /// An inline SAS reaches the wire and nothing else. Every other spelling of the
+    /// channel is a log line or an error message waiting to happen.
+    #[test]
+    fn only_the_wire_spelling_carries_the_signature() {
+        let channel = AzureChannelUrl::parse(
+            "az://acct.blob.core.windows.net/general/p?sv=2024-11-04&sig=SECRETSIG&se=z",
+        )
+        .unwrap();
+
+        for shown in [
+            channel.canonical().to_string(),
+            channel.to_string(),
+            format!("{channel:?}"),
+        ] {
+            assert!(!shown.contains("SECRETSIG"), "signature leaked: {shown}");
+            // The rest of the grant is not secret and is worth showing.
+            assert!(shown.contains("sv=2024-11-04"), "over-redacted: {shown}");
+            assert!(shown.contains("se=z"), "over-redacted: {shown}");
+        }
+
+        assert!(
+            channel
+                .wire(AzureScheme::Https)
+                .to_string()
+                .contains("sig=SECRETSIG"),
+            "the wire spelling must keep the signature that authenticates the request"
+        );
     }
 }

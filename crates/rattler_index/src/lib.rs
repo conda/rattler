@@ -1909,7 +1909,7 @@ mod tests {
         let channel =
             AzureChannelUrl::parse("az://stcondachannel.blob.core.windows.net/general/sub/dir")
                 .unwrap();
-        let credentials = AzureCredentials::SasToken("sv=token".to_string());
+        let credentials = AzureCredentials::SasToken("sv=token".into());
 
         let config =
             rattler_azure::azblob_config(&credentials, &channel, AzureEndpointOptions::default())
@@ -1931,7 +1931,7 @@ mod tests {
     fn azblob_config_container_only_url() {
         let channel =
             AzureChannelUrl::parse("az://stcondachannel.blob.core.windows.net/general").unwrap();
-        let credentials = AzureCredentials::AccountKey("key".to_string());
+        let credentials = AzureCredentials::AccountKey("key".into());
 
         let config =
             rattler_azure::azblob_config(&credentials, &channel, AzureEndpointOptions::default())
@@ -1949,7 +1949,7 @@ mod tests {
         let channel =
             AzureChannelUrl::parse("az://devstoreaccount1.blob.localhost:10000/testcontainer/ch")
                 .unwrap();
-        let credentials = AzureCredentials::AccountKey("key".to_string());
+        let credentials = AzureCredentials::AccountKey("key".into());
 
         let config = rattler_azure::azblob_config(
             &credentials,

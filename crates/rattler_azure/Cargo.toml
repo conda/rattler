@@ -30,6 +30,7 @@ opendal = { workspace = true, default-features = false, features = [
   "services-azblob",
 ], optional = true }
 percent-encoding = { workspace = true, optional = true }
+secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process"], optional = true }

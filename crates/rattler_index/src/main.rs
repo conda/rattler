@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(options.addressing, Addressing::PathStyle);
 
         let azblob = rattler_azure::azblob_config(
-            &AzureCredentials::AccountKey("key".to_string()),
+            &AzureCredentials::AccountKey("key".into()),
             &channel,
             options,
         )
@@ -421,7 +421,7 @@ mod tests {
         let options = azure_endpoint_options(&None, channel.host());
 
         let err = rattler_azure::azblob_config(
-            &AzureCredentials::AccountKey("key".to_string()),
+            &AzureCredentials::AccountKey("key".into()),
             &channel,
             options,
         )

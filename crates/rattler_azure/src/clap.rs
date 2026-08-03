@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use clap::Parser;
 
+use secrecy::{ExposeSecret, SecretString};
+
 use crate::{
     AzureCliSasError, AzureCoordinates, AzureCredentials, AzureUrlError, mint_user_delegation_sas,
 };
@@ -45,13 +47,13 @@ pub enum AzureCredentialsError {
 /// reason about combinations. Only [`AzureAuthSource::AzureCli`] carries state
 /// (the minting TTL), which is why account/container derivation is needed for
 /// that arm alone.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum AzureAuthSource {
     /// Use a shared storage account key verbatim.
-    AccountKey(String),
+    AccountKey(SecretString),
 
     /// Use a supplied SAS token verbatim.
-    SasToken(String),
+    SasToken(SecretString),
 
     /// Mint a short-lived user-delegation SAS from the current `az login`
     /// session, valid for `ttl`.
@@ -59,22 +61,6 @@ pub enum AzureAuthSource {
         /// How long the minted SAS should remain valid.
         ttl: Duration,
     },
-}
-
-impl std::fmt::Debug for AzureAuthSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            // Print only the variant, never the secret it carries.
-            AzureAuthSource::AccountKey(_) => {
-                f.debug_tuple("AccountKey").field(&"<redacted>").finish()
-            }
-            AzureAuthSource::SasToken(_) => f.debug_tuple("SasToken").field(&"<redacted>").finish(),
-            // The TTL is not a secret.
-            AzureAuthSource::AzureCli { ttl } => {
-                f.debug_struct("AzureCli").field("ttl", ttl).finish()
-            }
-        }
-    }
 }
 
 impl AzureAuthSource {
@@ -110,7 +96,7 @@ impl AzureAuthSource {
 /// exported *and* `--azure-cli` is passed), so [`AzureCredentialsOpts::source`]
 /// applies an explicit precedence rather than treating the combination as an
 /// error — see that method for the exact ordering.
-#[derive(Clone, PartialEq, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct AzureCredentialsOpts {
     /// The Azure Storage account key.
     ///
@@ -121,17 +107,19 @@ pub struct AzureCredentialsOpts {
         long,
         env = "AZURE_STORAGE_KEY",
         conflicts_with = "sas_token",
-        help_heading = "Azure Credentials"
+        help_heading = "Azure Credentials",
+        value_parser = secret
     )]
-    pub account_key: Option<String>,
+    pub account_key: Option<SecretString>,
 
     /// A shared access signature (SAS) token, with or without a leading `?`.
     #[arg(
         long,
         env = "AZURE_STORAGE_SAS_TOKEN",
-        help_heading = "Azure Credentials"
+        help_heading = "Azure Credentials",
+        value_parser = secret
     )]
-    pub sas_token: Option<String>,
+    pub sas_token: Option<SecretString>,
 
     /// Mint a short-lived user-delegation SAS from the current `az login`
     /// session (requires the Azure CLI).
@@ -157,17 +145,29 @@ pub struct AzureCredentialsOpts {
     pub azure_cli_sas_ttl_minutes: u64,
 }
 
-impl std::fmt::Debug for AzureCredentialsOpts {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Whether a secret was supplied is useful for diagnosing precedence; the
-        // secret itself never is.
-        let redact = |value: &Option<String>| value.as_ref().map(|_| "<redacted>");
-        f.debug_struct("AzureCredentialsOpts")
-            .field("account_key", &redact(&self.account_key))
-            .field("sas_token", &redact(&self.sas_token))
-            .field("azure_cli", &self.azure_cli)
-            .field("azure_cli_sas_ttl_minutes", &self.azure_cli_sas_ttl_minutes)
-            .finish()
+/// Take a command-line or environment value straight into a [`SecretString`], so
+/// it is never held as a plain `String` that a `{:?}` could reach.
+fn secret(value: &str) -> Result<SecretString, std::convert::Infallible> {
+    Ok(value.into())
+}
+
+impl PartialEq for AzureCredentialsOpts {
+    /// Hand-written because [`SecretString`] withholds `PartialEq` — comparing
+    /// secrets is not constant-time. The containing `UploadOpts` tree derives
+    /// `PartialEq`, and comparing parsed command lines is not a secrets check.
+    fn eq(&self, other: &Self) -> bool {
+        fn same(left: Option<&SecretString>, right: Option<&SecretString>) -> bool {
+            match (left, right) {
+                (Some(left), Some(right)) => left.expose_secret() == right.expose_secret(),
+                (None, None) => true,
+                _ => false,
+            }
+        }
+
+        same(self.account_key.as_ref(), other.account_key.as_ref())
+            && same(self.sas_token.as_ref(), other.sas_token.as_ref())
+            && self.azure_cli == other.azure_cli
+            && self.azure_cli_sas_ttl_minutes == other.azure_cli_sas_ttl_minutes
     }
 }
 
@@ -222,8 +222,8 @@ mod tests {
         azure_cli: bool,
     ) -> AzureCredentialsOpts {
         AzureCredentialsOpts {
-            account_key: account_key.map(str::to_string),
-            sas_token: sas_token.map(str::to_string),
+            account_key: account_key.map(Into::into),
+            sas_token: sas_token.map(Into::into),
             azure_cli,
             azure_cli_sas_ttl_minutes: DEFAULT_AZURE_CLI_SAS_TTL_MINUTES,
         }
@@ -238,7 +238,7 @@ mod tests {
     async fn account_key_resolves() {
         assert!(matches!(
             opts(Some("key"), None, false).resolve("cw", unreachable_context).await,
-            Ok(AzureCredentials::AccountKey(k)) if k == "key"
+            Ok(AzureCredentials::AccountKey(k)) if k.expose_secret() == "key"
         ));
     }
 
@@ -246,7 +246,7 @@ mod tests {
     async fn sas_token_resolves() {
         assert!(matches!(
             opts(None, Some("sv=..."), false).resolve("cw", unreachable_context).await,
-            Ok(AzureCredentials::SasToken(t)) if t == "sv=..."
+            Ok(AzureCredentials::SasToken(t)) if t.expose_secret() == "sv=..."
         ));
     }
 
@@ -270,12 +270,12 @@ mod tests {
         // SAS token beats an account key when `--azure-cli` is absent.
         assert!(matches!(
             opts(Some("key"), Some("sv=..."), false).source(),
-            Ok(AzureAuthSource::SasToken(t)) if t == "sv=..."
+            Ok(AzureAuthSource::SasToken(t)) if t.expose_secret() == "sv=..."
         ));
         // Account key is the last resort.
         assert!(matches!(
             opts(Some("key"), None, false).source(),
-            Ok(AzureAuthSource::AccountKey(k)) if k == "key"
+            Ok(AzureAuthSource::AccountKey(k)) if k.expose_secret() == "key"
         ));
     }
 
@@ -283,12 +283,10 @@ mod tests {
     fn azure_cli_ttl_is_carried_through() {
         let mut opts = opts(None, None, true);
         opts.azure_cli_sas_ttl_minutes = 45;
-        assert_eq!(
+        assert!(matches!(
             opts.source().unwrap(),
-            AzureAuthSource::AzureCli {
-                ttl: Duration::from_secs(45 * 60),
-            }
-        );
+            AzureAuthSource::AzureCli { ttl } if ttl == Duration::from_secs(45 * 60)
+        ));
     }
 
     // The `--azure-cli` resolve path shells out to `az`, which isn't available in
@@ -344,7 +342,7 @@ mod tests {
         ];
         for source in &sources {
             let out = format!("{source:?}");
-            assert!(out.contains("<redacted>"), "not redacted: {out}");
+            assert!(out.contains("REDACTED"), "not redacted: {out}");
             assert!(!out.contains("supersecret"), "leaked key: {out}");
             assert!(!out.contains("deadbeef"), "leaked token: {out}");
         }
@@ -356,11 +354,11 @@ mod tests {
         assert!(format!("{cli:?}").contains("60"));
 
         let out = format!("{:?}", opts(Some("supersecretkey"), None, false));
-        assert!(out.contains("<redacted>"), "not redacted: {out}");
+        assert!(out.contains("REDACTED"), "not redacted: {out}");
         assert!(!out.contains("supersecret"), "leaked key: {out}");
 
         let out = format!("{:?}", opts(None, Some("sig=deadbeef"), false));
-        assert!(out.contains("<redacted>"), "not redacted: {out}");
+        assert!(out.contains("REDACTED"), "not redacted: {out}");
         assert!(!out.contains("deadbeef"), "leaked token: {out}");
 
         // Absent secrets print as `None`, so the redaction cannot be mistaken for
