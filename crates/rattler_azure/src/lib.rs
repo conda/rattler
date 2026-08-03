@@ -13,7 +13,7 @@
 //!
 //! Userinfo (`user:pass@host`) is rejected wherever a host is parsed, because
 //! `az://real.host@evil.example/…` reads as the real host while addressing the
-//! attacker's.
+//! attacker's and provides no real functionality.
 
 #[cfg(feature = "clap")]
 pub mod clap;
@@ -185,9 +185,7 @@ pub struct AzureCoordinates {
 /// derived account and container are additionally held to Azure's own naming
 /// rules — under *both* addressing styles, since path-style takes the account
 /// from user-controlled path text. Those rules reject an empty name, any
-/// character outside `[a-z0-9-]`, and a leading `-`, which together are what keep
-/// an option-shaped value such as `--as-user` from ever reaching the `az` argv in
-/// [`mint_user_delegation_sas`].
+/// character outside `[a-z0-9-]`, and a leading `-`.
 ///
 /// [crate-level docs]: crate
 pub fn account_and_container(
@@ -197,10 +195,6 @@ pub fn account_and_container(
     if !url.username().is_empty() || url.password().is_some() {
         return Err(AzureUrlError::UserInfoNotAllowed);
     }
-    // Re-normalize through `AzureHost` rather than reading `host_str()` directly,
-    // so the account label is taken from the same spelling the config table is
-    // keyed by — trailing dot stripped, empty labels rejected, IP literals
-    // discriminated by type rather than by counting dots.
     let host = AzureHost::from_url(url)?;
     // Empty segments are never a valid name, so an empty one is a missing one.
     let mut segments = url
@@ -233,15 +227,6 @@ pub fn account_and_container(
 }
 
 /// Check a derived name against Azure's storage account naming rules.
-///
-/// Azure's rules are stricter than "whatever a URL host label may contain": 3-24
-/// characters of lowercase letters and digits, no hyphens at all. Enforcing the
-/// real rules rather than a permissive charset is what makes the guarantee in
-/// [`account_and_container`] true — a name that cannot contain `-` can never be
-/// read as an option by a subprocess — and it rejects names Azure would reject
-/// anyway, while the error can still name the URL that produced them. The length
-/// bound is also what rejects an empty name, so emptiness is not left to a
-/// caller's `filter`.
 fn validate_account(name: &str) -> Result<(), AzureUrlError> {
     let valid = (3..=24).contains(&name.len())
         && name
@@ -255,9 +240,7 @@ fn validate_account(name: &str) -> Result<(), AzureUrlError> {
 /// Check a derived name against Azure's blob container naming rules.
 ///
 /// 3-63 characters of lowercase letters, digits and hyphens, with no leading or
-/// trailing hyphen and no consecutive hyphens. The leading-hyphen rule is the one
-/// carrying security weight: `--https-only` is a perfectly good `[a-z0-9-]`
-/// string, so a charset check alone would hand it to the `az` argv as an option.
+/// trailing hyphen and no consecutive hyphens.
 fn validate_container(name: &str) -> Result<(), AzureUrlError> {
     let valid = (3..=63).contains(&name.len())
         && name
@@ -273,42 +256,6 @@ fn validate_container(name: &str) -> Result<(), AzureUrlError> {
 
 /// A normalized Azure Blob endpoint authority: a host, and its port when one is
 /// written.
-///
-/// This is the identity of an endpoint everywhere on the Azure path — the
-/// `azure-options` table key, the authority of an [`AzureChannelUrl`], and the
-/// text the guided errors tell a user to write. Because the *same* type
-/// deserializes a config key and is handed out by [`AzureChannelUrl::host`], a
-/// written key and a lookup cannot disagree about spelling: both are the output of
-/// [`AzureHost::parse`].
-///
-/// # Why not a `Url`
-///
-/// A `Url`'s port is scheme-relative: `https://host:443` serializes back as
-/// `https://host`, because 443 is the https default. Keeping the authority in a
-/// `Url` with a fixed scheme therefore *loses* a user-written `:443`, and makes
-/// equality scheme-relative along with it (`host:443` == `host`). Holding the host
-/// and the port as separate values keeps a written port a written port, whatever
-/// scheme the request eventually uses.
-///
-/// # Normalization
-///
-/// [`parse`](Self::parse) is the only way in. It applies the URL Standard's host
-/// parser (via [`url::Host`]) — lowercasing, IDNA (`ünï.example` →
-/// `xn--n-nga1b.example`), and canonical, *typed* IP literals (`0x7f.1` →
-/// [`url::Host::Ipv4`], `[0:0:0:0:0:0:0:1]` → [`url::Host::Ipv6`]) — plus two
-/// rules of its own:
-///
-/// - a single trailing dot, the DNS root label, is stripped, so
-///   `acct.blob.example.` and `acct.blob.example` are one host;
-/// - no label may be empty, so `acct..blob.example` is rejected rather than
-///   silently handing an empty label to account derivation.
-///
-/// The port is deliberately *not* normalized: which scheme this host is reached
-/// over is decided later, by its options entry, so no port here can be known to
-/// be a default. A written port is kept verbatim and an absent one stays absent.
-///
-/// [`Display`](std::fmt::Display) writes the canonical `host[:port]` text with an
-/// IPv6 literal bracketed, and round-trips through [`parse`](Self::parse).
 #[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "serde",
@@ -823,9 +770,8 @@ pub async fn mint_user_delegation_sas(
     permissions: &str,
     valid_for: std::time::Duration,
 ) -> Result<String, AzureCliSasError> {
-    /// Extra slack added to the requested lifetime so a slightly fast client
-    /// clock (the expiry is computed from *this* machine's time) does not shrink
-    /// the usable window toward zero at the Azure end.
+    /// Slack for a client clock running up to two minutes slow, since the expiry
+    /// is computed here and evaluated by Azure.
     const CLOCK_SKEW_HEADROOM: std::time::Duration = std::time::Duration::from_secs(120);
 
     let signed = jiff::SignedDuration::try_from(valid_for.saturating_add(CLOCK_SKEW_HEADROOM))

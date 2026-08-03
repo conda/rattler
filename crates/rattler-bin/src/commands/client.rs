@@ -63,10 +63,7 @@ pub fn create_client_with_middleware(
     let client = client.with(rattler_networking::GCSMiddleware::default());
     // `az://` URLs carry the full blob endpoint, so the middleware needs no
     // configuration to *reach* one — it just swaps the scheme. The empty options
-    // table means every `az://` fetch here is anonymous; this CLI reads no config
-    // file, so there is no `azure-options` to hand it (the same reason S3 gets an
-    // empty map above). It reuses the configured download client for reqsign's
-    // credential resolution so proxy/CA/TLS settings carry through.
+    // table means every `az://` fetch here is anonymous.
     #[cfg(feature = "azure")]
     let client = client.with(rattler_networking::AzureMiddleware::new(
         download_client,

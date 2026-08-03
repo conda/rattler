@@ -45,9 +45,6 @@ pub enum AzureCredentialsError {
 /// reason about combinations. Only [`AzureAuthSource::AzureCli`] carries state
 /// (the minting TTL), which is why account/container derivation is needed for
 /// that arm alone.
-///
-/// Two of the three arms carry a secret, so `Debug` is implemented by hand to
-/// redact them rather than derived (see [`AzureCredentials`]).
 #[derive(Clone, PartialEq, Eq)]
 pub enum AzureAuthSource {
     /// Use a shared storage account key verbatim.
@@ -113,11 +110,6 @@ impl AzureAuthSource {
 /// exported *and* `--azure-cli` is passed), so [`AzureCredentialsOpts::source`]
 /// applies an explicit precedence rather than treating the combination as an
 /// error — see that method for the exact ordering.
-///
-/// `account_key` and `sas_token` are secrets, so `Debug` is implemented by hand
-/// to redact them rather than derived (see [`AzureCredentials`]). This matters
-/// more here than elsewhere: these options are typically part of a larger clap
-/// struct that gets logged wholesale on a parse or startup failure.
 #[derive(Clone, PartialEq, Parser)]
 pub struct AzureCredentialsOpts {
     /// The Azure Storage account key.
@@ -343,9 +335,7 @@ mod tests {
         assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
-    /// Neither the resolved source nor the raw options may print a secret. Both
-    /// types hand-write `Debug` precisely so that a wholesale `{:?}` of an
-    /// enclosing CLI struct cannot leak a key or token into a log.
+    /// Neither the resolved source nor the raw options may print a secret.
     #[test]
     fn debug_never_prints_secrets() {
         let sources = [

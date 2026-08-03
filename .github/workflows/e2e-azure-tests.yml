@@ -34,21 +34,6 @@ jobs:
       # set up the rust build using sccache.
       SCCACHE_GHA_ENABLED: "true"
 
-    # A service container, so the runner does the waiting and the log collection:
-    # the health check gates every step below on the blob service actually
-    # listening, and the runner prints the container's logs when the job ends.
-    # The S3 E2E job is not a precedent either way — its Minio is a native binary
-    # spawned by `scripts/e2e/s3-minio.nu`, not a container.
-    #
-    # The image's default command is used as-is, since a service container cannot
-    # override one. That starts queue and table alongside blob; only the blob port
-    # is published, and the tests are unaffected.
-    #
-    # `nc -z` and not an HTTP request: every unsigned request is answered with a
-    # 4xx, which most HTTP clients treat as failure, so a listening socket is both
-    # the simplest and the most honest readiness signal. `curl` is not in the image
-    # anyway.
-    #
     # No secrets: the emulator's `devstoreaccount1` credentials are published
     # constants, spelled out in the tests, and only ever reach loopback.
     services:
