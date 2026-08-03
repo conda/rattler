@@ -56,7 +56,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
-#[cfg(any(feature = "s3", feature = "azure"))]
+#[cfg(feature = "s3")]
 use url::Url;
 
 /// Channel metadata written into generated repodata.
@@ -1544,10 +1544,11 @@ pub struct IndexAzureConfig {
     pub max_parallel: usize,
     /// The multi-progress bar to use for the index.
     pub multi_progress: Option<MultiProgress>,
-    // NOTE: no `precondition_checks` field. opendal's azblob service does not
-    // support conditional (`if_match`) writes, so precondition checks can only
-    // ever be disabled here; the Azure path hardcodes `Disabled` rather than
-    // exposing a knob whose enabled state always fails.
+    // NOTE: no `precondition_checks` field. opendal's azblob service supports
+    // `if_not_exists` and conditional reads but not conditional (`if_match`)
+    // writes, so any index of an already-populated channel fails under `Enabled`.
+    // The Azure path hardcodes `Disabled` rather than exposing a knob that only
+    // works on a first index; the conditional read is lost along with it.
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given
