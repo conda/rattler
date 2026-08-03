@@ -16,7 +16,7 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls", "s3", "gcs", "azure", "oauth"]
+default = ["rustls", "s3", "gcs", "azure", "oauth", "attestation"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
@@ -37,6 +37,7 @@ s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
 azure = ["rattler_networking/azure", "rattler_upload/azure"]
 oauth = ["rattler/oauth"]
+attestation = ["rattler_upload/sigstore-sign"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -71,21 +72,7 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
-# Default features off, stated explicitly rather than inherited from the
-# workspace dependency, so this crate's own `s3` / `azure` flags remain the only
-# thing that compiles in the S3 and Azure upload backends.
-#
-# Defaults being off also meant none of `rattler_upload`'s own default features
-# reached it: neither its TLS forwarding nor `sigstore-sign`, so `rattler upload`
-# rejected `--attestation` outright. https kept working only because feature
-# unification enabled `reqwest`'s TLS from the sibling rattler crates — a
-# coincidence of the dependency graph, not something this crate asked for. TLS is
-# now forwarded from the `rustls` / `native-tls` features above so it is chosen
-# rather than inherited, and `sigstore-sign` is unconditional because
-# attestations have no flag of their own to gate them.
-rattler_upload = { workspace = true, default-features = false, features = [
-  "sigstore-sign",
-] }
+rattler_upload = { workspace = true, default-features = false }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }
