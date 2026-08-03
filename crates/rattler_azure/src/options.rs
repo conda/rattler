@@ -175,7 +175,7 @@ pub struct AzureEndpointOptions {
     /// The field is named for what it holds, but the config key stays
     /// `path-style`: that is the spelling users have written, and the bool bridge
     /// is what the key means.
-    #[cfg_attr(feature = "serde", serde(rename = "path-style"))]
+    #[cfg_attr(feature = "serde", serde(rename = "path-style", alias = "path_style"))]
     pub addressing: Addressing,
 }
 
