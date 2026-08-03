@@ -304,8 +304,8 @@ async fn azurite_multi_block_write_keeps_cache_control() {
 /// multi-block path, and this is as close as a test can currently get to that
 /// upload: `rattler_upload` reads no config file, so it always builds a host-style
 /// endpoint and cannot be pointed at an emulator at all. What it can share is the
-/// operator, built here through the same `azblob_config`, and the exact writer
-/// options the uploader uses — so the behaviour being reproduced is the uploader's,
+/// operator, built here through the same `azblob_config`, and the uploader's chunk
+/// size and overwrite guard — so the behaviour being reproduced is the uploader's,
 /// even though the entry point is not.
 #[tokio::test]
 #[ignore = "requires a running Azurite emulator; see the module docs"]

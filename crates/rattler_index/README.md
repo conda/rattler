@@ -36,8 +36,9 @@ login` AAD bearer token directly. Supply one of:
 - `--azure-cli`: mint a short-lived user-delegation SAS from the current `az
   login` session automatically. Requires the Azure CLI (`az`) on `PATH` and a
   prior `az login`. The minted SAS is scoped to the target container, granted
-  only the permissions indexing needs, and expires after 30 minutes (a SAS
-  cannot be individually revoked, so it is kept short-lived on purpose).
+  only the permissions indexing needs, and expires after 30 minutes by default
+  (`--azure-cli-sas-ttl-minutes`, plus two minutes of clock-skew headroom). A SAS
+  cannot be individually revoked, so it is kept short-lived on purpose.
 - `--account-key` / `AZURE_STORAGE_KEY`: a storage account key.
 - `--sas-token` / `AZURE_STORAGE_SAS_TOKEN`: a SAS token you supply yourself.
 
@@ -48,15 +49,15 @@ via `--sas-token`:
 ```shell
 export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
     --account-name my-storage-account --name my-container \
-    --permissions rwlc --expiry 2026-01-01T00:00Z \
+    --permissions rwlc --expiry "$(date -u -d '+30 minutes' +%Y-%m-%dT%H:%MZ)" \
     --auth-mode login --as-user --https-only -o tsv)
 rattler-index --config ./rattler-config.toml az \
     az://my-storage-account.blob.core.windows.net/my-container/my-channel
 ```
 
 The `--config` flag points at the same TOML configuration file used by pixi. It
-configures S3 and Azure credentials, concurrency, and per-channel index options
-under the `[index-config]` section.
+configures S3 credentials, Azure endpoint options, concurrency, and per-channel
+index options under the `[index-config]` section.
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
@@ -82,21 +83,21 @@ is rejected. Credentials are never stored in the config — they are resolved at
 runtime from `--account-key` / `--sas-token`, an `az login` session
 (`--azure-cli`), or the `DefaultCredentialProvider` chain.
 
-A host that is not a plain `<account>.blob.<suffix>` domain, or that is not
-reached over https, needs an entry under `[azure-options."<host>"]`. The key is
-the host with its port when the URL has one:
+A host whose first label is not the storage account, or that is not reached over
+https, needs an entry under `[azure-options."<host>"]`. The key is the host with
+its port when the URL has one:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `auth` | boolean | Whether credentials may be sent to this host. Defaults to `false`, which fetches anonymously. This is the only way a credential attaches to a host, so keep these entries in your user-level config file, never in a checked-in project file. |
+| `auth` | boolean | Whether credentials may be sent to this host **when fetching**. Defaults to `false`, which fetches anonymously, and is the only way a credential attaches to a host on the fetch path — so keep these entries in your user-level config file, never in a checked-in project file. It has no effect on `rattler-index` or `rattler upload`, which take their credentials from the command line. |
 | `scheme` | string | The scheme `az://` is rewritten to: `"https"` (default) or `"http"`. Use `http` for local emulators only. |
 | `path-style` | boolean | Where the storage account is found. `false` (default) reads it from the first host label. `true` reads it from the first path segment instead, which is the only form that works for an IP-literal or single-label host. |
 
-Indexing a channel in the Azurite emulator needs all three:
+Indexing a channel in the Azurite emulator needs the two wire settings (add
+`auth = true` as well if the same host is also fetched from):
 
 ```toml
 [azure-options."127.0.0.1:10000"]
-auth = true
 scheme = "http"
 path-style = true
 ```

@@ -85,11 +85,11 @@ async fn upload_single_package(
     // opendal 0.57 only honours `if_not_exists` on the single-shot Put Blob path,
     // never the multi-block Put Block List path used for packages larger than a
     // single block, so the writer-level `if_not_exists(!force)` below silently
-    // does nothing for large uploads. An explicit `stat` closes that gap at all
-    // sizes. The residual stat->write TOCTOU (another writer could create the
-    // blob between this check and `close`) is acceptable: it is strictly better
-    // than a silent clobber, and the writer-level `if_not_exists` still
-    // guards the small-file and racing-writer cases.
+    // does nothing for large uploads. An explicit `stat` closes that gap for a
+    // blob that already exists, but not for two writers racing to create one:
+    // above the chunk size both stat as absent and the second commit wins
+    // silently. Concurrent uploads of the same package are unsafe until opendal
+    // carries `if_none_match` onto the Put Block List path.
     if !force {
         match op.stat(&key).await {
             Ok(_) => {
@@ -201,9 +201,10 @@ mod test {
     }
 
     /// C2: without `--force`, uploading over an existing blob must error rather
-    /// than silently overwrite it, at all package sizes. This exercises the
-    /// explicit pre-write `stat` guard that backstops opendal's
-    /// `if_not_exists`, which is dropped on the multi-block upload path.
+    /// than silently overwrite it. The memory backend honours `if_not_exists` on
+    /// every path and the fixture is a single block, so this covers the small-blob
+    /// path only — for the multi-block behaviour see
+    /// `rattler_index/tests/azure_azurite.rs::azurite_if_not_exists_is_dropped_on_the_multi_block_path`.
     #[tokio::test]
     async fn test_existing_blob_without_force_errors() {
         let op = memory_operator();
