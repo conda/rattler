@@ -12,7 +12,9 @@ use reqwest::{Client, Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use url::Url;
 
-/// The Azure Storage REST API version sent on every request.
+/// The Azure Storage REST API version sent on every signed request. A URL that
+/// already carries a SAS returns before this is attached, and the write path pins
+/// its own version inside opendal.
 const X_MS_VERSION: &str = "2021-12-02";
 
 /// Middleware that rewrites `az://` URLs to their wire form and, where a host is
@@ -64,11 +66,11 @@ const X_MS_VERSION: &str = "2021-12-02";
 /// hide behind it — and userinfo is invalid in a blob URL anyway.
 ///
 /// Granted credentials are resolved by reqsign's [`DefaultCredentialProvider`]
-/// chain, in its usual order: environment variables, then workload/managed
-/// identity, then the Azure CLI (`az login`). rattler's
-/// [`crate::AuthenticationStorage`] is not consulted for Azure — there is no
-/// `Authentication` Azure variant — so per-host credentials configured there do
-/// not apply to `az://` requests.
+/// chain, in its order: environment variables, the Azure CLI (`az login`),
+/// client certificate, client secret, pipelines, workload identity, IMDS.
+/// rattler's [`crate::AuthenticationStorage`] is not consulted — it has no Azure
+/// variant, and [`crate::AuthenticationMiddleware`] handles only `http`/`https`,
+/// so its host-keyed entries cannot reach an `az://` request either.
 #[derive(Clone)]
 pub struct AzureMiddleware {
     /// reqsign signer; caches the resolved credential internally.
