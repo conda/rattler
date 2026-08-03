@@ -29,54 +29,6 @@ use tokio::{
 };
 use url::Url;
 
-/// `Cache-Control` synthesized for a shard index served without one.
-///
-/// Azure Blob Storage sends no `Cache-Control` on the shard index, so the
-/// derived [`CachePolicy`] has a zero freshness lifetime and every fetch issues
-/// a conditional revalidation round-trip forever. Granting a small `max-age`
-/// (60 seconds) lets repeated fetches inside the window be served straight from
-/// the local cache; once it lapses the retained validators (`ETag` /
-/// `Last-Modified`) still drive a cheap revalidation. Responses that carry their
-/// own `Cache-Control` are used verbatim, so an origin's explicit freshness
-/// policy is never weakened.
-const SHARD_INDEX_SYNTHETIC_CACHE_CONTROL: &str = "max-age=60";
-
-/// Scheme of a channel served from Azure Blob Storage.
-///
-/// The gateway keeps the channel URL in its `az://` form throughout; the
-/// networking middleware rewrites the scheme only at send time, on its own copy
-/// of the request. So the scheme observed here still identifies an Azure
-/// channel.
-const AZURE_CHANNEL_SCHEME: &str = "az";
-
-/// Build a [`CachePolicy`] for a shard-index response.
-///
-/// Responses that already carry a `Cache-Control` header are used as-is. An
-/// `az://` channel that answers without one is given a small synthetic `max-age`
-/// so freshness accumulates instead of forcing a revalidation on every fetch.
-/// Validators are preserved either way.
-///
-/// The synthesis is limited to `az://` because a missing `Cache-Control` is
-/// only known to be an unconfigurable property of the origin for Azure Blob
-/// Storage. For any other origin the absence is a deliberate policy that the
-/// client must not override.
-fn shard_index_cache_policy(request: &SimpleRequest, response: &Response) -> CachePolicy {
-    if response.headers().contains_key(http::header::CACHE_CONTROL)
-        || request.uri().scheme_str() != Some(AZURE_CHANNEL_SCHEME)
-    {
-        return CachePolicy::new(request, response);
-    }
-
-    let mut synthetic = http::Response::new(());
-    *synthetic.status_mut() = response.status();
-    *synthetic.headers_mut() = response.headers().clone();
-    synthetic.headers_mut().insert(
-        http::header::CACHE_CONTROL,
-        http::HeaderValue::from_static(SHARD_INDEX_SYNTHETIC_CACHE_CONTROL),
-    );
-    CachePolicy::new(request, &synthetic)
-}
-
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
     GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
@@ -320,33 +272,17 @@ pub async fn fetch_index(
                         &response,
                         SystemTime::now(),
                     ) {
-                        AfterResponse::NotModified(refreshed, _) => {
-                            // The cached file is still valid. `after_response`
-                            // returns a refreshed policy derived from the stored
-                            // 200 response with the 304's headers merged, so it
-                            // stays storable and retains the original (or
-                            // synthesized) freshness window. Persist it so the
-                            // next fetch inside the window is a local cache hit
-                            // instead of yet another conditional round-trip.
-                            match read_cached_body(&mut cache_reader).await {
-                                Ok(body) => {
+                        AfterResponse::NotModified(_policy, _) => {
+                            // The cached file is still valid
+                            match read_shard_index_from_reader(&mut cache_reader).await {
+                                Ok(shard_index) => {
                                     tracing::debug!("shard index cache was not modified");
-                                    let mut guard = cache_reader.into_inner();
-                                    if let Err(e) = write_shard_index_cache(
-                                        guard.inner_mut(),
-                                        refreshed,
-                                        Bytes::from(body.clone()),
-                                    )
-                                    .await
-                                    {
-                                        tracing::warn!(
-                                            "failed to persist refreshed shard index cache policy: {e}"
-                                        );
-                                    }
                                     if let Some((reporter, index)) = download_reporter {
                                         reporter.on_download_complete(response.url(), index);
                                     }
-                                    return parse_shard_index(body).await;
+                                    // If reading the file failed for some reason we'll just
+                                    // fetch it again.
+                                    return Ok(shard_index);
                                 }
                                 Err(e) => {
                                     tracing::warn!(
@@ -358,13 +294,9 @@ pub async fn fetch_index(
                                 }
                             }
                         }
-                        AfterResponse::Modified(_, _) => {
+                        AfterResponse::Modified(policy, _) => {
                             // Close the old file so we can create a new one.
                             tracing::debug!("shard index cache has become stale");
-                            // Synthesize freshness for a Cache-Control-less
-                            // response so the re-cached index does not revalidate
-                            // on every subsequent fetch.
-                            let policy = shard_index_cache_policy(&canonical_request, &response);
                             return from_response(
                                 cache_reader.into_inner(),
                                 &cache_path,
@@ -451,7 +383,7 @@ pub async fn fetch_index(
         return Err(create_subdir_not_found_error(channel_base_url));
     }
 
-    let policy = shard_index_cache_policy(&canonical_request, &response);
+    let policy = CachePolicy::new(&canonical_request, &response);
     from_response(
         cache_reader.into_inner(),
         &cache_path,
@@ -531,34 +463,24 @@ async fn write_not_found_cache(cache_file: &mut File, policy: CachePolicy) -> st
     .await
 }
 
-/// Read the remaining bytes (the cached shard-index body) from a reader.
-async fn read_cached_body<R: AsyncRead + Unpin>(
+/// Read the shard index from a reader and deserialize it.
+pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
-) -> Result<Vec<u8>, GatewayError> {
+) -> Result<ShardedRepodata, GatewayError> {
+    // Read the file to memory
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
         .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
-    Ok(bytes)
-}
 
-/// Deserialize a shard index from raw `msgpack` bytes.
-async fn parse_shard_index(bytes: Vec<u8>) -> Result<ShardedRepodata, GatewayError> {
+    // Deserialize the bytes
     run_blocking_task(move || {
         rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
             .map_err(|e| GatewayError::IoError("failed to parse shard index".to_string(), e))
     })
     .await
-}
-
-/// Read the shard index from a reader and deserialize it.
-pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
-    reader: &mut BufReader<R>,
-) -> Result<ShardedRepodata, GatewayError> {
-    let bytes = read_cached_body(reader).await?;
-    parse_shard_index(bytes).await
 }
 
 /// Cache information stored at the start of the cache file.
@@ -632,106 +554,5 @@ impl RequestLike for SimpleRequest {
 
     fn is_same_uri(&self, other: &Uri) -> bool {
         &self.uri() == other
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::{Duration, SystemTime};
-
-    use http::{StatusCode, header};
-    use http_cache_semantics::{AfterResponse, BeforeRequest};
-    use url::Url;
-
-    use super::{SimpleRequest, shard_index_cache_policy};
-
-    /// Builds a bodyless `reqwest::Response`, mirroring how an origin (e.g.
-    /// Azure Blob Storage) answers for a shard index.
-    fn response(status: StatusCode, etag: &str, cache_control: Option<&str>) -> reqwest::Response {
-        let mut builder = http::Response::builder()
-            .status(status)
-            .header(header::ETAG, etag);
-        if let Some(cache_control) = cache_control {
-            builder = builder.header(header::CACHE_CONTROL, cache_control);
-        }
-        reqwest::Response::from(builder.body(Vec::new()).unwrap())
-    }
-
-    /// Shard index URL for a channel, in the scheme the gateway holds it in.
-    fn shards_url(scheme: &str) -> Url {
-        Url::parse(&format!(
-            "{scheme}://example.blob.core.windows.net/channel/noarch/repodata_shards.msgpack.zst"
-        ))
-        .unwrap()
-    }
-
-    /// The synthesis is scoped to Azure channels: an `az://` response without a
-    /// `Cache-Control` gains a freshness window, while any other origin keeps the
-    /// zero-freshness policy that the absent header implies.
-    #[test]
-    fn synthesis_is_limited_to_azure_channels() {
-        let now = SystemTime::now();
-        let no_cache_control = || response(StatusCode::OK, "\"v1\"", None);
-
-        let azure = SimpleRequest::get(&shards_url("az"));
-        assert!(
-            shard_index_cache_policy(&azure, &no_cache_control()).time_to_live(now)
-                > Duration::ZERO,
-            "an az:// shard index must be given a synthetic freshness window"
-        );
-
-        let https = SimpleRequest::get(&shards_url("https"));
-        assert_eq!(
-            shard_index_cache_policy(&https, &no_cache_control()).time_to_live(now),
-            Duration::ZERO,
-            "a non-Azure origin's missing Cache-Control must be honoured as-is"
-        );
-    }
-
-    /// A 304 revalidation must persist a policy that keeps a non-zero freshness
-    /// window, so a fetch within that window is a local cache hit instead of yet
-    /// another conditional round-trip.
-    #[test]
-    fn revalidation_policy_retains_freshness() {
-        let url = shards_url("az");
-        let request = SimpleRequest::get(&url);
-        let now = SystemTime::now();
-
-        // The original 200 carried no `Cache-Control`, so `shard_index_cache_policy`
-        // synthesizes a small `max-age` and the stored policy starts fresh.
-        let original = response(StatusCode::OK, "\"v1\"", None);
-        let stored = shard_index_cache_policy(&request, &original);
-        assert!(matches!(
-            stored.before_request(&request, now),
-            BeforeRequest::Fresh(_)
-        ));
-
-        // A later revalidation is answered with a 304 that, like Azure, carries no
-        // `Cache-Control`. Routing it through `after_response` yields the policy
-        // that is persisted for the next fetch.
-        let not_modified = response(StatusCode::NOT_MODIFIED, "\"v1\"", None);
-        let refreshed = match stored.after_response(&request, &not_modified, now) {
-            AfterResponse::NotModified(policy, _) => policy,
-            AfterResponse::Modified(_, _) => {
-                panic!("a matching ETag must revalidate as NotModified")
-            }
-        };
-
-        // The refreshed policy must retain a non-zero freshness window so the next
-        // fetch is served straight from the cache.
-        assert!(
-            refreshed.time_to_live(now) > Duration::ZERO,
-            "refreshed policy lost its freshness window"
-        );
-        assert!(matches!(
-            refreshed.before_request(&request, now),
-            BeforeRequest::Fresh(_)
-        ));
-
-        // Regression guard: building a policy directly from the 304 (a status that
-        // is not storable) yields zero freshness, which would force perpetual
-        // revalidation.
-        let from_304 = shard_index_cache_policy(&request, &not_modified);
-        assert_eq!(from_304.time_to_live(now), Duration::ZERO);
     }
 }
