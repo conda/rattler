@@ -85,18 +85,14 @@ impl NoticeFetch {
 }
 
 impl GatewayInner {
-    /// Fetch notices for the channels, returning an empty vector when notices
-    /// are disabled. Notice failures are intentionally non-fatal: a missing or
-    /// malformed `notices.json` must never prevent repodata from being used.
+    /// Fetch notices for the channels. Notice failures are intentionally
+    /// non-fatal: a missing or malformed `notices.json` must never prevent
+    /// repodata from being used.
     pub(super) async fn get_channel_notices<'a>(
         &self,
         channels: impl IntoIterator<Item = &'a Channel>,
         reporter: Option<&dyn Reporter>,
     ) -> Vec<ChannelNoticeResult> {
-        if !self.channel_notices {
-            return Vec::new();
-        }
-
         let mut seen = HashSet::new();
         let channels: Vec<_> = channels
             .into_iter()

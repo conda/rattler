@@ -96,9 +96,6 @@ struct JsGatewayOptions {
     max_concurrent_requests: Option<usize>,
 
     #[serde(default)]
-    channel_notices: bool,
-
-    #[serde(default)]
     channel_config: JsChannelConfig,
 }
 
@@ -177,7 +174,6 @@ impl JsGateway {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
                 builder.set_max_concurrent_requests(max_concurrent_requests);
             }
-            builder.set_channel_notices(options.channel_notices);
             builder.set_channel_config(options.channel_config.into());
         };
 
@@ -207,6 +203,7 @@ impl JsGateway {
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
+        channel_notices: bool,
     ) -> Result<JsValue, JsError> {
         // TODO: Dont hardcode
         let channel_config =
@@ -221,7 +218,12 @@ impl JsGateway {
             .map(|p| Platform::from_str(&p))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let output = self.inner.names(channels, platforms).execute().await?;
+        let output = self
+            .inner
+            .names(channels, platforms)
+            .channel_notices(channel_notices)
+            .execute()
+            .await?;
         emit_gateway_warnings(output.warnings);
 
         #[derive(Serialize)]

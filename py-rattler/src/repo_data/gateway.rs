@@ -171,7 +171,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
 #[pymethods]
 impl PyGateway {
     #[new]
-    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false, channel_notices=false))]
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false))]
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
@@ -179,7 +179,6 @@ impl PyGateway {
         cache_dir: Option<PathBuf>,
         client: Option<PyClientWithMiddleware>,
         show_progress: bool,
-        channel_notices: bool,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
@@ -194,8 +193,7 @@ impl PyGateway {
 
         let mut gateway = Gateway::builder()
             .with_max_concurrent_requests(max_concurrent_requests)
-            .with_channel_config(channel_config)
-            .with_channel_notices(channel_notices);
+            .with_channel_config(channel_config);
 
         if let Some(cache_dir) = cache_dir {
             gateway.set_cache_dir(cache_dir);
@@ -275,6 +273,7 @@ impl PyGateway {
         recursive,
         channel_relations=None,
         channel_relations_max_depth=None,
+        channel_notices=false,
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -286,6 +285,7 @@ impl PyGateway {
         recursive: bool,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
+        channel_notices: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -298,7 +298,8 @@ impl PyGateway {
         future_into_py(py, async move {
             let mut query = gateway
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
-                .recursive(recursive);
+                .recursive(recursive)
+                .channel_notices(channel_notices);
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
@@ -339,6 +340,7 @@ impl PyGateway {
         platforms,
         channel_relations=None,
         channel_relations_max_depth=None,
+        channel_notices=false,
     ))]
     pub fn names<'a>(
         &self,
@@ -347,6 +349,7 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
+        channel_notices: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -377,7 +380,9 @@ impl PyGateway {
 
             let mut notices = Vec::new();
             if !channels.is_empty() {
-                let mut query = gateway.names(channels, platforms_vec.iter().copied());
+                let mut query = gateway
+                    .names(channels, platforms_vec.iter().copied())
+                    .channel_notices(channel_notices);
 
                 if let Some(mode) = channel_relations {
                     query = query.channel_relations(mode.0);

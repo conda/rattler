@@ -202,7 +202,6 @@ class Gateway:
         max_concurrent_requests: int = 100,
         client: Optional[Client] = None,
         show_progress: bool = False,
-        channel_notices: bool = False,
     ) -> None:
         """
         Arguments:
@@ -216,7 +215,6 @@ class Gateway:
             client: An authenticated client to use for acquiring repodata. If not specified a default
                     client will be used.
             show_progress: Whether to show progress bars when fetching repodata.
-            channel_notices: Whether to fetch CEP-6 channel notices during gateway queries.
 
         Examples
         --------
@@ -235,7 +233,6 @@ class Gateway:
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
             show_progress=show_progress,
-            channel_notices=channel_notices,
         )
 
     async def query(
@@ -246,6 +243,7 @@ class Gateway:
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
+        channel_notices: bool = False,
     ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
@@ -280,6 +278,7 @@ class Gateway:
                                          ``channel_relations``. ``None`` uses the
                                          default (10). ``0`` behaves like
                                          ``channel_relations="disabled"``.
+            channel_notices: Whether to fetch CEP-6 notices for this query.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains one entry per
@@ -312,6 +311,7 @@ class Gateway:
                 for spec in specs
             ],
             recursive=recursive,
+            channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
         )
@@ -328,6 +328,7 @@ class Gateway:
         platforms: Iterable[Platform | PlatformLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
+        channel_notices: bool = False,
     ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
@@ -340,6 +341,7 @@ class Gateway:
             channel_relations_max_depth: Maximum recursion depth when following
                                          ``channel_relations``. ``None`` uses the
                                          default (10).
+            channel_notices: Whether to fetch CEP-6 notices for this query.
 
         Returns:
             A list of package names that are present in the given subdirectories.
@@ -362,6 +364,7 @@ class Gateway:
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
+            channel_notices=channel_notices,
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
         )
@@ -378,7 +381,6 @@ class Gateway:
     ) -> List[ChannelNotice]:
         """Fetch CEP-6 notices for the given channels.
 
-        The gateway must have been constructed with ``channel_notices=True``.
         Results reuse the same expiration-aware cache as regular queries.
         """
         py_notices = await self._gateway.channel_notices(

@@ -195,9 +195,8 @@ impl Gateway {
     /// Return the cached or freshly fetched CEP-6 notices for the given
     /// channels.
     ///
-    /// Returns an empty vector when channel notices were not enabled on the
-    /// [`GatewayBuilder`]. Fetch and parse failures are non-fatal and are
-    /// retried after a short cache interval.
+    /// Fetch and parse failures are non-fatal and are retried after a short
+    /// cache interval.
     pub async fn channel_notices<'a>(
         &self,
         channels: impl IntoIterator<Item = &'a Channel>,
@@ -341,9 +340,6 @@ struct GatewayInner {
 
     /// The channel configuration
     channel_config: ChannelConfig,
-
-    /// Whether CEP-6 channel notices are fetched during queries.
-    channel_notices: bool,
 
     /// In-memory notices cache, keyed by channel URL.
     notices: dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<CachedChannelNotices>>,
@@ -709,14 +705,13 @@ mod test {
 
         let channel = Channel::try_from_directory(tempdir.path()).unwrap();
         let reporter = Arc::new(NoticeReporter::default());
-        let output = Gateway::builder()
-            .with_channel_notices(true)
-            .finish()
+        let output = Gateway::new()
             .query(
                 vec![channel.clone()],
                 vec![Platform::NoArch],
                 vec![PackageName::from_str("demo").unwrap()],
             )
+            .channel_notices(true)
             .with_reporter(reporter.clone())
             .await
             .unwrap();
@@ -747,7 +742,7 @@ mod test {
         )
         .unwrap();
 
-        let gateway = Gateway::builder().with_channel_notices(true).finish();
+        let gateway = Gateway::new();
         assert_eq!(
             gateway.channel_notices([&channel]).await[0].notice.id,
             "old"
@@ -787,7 +782,7 @@ mod test {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
-        let gateway = Gateway::builder().with_channel_notices(true).finish();
+        let gateway = Gateway::new();
 
         let results = futures::future::join_all(
             (0..8).map(|_| gateway.channel_notices(std::iter::once(&channel))),
@@ -805,7 +800,7 @@ mod test {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
-        let gateway = Gateway::builder().with_channel_notices(true).finish();
+        let gateway = Gateway::new();
         assert!(gateway.channel_notices([&channel]).await.is_empty());
         server.abort();
     }
@@ -844,7 +839,6 @@ mod test {
             Channel::from_url(root.join("b/").unwrap()),
         ];
         let gateway = Gateway::builder()
-            .with_channel_notices(true)
             .with_max_concurrent_requests(1_usize)
             .finish();
 
@@ -3039,14 +3033,13 @@ mod test {
 
         let server = SimpleChannelServer::new(dir.path()).await;
         let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
-        let output = Gateway::builder()
-            .with_channel_notices(true)
-            .finish()
+        let output = Gateway::new()
             .query(
                 [bioconda],
                 [Platform::Linux64],
                 [MatchSpec::from_str("shared", Strict).unwrap()],
             )
+            .channel_notices(true)
             .execute()
             .await
             .unwrap();

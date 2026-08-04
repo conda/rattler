@@ -52,7 +52,7 @@ async def test_channel_notices(tmp_path: Path) -> None:
         )
     )
 
-    gateway = Gateway(channel_notices=True)
+    gateway = Gateway()
     channel = Channel(str(tmp_path))
     notices = await gateway.channel_notices([channel])
     assert len(notices) == 1
@@ -60,11 +60,11 @@ async def test_channel_notices(tmp_path: Path) -> None:
     assert notices[0].level == "critical"
     assert notices[0].expires_at == "2099-01-01T00:00:00Z"
 
-    result = await gateway.query([channel], ["noarch"], ["demo"])
+    result = await gateway.query([channel], ["noarch"], ["demo"], channel_notices=True)
     assert result.repodata is result
     assert result.notices == notices
 
-    names = await gateway.names([channel], ["noarch"])
+    names = await gateway.names([channel], ["noarch"], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
 

@@ -139,6 +139,9 @@ pub struct RepoDataQuery {
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
 
+    /// Whether to fetch CEP-6 notices for this query.
+    channel_notices: bool,
+
     /// CEP-42 channel relations handling mode.
     channel_relations_mode: ChannelRelationsMode,
 
@@ -234,6 +237,7 @@ impl RepoDataQuery {
 
             recursive: false,
             reporter: None,
+            channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
         }
@@ -256,6 +260,15 @@ impl RepoDataQuery {
     pub fn channel_relations_max_depth(self, depth: usize) -> Self {
         Self {
             channel_relations_max_depth: depth,
+            ..self
+        }
+    }
+
+    /// Enable or disable fetching CEP-6 channel notices. Disabled by default.
+    #[must_use]
+    pub fn channel_notices(self, enabled: bool) -> Self {
+        Self {
+            channel_notices: enabled,
             ..self
         }
     }
@@ -290,6 +303,7 @@ impl RepoDataQuery {
             return Ok(RepoDataQueryOutput::default());
         }
 
+        let channel_notices = self.channel_notices;
         let initial_channels: Vec<_> = self
             .sources
             .iter()
@@ -302,17 +316,23 @@ impl RepoDataQuery {
         let reporter = self.reporter.clone();
         let executor = QueryExecutor::new(self)?;
         let ((mut output, channels), _) = futures::try_join!(executor.run(), async {
-            Ok::<_, GatewayError>(
+            Ok::<_, GatewayError>(if channel_notices {
                 gateway
                     .get_channel_notices(initial_channels.iter(), reporter.as_deref())
-                    .await,
-            )
+                    .await
+            } else {
+                Vec::new()
+            })
         })?;
         // Fetch again with the complete channel set. Explicit channels hit the
         // cache while this adds channels discovered through CEP-42.
-        let notices = gateway
-            .get_channel_notices(channels.iter(), reporter.as_deref())
-            .await;
+        let notices = if channel_notices {
+            gateway
+                .get_channel_notices(channels.iter(), reporter.as_deref())
+                .await
+        } else {
+            Vec::new()
+        };
         GatewayInner::report_channel_notices(reporter.as_deref(), &notices);
         output.notices = notices;
         Ok(output)
@@ -375,6 +395,7 @@ impl QueryExecutor {
             specs,
             recursive,
             reporter,
+            channel_notices: _,
             channel_relations_mode,
             channel_relations_max_depth,
         } = query;
@@ -1229,6 +1250,9 @@ pub struct NamesQuery {
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
 
+    /// Whether to fetch CEP-6 notices for this query.
+    channel_notices: bool,
+
     /// CEP-42 channel relations handling mode.
     channel_relations_mode: ChannelRelationsMode,
 
@@ -1250,8 +1274,18 @@ impl NamesQuery {
             platforms,
 
             reporter: None,
+            channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
             channel_relations_max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+        }
+    }
+
+    /// Enable or disable fetching CEP-6 channel notices. Disabled by default.
+    #[must_use]
+    pub fn channel_notices(self, enabled: bool) -> Self {
+        Self {
+            channel_notices: enabled,
+            ..self
         }
     }
 
@@ -1290,11 +1324,19 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
+        let channel_notices = self.channel_notices;
         let initial_channels = self.channels.clone();
         let notice_gateway = self.gateway.clone();
         let notice_reporter = self.reporter.clone();
-        let initial_notices =
-            notice_gateway.get_channel_notices(initial_channels.iter(), notice_reporter.as_deref());
+        let initial_notices = async {
+            if channel_notices {
+                notice_gateway
+                    .get_channel_notices(initial_channels.iter(), notice_reporter.as_deref())
+                    .await
+            } else {
+                Vec::new()
+            }
+        };
 
         let names = async move {
             let mut expander = ChannelExpander::new(
@@ -1373,9 +1415,13 @@ impl NamesQuery {
         let (names, warnings, channels) = names?;
         // Explicit channels are cached; this second pass adds any channels
         // discovered while resolving CEP-42 relations.
-        let notices = notice_gateway
-            .get_channel_notices(channels.iter(), notice_reporter.as_deref())
-            .await;
+        let notices = if channel_notices {
+            notice_gateway
+                .get_channel_notices(channels.iter(), notice_reporter.as_deref())
+                .await
+        } else {
+            Vec::new()
+        };
         GatewayInner::report_channel_notices(notice_reporter.as_deref(), &notices);
         Ok(NamesQueryOutput {
             names,

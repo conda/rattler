@@ -45,6 +45,11 @@ export type ChannelNotice = {
     interval: number | null;
 };
 
+export type GatewayQueryOptions = {
+    /** Whether CEP-6 channel notices are fetched. Defaults to `false`. */
+    channelNotices?: boolean;
+};
+
 export type GatewayNamesResult = NormalizedPackageName[] & {
     /** The package names. This aliases the result array for compatibility. */
     names: NormalizedPackageName[];
@@ -58,9 +63,6 @@ export type GatewayOptions = {
      * default there is no limit.
      */
     maxConcurrentRequests?: number | null;
-
-    /** Whether CEP-6 channel notices are fetched. Defaults to `false`. */
-    channelNotices?: boolean;
 
     /** Defines how to access channels. */
     channelConfig?: GatewayChannelConfig;
@@ -104,15 +106,25 @@ export class Gateway {
      *
      * @param channels - The channels to query
      * @param platforms - The platforms to query
+     * @param options - Per-query options
      */
     public async names(
         channels: string[],
         platforms: Platform[],
+        options?: GatewayQueryOptions,
     ): Promise<GatewayNamesResult> {
-        const rawOutput = (await this.native.names(
+        const nativeNames = (
+            this.native.names as unknown as (
+                channels: string[],
+                platforms: Platform[],
+                channelNotices: boolean,
+            ) => Promise<unknown>
+        ).bind(this.native);
+        const rawOutput = await nativeNames(
             channels,
             platforms,
-        )) as unknown;
+            options?.channelNotices ?? false,
+        );
         // Accept the old native array shape as well, so the TypeScript wrapper
         // remains compatible when it is loaded with an older WASM artifact.
         const output = Array.isArray(rawOutput)
