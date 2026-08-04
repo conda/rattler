@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ExtractError"],"mod":["fs","read","reqwest","seek","tokio","write"],"struct":["ExtractResult"],"trait":["DownloadReporter"]};
+window.SIDEBAR_ITEMS = {"enum":["ExtractError"],"mod":["archive","fs","read","reqwest","seek","tokio","write"],"struct":["ExtractResult"],"trait":["DownloadReporter"]};

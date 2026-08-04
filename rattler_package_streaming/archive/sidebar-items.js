@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ArchiveAccess","ArchiveEntryKind","Section","SparsePolicy"],"struct":["PackageArchive","RemoteArchiveOptions","SectionEntry","SectionStream"]};
