@@ -27,7 +27,7 @@
 //! message = "Please update the affected package"
 //! level = "critical"
 //! created_at = "2025-01-01T12:00:00Z"
-//! expired_at = "2025-02-01T12:00:00Z"
+//! expires_at = "2025-02-01T12:00:00Z"
 //!
 //! [index-config."/srv/conda/internal"]
 //! base-url = "../packages/"
@@ -334,7 +334,7 @@ id = "security-1"
 message = "Please update demo"
 level = "critical"
 created_at = "2025-01-01T12:00:00Z"
-expired_at = "2025-02-01T12:00:00Z"
+expires_at = "2025-02-01T12:00:00Z"
 interval = 24
 "#,
         );

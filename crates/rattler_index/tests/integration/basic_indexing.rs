@@ -394,7 +394,7 @@ async fn test_index_writes_channel_metadata() {
             message: "Please update demo".to_string(),
             level: ChannelNoticeLevel::Critical,
             created_at: None,
-            expired_at: None,
+            expires_at: None,
             interval: Some(24),
         }]),
     };

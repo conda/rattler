@@ -32,8 +32,11 @@ pub struct ChannelNotice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<Timestamp>,
     /// When the notice expires.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expired_at: Option<Timestamp>,
+    ///
+    /// `expired_at` is accepted as an alias for compatibility with older
+    /// conda implementations, but CEP-6 calls this field `expires_at`.
+    #[serde(default, alias = "expired_at", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<Timestamp>,
     /// The requested interval between displaying the notice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interval: Option<u64>,
@@ -60,7 +63,7 @@ mod tests {
                     "message": "Please update demo",
                     "level": "critical",
                     "created_at": "2025-01-01T12:00:00+00:00",
-                    "expired_at": "2025-02-01T12:00:00+00:00",
+                    "expires_at": "2025-02-01T12:00:00+00:00",
                     "interval": 24
                 }]
             }"#,
@@ -69,6 +72,12 @@ mod tests {
 
         assert_eq!(notices.notices.len(), 1);
         assert_eq!(notices.notices[0].level, ChannelNoticeLevel::Critical);
+        assert!(notices.notices[0].expires_at.is_some());
         assert_eq!(notices.notices[0].interval, Some(24));
+        assert!(
+            serde_json::to_value(&notices).unwrap()["notices"][0]
+                .get("expires_at")
+                .is_some()
+        );
     }
 }
