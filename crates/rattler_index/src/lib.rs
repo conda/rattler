@@ -1585,10 +1585,11 @@ pub async fn index_with_channel_metadata(
     precondition_checks: PreconditionChecks,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
-    if let Some(notices) = &channel_metadata.notices {
-        write_channel_notices(&op, notices).await?;
-    }
-
+    let notices_metadata = if channel_metadata.notices.is_some() {
+        Some(RepodataFileMetadata::new(&op, CHANNEL_NOTICES, precondition_checks).await?)
+    } else {
+        None
+    };
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.
@@ -1693,18 +1694,44 @@ pub async fn index_with_channel_metadata(
             }
         }
     }
+
+    // Publish notices only after all repodata updates succeeded, so a failed
+    // indexing operation cannot partially update channel-level messaging.
+    if let (Some(notices), Some(metadata)) = (&channel_metadata.notices, notices_metadata.as_ref())
+    {
+        write_channel_notices_with_metadata(&op, notices, metadata).await?;
+    }
+
     Ok(stats)
 }
 
 /// Write CEP-6 channel notices to the channel root.
 pub async fn write_channel_notices(op: &Operator, notices: &[ChannelNotice]) -> anyhow::Result<()> {
+    let metadata =
+        RepodataFileMetadata::new(op, CHANNEL_NOTICES, PreconditionChecks::Disabled).await?;
+    write_channel_notices_with_metadata(op, notices, &metadata).await
+}
+
+async fn write_channel_notices_with_metadata(
+    op: &Operator,
+    notices: &[ChannelNotice],
+    metadata: &RepodataFileMetadata,
+) -> anyhow::Result<()> {
     let bytes = serde_json::to_vec_pretty(&ChannelNotices {
         notices: notices.to_vec(),
     })?;
-    op.write_with(CHANNEL_NOTICES, bytes)
+    let mut writer = op
+        .write_with(CHANNEL_NOTICES, bytes)
         .content_type("application/json")
-        .cache_control(CACHE_CONTROL_REPODATA)
-        .await?;
+        .cache_control(CACHE_CONTROL_REPODATA);
+    if metadata.precondition_checks.is_enabled() {
+        if let Some(etag) = &metadata.etag {
+            writer = writer.if_match(etag);
+        } else if !metadata.file_existed {
+            writer = writer.if_not_exists(true);
+        }
+    }
+    writer.await?;
     Ok(())
 }
 

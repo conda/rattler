@@ -28,6 +28,7 @@ pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use channel_expander::{ChannelRelationsMode, ChannelRelationsWarning};
+use channel_notices::CachedChannelNotices;
 pub use channel_notices::ChannelNoticeResult;
 pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
@@ -191,6 +192,19 @@ impl Gateway {
         )
     }
 
+    /// Return the cached or freshly fetched CEP-6 notices for the given
+    /// channels.
+    ///
+    /// Returns an empty vector when channel notices were not enabled on the
+    /// [`GatewayBuilder`]. Fetch and parse failures are non-fatal and are
+    /// retried after a short cache interval.
+    pub async fn channel_notices<'a>(
+        &self,
+        channels: impl IntoIterator<Item = &'a Channel>,
+    ) -> Vec<ChannelNoticeResult> {
+        self.inner.get_channel_notices(channels, None).await
+    }
+
     /// Returns the [CEP-42] `channel_relations` declared by the given
     /// `(channel, platform)` subdirectory, or `None` if none were
     /// declared or the subdirectory doesn't exist.
@@ -276,6 +290,8 @@ impl Gateway {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+        self.inner.notices.remove(&channel.base_url);
+        self.inner.notice_fetch_locks.remove(&channel.base_url);
 
         #[cfg(not(target_arch = "wasm32"))]
         if mode == CacheClearMode::InMemoryAndDisk {
@@ -330,10 +346,11 @@ struct GatewayInner {
     channel_notices: bool,
 
     /// In-memory notices cache, keyed by channel URL.
-    notices: dashmap::DashMap<
-        rattler_conda_types::ChannelUrl,
-        Arc<Vec<rattler_conda_types::ChannelNotice>>,
-    >,
+    notices: dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<CachedChannelNotices>>,
+
+    /// Per-channel locks used to coalesce notice refreshes.
+    notice_fetch_locks:
+        dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<tokio::sync::Mutex<()>>>,
 
     /// The directory to store any cache
     #[cfg(not(target_arch = "wasm32"))]
@@ -683,7 +700,10 @@ mod test {
         fs_err::write(noarch.join("repodata.json"), make_repodata("demo", "1.0")).unwrap();
         fs_err::write(
             tempdir.path().join("notices.json"),
-            r#"{"notices":[{"id":"security-1","message":"Update demo","level":"critical"}]}"#,
+            r#"{"notices":[
+                {"id":"security-1","message":"Update demo","level":"critical","expires_at":"2099-01-01T00:00:00Z"},
+                {"id":42,"message":"malformed notice"}
+            ]}"#,
         )
         .unwrap();
 
@@ -714,6 +734,80 @@ mod test {
             .await
             .unwrap();
         assert!(output.notices.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_refresh_at_expiration() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let expiry = jiff::Timestamp::now() + jiff::SignedDuration::from_millis(500);
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            format!(r#"{{"notices":[{{"id":"old","message":"Old","expires_at":"{expiry}"}}]}}"#),
+        )
+        .unwrap();
+
+        let gateway = Gateway::builder().with_channel_notices(true).finish();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "old"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[{"id":"new","message":"New","expires_at":"2099-01-01T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "new"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notice_requests_are_coalesced_and_size_limited() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_route = calls.clone();
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(move || {
+                let calls = calls_for_route.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    r#"{"notices":[{"id":"one","message":"One","expires_at":"2099-01-01T00:00:00Z"}]}"#
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::builder().with_channel_notices(true).finish();
+
+        let results = futures::future::join_all(
+            (0..8).map(|_| gateway.channel_notices(std::iter::once(&channel))),
+        )
+        .await;
+        assert!(results.iter().all(|notices| notices.len() == 1));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        server.abort();
+
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(|| async { "x".repeat(1024 * 1024 + 1) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::builder().with_channel_notices(true).finish();
+        assert!(gateway.channel_notices([&channel]).await.is_empty());
+        server.abort();
     }
 
     #[tokio::test]

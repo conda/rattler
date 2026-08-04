@@ -301,11 +301,12 @@ impl RepoDataQuery {
         let gateway = self.gateway.clone();
         let reporter = self.reporter.clone();
         let executor = QueryExecutor::new(self)?;
-        let (output, notices) = tokio::join!(
+        let (output, notices) = futures::join!(
             executor.run(),
             gateway.get_channel_notices(channels.iter(), reporter.as_deref())
         );
         let mut output = output?;
+        GatewayInner::report_channel_notices(reporter.as_deref(), &notices);
         output.notices = notices;
         Ok(output)
     }
@@ -1287,75 +1288,85 @@ impl NamesQuery {
         let notices =
             notice_gateway.get_channel_notices(notice_channels.iter(), notice_reporter.as_deref());
 
-        let mut expander = ChannelExpander::new(
-            self.channel_relations_mode,
-            self.channel_relations_max_depth,
-            self.platforms.clone(),
-            self.reporter.clone(),
-        );
+        let names = async move {
+            let mut expander = ChannelExpander::new(
+                self.channel_relations_mode,
+                self.channel_relations_max_depth,
+                self.platforms.clone(),
+                self.reporter.clone(),
+            );
 
-        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
-        for channel in self.channels {
-            let (url, channel_arc) = expander.register_user_channel(channel);
-            for &platform in &self.platforms {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    channel_arc.clone(),
-                    platform,
-                    url.clone(),
-                    self.reporter.clone(),
-                    FetchErrorPolicy::Propagate,
-                ));
+            let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> =
+                FuturesUnordered::new();
+            for channel in self.channels {
+                let (url, channel_arc) = expander.register_user_channel(channel);
+                for &platform in &self.platforms {
+                    pending.push(spawn_names_fetch(
+                        self.gateway.clone(),
+                        channel_arc.clone(),
+                        platform,
+                        url.clone(),
+                        self.reporter.clone(),
+                        FetchErrorPolicy::Propagate,
+                    ));
+                }
             }
-        }
 
-        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
-        let strict = expander.strict();
-        let policy = if strict {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
+            let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
+            let strict = expander.strict();
+            let policy = if strict {
+                FetchErrorPolicy::WrapAsChannelRelationsError
+            } else {
+                FetchErrorPolicy::SwallowAsWarning
+            };
+
+            while let Some(result) = pending.next().await {
+                let (url, platform, subdir, warning) = result?;
+                if let Some(w) = warning {
+                    expander.push_warning(w);
+                }
+                if let Some(subdir_names) = subdir.package_names() {
+                    names.extend(subdir_names);
+                }
+                for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
+                    pending.push(spawn_names_fetch(
+                        self.gateway.clone(),
+                        new_channel,
+                        new_plat,
+                        new_url,
+                        self.reporter.clone(),
+                        policy,
+                    ));
+                }
+            }
+
+            if expander.enabled() && expander.has_observed_relations() {
+                // Names are an unordered set; finalize only for its
+                // depth/cycle diagnostics and strict-mode errors.
+                expander.finalize()?;
+            }
+
+            let names = names
+                .into_iter()
+                .map(PackageName::try_from)
+                .collect::<Result<Vec<PackageName>, _>>()?;
+            Ok::<_, GatewayError>((
+                names,
+                expander
+                    .take_warnings()
+                    .into_iter()
+                    .map(GatewayWarning::from)
+                    .collect(),
+            ))
         };
 
-        while let Some(result) = pending.next().await {
-            let (url, platform, subdir, warning) = result?;
-            if let Some(w) = warning {
-                expander.push_warning(w);
-            }
-            if let Some(subdir_names) = subdir.package_names() {
-                names.extend(subdir_names);
-            }
-            for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    new_channel,
-                    new_plat,
-                    new_url,
-                    self.reporter.clone(),
-                    policy,
-                ));
-            }
-        }
-
-        if expander.enabled() && expander.has_observed_relations() {
-            // Names are an unordered set; finalize only for its
-            // depth/cycle diagnostics and strict-mode errors.
-            expander.finalize()?;
-        }
-
-        let names = names
-            .into_iter()
-            .map(PackageName::try_from)
-            .collect::<Result<Vec<PackageName>, _>>()?;
-        let notices = notices.await;
+        let (names, notices) = futures::join!(names, notices);
+        let (names, warnings) = names?;
+        GatewayInner::report_channel_notices(notice_reporter.as_deref(), &notices);
         Ok(NamesQueryOutput {
             names,
             notices,
-            warnings: expander
-                .take_warnings()
-                .into_iter()
-                .map(GatewayWarning::from)
-                .collect(),
+            warnings,
         })
     }
 }

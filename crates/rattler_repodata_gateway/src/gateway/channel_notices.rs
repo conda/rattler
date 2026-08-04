@@ -2,13 +2,25 @@
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use rattler_conda_types::{Channel, ChannelNotice, ChannelNotices, ChannelUrl};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+use wasmtimer::std::Instant;
+
+use futures::TryStreamExt;
+use rattler_conda_types::{Channel, ChannelNotice, ChannelUrl};
 use rattler_redaction::Redact;
 use reqwest::StatusCode;
+use serde::Deserialize;
 
 use crate::{Reporter, reporter::ResponseReporterExt};
 
 use super::GatewayInner;
+
+const NOTICES_FILENAME: &str = "notices.json";
+const MAX_NOTICES_SIZE: usize = 1024 * 1024;
+const EMPTY_NOTICES_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const FAILED_NOTICES_TTL: Duration = Duration::from_secs(5 * 60);
 
 /// A channel notice together with the channel that published it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +29,59 @@ pub struct ChannelNoticeResult {
     pub channel: ChannelUrl,
     /// The published CEP-6 notice.
     pub notice: ChannelNotice,
+}
+
+pub(super) struct CachedChannelNotices {
+    notices: Arc<Vec<ChannelNotice>>,
+    refresh_at: Instant,
+}
+
+impl CachedChannelNotices {
+    fn is_fresh(&self) -> bool {
+        Instant::now() < self.refresh_at
+    }
+}
+
+struct NoticeFetch {
+    notices: Vec<ChannelNotice>,
+    ttl: Duration,
+}
+
+impl NoticeFetch {
+    fn failed() -> Self {
+        Self {
+            notices: Vec::new(),
+            ttl: FAILED_NOTICES_TTL,
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            notices: Vec::new(),
+            ttl: EMPTY_NOTICES_TTL,
+        }
+    }
+
+    fn from_notices(mut notices: Vec<ChannelNotice>) -> Self {
+        let now = jiff::Timestamp::now();
+        let had_expired_notice = notices
+            .iter()
+            .any(|notice| notice.expires_at.is_some_and(|expires| expires <= now));
+        notices.retain(|notice| notice.expires_at.is_none_or(|expires| expires > now));
+
+        let ttl = notices
+            .iter()
+            .filter_map(|notice| notice.expires_at)
+            .filter_map(|expires| Duration::try_from(expires.duration_since(now)).ok())
+            .min()
+            .unwrap_or(if had_expired_notice {
+                FAILED_NOTICES_TTL
+            } else {
+                EMPTY_NOTICES_TTL
+            });
+
+        Self { notices, ttl }
+    }
 }
 
 impl GatewayInner {
@@ -40,20 +105,12 @@ impl GatewayInner {
             .collect();
 
         let results = futures::future::join_all(channels.iter().map(|channel| async move {
-            let notices = if let Some(notices) = self.notices.get(&channel.base_url) {
-                notices.clone()
-            } else {
-                let notices = Arc::new(self.fetch_channel_notices(channel, reporter).await);
-                self.notices
-                    .entry(channel.base_url.clone())
-                    .or_insert_with(|| notices.clone())
-                    .clone()
-            };
+            let notices = self.get_one_channel_notices(channel, reporter).await;
             (channel.base_url.clone(), notices)
         }))
         .await;
 
-        let notices: Vec<_> = results
+        results
             .into_iter()
             .flat_map(|(channel, notices)| {
                 notices
@@ -65,69 +122,172 @@ impl GatewayInner {
                         notice,
                     })
             })
-            .collect();
+            .collect()
+    }
 
+    async fn get_one_channel_notices(
+        &self,
+        channel: &Channel,
+        reporter: Option<&dyn Reporter>,
+    ) -> Arc<Vec<ChannelNotice>> {
+        if let Some(cached) = self.notices.get(&channel.base_url)
+            && cached.is_fresh()
+        {
+            return cached.notices.clone();
+        }
+
+        // Notice requests are much smaller than repodata requests but still
+        // need to be coalesced when multiple queries start simultaneously.
+        let lock = self
+            .notice_fetch_locks
+            .entry(channel.base_url.clone())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone();
+        let _guard = lock.lock().await;
+
+        // Another waiter may have refreshed the entry while this task waited.
+        if let Some(cached) = self.notices.get(&channel.base_url)
+            && cached.is_fresh()
+        {
+            return cached.notices.clone();
+        }
+
+        let fetched = self.fetch_channel_notices(channel, reporter).await;
+        let notices = Arc::new(fetched.notices);
+        let now = Instant::now();
+        self.notices.insert(
+            channel.base_url.clone(),
+            Arc::new(CachedChannelNotices {
+                notices: notices.clone(),
+                refresh_at: now
+                    .checked_add(fetched.ttl)
+                    .unwrap_or_else(|| now + EMPTY_NOTICES_TTL),
+            }),
+        );
+        notices
+    }
+
+    pub(super) fn report_channel_notices(
+        reporter: Option<&dyn Reporter>,
+        notices: &[ChannelNoticeResult],
+    ) {
         if let Some(reporter) = reporter {
-            for notice in &notices {
+            for notice in notices {
                 reporter.on_channel_notice(notice);
             }
         }
-        notices
     }
 
     async fn fetch_channel_notices(
         &self,
         channel: &Channel,
         reporter: Option<&dyn Reporter>,
-    ) -> Vec<ChannelNotice> {
-        let Ok(url) = channel.base_url.url().join("notices.json") else {
-            return Vec::new();
+    ) -> NoticeFetch {
+        let Ok(url) = channel.base_url.url().join(NOTICES_FILENAME) else {
+            return NoticeFetch::failed();
         };
 
-        let result = if url.scheme() == "file" {
+        #[cfg(not(target_arch = "wasm32"))]
+        if url.scheme() == "file" {
             let Ok(path) = url.to_file_path() else {
-                return Vec::new();
+                return NoticeFetch::failed();
             };
-            fs_err::read(path)
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<ChannelNotices>(&bytes).ok())
-        } else if matches!(url.scheme(), "http" | "https") {
-            let response = match self
-                .client
-                .client()
-                .get(url.clone())
-                .timeout(Duration::from_secs(5))
-                .send()
-                .await
-            {
-                Ok(response) if response.status() == StatusCode::NOT_FOUND => return Vec::new(),
-                Ok(response) => match response.error_for_status() {
-                    Ok(response) => response,
-                    Err(err) => {
-                        tracing::debug!(url = %url.clone().redact(), "failed to fetch channel notices: {err}");
-                        return Vec::new();
-                    }
-                },
+            return match fs_err::read(path) {
+                Ok(bytes) if bytes.len() <= MAX_NOTICES_SIZE => parse_notices(&bytes),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => NoticeFetch::empty(),
+                Ok(_) | Err(_) => NoticeFetch::failed(),
+            };
+        }
+
+        if !matches!(url.scheme(), "http" | "https") {
+            return NoticeFetch::empty();
+        }
+
+        let request = self.client.client().get(url.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        let response = request.timeout(Duration::from_secs(5)).send().await;
+        #[cfg(target_arch = "wasm32")]
+        let response = match wasmtimer::tokio::timeout(Duration::from_secs(5), request.send()).await
+        {
+            Ok(response) => response,
+            Err(_) => {
+                tracing::debug!(url = %url.clone().redact(), "timed out fetching channel notices");
+                return NoticeFetch::failed();
+            }
+        };
+        let response = match response {
+            Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+                return NoticeFetch::empty();
+            }
+            Ok(response) => match response.error_for_status() {
+                Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(url = %url.clone().redact(), "failed to fetch channel notices: {err}");
-                    return Vec::new();
+                    return NoticeFetch::failed();
                 }
-            };
-
-            let download = reporter
-                .and_then(Reporter::download_reporter)
-                .map(|download| (download, download.on_download_start(&url)));
-            let bytes = response.bytes_with_progress(download).await;
-            if let Some((download, index)) = download {
-                download.on_download_complete(&url, index);
+            },
+            Err(err) => {
+                tracing::debug!(url = %url.clone().redact(), "failed to fetch channel notices: {err}");
+                return NoticeFetch::failed();
             }
-            bytes
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<ChannelNotices>(&bytes).ok())
-        } else {
-            None
         };
 
-        result.map_or_else(Vec::new, |notices| notices.notices)
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_NOTICES_SIZE as u64)
+        {
+            tracing::debug!(url = %url.clone().redact(), "channel notices response is too large");
+            return NoticeFetch::failed();
+        }
+
+        let download = reporter
+            .and_then(Reporter::download_reporter)
+            .map(|download| (download, download.on_download_start(&url)));
+        let mut stream = std::pin::pin!(response.byte_stream_with_progress(download));
+        let mut bytes = Vec::new();
+        let result = loop {
+            match stream.try_next().await {
+                Ok(Some(chunk))
+                    if bytes
+                        .len()
+                        .checked_add(chunk.len())
+                        .is_some_and(|size| size <= MAX_NOTICES_SIZE) =>
+                {
+                    bytes.extend_from_slice(&chunk);
+                }
+                Ok(Some(_)) | Err(_) => break NoticeFetch::failed(),
+                Ok(None) => break parse_notices(&bytes),
+            }
+        };
+        if let Some((download, index)) = download {
+            download.on_download_complete(&url, index);
+        }
+        result
+    }
+}
+
+fn parse_notices(bytes: &[u8]) -> NoticeFetch {
+    #[derive(Deserialize)]
+    struct RawNotices {
+        #[serde(default)]
+        notices: Vec<serde_json::Value>,
+    }
+
+    let Ok(raw) = serde_json::from_slice::<RawNotices>(bytes) else {
+        return NoticeFetch::failed();
+    };
+
+    // A malformed notice should not hide unrelated valid notices from the
+    // same channel.
+    let had_entries = !raw.notices.is_empty();
+    let notices: Vec<_> = raw
+        .notices
+        .into_iter()
+        .filter_map(|notice| serde_json::from_value(notice).ok())
+        .collect();
+    if had_entries && notices.is_empty() {
+        NoticeFetch::failed()
+    } else {
+        NoticeFetch::from_notices(notices)
     }
 }

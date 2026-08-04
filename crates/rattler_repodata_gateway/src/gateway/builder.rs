@@ -212,6 +212,7 @@ impl GatewayBuilder {
                 channel_config: self.channel_config,
                 channel_notices: self.channel_notices,
                 notices: dashmap::DashMap::new(),
+                notice_fetch_locks: dashmap::DashMap::new(),
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
