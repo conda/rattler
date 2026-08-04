@@ -1,12 +1,12 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use rattler_conda_types::{Channel, Platform};
+use rattler_conda_types::{Channel, ChannelNoticeLevel, Platform};
 use rattler_repodata_gateway::{
     ChannelConfig, Gateway, GatewayWarning, SourceConfig, fetch::CacheAction,
 };
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 use wasm_bindgen::prelude::*;
 
@@ -58,6 +58,9 @@ impl AsRef<Gateway> for JsGateway {
 #[serde(rename_all = "camelCase")]
 struct JsGatewayOptions {
     max_concurrent_requests: Option<usize>,
+
+    #[serde(default)]
+    channel_notices: bool,
 
     #[serde(default)]
     channel_config: JsChannelConfig,
@@ -138,12 +141,60 @@ impl JsGateway {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
                 builder.set_max_concurrent_requests(max_concurrent_requests);
             }
+            builder.set_channel_notices(options.channel_notices);
             builder.set_channel_config(options.channel_config.into());
         };
 
         Ok(Self {
             inner: builder.finish(),
         })
+    }
+
+    pub async fn channel_notices(&self, channels: Vec<String>) -> Result<JsValue, JsError> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Notice {
+            channel: String,
+            id: String,
+            message: String,
+            level: &'static str,
+            created_at: Option<String>,
+            expires_at: Option<String>,
+            interval: Option<u64>,
+        }
+
+        let channel_config =
+            rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
+        let channels = channels
+            .into_iter()
+            .map(|channel| Channel::from_str(&channel, &channel_config))
+            .collect::<Result<Vec<_>, _>>()?;
+        let notices: Vec<_> = self
+            .inner
+            .channel_notices(channels.iter())
+            .await
+            .into_iter()
+            .map(|result| Notice {
+                channel: result.channel.to_string(),
+                id: result.notice.id,
+                message: result.notice.message,
+                level: match result.notice.level {
+                    ChannelNoticeLevel::Info => "info",
+                    ChannelNoticeLevel::Warning => "warning",
+                    ChannelNoticeLevel::Critical => "critical",
+                },
+                created_at: result
+                    .notice
+                    .created_at
+                    .map(|timestamp| timestamp.to_string()),
+                expires_at: result
+                    .notice
+                    .expires_at
+                    .map(|timestamp| timestamp.to_string()),
+                interval: result.notice.interval,
+            })
+            .collect();
+        Ok(serde_wasm_bindgen::to_value(&notices)?)
     }
 
     pub async fn names(

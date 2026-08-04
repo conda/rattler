@@ -9,8 +9,8 @@ use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclas
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, GatewayWarning, Source,
-    SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
+    GatewayWarning, Source, SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -29,6 +29,39 @@ use crate::{PyChannel, Wrap};
 pub struct PyGateway {
     pub(crate) inner: Gateway,
     show_progress: bool,
+}
+
+/// A CEP-6 channel notice returned by the repodata gateway.
+#[pyclass(get_all, from_py_object)]
+#[derive(Clone)]
+pub struct PyChannelNotice {
+    channel: String,
+    id: String,
+    message: String,
+    level: String,
+    created_at: Option<String>,
+    expires_at: Option<String>,
+    interval: Option<u64>,
+}
+
+impl From<ChannelNoticeResult> for PyChannelNotice {
+    fn from(value: ChannelNoticeResult) -> Self {
+        let notice = value.notice;
+        Self {
+            channel: value.channel.to_string(),
+            id: notice.id,
+            message: notice.message,
+            level: match notice.level {
+                rattler_conda_types::ChannelNoticeLevel::Info => "info",
+                rattler_conda_types::ChannelNoticeLevel::Warning => "warning",
+                rattler_conda_types::ChannelNoticeLevel::Critical => "critical",
+            }
+            .to_string(),
+            created_at: notice.created_at.map(|timestamp| timestamp.to_string()),
+            expires_at: notice.expires_at.map(|timestamp| timestamp.to_string()),
+            interval: notice.interval,
+        }
+    }
 }
 
 impl From<PyGateway> for Gateway {
@@ -138,7 +171,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
 #[pymethods]
 impl PyGateway {
     #[new]
-    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false))]
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false, channel_notices=false))]
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
@@ -146,6 +179,7 @@ impl PyGateway {
         cache_dir: Option<PathBuf>,
         client: Option<PyClientWithMiddleware>,
         show_progress: bool,
+        channel_notices: bool,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
@@ -160,7 +194,8 @@ impl PyGateway {
 
         let mut gateway = Gateway::builder()
             .with_max_concurrent_requests(max_concurrent_requests)
-            .with_channel_config(channel_config);
+            .with_channel_config(channel_config)
+            .with_channel_notices(channel_notices);
 
         if let Some(cache_dir) = cache_dir {
             gateway.set_cache_dir(cache_dir);
@@ -177,6 +212,23 @@ impl PyGateway {
         Ok(Self {
             inner: gateway.finish(),
             show_progress,
+        })
+    }
+
+    /// Fetch CEP-6 notices for the given channels.
+    pub fn channel_notices<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            Ok(gateway
+                .channel_notices(channels.iter().map(|channel| &channel.inner))
+                .await
+                .into_iter()
+                .map(PyChannelNotice::from)
+                .collect::<Vec<_>>())
         })
     }
 

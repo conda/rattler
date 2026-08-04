@@ -35,12 +35,25 @@ export type GatewayChannelConfig = {
     };
 };
 
+export type ChannelNotice = {
+    channel: string;
+    id: string;
+    message: string;
+    level: "info" | "warning" | "critical";
+    createdAt: string | null;
+    expiresAt: string | null;
+    interval: number | null;
+};
+
 export type GatewayOptions = {
     /**
      * The maximum number of concurrent requests the gateway can execute. By
      * default there is no limit.
      */
     maxConcurrentRequests?: number | null;
+
+    /** Whether CEP-6 channel notices are fetched. Defaults to `false`. */
+    channelNotices?: boolean;
 
     /** Defines how to access channels. */
     channelConfig?: GatewayChannelConfig;
@@ -71,6 +84,11 @@ export class Gateway {
      */
     constructor(options?: GatewayOptions | null) {
         this.native = new JsGateway(options);
+    }
+
+    /** Fetches CEP-6 notices for the given channels. */
+    public async channelNotices(channels: string[]): Promise<ChannelNotice[]> {
+        return (await this.native.channel_notices(channels)) as ChannelNotice[];
     }
 
     /**

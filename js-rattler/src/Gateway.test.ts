@@ -22,6 +22,14 @@ describe("Gateway", () => {
                     }),
             ).not.toThrowError();
         });
+        it("accepts channel notices", () => {
+            expect(
+                () =>
+                    new Gateway({
+                        channelNotices: true,
+                    }),
+            ).not.toThrowError();
+        });
         it("accepts empty channelConfig", () => {
             expect(
                 () =>

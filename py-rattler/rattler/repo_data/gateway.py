@@ -11,7 +11,7 @@ from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
-from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
+from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
 
@@ -127,6 +127,31 @@ class SourceConfig:
         )
 
 
+@dataclass(frozen=True)
+class ChannelNotice:
+    """A CEP-6 notice published by a conda channel."""
+
+    channel: str
+    id: str
+    message: str
+    level: Literal["info", "warning", "critical"]
+    created_at: Optional[str]
+    expires_at: Optional[str]
+    interval: Optional[int]
+
+    @classmethod
+    def _from_py(cls, notice: PyChannelNotice) -> ChannelNotice:
+        return cls(
+            channel=notice.channel,
+            id=notice.id,
+            message=notice.message,
+            level=notice.level,
+            created_at=notice.created_at,
+            expires_at=notice.expires_at,
+            interval=notice.interval,
+        )
+
+
 class Gateway:
     """
     The gateway manages all the quircks and complex bits of efficiently acquiring
@@ -153,6 +178,7 @@ class Gateway:
         max_concurrent_requests: int = 100,
         client: Optional[Client] = None,
         show_progress: bool = False,
+        channel_notices: bool = False,
     ) -> None:
         """
         Arguments:
@@ -166,6 +192,7 @@ class Gateway:
             client: An authenticated client to use for acquiring repodata. If not specified a default
                     client will be used.
             show_progress: Whether to show progress bars when fetching repodata.
+            channel_notices: Whether to fetch CEP-6 channel notices during gateway queries.
 
         Examples
         --------
@@ -184,6 +211,7 @@ class Gateway:
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
             show_progress=show_progress,
+            channel_notices=channel_notices,
         )
 
     async def query(
@@ -313,6 +341,20 @@ class Gateway:
 
         # Convert the records into python objects
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+
+    async def channel_notices(
+        self,
+        channels: Iterable[Channel | str],
+    ) -> List[ChannelNotice]:
+        """Fetch CEP-6 notices for the given channels.
+
+        The gateway must have been constructed with ``channel_notices=True``.
+        Results reuse the same expiration-aware cache as regular queries.
+        """
+        py_notices = await self._gateway.channel_notices(
+            [channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels]
+        )
+        return [ChannelNotice._from_py(notice) for notice in py_notices]
 
     async def channel_relations(
         self,
