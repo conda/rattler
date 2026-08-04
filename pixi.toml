@@ -14,6 +14,9 @@ preview = ["pixi-build"]
 exclude-newer = "7d"
 requires-pixi = ">=0.67.0"
 
+[exclude-newer]
+pixi-build-rust = "0d"
+
 [workspace.build-variants]
 # Use the same Rust version everywhere
 rust_compiler_version = ["1.95.0"]
