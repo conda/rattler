@@ -2,6 +2,7 @@ mod barrier_cell;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
@@ -27,6 +28,7 @@ pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use channel_expander::{ChannelRelationsMode, ChannelRelationsWarning};
+pub use channel_notices::ChannelNoticeResult;
 pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
@@ -323,6 +325,15 @@ struct GatewayInner {
 
     /// The channel configuration
     channel_config: ChannelConfig,
+
+    /// Whether CEP-6 channel notices are fetched during queries.
+    channel_notices: bool,
+
+    /// In-memory notices cache, keyed by channel URL.
+    notices: dashmap::DashMap<
+        rattler_conda_types::ChannelUrl,
+        Arc<Vec<rattler_conda_types::ChannelNotice>>,
+    >,
 
     /// The directory to store any cache
     #[cfg(not(target_arch = "wasm32"))]
@@ -649,6 +660,60 @@ mod test {
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
         assert!(messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_are_returned_and_reported() {
+        #[derive(Default)]
+        struct NoticeReporter(Mutex<Vec<String>>);
+
+        impl Reporter for Arc<NoticeReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_channel_notice(&self, notice: &crate::ChannelNoticeResult) {
+                self.0.lock().unwrap().push(notice.notice.id.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(noarch.join("repodata.json"), make_repodata("demo", "1.0")).unwrap();
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[{"id":"security-1","message":"Update demo","level":"critical"}]}"#,
+        )
+        .unwrap();
+
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let reporter = Arc::new(NoticeReporter::default());
+        let output = Gateway::builder()
+            .with_channel_notices(true)
+            .finish()
+            .query(
+                vec![channel.clone()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(output.notices.len(), 1);
+        assert_eq!(output.notices[0].notice.id, "security-1");
+        assert_eq!(reporter.0.lock().unwrap().as_slice(), ["security-1"]);
+
+        let output = Gateway::new()
+            .query(
+                vec![channel],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .await
+            .unwrap();
+        assert!(output.notices.is_empty());
     }
 
     #[tokio::test]

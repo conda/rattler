@@ -12,7 +12,7 @@ use rattler_conda_types::{
 use url::Url;
 
 use super::{
-    BarrierCell, GatewayError, GatewayInner, GatewayWarning, RepoData,
+    BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     source::{CustomSourceClient, Source},
@@ -31,6 +31,9 @@ pub struct RepoDataQueryOutput {
     /// next to the channel that introduced them; caller-supplied
     /// sources keep their positions.
     pub repodata: Vec<RepoData>,
+    /// CEP-6 notices published by the queried channels. Also streamed to
+    /// [`Reporter::on_channel_notice`].
+    pub notices: Vec<ChannelNoticeResult>,
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
@@ -71,6 +74,9 @@ impl<'a> IntoIterator for &'a RepoDataQueryOutput {
 pub struct NamesQueryOutput {
     /// Distinct package names contributed by all queried subdirs.
     pub names: Vec<PackageName>,
+    /// CEP-6 notices published by the queried channels. Also streamed to
+    /// [`Reporter::on_channel_notice`].
+    pub notices: Vec<ChannelNoticeResult>,
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
@@ -284,8 +290,24 @@ impl RepoDataQuery {
             return Ok(RepoDataQueryOutput::default());
         }
 
+        let channels: Vec<_> = self
+            .sources
+            .iter()
+            .filter_map(|source| match source {
+                Source::Channel(channel) => Some(channel.clone()),
+                Source::Custom(_) => None,
+            })
+            .collect();
+        let gateway = self.gateway.clone();
+        let reporter = self.reporter.clone();
         let executor = QueryExecutor::new(self)?;
-        executor.run().await
+        let (output, notices) = tokio::join!(
+            executor.run(),
+            gateway.get_channel_notices(channels.iter(), reporter.as_deref())
+        );
+        let mut output = output?;
+        output.notices = notices;
+        Ok(output)
     }
 }
 
@@ -1008,6 +1030,7 @@ impl QueryExecutor {
         repodata.extend(handles.into_iter().map(|h| h.data));
         Ok(RepoDataQueryOutput {
             repodata,
+            notices: Vec::new(),
             warnings: self
                 .expander
                 .take_warnings()
@@ -1258,6 +1281,12 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
+        let notice_channels = self.channels.clone();
+        let notice_gateway = self.gateway.clone();
+        let notice_reporter = self.reporter.clone();
+        let notices =
+            notice_gateway.get_channel_notices(notice_channels.iter(), notice_reporter.as_deref());
+
         let mut expander = ChannelExpander::new(
             self.channel_relations_mode,
             self.channel_relations_max_depth,
@@ -1318,8 +1347,10 @@ impl NamesQuery {
             .into_iter()
             .map(PackageName::try_from)
             .collect::<Result<Vec<PackageName>, _>>()?;
+        let notices = notices.await;
         Ok(NamesQueryOutput {
             names,
+            notices,
             warnings: expander
                 .take_warnings()
                 .into_iter()

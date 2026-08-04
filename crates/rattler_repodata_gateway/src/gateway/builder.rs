@@ -49,6 +49,7 @@ pub struct GatewayBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
     max_concurrent_requests: MaxConcurrency,
+    channel_notices: bool,
 }
 
 impl GatewayBuilder {
@@ -109,6 +110,22 @@ impl GatewayBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_package_cache(&mut self, package_cache: PackageCache) -> &mut Self {
         self.package_cache = Some(package_cache);
+        self
+    }
+
+    /// Enable or disable fetching CEP-6 channel notices during queries.
+    ///
+    /// Notices are disabled by default. When enabled, notices are returned on
+    /// query outputs and sent to the query's reporter.
+    #[must_use]
+    pub fn with_channel_notices(mut self, enabled: bool) -> Self {
+        self.set_channel_notices(enabled);
+        self
+    }
+
+    /// Enable or disable fetching CEP-6 channel notices during queries.
+    pub fn set_channel_notices(&mut self, enabled: bool) -> &mut Self {
+        self.channel_notices = enabled;
         self
     }
 
@@ -193,6 +210,8 @@ impl GatewayBuilder {
                 subdirs: CoalescedMap::new(),
                 client,
                 channel_config: self.channel_config,
+                channel_notices: self.channel_notices,
+                notices: dashmap::DashMap::new(),
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
