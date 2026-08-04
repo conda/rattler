@@ -22,12 +22,21 @@
 //! [index-config."s3://my-bucket/staging".channel-relations]
 //! base = "../conda-forge"
 //!
+//! [[index-config."s3://my-bucket/staging".notices]]
+//! id = "security-1"
+//! message = "Please update the affected package"
+//! level = "critical"
+//! created_at = "2025-01-01T12:00:00Z"
+//! expired_at = "2025-02-01T12:00:00Z"
+//!
 //! [index-config."/srv/conda/internal"]
 //! base-url = "../packages/"
 //! ```
 use std::{collections::HashMap, str::FromStr};
 
-use rattler_conda_types::{ChannelRelations, RepodataRevision, RepodataRevisionInfo};
+use rattler_conda_types::{
+    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionInfo,
+};
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
 use crate::config::{Config, MergeError, ValidationError};
@@ -92,6 +101,13 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
 
+    /// CEP-6 notices to write to the channel's root `notices.json`.
+    ///
+    /// When unset, an existing notices file is left untouched. An empty list
+    /// explicitly writes a notices file with no notices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notices: Option<Vec<ChannelNotice>>,
+
     /// `info.channel_relations` value written to generated repodata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_relations: Option<ChannelRelations>,
@@ -105,6 +121,7 @@ impl IndexChannelConfig {
             && self.repodata_revisions.is_none()
             && self.package_revision_assignment.is_none()
             && self.base_url.is_none()
+            && self.notices.is_none()
             && self.channel_relations.is_none()
     }
 
@@ -120,6 +137,7 @@ impl IndexChannelConfig {
                 .package_revision_assignment
                 .or(self.package_revision_assignment),
             base_url: other.base_url.or_else(|| self.base_url.clone()),
+            notices: other.notices.or_else(|| self.notices.clone()),
             channel_relations: other
                 .channel_relations
                 .or_else(|| self.channel_relations.clone()),
@@ -305,6 +323,26 @@ base = "../conda-forge"
             Some("../conda-forge")
         );
         assert!(cfg.per_channel.is_empty());
+    }
+
+    #[test]
+    fn parses_channel_notices() {
+        let cfg = parse(
+            r#"
+[[notices]]
+id = "security-1"
+message = "Please update demo"
+level = "critical"
+created_at = "2025-01-01T12:00:00Z"
+expired_at = "2025-02-01T12:00:00Z"
+interval = 24
+"#,
+        );
+
+        let notices = cfg.default.notices.unwrap();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].id, "security-1");
+        assert_eq!(notices[0].interval, Some(24));
     }
 
     #[test]
