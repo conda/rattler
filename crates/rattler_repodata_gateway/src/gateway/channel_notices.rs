@@ -7,7 +7,7 @@ use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 use wasmtimer::std::Instant;
 
-use futures::TryStreamExt;
+use futures::{TryStreamExt, future::OptionFuture};
 use rattler_conda_types::{Channel, ChannelNotice, ChannelUrl};
 use rattler_redaction::Redact;
 use reqwest::StatusCode;
@@ -202,6 +202,17 @@ impl GatewayInner {
         if !matches!(url.scheme(), "http" | "https") {
             return NoticeFetch::empty();
         }
+
+        // Notice downloads share the gateway's request budget with repodata,
+        // package, and run-export downloads.
+        let _request_permit = OptionFuture::from(
+            self.concurrent_requests_semaphore
+                .clone()
+                .map(tokio::sync::Semaphore::acquire_owned),
+        )
+        .await
+        .transpose()
+        .expect("gateway request semaphore was closed");
 
         let request = self.client.client().get(url.clone());
         #[cfg(not(target_arch = "wasm32"))]

@@ -45,6 +45,13 @@ export type ChannelNotice = {
     interval: number | null;
 };
 
+export type GatewayNamesResult = NormalizedPackageName[] & {
+    /** The package names. This aliases the result array for compatibility. */
+    names: NormalizedPackageName[];
+    /** CEP-6 notices published by queried and CEP-42-discovered channels. */
+    notices: ChannelNotice[];
+};
+
 export type GatewayOptions = {
     /**
      * The maximum number of concurrent requests the gateway can execute. By
@@ -101,10 +108,22 @@ export class Gateway {
     public async names(
         channels: string[],
         platforms: Platform[],
-    ): Promise<NormalizedPackageName[]> {
-        return (await this.native.names(
+    ): Promise<GatewayNamesResult> {
+        const rawOutput = (await this.native.names(
             channels,
             platforms,
-        )) as NormalizedPackageName[];
+        )) as unknown;
+        // Accept the old native array shape as well, so the TypeScript wrapper
+        // remains compatible when it is loaded with an older WASM artifact.
+        const output = Array.isArray(rawOutput)
+            ? { names: rawOutput as NormalizedPackageName[], notices: [] }
+            : (rawOutput as {
+                  names: NormalizedPackageName[];
+                  notices: ChannelNotice[];
+              });
+        const result = output.names as GatewayNamesResult;
+        result.names = result;
+        result.notices = output.notices;
+        return result;
     }
 }

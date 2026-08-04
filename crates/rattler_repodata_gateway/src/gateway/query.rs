@@ -290,7 +290,7 @@ impl RepoDataQuery {
             return Ok(RepoDataQueryOutput::default());
         }
 
-        let channels: Vec<_> = self
+        let initial_channels: Vec<_> = self
             .sources
             .iter()
             .filter_map(|source| match source {
@@ -301,11 +301,18 @@ impl RepoDataQuery {
         let gateway = self.gateway.clone();
         let reporter = self.reporter.clone();
         let executor = QueryExecutor::new(self)?;
-        let (output, notices) = futures::join!(
-            executor.run(),
-            gateway.get_channel_notices(channels.iter(), reporter.as_deref())
-        );
-        let mut output = output?;
+        let ((mut output, channels), _) = futures::try_join!(executor.run(), async {
+            Ok::<_, GatewayError>(
+                gateway
+                    .get_channel_notices(initial_channels.iter(), reporter.as_deref())
+                    .await,
+            )
+        })?;
+        // Fetch again with the complete channel set. Explicit channels hit the
+        // cache while this adds channels discovered through CEP-42.
+        let notices = gateway
+            .get_channel_notices(channels.iter(), reporter.as_deref())
+            .await;
         GatewayInner::report_channel_notices(reporter.as_deref(), &notices);
         output.notices = notices;
         Ok(output)
@@ -832,7 +839,7 @@ impl QueryExecutor {
     }
 
     /// Run the main event loop.
-    async fn run(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
+    async fn run(mut self) -> Result<(RepoDataQueryOutput, Vec<Channel>), GatewayError> {
         self.spawn_direct_url_fetches()?;
 
         loop {
@@ -884,7 +891,8 @@ impl QueryExecutor {
             }
         }
 
-        self.finalize_channel_relations()
+        let channels = self.expander.channels();
+        Ok((self.finalize_channel_relations()?, channels))
     }
 
     /// Hand a freshly resolved subdir to the expander; schedule fetches
@@ -1282,11 +1290,11 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
-        let notice_channels = self.channels.clone();
+        let initial_channels = self.channels.clone();
         let notice_gateway = self.gateway.clone();
         let notice_reporter = self.reporter.clone();
-        let notices =
-            notice_gateway.get_channel_notices(notice_channels.iter(), notice_reporter.as_deref());
+        let initial_notices =
+            notice_gateway.get_channel_notices(initial_channels.iter(), notice_reporter.as_deref());
 
         let names = async move {
             let mut expander = ChannelExpander::new(
@@ -1357,11 +1365,17 @@ impl NamesQuery {
                     .into_iter()
                     .map(GatewayWarning::from)
                     .collect(),
+                expander.channels(),
             ))
         };
 
-        let (names, notices) = futures::join!(names, notices);
-        let (names, warnings) = names?;
+        let (names, _initial_notices) = futures::join!(names, initial_notices);
+        let (names, warnings, channels) = names?;
+        // Explicit channels are cached; this second pass adds any channels
+        // discovered while resolving CEP-42 relations.
+        let notices = notice_gateway
+            .get_channel_notices(channels.iter(), notice_reporter.as_deref())
+            .await;
         GatewayInner::report_channel_notices(notice_reporter.as_deref(), &notices);
         Ok(NamesQueryOutput {
             names,

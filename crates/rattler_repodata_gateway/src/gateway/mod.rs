@@ -812,6 +812,49 @@ mod test {
 
     #[tokio::test]
     #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notices_respect_max_concurrent_requests() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let maximum = Arc::new(AtomicUsize::new(0));
+        let handler = {
+            let active = active.clone();
+            let maximum = maximum.clone();
+            move || {
+                let active = active.clone();
+                let maximum = maximum.clone();
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    maximum.fetch_max(current, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    r#"{"notices":[]}"#
+                }
+            }
+        };
+        let app = axum::Router::new()
+            .route("/a/notices.json", axum::routing::get(handler.clone()))
+            .route("/b/notices.json", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let root = Url::parse(&format!("http://{address}/")).unwrap();
+        let channels = [
+            Channel::from_url(root.join("a/").unwrap()),
+            Channel::from_url(root.join("b/").unwrap()),
+        ];
+        let gateway = Gateway::builder()
+            .with_channel_notices(true)
+            .with_max_concurrent_requests(1_usize)
+            .finish();
+
+        gateway.channel_notices(channels.iter()).await;
+        assert_eq!(maximum.load(Ordering::SeqCst), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
             .with_package_cache(PackageCache::new(
@@ -2973,6 +3016,47 @@ mod test {
         assert_eq!(results.len(), 2);
         assert!(!results[0].is_empty(), "conda-forge bucket non-empty");
         assert!(!results[1].is_empty(), "bioconda bucket non-empty");
+    }
+
+    /// Notices include channels discovered through CEP-42 relations.
+    #[tokio::test]
+    async fn test_cep42_discovered_channel_notices_are_returned() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        std::fs::write(
+            cf_root.join("notices.json"),
+            r#"{"notices":[{"id":"base","message":"Base notice"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            bc_root.join("notices.json"),
+            r#"{"notices":[{"id":"declaring","message":"Declaring notice"}]}"#,
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+        let output = Gateway::builder()
+            .with_channel_notices(true)
+            .finish()
+            .query(
+                [bioconda],
+                [Platform::Linux64],
+                [MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .execute()
+            .await
+            .unwrap();
+
+        let ids: std::collections::HashSet<_> = output
+            .notices
+            .iter()
+            .map(|notice| notice.notice.id.as_str())
+            .collect();
+        assert_eq!(ids, std::collections::HashSet::from(["base", "declaring"]));
     }
 
     /// `Disabled` ignores declared relations.

@@ -29,6 +29,42 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) {
 
 use crate::JsResult;
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Notice {
+    channel: String,
+    id: String,
+    message: String,
+    level: &'static str,
+    created_at: Option<String>,
+    expires_at: Option<String>,
+    interval: Option<u64>,
+}
+
+impl From<rattler_repodata_gateway::ChannelNoticeResult> for Notice {
+    fn from(result: rattler_repodata_gateway::ChannelNoticeResult) -> Self {
+        Self {
+            channel: result.channel.to_string(),
+            id: result.notice.id,
+            message: result.notice.message,
+            level: match result.notice.level {
+                ChannelNoticeLevel::Info => "info",
+                ChannelNoticeLevel::Warning => "warning",
+                ChannelNoticeLevel::Critical => "critical",
+            },
+            created_at: result
+                .notice
+                .created_at
+                .map(|timestamp| timestamp.to_string()),
+            expires_at: result
+                .notice
+                .expires_at
+                .map(|timestamp| timestamp.to_string()),
+            interval: result.notice.interval,
+        }
+    }
+}
+
 #[wasm_bindgen]
 #[repr(transparent)]
 #[derive(Clone)]
@@ -151,18 +187,6 @@ impl JsGateway {
     }
 
     pub async fn channel_notices(&self, channels: Vec<String>) -> Result<JsValue, JsError> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Notice {
-            channel: String,
-            id: String,
-            message: String,
-            level: &'static str,
-            created_at: Option<String>,
-            expires_at: Option<String>,
-            interval: Option<u64>,
-        }
-
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
         let channels = channels
@@ -174,25 +198,7 @@ impl JsGateway {
             .channel_notices(channels.iter())
             .await
             .into_iter()
-            .map(|result| Notice {
-                channel: result.channel.to_string(),
-                id: result.notice.id,
-                message: result.notice.message,
-                level: match result.notice.level {
-                    ChannelNoticeLevel::Info => "info",
-                    ChannelNoticeLevel::Warning => "warning",
-                    ChannelNoticeLevel::Critical => "critical",
-                },
-                created_at: result
-                    .notice
-                    .created_at
-                    .map(|timestamp| timestamp.to_string()),
-                expires_at: result
-                    .notice
-                    .expires_at
-                    .map(|timestamp| timestamp.to_string()),
-                interval: result.notice.interval,
-            })
+            .map(Notice::from)
             .collect();
         Ok(serde_wasm_bindgen::to_value(&notices)?)
     }
@@ -201,7 +207,7 @@ impl JsGateway {
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
-    ) -> Result<Vec<String>, JsError> {
+    ) -> Result<JsValue, JsError> {
         // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -217,10 +223,20 @@ impl JsGateway {
 
         let output = self.inner.names(channels, platforms).execute().await?;
         emit_gateway_warnings(output.warnings);
-        Ok(output
-            .names
-            .into_iter()
-            .map(|name| name.as_source().to_string())
-            .collect())
+
+        #[derive(Serialize)]
+        struct NamesOutput {
+            names: Vec<String>,
+            notices: Vec<Notice>,
+        }
+
+        Ok(serde_wasm_bindgen::to_value(&NamesOutput {
+            names: output
+                .names
+                .into_iter()
+                .map(|name| name.as_source().to_string())
+                .collect(),
+            notices: output.notices.into_iter().map(Notice::from).collect(),
+        })?)
     }
 }

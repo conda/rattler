@@ -316,7 +316,7 @@ impl PyGateway {
             emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
-            Ok(output
+            let records = output
                 .repodata
                 .into_iter()
                 .map(|r| {
@@ -324,7 +324,13 @@ impl PyGateway {
                         .map(|arc| PyRecord::from(arc.clone()))
                         .collect::<Vec<_>>()
                 })
-                .collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let notices = output
+                .notices
+                .into_iter()
+                .map(PyChannelNotice::from)
+                .collect::<Vec<_>>();
+            Ok((records, notices))
         })
     }
 
@@ -369,6 +375,7 @@ impl PyGateway {
             let mut all_names: std::collections::HashSet<rattler_conda_types::PackageName> =
                 std::collections::HashSet::new();
 
+            let mut notices = Vec::new();
             if !channels.is_empty() {
                 let mut query = gateway.names(channels, platforms_vec.iter().copied());
 
@@ -388,6 +395,7 @@ impl PyGateway {
                 let output = query.execute().await.map_err(PyRattlerError::from)?;
                 emit_gateway_warnings(output.warnings)?;
                 all_names.extend(output.names);
+                notices.extend(output.notices.into_iter().map(PyChannelNotice::from));
             }
 
             // Collect names from custom sources directly
@@ -403,10 +411,13 @@ impl PyGateway {
             }
 
             // Convert to list of PyPackageName
-            Ok(all_names
-                .into_iter()
-                .map(PyPackageName::from)
-                .collect::<Vec<_>>())
+            Ok((
+                all_names
+                    .into_iter()
+                    .map(PyPackageName::from)
+                    .collect::<Vec<_>>(),
+                notices,
+            ))
         })
     }
 }

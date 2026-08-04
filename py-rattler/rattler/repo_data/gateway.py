@@ -152,6 +152,30 @@ class ChannelNotice:
         )
 
 
+class GatewayQueryResult(list[List[RepoDataRecord]]):
+    """Repodata and CEP-6 notices returned by :meth:`Gateway.query`.
+
+    This remains a list for compatibility with earlier releases.
+    """
+
+    def __init__(self, repodata: List[List[RepoDataRecord]], notices: List[ChannelNotice]) -> None:
+        super().__init__(repodata)
+        self.repodata = self
+        self.notices = notices
+
+
+class GatewayNamesResult(list[PackageName]):
+    """Package names and CEP-6 notices returned by :meth:`Gateway.names`.
+
+    This remains a list for compatibility with earlier releases.
+    """
+
+    def __init__(self, names: List[PackageName], notices: List[ChannelNotice]) -> None:
+        super().__init__(names)
+        self.names = self
+        self.notices = notices
+
+
 class Gateway:
     """
     The gateway manages all the quircks and complex bits of efficiently acquiring
@@ -222,7 +246,7 @@ class Gateway:
         recursive: bool = True,
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
-    ) -> List[List[RepoDataRecord]]:
+    ) -> GatewayQueryResult:
         """Queries the gateway for repodata from channels and custom sources.
 
         If `recursive` is `True` the gateway will recursively fetch the dependencies of the
@@ -277,7 +301,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records = await self._gateway.query(
+        py_records, py_notices = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -292,8 +316,11 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records into python objects
-        return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
+        # Convert the records and notices into Python objects.
+        return GatewayQueryResult(
+            [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
+            [ChannelNotice._from_py(notice) for notice in py_notices],
+        )
 
     async def names(
         self,
@@ -301,7 +328,7 @@ class Gateway:
         platforms: Iterable[Platform | PlatformLiteral],
         channel_relations: Optional[ChannelRelationsMode] = None,
         channel_relations_max_depth: Optional[int] = None,
-    ) -> List[PackageName]:
+    ) -> GatewayNamesResult:
         """Queries all the names of packages in channels or custom sources.
 
         Arguments:
@@ -329,7 +356,7 @@ class Gateway:
         ```
         """
 
-        py_package_names = await self._gateway.names(
+        py_package_names, py_notices = await self._gateway.names(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -339,8 +366,11 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records into python objects
-        return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+        # Convert the names and notices into Python objects.
+        return GatewayNamesResult(
+            [PackageName._from_py_package_name(package_name) for package_name in py_package_names],
+            [ChannelNotice._from_py(notice) for notice in py_notices],
+        )
 
     async def channel_notices(
         self,

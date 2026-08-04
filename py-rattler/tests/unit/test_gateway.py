@@ -18,6 +18,24 @@ async def test_single_record_in_recursive_query(gateway: Gateway, conda_forge_ch
 
 @pytest.mark.asyncio
 async def test_channel_notices(tmp_path: Path) -> None:
+    noarch = tmp_path / "noarch"
+    noarch.mkdir()
+    (noarch / "repodata.json").write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "demo-1.0-0.tar.bz2": {
+                        "name": "demo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "noarch",
+                    }
+                }
+            }
+        )
+    )
     (tmp_path / "notices.json").write_text(
         json.dumps(
             {
@@ -35,11 +53,20 @@ async def test_channel_notices(tmp_path: Path) -> None:
     )
 
     gateway = Gateway(channel_notices=True)
-    notices = await gateway.channel_notices([Channel(str(tmp_path))])
+    channel = Channel(str(tmp_path))
+    notices = await gateway.channel_notices([channel])
     assert len(notices) == 1
     assert notices[0].id == "security-1"
     assert notices[0].level == "critical"
     assert notices[0].expires_at == "2099-01-01T00:00:00Z"
+
+    result = await gateway.query([channel], ["noarch"], ["demo"])
+    assert result.repodata is result
+    assert result.notices == notices
+
+    names = await gateway.names([channel], ["noarch"])
+    assert names.names is names
+    assert names.notices == notices
 
 
 def test_init_per_channel_config_key() -> None:
