@@ -233,9 +233,9 @@ dependencies = [
 
 [[package]]
 name = "astral_async_zip"
-version = "0.0.18"
+version = "0.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c15fc5b591f19dfbbbce736615908d74f1d9252bb34b231873cb995f2a997ffb"
+checksum = "bd939d79959c3f49a648a1d7857d63cc62548725a6b060b8dbf0ea5c92470b63"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -1114,7 +1114,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "coalesced_map"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "dashmap",
  "tokio",
@@ -1699,9 +1699,9 @@ dependencies = [
 
 [[package]]
 name = "file_url"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "percent-encoding",
  "thiserror 2.0.18",
  "typed-path",
@@ -1804,14 +1804,14 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "0.13.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
 dependencies = [
  "fs-err",
  "rustix 1.1.4",
  "tokio",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2414,7 +2414,7 @@ dependencies = [
  "tokio",
  "tower-service",
  "tracing",
- "windows-registry",
+ "windows-registry 0.5.3",
 ]
 
 [[package]]
@@ -2429,7 +2429,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -2637,6 +2637,15 @@ name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
 ]
@@ -3029,9 +3038,9 @@ checksum = "ea2970fbbc8c785e8246234a7bd004ed66cd1ed1a35ec73669a92545e419b836"
 
 [[package]]
 name = "nix"
-version = "0.30.1"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3388,12 +3397,12 @@ dependencies = [
 
 [[package]]
 name = "path_resolver"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "ahash",
  "fs-err",
  "indexmap 2.14.0",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "proptest",
  "tempfile",
  "tracing",
@@ -3678,7 +3687,6 @@ dependencies = [
  "pyo3-async-runtimes",
  "pyo3-build-config",
  "pyo3-file",
- "pyo3-log",
  "pythonize",
  "rattler",
  "rattler_conda_types",
@@ -3762,17 +3770,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyo3-log"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f64083bd3a16a353d9d62335808e8e13d0552d2a2b83fdb084496192dcfa9fcd"
-dependencies = [
- "arc-swap",
- "log",
- "pyo3",
-]
-
-[[package]]
 name = "pyo3-macros"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3814,15 +3811,6 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-xml"
-version = "0.37.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.39.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
@@ -3839,6 +3827,15 @@ checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
 dependencies = [
  "memchr",
  "serde",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -4011,7 +4008,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.47.0"
+version = "0.48.1"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4026,7 +4023,7 @@ dependencies = [
  "humantime",
  "indexmap 2.14.0",
  "indicatif",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "memchr",
  "memmap2",
@@ -4058,7 +4055,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.10.2"
+version = "0.10.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4070,7 +4067,7 @@ dependencies = [
  "fs4",
  "futures",
  "hex",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
@@ -4079,6 +4076,7 @@ dependencies = [
  "rattler_redaction",
  "rayon",
  "reqwest",
+ "rustix 1.1.4",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
@@ -4090,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4101,7 +4099,7 @@ dependencies = [
  "glob",
  "hex",
  "indexmap 2.14.0",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "lazy-regex",
  "memmap2",
@@ -4130,7 +4128,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.6.0"
+version = "0.6.2"
 dependencies = [
  "dirs",
  "fs-err",
@@ -4147,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.3.1"
+version = "1.3.2"
 dependencies = [
  "blake2",
  "digest 0.11.3",
@@ -4165,7 +4163,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.8"
+version = "0.30.11"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4203,12 +4201,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.4"
+version = "0.32.0"
 dependencies = [
  "ahash",
  "file_url",
  "indexmap 2.14.0",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "pep440_rs",
  "pep508_rs",
@@ -4230,7 +4228,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "quote",
  "syn",
@@ -4238,7 +4236,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.69"
+version = "0.2.72"
 dependencies = [
  "configparser",
  "dirs",
@@ -4248,7 +4246,7 @@ dependencies = [
  "known-folders",
  "once_cell",
  "plist",
- "quick-xml 0.37.5",
+ "quick-xml 0.41.0",
  "rattler_conda_types",
  "rattler_shell",
  "regex",
@@ -4261,13 +4259,13 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "which",
- "windows 0.61.3",
- "windows-registry",
+ "windows 0.62.2",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
 name = "rattler_networking"
-version = "0.30.1"
+version = "0.30.3"
 dependencies = [
  "ambient-id",
  "anyhow",
@@ -4287,7 +4285,7 @@ dependencies = [
  "google-cloud-auth",
  "http 1.4.2",
  "http-auth",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "keyring-core",
  "netrc-rs",
  "regex",
@@ -4305,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.26.7"
+version = "0.26.9"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-tokio-tar",
@@ -4313,6 +4311,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "async-spooled-tempfile",
+ "bytes",
  "bzip2",
  "filetime",
  "fs-err",
@@ -4344,7 +4343,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.14"
+version = "0.2.16"
 dependencies = [
  "libc",
  "nix",
@@ -4354,7 +4353,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "astral-reqwest-middleware",
  "reqwest",
@@ -4363,7 +4362,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4389,7 +4388,7 @@ dependencies = [
  "humansize",
  "humantime",
  "indicatif",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "json-patch",
  "libc",
@@ -4425,7 +4424,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.2.7"
+version = "0.2.9"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4441,13 +4440,13 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.9"
+version = "0.27.12"
 dependencies = [
  "anyhow",
  "enum_dispatch",
  "fs-err",
  "indexmap 2.14.0",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "rattler_conda_types",
  "rattler_pty",
  "serde_json",
@@ -4460,11 +4459,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "7.2.1"
+version = "9.0.0"
 dependencies = [
  "futures",
  "hex",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "rattler_conda_types",
  "rattler_digest",
@@ -4473,11 +4472,12 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "url",
 ]
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "3.0.3"
+version = "4.1.0"
 dependencies = [
  "archspec",
  "libloading",
@@ -5295,9 +5295,9 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-hook"
-version = "0.3.18"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+checksum = "b2a0c28ca5908dbdbcd52e6fdaa00358ab88637f8ab33e1f188dd510eb44b53d"
 dependencies = [
  "libc",
  "signal-hook-registry",
@@ -5361,7 +5361,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simple_spawn_blocking"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "tokio",
 ]
@@ -6308,11 +6308,23 @@ version = "0.61.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9babd3a767a4c1aef6900409f85f5d53ce2544ccdfaa86dad48c91782c6d6893"
 dependencies = [
- "windows-collections",
- "windows-core",
- "windows-future",
+ "windows-collections 0.2.0",
+ "windows-core 0.61.2",
+ "windows-future 0.2.1",
  "windows-link 0.1.3",
- "windows-numerics",
+ "windows-numerics 0.2.0",
+]
+
+[[package]]
+name = "windows"
+version = "0.62.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580"
+dependencies = [
+ "windows-collections 0.3.2",
+ "windows-core 0.62.2",
+ "windows-future 0.3.2",
+ "windows-numerics 0.3.1",
 ]
 
 [[package]]
@@ -6321,7 +6333,16 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3beeceb5e5cfd9eb1d76b381630e82c4241ccd0d27f1a39ed41b2760b255c5e8"
 dependencies = [
- "windows-core",
+ "windows-core 0.61.2",
+]
+
+[[package]]
+name = "windows-collections"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b2d95af1a8a14a3c7367e1ed4fc9c20e0a26e79551b1454d72583c97cc6610"
+dependencies = [
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -6333,8 +6354,21 @@ dependencies = [
  "windows-implement",
  "windows-interface",
  "windows-link 0.1.3",
- "windows-result",
- "windows-strings",
+ "windows-result 0.3.4",
+ "windows-strings 0.4.2",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.62.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
+dependencies = [
+ "windows-implement",
+ "windows-interface",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
 ]
 
 [[package]]
@@ -6343,9 +6377,20 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc6a41e98427b19fe4b73c550f060b59fa592d7d686537eebf9385621bfbad8e"
 dependencies = [
- "windows-core",
+ "windows-core 0.61.2",
  "windows-link 0.1.3",
- "windows-threading",
+ "windows-threading 0.1.0",
+]
+
+[[package]]
+name = "windows-future"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1d6f90251fe18a279739e78025bd6ddc52a7e22f921070ccdc67dde84c605cb"
+dependencies = [
+ "windows-core 0.62.2",
+ "windows-link 0.2.1",
+ "windows-threading 0.2.1",
 ]
 
 [[package]]
@@ -6401,8 +6446,18 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9150af68066c4c5c07ddc0ce30421554771e528bde427614c61038bc2c92c2b1"
 dependencies = [
- "windows-core",
+ "windows-core 0.61.2",
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-numerics"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e2e40844ac143cdb44aead537bbf727de9b044e107a0f1220392177d15b0f26"
+dependencies = [
+ "windows-core 0.62.2",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -6412,8 +6467,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b8a9ed28765efc97bbc954883f4e6796c33a06546ebafacbabee9696967499e"
 dependencies = [
  "windows-link 0.1.3",
- "windows-result",
- "windows-strings",
+ "windows-result 0.3.4",
+ "windows-strings 0.4.2",
+]
+
+[[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
 ]
 
 [[package]]
@@ -6426,12 +6492,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-result"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
+dependencies = [
+ "windows-link 0.2.1",
+]
+
+[[package]]
 name = "windows-strings"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56e6c93f3a0c3b36176cb1327a4958a0353d5d166c2a35cb268ace15e91d3b57"
 dependencies = [
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-strings"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
+dependencies = [
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -6499,6 +6583,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66463ad2e0ea3bbf808b7f1d371311c80e115c0b71d60efc142cafbcfb057a6"
 dependencies = [
  "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-threading"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
+dependencies = [
+ "windows-link 0.2.1",
 ]
 
 [[package]]
