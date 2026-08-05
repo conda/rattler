@@ -1,3 +1,5 @@
+pub mod archive;
+
 use futures::StreamExt;
 use pyo3::{prelude::*, types::PyBytes};
 use pyo3_async_runtimes::tokio::future_into_py;
@@ -21,7 +23,7 @@ fn parse_url(url: &str) -> PyResult<Url> {
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}")))
 }
 
-fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
+pub(crate) fn io_error<E: std::fmt::Display>(error: E) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyIOError, _>(error.to_string())
 }
 
