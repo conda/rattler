@@ -22,6 +22,7 @@ mod extras_tests;
 mod helpers;
 mod min_age_tests;
 mod solver_case_tests;
+mod sorting_tests;
 mod strategy_tests;
 mod variant_flags_tests;
 
@@ -1350,6 +1351,22 @@ mod resolvo {
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
         "###);
+    }
+
+    // Candidate ordering tests (resolvo-specific)
+
+    #[test]
+    fn test_prefers_build_with_highest_dependency() {
+        crate::sorting_tests::solve_prefers_build_with_highest_dependency::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_prefers_build_with_highest_dependency_with_bare_requirement() {
+        crate::sorting_tests::solve_prefers_build_with_highest_dependency_with_bare_requirement::<
+            rattler_solve::resolvo::Solver,
+        >();
     }
 
     // Strategy tests (resolvo-specific)
