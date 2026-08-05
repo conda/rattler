@@ -34,9 +34,11 @@ secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process"], optional = true }
+tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }
+tracing-test = { workspace = true }

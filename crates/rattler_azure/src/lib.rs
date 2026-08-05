@@ -101,28 +101,6 @@ pub enum AzureUrlError {
     )]
     InvalidHost(String),
 
-    /// Path-style addressing was configured for a host that already carries the
-    /// account in its first label.
-    ///
-    /// Both styles produce identical request URLs for such a host, so the mistake
-    /// is invisible on the wire and only shows up when an account name is needed
-    /// on its own — where it would be taken from path text the user meant as a
-    /// container.
-    #[error(
-        "Azure blob URL host `{host}` is a dotted domain whose first label `{label}` is already a \
-         valid storage account name, so it is a host-style endpoint. Reading it path-style would \
-         take the storage account from the URL path instead and mint credentials for whatever \
-         account that text names; remove `path-style = true` from `[azure-options.\"{host}\"]`, or \
-         remove the entry"
-    )]
-    PathStyleOnAccountHost {
-        /// The host as [`AzureHost`] spells it, which is how the config table is
-        /// keyed.
-        host: String,
-        /// Its first label.
-        label: String,
-    },
-
     /// The URL has no path segment to read the account from (path-style only).
     #[error("could not derive account name from Azure blob URL")]
     NoAccount,
@@ -236,10 +214,13 @@ pub struct AzureCoordinates {
 ///   [`AzureUrlError::InvalidHost`], whose message names the config line that
 ///   switches to path-style.
 /// - [`Addressing::PathStyle`] (Azurite and other emulators): account = first
-///   path segment, container = second. The host must *not* be one that could
-///   carry an account itself, or the two styles disagree about which name is the
-///   account while producing identical request URLs — see
-///   [`AzureUrlError::PathStyleOnAccountHost`].
+///   path segment, container = second. On a host under a known Azure Blob suffix
+///   this is almost certainly a config mistake — the two styles then disagree
+///   about which name is the account while producing identical request URLs, so
+///   nothing fails until a mint asks for a delegation SAS on whatever the path
+///   spelled. It is only a warning: the list is advisory, cannot cover a
+///   proxy or a private endpoint, and choosing the addressing for a host remains
+///   the user's call.
 ///
 /// The host is otherwise trusted verbatim (see the [crate-level docs] for the
 /// host model): an honest, arbitrary host is the caller's responsibility. The
@@ -268,14 +249,16 @@ pub fn account_and_container(
             (account, next_segment().ok_or(AzureUrlError::NoContainer)?)
         }
         Addressing::PathStyle => {
-            if let Some(label) = host
-                .account_label()
-                .filter(|label| validate_account(label).is_ok())
-            {
-                return Err(AzureUrlError::PathStyleOnAccountHost {
-                    host: host.to_string(),
-                    label: label.to_string(),
-                });
+            if host.is_known_azure_blob_endpoint() {
+                tracing::warn!(
+                    "`path-style = true` is set for `{host}`, which is a real Azure Blob endpoint \
+                     addressed host-style: its storage account is `{}`, not the first path \
+                     segment. Requests still come out identical, but anything that needs the \
+                     account on its own — minting a user-delegation SAS, for one — will use the \
+                     path segment instead. Remove `path-style = true` from \
+                     `[azure-options.\"{host}\"]` unless you meant it",
+                    host.account_label().unwrap_or("<none>"),
+                );
             }
             (
                 next_segment().ok_or(AzureUrlError::NoAccount)?,
@@ -442,6 +425,33 @@ impl AzureHost {
             }
             url::Host::Ipv4(_) | url::Host::Ipv6(_) => None,
         }
+    }
+
+    /// Whether this host sits under a suffix Microsoft operates, where the account
+    /// is by definition the first label.
+    ///
+    /// Advisory only, and deliberately not a security boundary: a grant is written
+    /// per host, so no behaviour hangs off this answer. It exists to warn about a
+    /// `path-style = true` that cannot be what the user meant. A proxy or private
+    /// endpoint in front of real Azure answers `false`, which is why a `false` here
+    /// is never treated as evidence of anything.
+    pub fn is_known_azure_blob_endpoint(&self) -> bool {
+        const SUFFIXES: &[&str] = &[
+            "blob.core.windows.net",       // global
+            "blob.core.usgovcloudapi.net", // US Government
+            "blob.core.chinacloudapi.cn",  // China, operated by 21Vianet
+        ];
+
+        let url::Host::Domain(domain) = &self.host else {
+            return false;
+        };
+        SUFFIXES.iter().any(|suffix| {
+            // The dot has to be part of the match, or `notblob.core.windows.net`
+            // would pass as `blob.core.windows.net`.
+            domain
+                .strip_suffix(suffix)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+        })
     }
 }
 
@@ -1159,35 +1169,66 @@ mod tests {
         }
     }
 
-    /// A `path-style = true` entry on a host that already carries the account is a
-    /// config mistake with no visible symptom — request URLs come out identical
-    /// under both styles — right up to a mint asking for a delegation SAS on the
-    /// account name the *path* happened to spell.
+    /// A `path-style = true` entry on a real Azure host is a config mistake with no
+    /// visible symptom — request URLs come out identical under both styles — right
+    /// up to a mint asking for a delegation SAS on the account name the *path*
+    /// happened to spell. Which addressing a host uses is still the user's call, so
+    /// this warns and proceeds.
     #[test]
-    fn path_style_rejects_a_host_that_carries_the_account() {
-        let err = account_and_container(
+    #[tracing_test::traced_test]
+    fn path_style_on_a_real_azure_host_warns_and_proceeds() {
+        let coords = account_and_container(
             &channel("az://acct.blob.core.windows.net/general/mychannel"),
             Addressing::PathStyle,
         )
-        .expect_err("path-style must not read an account out of a host-style URL");
+        .expect("addressing is the user's call, so this is a warning and not an error");
+        assert_eq!(coords.account, "general");
 
-        assert!(
-            matches!(err, AzureUrlError::PathStyleOnAccountHost { .. }),
-            "{err}"
-        );
-        let message = err.to_string();
-        assert!(message.contains("acct.blob.core.windows.net"), "{message}");
-        assert!(message.contains("path-style = true"), "{message}");
+        assert!(logs_contain("path-style = true"));
+        assert!(logs_contain("acct.blob.core.windows.net"));
 
-        // A first label that is not a legal account name carries no account, so
-        // path-style is the only reading left.
-        assert!(
-            account_and_container(
-                &channel("az://my-emulator.internal/devstoreaccount1/general"),
-                Addressing::PathStyle
-            )
-            .is_ok()
-        );
+        // A host that is not a known Azure endpoint gets no warning, however much
+        // its first label looks like an account name.
+        let coords = account_and_container(
+            &channel("az://acct.blob.example.com/devstoreaccount1/general"),
+            Addressing::PathStyle,
+        )
+        .unwrap();
+        assert_eq!(coords.account, "devstoreaccount1");
+        assert!(!logs_contain("acct.blob.example.com"));
+    }
+
+    /// The suffix list is advisory, but a sloppy match on it would warn about
+    /// hosts Microsoft does not operate — and stay silent on ones it does.
+    #[test]
+    fn known_azure_endpoints_are_matched_on_a_label_boundary() {
+        for host in [
+            "acct.blob.core.windows.net",
+            "acct.blob.core.usgovcloudapi.net",
+            "acct.blob.core.chinacloudapi.cn",
+        ] {
+            assert!(
+                AzureHost::parse(host)
+                    .unwrap()
+                    .is_known_azure_blob_endpoint(),
+                "{host}"
+            );
+        }
+
+        for host in [
+            "notblob.core.windows.net",             // no label boundary
+            "blob.core.windows.net",                // the suffix alone carries no account
+            "acct.blob.core.windows.net.evil.test", // suffix in the middle
+            "127.0.0.1:10000",
+            "azurite",
+        ] {
+            assert!(
+                !AzureHost::parse(host)
+                    .unwrap()
+                    .is_known_azure_blob_endpoint(),
+                "{host}"
+            );
+        }
     }
 
     /// Host-style must keep rejecting hosts it cannot derive an account from — and
