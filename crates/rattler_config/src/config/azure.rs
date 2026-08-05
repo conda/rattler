@@ -64,6 +64,36 @@ impl AzureOptionsMap {
         self.0.keys()
     }
 
+    /// Whether no host is configured, which is also "every `az://` host is
+    /// anonymous". Serializers skip the table on this.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Grant `host` these options, returning what it was granted before.
+    ///
+    /// Taking an [`AzureHost`] rather than a string is what lets the inner map stay
+    /// private while still being writable: a caller editing config (`pixi config
+    /// set azure-options."…"`) has to have parsed its key, so it cannot install an
+    /// entry a lookup would fail to find. There is no `get_mut`, and none is
+    /// needed — [`AzureEndpointOptions`] is `Copy`, so editing one field is
+    /// [`get`](Self::get), change, insert.
+    pub fn insert(
+        &mut self,
+        host: AzureHost,
+        options: AzureEndpointOptions,
+    ) -> Option<AzureEndpointOptions> {
+        self.0.insert(host, options)
+    }
+
+    /// Revoke `host`'s grant, returning it if there was one.
+    ///
+    /// Shift-removes, so the remaining entries keep their relative order and a
+    /// serialized table does not reshuffle on an unrelated edit.
+    pub fn remove(&mut self, host: &AzureHost) -> Option<AzureEndpointOptions> {
+        self.0.shift_remove(host)
+    }
+
     /// The grants as the fetch path takes them, ready to hand to
     /// `AzureMiddleware::new` without a caller rebuilding a map by hand.
     pub fn fetch_options(&self) -> impl Iterator<Item = (AzureHost, AzureFetchOptions)> {
@@ -155,6 +185,26 @@ mod tests {
 
     fn host(authority: &str) -> AzureHost {
         AzureHost::parse(authority).expect("test host should parse")
+    }
+
+    /// A grant can be written and revoked without the inner map being public, and
+    /// a revoked host falls back to anonymous rather than lingering.
+    #[test]
+    fn a_grant_can_be_written_and_revoked() {
+        let key = host("mycompany.blob.core.windows.net");
+        let granted =
+            AzureEndpointOptions::new(Auth::DefaultChain, rattler_azure::AzureEndpoint::default());
+
+        let mut map = AzureOptionsMap::default();
+        assert!(map.is_empty());
+        assert_eq!(map.insert(key.clone(), granted), None);
+        assert_eq!(map.get(&key), granted);
+        assert!(!map.is_empty());
+
+        assert_eq!(map.remove(&key), Some(granted));
+        assert!(!map.get(&key).fetch().auth.is_granted());
+        assert!(map.is_empty());
+        assert_eq!(map.remove(&key), None);
     }
 
     /// The table parses in the shape documented for users, and an absent host
