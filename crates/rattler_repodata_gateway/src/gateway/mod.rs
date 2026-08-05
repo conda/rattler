@@ -359,8 +359,13 @@ struct GatewayInner {
     /// A cache for global run exports.
     subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
-    /// A semaphore to limit the number of concurrent requests.
+    /// A semaphore to limit the number of concurrent HTTP requests.
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+
+    /// A semaphore to limit the number of concurrent IO operations (e.g.
+    /// reading shard files from the on-disk cache).
+    #[cfg(not(target_arch = "wasm32"))]
+    io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl GatewayInner {

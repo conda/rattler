@@ -60,11 +60,13 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
     cache_policy: ShardCachePolicy,
 }
 
 impl ShardedSubdir {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         channel: Channel,
         subdir: String,
@@ -72,6 +74,7 @@ impl ShardedSubdir {
         cache_dir: PathBuf,
         cache_policy: ShardCachePolicy,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+        io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
@@ -139,6 +142,7 @@ impl ShardedSubdir {
             cache_dir,
             cache_policy,
             concurrent_requests_semaphore,
+            io_concurrency_semaphore,
         })
     }
 
@@ -202,8 +206,17 @@ impl SubdirClient for ShardedSubdir {
             .cache_dir
             .join(format!("{}.msgpack", hex::encode(shard)));
 
-        // Read the cached shard
+        // Read the cached shard.
+        // Acquire the IO semaphore permit before opening the file to avoid
+        // exhausting the OS file-descriptor limit when many shards are fetched
+        // concurrently (e.g. when querying for `*`).
         if self.cache_policy.action != CacheAction::NoCache {
+            let _io_permit = OptionFuture::from(
+                self.io_concurrency_semaphore
+                    .as_deref()
+                    .map(tokio::sync::Semaphore::acquire),
+            )
+            .await;
             match tokio_fs::read(&shard_cache_path).await {
                 Ok(cached_bytes) => {
                     // Decode the cached shard
