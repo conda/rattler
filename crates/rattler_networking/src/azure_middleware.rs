@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use rattler_azure::{Auth, AzureChannelUrl, AzureEndpointOptions, AzureHost};
+use rattler_azure::{Auth, AzureChannelUrl, AzureFetchOptions, AzureHost};
 use reqsign_azure_storage::{Credential, DefaultCredentialProvider, RequestSigner};
 use reqsign_command_execute_tokio::TokioCommandExecute;
 use reqsign_core::{Context, OsEnv, ProvideCredential, Signer};
@@ -34,7 +34,7 @@ const X_MS_VERSION: &str = "2021-12-02";
 /// credential can leak to a host the user never named, and an anonymous read of a
 /// public container does not block on the managed-identity / IMDS probe.
 ///
-/// A credential attaches to a host only because an [`AzureEndpointOptions`] entry
+/// A credential attaches to a host only because an `azure-options` entry
 /// for it says [`Auth::DefaultChain`], which comes from the user's `azure-options`
 /// config table:
 ///
@@ -89,7 +89,7 @@ pub struct AzureMiddleware {
     /// `#[cfg(feature = "rattler_config")]` helper next to
     /// [`crate::s3_middleware::compute_s3_config_from_config`] rather than changing
     /// this signature.
-    options: HashMap<AzureHost, AzureEndpointOptions>,
+    options: HashMap<AzureHost, AzureFetchOptions>,
 }
 
 impl AzureMiddleware {
@@ -102,7 +102,7 @@ impl AzureMiddleware {
     ///
     /// `options` is the `azure-options` table: the per-host grants. An empty map
     /// means every `az://` request is anonymous.
-    pub fn new(client: Client, options: HashMap<AzureHost, AzureEndpointOptions>) -> Self {
+    pub fn new(client: Client, options: HashMap<AzureHost, AzureFetchOptions>) -> Self {
         Self::with_credential_provider(client, DefaultCredentialProvider::new(), options)
     }
 
@@ -115,7 +115,7 @@ impl AzureMiddleware {
     fn with_credential_provider(
         client: Client,
         provider: impl ProvideCredential<Credential = Credential> + 'static,
-        options: HashMap<AzureHost, AzureEndpointOptions>,
+        options: HashMap<AzureHost, AzureFetchOptions>,
     ) -> Self {
         let ctx = Context::new()
             .with_file_read(TokioFileRead)
@@ -135,11 +135,7 @@ impl AzureMiddleware {
     /// the options table is keyed by, so a grant cannot miss over case, a trailing
     /// dot, an IDNA name or an IP literal written oddly.
     ///
-    /// [`AzureEndpointOptions::addressing`] is deliberately unused here: the fetch
-    /// path never needs an account name, it only forwards a path. Addressing
-    /// matters to the write path, which derives coordinates via
-    /// `rattler_azure::account_and_container`.
-    fn resolve(&self, url: &Url) -> MiddlewareResult<(AzureChannelUrl, AzureEndpointOptions)> {
+    fn resolve(&self, url: &Url) -> MiddlewareResult<(AzureChannelUrl, AzureFetchOptions)> {
         let channel = AzureChannelUrl::parse(url.as_str()).map_err(|e| {
             // The URL is not echoed back: the one rejection a user hits here is
             // userinfo, and quoting it would print their password.
@@ -280,21 +276,21 @@ mod tests {
     /// The `azure-options` table for one host, as a caller would build it.
     fn options(
         authority: &str,
-        options: AzureEndpointOptions,
-    ) -> HashMap<AzureHost, AzureEndpointOptions> {
+        options: AzureFetchOptions,
+    ) -> HashMap<AzureHost, AzureFetchOptions> {
         HashMap::from([(AzureHost::parse(authority).expect("test host"), options)])
     }
 
     /// A grant with everything else defaulted: anonymous is the only interesting
     /// axis in most of these tests.
-    fn granted() -> AzureEndpointOptions {
-        AzureEndpointOptions {
+    fn granted() -> AzureFetchOptions {
+        AzureFetchOptions {
             auth: Auth::DefaultChain,
             ..Default::default()
         }
     }
 
-    fn middleware(options: HashMap<AzureHost, AzureEndpointOptions>) -> AzureMiddleware {
+    fn middleware(options: HashMap<AzureHost, AzureFetchOptions>) -> AzureMiddleware {
         AzureMiddleware::new(Client::new(), options)
     }
 
@@ -334,10 +330,9 @@ mod tests {
     fn rewrites_to_http_for_an_emulator_entry() {
         let emulator = middleware(options(
             "127.0.0.1:10000",
-            AzureEndpointOptions {
+            AzureFetchOptions {
                 auth: Auth::DefaultChain,
                 scheme: AzureScheme::Http,
-                addressing: rattler_azure::Addressing::PathStyle,
             },
         ));
         assert_eq!(
@@ -568,11 +563,10 @@ mod tests {
 
     /// An emulator-shaped entry (http, path-style) with the grant taken from the
     /// caller, so one server can exercise both sides of the hint.
-    fn emulator_entry(auth: Auth) -> AzureEndpointOptions {
-        AzureEndpointOptions {
+    fn emulator_entry(auth: Auth) -> AzureFetchOptions {
+        AzureFetchOptions {
             auth,
             scheme: AzureScheme::Http,
-            addressing: rattler_azure::Addressing::PathStyle,
         }
     }
 

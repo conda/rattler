@@ -20,7 +20,9 @@ pub mod clap;
 
 pub mod options;
 
-pub use options::{Addressing, Auth, AzureEndpointOptions, AzureScheme};
+pub use options::{
+    Addressing, Auth, AzureEndpoint, AzureEndpointOptions, AzureFetchOptions, AzureScheme,
+};
 
 pub use secrecy::{ExposeSecret, SecretString};
 use url::Url;
@@ -733,18 +735,18 @@ fn strip_az_scheme(value: &str) -> Option<&str> {
 pub fn azblob_config(
     credentials: &AzureCredentials,
     channel: &AzureChannelUrl,
-    options: AzureEndpointOptions,
+    endpoint_options: AzureEndpoint,
 ) -> Result<opendal::services::AzblobConfig, AzureUrlError> {
     let AzureCoordinates { account, container } =
-        account_and_container(channel, options.addressing)?;
+        account_and_container(channel, endpoint_options.addressing)?;
 
     // The authority comes from `AzureHost`, not from a wire URL: a `Url` has
     // already dropped a port equal to its scheme's default, so reading it back
     // would turn a written `:443` into no port at all.
     let authority = channel.host();
-    let endpoint = match options.addressing {
-        Addressing::HostStyle => format!("{}://{authority}", options.scheme),
-        Addressing::PathStyle => format!("{}://{authority}/{account}", options.scheme),
+    let endpoint = match endpoint_options.addressing {
+        Addressing::HostStyle => format!("{}://{authority}", endpoint_options.scheme),
+        Addressing::PathStyle => format!("{}://{authority}/{account}", endpoint_options.scheme),
     };
 
     // Root prefix = the path after the segments the coordinates already consumed:
@@ -752,7 +754,7 @@ pub fn azblob_config(
     // one too few there leaves the account segment inside `root`, so every blob is
     // written one directory deeper than the channel actually lives — silently, and
     // in the right container, which is what makes it hard to spot.
-    let consumed = match options.addressing {
+    let consumed = match endpoint_options.addressing {
         Addressing::HostStyle => 1,
         Addressing::PathStyle => 2,
     };
@@ -1440,16 +1442,13 @@ mod tests {
         let channel =
             AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general/mychannel")
                 .unwrap();
-        let options = AzureEndpointOptions {
-            auth: Auth::DefaultChain,
-            scheme: AzureScheme::Http,
-            addressing: Addressing::PathStyle,
-        };
-
         let config = azblob_config(
             &AzureCredentials::AccountKey("key".into()),
             &channel,
-            options,
+            AzureEndpoint {
+                scheme: AzureScheme::Http,
+                addressing: Addressing::PathStyle,
+            },
         )
         .unwrap();
 
@@ -1486,8 +1485,7 @@ mod tests {
         let config = azblob_config(
             &AzureCredentials::SasToken("?sv=token".into()),
             &channel,
-            AzureEndpointOptions {
-                auth: Auth::Anonymous,
+            AzureEndpoint {
                 scheme: AzureScheme::Http,
                 addressing: Addressing::PathStyle,
             },
@@ -1511,7 +1509,7 @@ mod tests {
         let config = azblob_config(
             &AzureCredentials::SasToken("sv=token".into()),
             &channel,
-            AzureEndpointOptions::default(),
+            AzureEndpoint::default(),
         )
         .unwrap();
 
@@ -1536,7 +1534,7 @@ mod tests {
         let config = azblob_config(
             &AzureCredentials::AccountKey("key".into()),
             &channel,
-            AzureEndpointOptions::default(),
+            AzureEndpoint::default(),
         )
         .unwrap();
 

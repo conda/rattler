@@ -29,7 +29,7 @@ use opendal::layers::RetryLayer;
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 #[cfg(feature = "azure")]
-use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpointOptions};
+use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpoint};
 use rattler_conda_types::{
     ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
     ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
@@ -1522,10 +1522,10 @@ pub struct IndexAzureConfig {
     pub channel: AzureChannelUrl,
     /// The credentials to use for Azure Blob access.
     pub credentials: AzureCredentials,
-    /// The `azure-options` entry for the channel's host, which decides the wire
-    /// scheme and whether the account is read from the host or the path. The
-    /// defaults (https, host-style) describe real Azure.
-    pub options: AzureEndpointOptions,
+    /// How to address the channel's host: the wire scheme, and whether the account
+    /// is read from the host or the path. The defaults (https, host-style) describe
+    /// real Azure.
+    pub endpoint: AzureEndpoint,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -1565,7 +1565,7 @@ pub async fn index_azure_with_channel_metadata(
     IndexAzureConfig {
         channel,
         credentials,
-        options,
+        endpoint,
         target_platform,
         repodata_patch,
         write_zst,
@@ -1578,7 +1578,7 @@ pub async fn index_azure_with_channel_metadata(
     }: IndexAzureConfig,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<()> {
-    let azblob_config = rattler_azure::azblob_config(&credentials, &channel, options)?;
+    let azblob_config = rattler_azure::azblob_config(&credentials, &channel, endpoint)?;
     let builder = azblob_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
@@ -1912,8 +1912,7 @@ mod tests {
         let credentials = AzureCredentials::SasToken("sv=token".into());
 
         let config =
-            rattler_azure::azblob_config(&credentials, &channel, AzureEndpointOptions::default())
-                .unwrap();
+            rattler_azure::azblob_config(&credentials, &channel, AzureEndpoint::default()).unwrap();
 
         assert_eq!(
             config.endpoint.as_deref(),
@@ -1934,8 +1933,7 @@ mod tests {
         let credentials = AzureCredentials::AccountKey("key".into());
 
         let config =
-            rattler_azure::azblob_config(&credentials, &channel, AzureEndpointOptions::default())
-                .unwrap();
+            rattler_azure::azblob_config(&credentials, &channel, AzureEndpoint::default()).unwrap();
 
         assert_eq!(config.container, "general");
         assert_eq!(config.root.as_deref(), Some("/"));
@@ -1954,7 +1952,7 @@ mod tests {
         let config = rattler_azure::azblob_config(
             &credentials,
             &channel,
-            AzureEndpointOptions {
+            AzureEndpoint {
                 scheme: rattler_azure::AzureScheme::Http,
                 ..Default::default()
             },

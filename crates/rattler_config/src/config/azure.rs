@@ -119,8 +119,9 @@ impl Config for AzureOptionsMap {
 
     fn validate(&self) -> Result<(), super::ValidationError> {
         for (host, options) in &self.0 {
-            if options.auth == Auth::DefaultChain
-                && options.scheme == AzureScheme::Http
+            let fetch = options.fetch();
+            if fetch.auth == Auth::DefaultChain
+                && fetch.scheme == AzureScheme::Http
                 && !is_local(host)
             {
                 return Err(super::ValidationError::Invalid(format!(
@@ -171,18 +172,18 @@ mod tests {
         .unwrap();
 
         let real = map.get(&host("mycompany.blob.core.windows.net"));
-        assert_eq!(real.auth, Auth::DefaultChain);
-        assert_eq!(real.scheme, AzureScheme::Https);
-        assert_eq!(real.addressing, Addressing::HostStyle);
+        assert_eq!(real.fetch().auth, Auth::DefaultChain);
+        assert_eq!(real.endpoint().scheme, AzureScheme::Https);
+        assert_eq!(real.endpoint().addressing, Addressing::HostStyle);
 
         let azurite = map.get(&host("127.0.0.1:10000"));
-        assert_eq!(azurite.auth, Auth::DefaultChain);
-        assert_eq!(azurite.scheme, AzureScheme::Http);
-        assert_eq!(azurite.addressing, Addressing::PathStyle);
+        assert_eq!(azurite.fetch().auth, Auth::DefaultChain);
+        assert_eq!(azurite.endpoint().scheme, AzureScheme::Http);
+        assert_eq!(azurite.endpoint().addressing, Addressing::PathStyle);
 
         // An unlisted host gets no grant.
         let unlisted = map.get(&host("someoneelse.blob.core.windows.net"));
-        assert!(!unlisted.auth.is_granted());
+        assert!(!unlisted.fetch().auth.is_granted());
         assert_eq!(unlisted, AzureEndpointOptions::default());
     }
 
@@ -243,12 +244,12 @@ auth = true
 
         let merged = base.merge_config(&over).unwrap();
         let entry = merged.get(&host("host.example"));
-        assert_eq!(entry.scheme, AzureScheme::Http);
+        assert_eq!(entry.endpoint().scheme, AzureScheme::Http);
         assert!(
-            !entry.auth.is_granted(),
+            !entry.fetch().auth.is_granted(),
             "overwriting an entry must not inherit the previous grant"
         );
-        assert_eq!(entry.addressing, Addressing::HostStyle);
+        assert_eq!(entry.endpoint().addressing, Addressing::HostStyle);
     }
 
     /// The defect this key type exists to kill: every one of these keys is a
@@ -275,7 +276,7 @@ auth = true
                 toml::from_str(&format!("[\"{written}\"]\nauth = true\n")).unwrap();
 
             assert!(
-                map.get(&host(looked_up)).auth.is_granted(),
+                map.get(&host(looked_up)).fetch().auth.is_granted(),
                 "the grant written as `{written}` did not apply to `{looked_up}`"
             );
             // The key is stored canonically, so `keys()` reports what a lookup

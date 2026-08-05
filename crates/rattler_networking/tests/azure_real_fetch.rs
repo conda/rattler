@@ -20,7 +20,7 @@
 
 use std::collections::HashMap;
 
-use rattler_azure::{Auth, AzureEndpointOptions, AzureHost};
+use rattler_azure::{Auth, AzureFetchOptions, AzureHost};
 use rattler_networking::AzureMiddleware;
 use reqwest_middleware::ClientBuilder;
 
@@ -40,7 +40,7 @@ async fn azure_middleware_fetches_real_repodata() {
     // loudly instead of falling through to an unsigned 404.
     let options = HashMap::from([(
         AzureHost::parse(&host).expect("AZURE_TEST_HOST is not a valid host[:port]"),
-        AzureEndpointOptions {
+        AzureFetchOptions {
             auth: Auth::DefaultChain,
             ..Default::default()
         },

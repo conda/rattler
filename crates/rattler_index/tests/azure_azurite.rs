@@ -37,8 +37,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 use opendal::{Configurator, ErrorKind, Operator, services::AzblobConfig};
 use rattler_azure::{
-    Addressing, Auth, AzureChannelUrl, AzureCredentials, AzureEndpointOptions, AzureHost,
-    AzureScheme,
+    Addressing, Auth, AzureChannelUrl, AzureCredentials, AzureEndpoint, AzureEndpointOptions,
+    AzureHost, AzureScheme,
 };
 use rattler_index::{IndexAzureConfig, PackageRevisionAssignment, index_azure};
 
@@ -85,11 +85,13 @@ fn channel(prefix: &str) -> AzureChannelUrl {
 /// The `azure-options` entry for the emulator: the only configuration these tests
 /// hand to the indexer.
 fn azurite_options() -> AzureEndpointOptions {
-    AzureEndpointOptions {
-        auth: Auth::DefaultChain,
-        scheme: AzureScheme::Http,
-        addressing: Addressing::PathStyle,
-    }
+    AzureEndpointOptions::new(
+        Auth::DefaultChain,
+        AzureEndpoint {
+            scheme: AzureScheme::Http,
+            addressing: Addressing::PathStyle,
+        },
+    )
 }
 
 /// An operator built exactly the way `index_azure` builds one, so the opendal-level
@@ -99,7 +101,7 @@ fn production_operator(channel: &AzureChannelUrl) -> Operator {
     let config = rattler_azure::azblob_config(
         &AzureCredentials::AccountKey(ACCOUNT_KEY.into()),
         channel,
-        azurite_options(),
+        azurite_options().endpoint(),
     )
     .expect("azblob config for an azurite path-style channel");
     Operator::new(config.into_builder())
@@ -137,7 +139,7 @@ fn verify_operator(prefix: &str) -> Operator {
 async fn ensure_container() {
     let options = HashMap::from([(
         AzureHost::parse(AUTHORITY).expect("azurite authority is a valid host:port"),
-        azurite_options(),
+        azurite_options().fetch(),
     )]);
     let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
         .with(rattler_networking::AzureMiddleware::new(
@@ -181,7 +183,7 @@ fn index_config(channel: AzureChannelUrl) -> IndexAzureConfig {
     IndexAzureConfig {
         channel,
         credentials: AzureCredentials::AccountKey(ACCOUNT_KEY.into()),
-        options: azurite_options(),
+        endpoint: azurite_options().endpoint(),
         target_platform: None,
         repodata_patch: None,
         write_zst: false,

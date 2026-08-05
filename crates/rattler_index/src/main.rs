@@ -5,7 +5,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 #[cfg(feature = "azure")]
-use rattler_azure::{AzureChannelUrl, AzureEndpointOptions, AzureHost};
+use rattler_azure::{AzureChannelUrl, AzureEndpoint, AzureHost};
 use rattler_conda_types::Platform;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
@@ -257,17 +257,17 @@ async fn main() -> anyhow::Result<()> {
                 effective_index_options(&resolved);
             let channel_metadata = ChannelMetadata::from_index_config(&resolved);
 
-            let options = azure_endpoint_options(&config, channel.host());
+            let endpoint = azure_endpoint(&config, channel.host());
 
             let credentials = credentials
-                .resolve(AZURE_INDEX_SAS_PERMISSIONS, &channel, options)
+                .resolve(AZURE_INDEX_SAS_PERMISSIONS, &channel, endpoint)
                 .await?;
 
             index_azure_with_channel_metadata(
                 IndexAzureConfig {
                     channel,
                     credentials,
-                    options,
+                    endpoint,
                     target_platform: cli.target_platform,
                     repodata_patch: cli.repodata_patch,
                     write_zst,
@@ -287,16 +287,18 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The `[azure-options."<host>"]` entry for a channel's host, or the anonymous
-/// https host-style defaults when there is no config file or no entry.
+/// How to address a channel's host, from its `[azure-options."<host>"]` entry, or
+/// the https host-style defaults when there is no config file or no entry.
 ///
 /// A host without an entry and a host with an empty entry are defined to behave
-/// identically, so this never has to report which of the two it found.
+/// identically, so this never has to report which of the two it found. The entry's
+/// `auth` grant is not part of the result: indexing signs with the credential its
+/// caller supplied, so there is no ambient chain for a grant to gate.
 #[cfg(feature = "azure")]
-fn azure_endpoint_options(config: &Option<Config>, host: &AzureHost) -> AzureEndpointOptions {
+fn azure_endpoint(config: &Option<Config>, host: &AzureHost) -> AzureEndpoint {
     config
         .as_ref()
-        .map(|config| config.azure_options.get(host))
+        .map(|config| config.azure_options.get(host).endpoint())
         .unwrap_or_default()
 }
 
@@ -329,7 +331,7 @@ fn effective_index_options(
 
 #[cfg(all(test, feature = "azure"))]
 mod tests {
-    use rattler_azure::{Addressing, Auth, AzureCredentials, AzureScheme};
+    use rattler_azure::{Addressing, AzureCredentials, AzureScheme};
 
     use super::*;
 
@@ -385,15 +387,14 @@ mod tests {
             AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general/mychannel")
                 .unwrap();
 
-        let options = azure_endpoint_options(&config, channel.host());
-        assert_eq!(options.auth, Auth::DefaultChain);
-        assert_eq!(options.scheme, AzureScheme::Http);
-        assert_eq!(options.addressing, Addressing::PathStyle);
+        let endpoint = azure_endpoint(&config, channel.host());
+        assert_eq!(endpoint.scheme, AzureScheme::Http);
+        assert_eq!(endpoint.addressing, Addressing::PathStyle);
 
         let azblob = rattler_azure::azblob_config(
             &AzureCredentials::AccountKey("key".into()),
             &channel,
-            options,
+            endpoint,
         )
         .expect("an Azurite channel must build an opendal config");
 
@@ -413,12 +414,12 @@ mod tests {
     fn an_emulator_host_without_an_entry_is_a_guided_error() {
         let channel =
             AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general").unwrap();
-        let options = azure_endpoint_options(&None, channel.host());
+        let endpoint = azure_endpoint(&None, channel.host());
 
         let err = rattler_azure::azblob_config(
             &AzureCredentials::AccountKey("key".into()),
             &channel,
-            options,
+            endpoint,
         )
         .expect_err("host-style cannot address an IP literal");
         let message = err.to_string();

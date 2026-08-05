@@ -7,6 +7,15 @@
 //! suffix classification carries no security weight, and the absence of the list
 //! is what lets custom endpoints and the Azurite emulator work at all.
 //!
+//! # Three types, one table
+//!
+//! [`AzureEndpointOptions`] is the file format. Nothing consumes it directly:
+//! the fetch path takes [`AzureFetchOptions`] and the write path takes
+//! [`AzureEndpoint`], so `auth` cannot reach a caller that supplies its own
+//! credential and [`Addressing`] cannot reach one that never derives an account.
+//! A field a consumer would have to ignore reads as a guarantee, and the write
+//! path ignoring `auth` looked exactly like a credential gate that was never there.
+//!
 //! # Why enums for what the config spells as bools
 //!
 //! The TOML surface stays `auth = true` / `path-style = true`, because that is
@@ -151,7 +160,41 @@ impl From<Addressing> for bool {
     }
 }
 
-/// How to reach, and whether to authenticate to, one Azure Blob host.
+/// How to address one Azure Blob host. Carries no grant.
+///
+/// This is what the write path takes. Splitting it out is what stops
+/// [`Auth`] from reaching a consumer that cannot act on it: `azblob_config` and
+/// the SAS mint are handed a material credential by their caller, so there is no
+/// ambient chain for a grant to gate, and a grant they could read would be a
+/// promise nothing keeps.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AzureEndpoint {
+    /// The scheme `az://` is rewritten to for this host.
+    pub scheme: AzureScheme,
+
+    /// Where the account name is found in the URL for this host.
+    pub addressing: Addressing,
+}
+
+/// What the fetch middleware needs to reach one Azure Blob host.
+///
+/// [`Addressing`] is absent rather than ignored: the fetch path forwards a path
+/// and never derives an account name from it.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AzureFetchOptions {
+    /// Whether credentials may be sent to this host.
+    pub auth: Auth,
+
+    /// The scheme `az://` is rewritten to for this host.
+    pub scheme: AzureScheme,
+}
+
+/// One `azure-options` entry, as the config file spells it.
+///
+/// This is the serde surface and nothing else: the three TOML keys live here, and
+/// each consumer takes the narrower view it can actually act on, via
+/// [`Self::endpoint`] or [`Self::fetch`]. The fields are private so that view is
+/// the only way in.
 ///
 /// The default value is the no-entry behaviour: anonymous, https, host-style. A
 /// host with no config entry behaves exactly as if it had a defaulted entry, so
@@ -164,19 +207,42 @@ impl From<Addressing> for bool {
     serde(rename_all = "kebab-case", default)
 )]
 pub struct AzureEndpointOptions {
-    /// Whether credentials may be sent to this host.
-    pub auth: Auth,
+    auth: Auth,
 
-    /// The scheme `az://` is rewritten to for this host.
-    pub scheme: AzureScheme,
+    scheme: AzureScheme,
 
-    /// Where the account name is found in the URL for this host.
-    ///
     /// The field is named for what it holds, but the config key stays
     /// `path-style`: that is the spelling users have written, and the bool bridge
     /// is what the key means.
     #[cfg_attr(feature = "serde", serde(rename = "path-style", alias = "path_style"))]
-    pub addressing: Addressing,
+    addressing: Addressing,
+}
+
+impl AzureEndpointOptions {
+    /// Build an entry from a grant and the endpoint it applies to.
+    pub fn new(auth: Auth, endpoint: AzureEndpoint) -> Self {
+        Self {
+            auth,
+            scheme: endpoint.scheme,
+            addressing: endpoint.addressing,
+        }
+    }
+
+    /// How to address this host, for the write path.
+    pub fn endpoint(self) -> AzureEndpoint {
+        AzureEndpoint {
+            scheme: self.scheme,
+            addressing: self.addressing,
+        }
+    }
+
+    /// The grant and wire scheme, for the fetch path.
+    pub fn fetch(self) -> AzureFetchOptions {
+        AzureFetchOptions {
+            auth: self.auth,
+            scheme: self.scheme,
+        }
+    }
 }
 
 #[cfg(all(test, feature = "serde"))]
@@ -197,36 +263,39 @@ mod tests {
         .unwrap();
         assert_eq!(
             opts,
-            AzureEndpointOptions {
-                auth: Auth::DefaultChain,
-                scheme: AzureScheme::Http,
-                addressing: Addressing::PathStyle,
-            }
+            AzureEndpointOptions::new(
+                Auth::DefaultChain,
+                AzureEndpoint {
+                    scheme: AzureScheme::Http,
+                    addressing: Addressing::PathStyle,
+                },
+            )
         );
 
         // An empty entry is the same as no entry: anonymous, https, host-style.
         let empty: AzureEndpointOptions = toml::from_str("").unwrap();
         assert_eq!(empty, AzureEndpointOptions::default());
-        assert_eq!(empty.auth, Auth::Anonymous);
-        assert!(!empty.auth.is_granted());
-        assert_eq!(empty.scheme, AzureScheme::Https);
-        assert_eq!(empty.addressing, Addressing::HostStyle);
+        assert_eq!(empty.fetch(), AzureFetchOptions::default());
+        assert!(!empty.fetch().auth.is_granted());
+        assert_eq!(empty.endpoint(), AzureEndpoint::default());
 
         // `auth = false` is spelled out explicitly by some users; it must not be
         // mistaken for a grant.
         let denied: AzureEndpointOptions = toml::from_str("auth = false").unwrap();
-        assert!(!denied.auth.is_granted());
+        assert!(!denied.fetch().auth.is_granted());
     }
 
     /// Round-tripping must preserve the boolean spelling, not leak the enum
     /// variant names into a written config file.
     #[test]
     fn enums_serialize_back_to_bools() {
-        let toml = toml::to_string(&AzureEndpointOptions {
-            auth: Auth::DefaultChain,
-            scheme: AzureScheme::Http,
-            addressing: Addressing::PathStyle,
-        })
+        let toml = toml::to_string(&AzureEndpointOptions::new(
+            Auth::DefaultChain,
+            AzureEndpoint {
+                scheme: AzureScheme::Http,
+                addressing: Addressing::PathStyle,
+            },
+        ))
         .unwrap();
         assert!(toml.contains("auth = true"), "{toml}");
         assert!(toml.contains("path-style = true"), "{toml}");

@@ -7,7 +7,7 @@ use std::{
 use futures::{StreamExt, TryStreamExt};
 use miette::IntoDiagnostic;
 use opendal::{Configurator, ErrorKind, Operator};
-use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpointOptions};
+use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpoint};
 
 use crate::upload::{
     object_store::{BlobUploadTarget, PACKAGE_CONCURRENCY, stream_package_to_object_store},
@@ -30,19 +30,18 @@ enum PackageOutcome {
 /// Uploads packages to a channel in an Azure Blob Storage container.
 ///
 /// The account name, endpoint, container and root prefix are all derived from the
-/// channel URL together with `options` (see `azblob_config`): `options.addressing`
-/// decides whether the account is the first host label or the first path segment,
-/// and `options.scheme` decides what `az://` is sent over. A path-style entry is
-/// therefore what makes an IP, single-label or emulator (Azurite) endpoint
-/// uploadable. The [`AzureCredentials`] supply only the account key or SAS token.
+/// channel URL together with `endpoint` (see `azblob_config`), so a path-style entry
+/// is what makes an IP, single-label or emulator (Azurite) endpoint uploadable. The
+/// [`AzureCredentials`] supply only the account key or SAS token.
 pub async fn upload_package_to_azure(
     channel: AzureChannelUrl,
     credentials: AzureCredentials,
-    options: AzureEndpointOptions,
+    endpoint: AzureEndpoint,
     package_files: &[PathBuf],
     force: ForceOverwrite,
 ) -> miette::Result<()> {
-    let config = rattler_azure::azblob_config(&credentials, &channel, options).into_diagnostic()?;
+    let config =
+        rattler_azure::azblob_config(&credentials, &channel, endpoint).into_diagnostic()?;
 
     let builder = config.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();

@@ -39,7 +39,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use rattler_azure::{Addressing, Auth, AzureEndpointOptions, AzureHost, AzureScheme};
+use rattler_azure::{Auth, AzureFetchOptions, AzureHost, AzureScheme};
 use rattler_networking::AzureMiddleware;
 use reqwest::{
     Request, Response,
@@ -96,13 +96,12 @@ fn channel_url() -> String {
 /// variable. `scheme` and `path-style` stay set even in the ungranted case: the
 /// entry is what makes the emulator reachable at all, and keeping it identical
 /// means the two tests differ in the grant and nothing else.
-fn azurite_entry(auth: Auth) -> HashMap<AzureHost, AzureEndpointOptions> {
+fn azurite_entry(auth: Auth) -> HashMap<AzureHost, AzureFetchOptions> {
     HashMap::from([(
         AzureHost::parse(AUTHORITY).expect("azurite authority is a valid host:port"),
-        AzureEndpointOptions {
+        AzureFetchOptions {
             auth,
             scheme: AzureScheme::Http,
-            addressing: Addressing::PathStyle,
         },
     )])
 }
