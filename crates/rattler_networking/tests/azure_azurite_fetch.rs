@@ -33,11 +33,22 @@
 //! only if an older emulator rejects the version outright.
 #![cfg(feature = "azure")]
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
+use async_trait::async_trait;
 use rattler_azure::{Addressing, Auth, AzureEndpointOptions, AzureHost, AzureScheme};
 use rattler_networking::AzureMiddleware;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest::{
+    Request, Response,
+    header::{AUTHORIZATION, HeaderMap},
+};
+use reqwest_middleware::{
+    ClientBuilder, ClientWithMiddleware, Middleware, Next, Result as MiddlewareResult,
+};
+use url::Url;
 
 /// Azurite's development account and its fixed key. Not a secret: both are
 /// published constants of the emulator, hardcoded in opendal's own source, and
@@ -96,13 +107,52 @@ fn azurite_entry(auth: Auth) -> HashMap<AzureHost, AzureEndpointOptions> {
     )])
 }
 
-fn client(auth: Auth) -> ClientWithMiddleware {
-    ClientBuilder::new(reqwest::Client::new())
+/// The last request to leave the stack, captured *after* `AzureMiddleware` ran.
+///
+/// Azurite answers 403 to any request it cannot authenticate, so a response status
+/// cannot tell an unsigned request from a signed one whose signature was rejected —
+/// a leak with a bad signature reads exactly like a refusal. The claim being tested
+/// is about what goes on the wire, so that is what gets asserted.
+#[derive(Clone, Default)]
+struct SentRequest(Arc<Mutex<Option<(Url, HeaderMap)>>>);
+
+impl SentRequest {
+    fn recorded(&self) -> (Url, HeaderMap) {
+        self.0
+            .lock()
+            .expect("recorder mutex")
+            .clone()
+            .expect("no request reached the recorder")
+    }
+}
+
+#[async_trait]
+impl Middleware for SentRequest {
+    async fn handle(
+        &self,
+        req: Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> MiddlewareResult<Response> {
+        *self.0.lock().expect("recorder mutex") = Some((req.url().clone(), req.headers().clone()));
+        next.run(req, extensions).await
+    }
+}
+
+fn recording_client(auth: Auth) -> (ClientWithMiddleware, SentRequest) {
+    let sent = SentRequest::default();
+    let client = ClientBuilder::new(reqwest::Client::new())
         .with(AzureMiddleware::new(
             reqwest::Client::new(),
             azurite_entry(auth),
         ))
-        .build()
+        .with(sent.clone())
+        .build();
+    (client, sent)
+}
+
+fn client(auth: Auth) -> ClientWithMiddleware {
+    recording_client(auth).0
 }
 
 /// Create the container and put a `noarch/repodata.json` in it.
@@ -188,8 +238,13 @@ async fn azurite_granted_entry_fetches_repodata() {
 }
 
 /// Without `auth = true` the request goes out unsigned, and a private container
-/// refuses it. This is the core claim of the anonymous-by-default model, and the
-/// only way to check it is against a server that actually enforces authorization.
+/// refuses it. This is the core claim of the anonymous-by-default model.
+///
+/// The primary assertion is on the outgoing request, not the status: no
+/// `Authorization` header and no SAS `sig` reaches the wire. The 403 stays as a
+/// secondary check that the container really is private, but on its own it would
+/// also pass while the account key was being sent with a signature Azurite
+/// rejected.
 #[tokio::test]
 #[ignore = "requires a running Azurite emulator; see the module docs"]
 async fn azurite_ungranted_entry_is_refused_by_a_private_container() {
@@ -205,11 +260,25 @@ async fn azurite_ungranted_entry_is_refused_by_a_private_container() {
             seed(&client(Auth::DefaultChain)).await;
 
             let url = format!("{}/noarch/repodata.json", channel_url());
-            let resp = client(Auth::Anonymous)
+            let (client, sent) = recording_client(Auth::Anonymous);
+            let resp = client
                 .get(&url)
                 .send()
                 .await
                 .expect("request through azure middleware failed");
+
+            let (sent_url, sent_headers) = sent.recorded();
+            assert!(
+                !sent_headers.contains_key(AUTHORIZATION),
+                "an ungranted request must carry no credential, but it went out with an \
+                 Authorization header: {:?}",
+                sent_headers.get(AUTHORIZATION)
+            );
+            assert!(
+                !sent_url.query_pairs().any(|(key, _)| key == "sig"),
+                "an ungranted request must carry no credential, but its URL went out with a SAS \
+                 signature: {sent_url}"
+            );
 
             let status = resp.status();
             assert!(

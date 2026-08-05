@@ -296,9 +296,16 @@ async fn azurite_multi_block_write_keeps_cache_control() {
     .await;
 }
 
-/// The gap `upload_package_to_azure`'s pre-write `stat` exists to close: opendal
-/// honours `if_not_exists` on the single-shot Put Blob path and silently drops it
-/// on the multi-block path.
+/// A canary for an opendal bug, so it asserts the *broken* behaviour and fails when
+/// upstream fixes it. Read the failure message before touching the assertions.
+///
+/// The bug: `azblob_complete_put_block_list_request` never sets `IF_NONE_MATCH`, so
+/// `if_not_exists` is silently dropped above the 10 MiB chunk size, while the
+/// sibling copy-block-list function does set it. That is the gap
+/// `upload_package_to_azure`'s pre-write `stat` exists to close.
+///
+/// TODO: revisit once <https://github.com/apache/opendal/pull/7990> merges — it
+/// carries changes in this area.
 ///
 /// A package over `rattler_upload`'s 10 MiB chunk size is the only way to reach the
 /// multi-block path, and this is as close as a test can currently get to that
@@ -328,11 +335,33 @@ async fn azurite_if_not_exists_is_dropped_on_the_multi_block_path() {
             .expect_err("if_not_exists should refuse to overwrite a small blob");
         assert_eq!(refused.kind(), ErrorKind::ConditionNotMatch);
 
-        // Over the chunk size, the same option is accepted and then ignored.
+        // Over the chunk size, the same option is accepted and then ignored: the
+        // guarded second write goes through and replaces the first payload.
         let large = "noarch/large.conda";
-        let payload = vec![0u8; UPLOAD_CHUNK_SIZE + 2 * MIB];
-        write_chunked(&op, large, &payload, false).await;
-        write_chunked(&op, large, &payload, true).await;
+        let first = vec![0u8; UPLOAD_CHUNK_SIZE + 2 * MIB];
+        let second = vec![1u8; first.len()];
+        write_chunked(&op, large, &first, false)
+            .await
+            .expect("unguarded multi-block write failed");
+        write_chunked(&op, large, &second, true)
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "opendal now honours `if_not_exists` on the multi-block path ({e}). This is \
+                     the upstream fix this test was waiting for — do not adjust the assertion. \
+                     Delete `upload_package_to_azure`'s pre-write `stat` guard (and its TOCTOU \
+                     window) in crates/rattler_upload/src/upload/azure.rs, then delete this test."
+                )
+            });
+        let stored = op
+            .read(large)
+            .await
+            .expect("read back the large blob")
+            .to_vec();
+        assert!(
+            stored == second,
+            "the guarded multi-block write should have clobbered the first payload"
+        );
 
         // Which is why the uploader stats first. That check does see the blob, so
         // the guard holds for large packages despite opendal dropping the option.
@@ -344,13 +373,17 @@ async fn azurite_if_not_exists_is_dropped_on_the_multi_block_path() {
     .await;
 }
 
-/// Write `payload` the way `upload_single_package` does, and assert it succeeded.
+/// Write `payload` the way `upload_single_package` does.
 ///
-/// `guard` is that function's `if_not_exists(!force)`. Passing `true` over a blob
-/// that already exists still succeeds, which is the point being demonstrated: on
-/// the multi-block path the option is a no-op, so a large upload would clobber
-/// without the separate `stat`.
-async fn write_chunked(op: &Operator, path: &str, payload: &[u8], guard: bool) {
+/// `guard` is that function's `if_not_exists(!force)`. The commit result is handed
+/// back rather than unwrapped: whether a guarded commit over an existing blob
+/// succeeds is the thing under test, so the caller owns that message.
+async fn write_chunked(
+    op: &Operator,
+    path: &str,
+    payload: &[u8],
+    guard: bool,
+) -> opendal::Result<()> {
     let mut writer = op
         .writer_with(path)
         .chunk(UPLOAD_CHUNK_SIZE)
@@ -361,8 +394,5 @@ async fn write_chunked(op: &Operator, path: &str, payload: &[u8], guard: bool) {
         .write(payload.to_vec())
         .await
         .expect("chunked write failed");
-    writer
-        .close()
-        .await
-        .expect("a multi-block commit should succeed even with if_not_exists set");
+    writer.close().await.map(|_| ())
 }
