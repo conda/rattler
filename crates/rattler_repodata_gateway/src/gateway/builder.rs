@@ -193,6 +193,8 @@ impl GatewayBuilder {
                 subdirs: CoalescedMap::new(),
                 client,
                 channel_config: self.channel_config,
+                notices: dashmap::DashMap::new(),
+                notice_fetch_locks: dashmap::DashMap::new(),
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]

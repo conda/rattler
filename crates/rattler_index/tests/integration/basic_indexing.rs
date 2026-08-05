@@ -5,7 +5,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelRelations, Platform, ShardedRepodata, compression_level::CompressionLevel,
+    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, ShardedRepodata,
+    compression_level::CompressionLevel,
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
@@ -388,6 +389,14 @@ async fn test_index_writes_channel_metadata() {
             base: Some("../conda-forge".to_string()),
             overrides: Some("../fallback".to_string()),
         }),
+        notices: Some(vec![ChannelNotice {
+            id: "security-1".to_string(),
+            message: "Please update demo".to_string(),
+            level: ChannelNoticeLevel::Critical,
+            created_at: None,
+            expires_at: None,
+            interval: Some(24),
+        }]),
     };
 
     index_fs_with_channel_metadata(
@@ -458,6 +467,12 @@ async fn test_index_writes_channel_metadata() {
         shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
         Some(0)
     );
+
+    let notices_json: Value =
+        serde_json::from_reader(File::open(temp_dir.path().join("notices.json")).unwrap()).unwrap();
+    assert_eq!(notices_json["notices"][0]["id"], "security-1");
+    assert_eq!(notices_json["notices"][0]["level"], "critical");
+    assert_eq!(notices_json["notices"][0]["interval"], 24);
 }
 
 /// Regression test: sharded repodata must be reproducible.

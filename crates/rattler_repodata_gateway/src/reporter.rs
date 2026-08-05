@@ -96,6 +96,11 @@ pub trait Reporter: Send + Sync {
     #[cfg(feature = "sparse")]
     fn on_unsupported_repodata_revision(&self, _message: &UnsupportedRepodataRevision) {}
 
+    /// Called for every CEP-6 channel notice found during a query. The notice
+    /// is also collected on the query output.
+    #[cfg(feature = "gateway")]
+    fn on_channel_notice(&self, _notice: &crate::ChannelNoticeResult) {}
+
     /// Called once per unique non-fatal warning as the query records
     /// it. The warning is also collected on the query output.
     #[cfg(feature = "gateway")]

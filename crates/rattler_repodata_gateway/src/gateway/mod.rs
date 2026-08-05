@@ -2,6 +2,7 @@ mod barrier_cell;
 mod builder;
 mod channel_config;
 mod channel_expander;
+mod channel_notices;
 mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
@@ -27,6 +28,8 @@ pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use channel_expander::{ChannelRelationsMode, ChannelRelationsWarning};
+use channel_notices::CachedChannelNotices;
+pub use channel_notices::ChannelNoticeResult;
 pub use channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
@@ -189,6 +192,18 @@ impl Gateway {
         )
     }
 
+    /// Return the cached or freshly fetched CEP-6 notices for the given
+    /// channels.
+    ///
+    /// Fetch and parse failures are non-fatal and are retried after a short
+    /// cache interval.
+    pub async fn channel_notices<'a>(
+        &self,
+        channels: impl IntoIterator<Item = &'a Channel>,
+    ) -> Vec<ChannelNoticeResult> {
+        self.inner.get_channel_notices(channels, None).await
+    }
+
     /// Returns the [CEP-42] `channel_relations` declared by the given
     /// `(channel, platform)` subdirectory, or `None` if none were
     /// declared or the subdirectory doesn't exist.
@@ -274,6 +289,8 @@ impl Gateway {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+        self.inner.notices.remove(&channel.base_url);
+        self.inner.notice_fetch_locks.remove(&channel.base_url);
 
         #[cfg(not(target_arch = "wasm32"))]
         if mode == CacheClearMode::InMemoryAndDisk {
@@ -323,6 +340,13 @@ struct GatewayInner {
 
     /// The channel configuration
     channel_config: ChannelConfig,
+
+    /// In-memory notices cache, keyed by channel URL.
+    notices: dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<CachedChannelNotices>>,
+
+    /// Per-channel locks used to coalesce notice refreshes.
+    notice_fetch_locks:
+        dashmap::DashMap<rattler_conda_types::ChannelUrl, Arc<tokio::sync::Mutex<()>>>,
 
     /// The directory to store any cache
     #[cfg(not(target_arch = "wasm32"))]
@@ -649,6 +673,178 @@ mod test {
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
         assert!(messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_are_returned_and_reported() {
+        #[derive(Default)]
+        struct NoticeReporter(Mutex<Vec<String>>);
+
+        impl Reporter for Arc<NoticeReporter> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                None
+            }
+
+            fn on_channel_notice(&self, notice: &crate::ChannelNoticeResult) {
+                self.0.lock().unwrap().push(notice.notice.id.clone());
+            }
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let noarch = tempdir.path().join("noarch");
+        fs_err::create_dir_all(&noarch).unwrap();
+        fs_err::write(noarch.join("repodata.json"), make_repodata("demo", "1.0")).unwrap();
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[
+                {"id":"security-1","message":"Update demo","level":"critical","expires_at":"2099-01-01T00:00:00Z"},
+                {"id":42,"message":"malformed notice"}
+            ]}"#,
+        )
+        .unwrap();
+
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let reporter = Arc::new(NoticeReporter::default());
+        let output = Gateway::new()
+            .query(
+                vec![channel.clone()],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .channel_notices(true)
+            .with_reporter(reporter.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(output.notices.len(), 1);
+        assert_eq!(output.notices[0].notice.id, "security-1");
+        assert_eq!(reporter.0.lock().unwrap().as_slice(), ["security-1"]);
+
+        let output = Gateway::new()
+            .query(
+                vec![channel],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("demo").unwrap()],
+            )
+            .await
+            .unwrap();
+        assert!(output.notices.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_channel_notices_refresh_at_expiration() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let channel = Channel::try_from_directory(tempdir.path()).unwrap();
+        let expiry = jiff::Timestamp::now() + jiff::SignedDuration::from_millis(500);
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            format!(r#"{{"notices":[{{"id":"old","message":"Old","expires_at":"{expiry}"}}]}}"#),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "old"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+        fs_err::write(
+            tempdir.path().join("notices.json"),
+            r#"{"notices":[{"id":"new","message":"New","expires_at":"2099-01-01T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            gateway.channel_notices([&channel]).await[0].notice.id,
+            "new"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notice_requests_are_coalesced_and_size_limited() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_route = calls.clone();
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(move || {
+                let calls = calls_for_route.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    r#"{"notices":[{"id":"one","message":"One","expires_at":"2099-01-01T00:00:00Z"}]}"#
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::new();
+
+        let results = futures::future::join_all(
+            (0..8).map(|_| gateway.channel_notices(std::iter::once(&channel))),
+        )
+        .await;
+        assert!(results.iter().all(|notices| notices.len() == 1));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        server.abort();
+
+        let app = axum::Router::new().route(
+            "/notices.json",
+            axum::routing::get(|| async { "x".repeat(1024 * 1024 + 1) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let channel = Channel::from_url(Url::parse(&format!("http://{address}/")).unwrap());
+        let gateway = Gateway::new();
+        assert!(gateway.channel_notices([&channel]).await.is_empty());
+        server.abort();
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn test_channel_notices_respect_max_concurrent_requests() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let maximum = Arc::new(AtomicUsize::new(0));
+        let handler = {
+            let active = active.clone();
+            let maximum = maximum.clone();
+            move || {
+                let active = active.clone();
+                let maximum = maximum.clone();
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    maximum.fetch_max(current, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    r#"{"notices":[]}"#
+                }
+            }
+        };
+        let app = axum::Router::new()
+            .route("/a/notices.json", axum::routing::get(handler.clone()))
+            .route("/b/notices.json", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let root = Url::parse(&format!("http://{address}/")).unwrap();
+        let channels = [
+            Channel::from_url(root.join("a/").unwrap()),
+            Channel::from_url(root.join("b/").unwrap()),
+        ];
+        let gateway = Gateway::builder()
+            .with_max_concurrent_requests(1_usize)
+            .finish();
+
+        gateway.channel_notices(channels.iter()).await;
+        assert_eq!(maximum.load(Ordering::SeqCst), 1);
+        server.abort();
     }
 
     #[tokio::test]
@@ -2868,6 +3064,46 @@ mod test {
         assert_eq!(results.len(), 2);
         assert!(!results[0].is_empty(), "conda-forge bucket non-empty");
         assert!(!results[1].is_empty(), "bioconda bucket non-empty");
+    }
+
+    /// Notices include channels discovered through CEP-42 relations.
+    #[tokio::test]
+    async fn test_cep42_discovered_channel_notices_are_returned() {
+        let dir = tempfile::tempdir().unwrap();
+        let cf_root = dir.path().join("conda-forge");
+        let bc_root = dir.path().join("bioconda");
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        std::fs::write(
+            cf_root.join("notices.json"),
+            r#"{"notices":[{"id":"base","message":"Base notice"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            bc_root.join("notices.json"),
+            r#"{"notices":[{"id":"declaring","message":"Declaring notice"}]}"#,
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+        let output = Gateway::new()
+            .query(
+                [bioconda],
+                [Platform::Linux64],
+                [MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .channel_notices(true)
+            .execute()
+            .await
+            .unwrap();
+
+        let ids: std::collections::HashSet<_> = output
+            .notices
+            .iter()
+            .map(|notice| notice.notice.id.as_str())
+            .collect();
+        assert_eq!(ids, std::collections::HashSet::from(["base", "declaring"]));
     }
 
     /// `Disabled` ignores declared relations.

@@ -7,6 +7,7 @@ pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;
+mod channel_notice;
 mod explicit_environment_spec;
 mod flags;
 pub mod match_spec;
@@ -38,6 +39,7 @@ use std::path::{Path, PathBuf};
 pub use build_spec::{BuildNumber, BuildNumberSpec, OrdOperator, ParseBuildNumberSpecError};
 pub use channel::{Channel, ChannelConfig, ChannelUrl, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
+pub use channel_notice::{ChannelNotice, ChannelNoticeLevel, ChannelNotices};
 pub use environment_yaml::{EnvironmentYaml, MatchSpecOrSubSection};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,

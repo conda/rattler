@@ -9,8 +9,8 @@ use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclas
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
-    CacheClearMode, ChannelConfig, ChannelRelationsMode, Gateway, GatewayWarning, Source,
-    SourceConfig, SubdirSelection,
+    CacheClearMode, ChannelConfig, ChannelNoticeResult, ChannelRelationsMode, Gateway,
+    GatewayWarning, Source, SourceConfig, SubdirSelection,
 };
 use url::Url;
 
@@ -29,6 +29,39 @@ use crate::{PyChannel, Wrap};
 pub struct PyGateway {
     pub(crate) inner: Gateway,
     show_progress: bool,
+}
+
+/// A CEP-6 channel notice returned by the repodata gateway.
+#[pyclass(get_all, from_py_object)]
+#[derive(Clone)]
+pub struct PyChannelNotice {
+    channel: String,
+    id: String,
+    message: String,
+    level: String,
+    created_at: Option<String>,
+    expires_at: Option<String>,
+    interval: Option<u64>,
+}
+
+impl From<ChannelNoticeResult> for PyChannelNotice {
+    fn from(value: ChannelNoticeResult) -> Self {
+        let notice = value.notice;
+        Self {
+            channel: value.channel.to_string(),
+            id: notice.id,
+            message: notice.message,
+            level: match notice.level {
+                rattler_conda_types::ChannelNoticeLevel::Info => "info",
+                rattler_conda_types::ChannelNoticeLevel::Warning => "warning",
+                rattler_conda_types::ChannelNoticeLevel::Critical => "critical",
+            }
+            .to_string(),
+            created_at: notice.created_at.map(|timestamp| timestamp.to_string()),
+            expires_at: notice.expires_at.map(|timestamp| timestamp.to_string()),
+            interval: notice.interval,
+        }
+    }
 }
 
 impl From<PyGateway> for Gateway {
@@ -180,6 +213,23 @@ impl PyGateway {
         })
     }
 
+    /// Fetch CEP-6 notices for the given channels.
+    pub fn channel_notices<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            Ok(gateway
+                .channel_notices(channels.iter().map(|channel| &channel.inner))
+                .await
+                .into_iter()
+                .map(PyChannelNotice::from)
+                .collect::<Vec<_>>())
+        })
+    }
+
     #[pyo3(signature = (channel, subdirs, clear_disk=false))]
     pub fn clear_repodata_cache(
         &self,
@@ -223,6 +273,7 @@ impl PyGateway {
         recursive,
         channel_relations=None,
         channel_relations_max_depth=None,
+        channel_notices=false,
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn query<'a>(
@@ -234,6 +285,7 @@ impl PyGateway {
         recursive: bool,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
+        channel_notices: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -246,7 +298,8 @@ impl PyGateway {
         future_into_py(py, async move {
             let mut query = gateway
                 .query(rust_sources, platforms.into_iter().map(|p| p.inner), specs)
-                .recursive(recursive);
+                .recursive(recursive)
+                .channel_notices(channel_notices);
 
             if let Some(mode) = channel_relations {
                 query = query.channel_relations(mode.0);
@@ -264,7 +317,7 @@ impl PyGateway {
             emit_gateway_warnings(output.warnings)?;
 
             // Convert the records into a list of lists (Arc clone, not deep copy)
-            Ok(output
+            let records = output
                 .repodata
                 .into_iter()
                 .map(|r| {
@@ -272,7 +325,13 @@ impl PyGateway {
                         .map(|arc| PyRecord::from(arc.clone()))
                         .collect::<Vec<_>>()
                 })
-                .collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let notices = output
+                .notices
+                .into_iter()
+                .map(PyChannelNotice::from)
+                .collect::<Vec<_>>();
+            Ok((records, notices))
         })
     }
 
@@ -281,6 +340,7 @@ impl PyGateway {
         platforms,
         channel_relations=None,
         channel_relations_max_depth=None,
+        channel_notices=false,
     ))]
     pub fn names<'a>(
         &self,
@@ -289,6 +349,7 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         channel_relations: Option<Wrap<ChannelRelationsMode>>,
         channel_relations_max_depth: Option<usize>,
+        channel_notices: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Convert Python sources to Rust Source enum
         let rust_sources: Vec<Source> = sources
@@ -317,8 +378,11 @@ impl PyGateway {
             let mut all_names: std::collections::HashSet<rattler_conda_types::PackageName> =
                 std::collections::HashSet::new();
 
+            let mut notices = Vec::new();
             if !channels.is_empty() {
-                let mut query = gateway.names(channels, platforms_vec.iter().copied());
+                let mut query = gateway
+                    .names(channels, platforms_vec.iter().copied())
+                    .channel_notices(channel_notices);
 
                 if let Some(mode) = channel_relations {
                     query = query.channel_relations(mode.0);
@@ -336,6 +400,7 @@ impl PyGateway {
                 let output = query.execute().await.map_err(PyRattlerError::from)?;
                 emit_gateway_warnings(output.warnings)?;
                 all_names.extend(output.names);
+                notices.extend(output.notices.into_iter().map(PyChannelNotice::from));
             }
 
             // Collect names from custom sources directly
@@ -351,10 +416,13 @@ impl PyGateway {
             }
 
             // Convert to list of PyPackageName
-            Ok(all_names
-                .into_iter()
-                .map(PyPackageName::from)
-                .collect::<Vec<_>>())
+            Ok((
+                all_names
+                    .into_iter()
+                    .map(PyPackageName::from)
+                    .collect::<Vec<_>>(),
+                notices,
+            ))
         })
     }
 }
