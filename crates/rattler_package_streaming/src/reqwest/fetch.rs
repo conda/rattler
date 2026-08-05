@@ -8,7 +8,7 @@
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use rattler_redaction::{DEFAULT_REDACTION_STR, redact_known_secrets_from_url};
 use reqwest_middleware::ClientWithMiddleware;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use url::Url;
 
 pub use super::full_download::{

@@ -81,6 +81,7 @@ pep440_rs = "0.7"
 pep508_rs = "0.9"
 serde_json = "1"
 pyo3-file = "0.17"
+pyo3-log = "0.13.4"
 nix = { version = "0.31", features = ["process"], optional = true }
 tracing = { version = "0.1.44", features = ["log", "log-always"] }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = [
