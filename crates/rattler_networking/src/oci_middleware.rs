@@ -10,7 +10,7 @@ use http::{
     Extensions,
     header::{ACCEPT, AUTHORIZATION},
 };
-use reqwest::{Request, Response, header::HeaderValue};
+use reqwest::{Request, Response, StatusCode, header::HeaderValue};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
 use url::{ParseError, Url};
@@ -39,6 +39,9 @@ enum OciMiddlewareError {
 
     #[error("Invalid OCI URL '{0}': {1}")]
     InvalidUrl(Url, &'static str),
+
+    #[error("OCI registry requested authentication")]
+    AuthenticationRequired(Vec<Challenge>),
 }
 
 /// Middleware to handle `oci://` URLs
@@ -137,9 +140,19 @@ impl OciMiddleware {
         };
 
         match self.client.client().get(url.clone()).send().await {
-            Ok(response) => Some(registry_auth_from_challenges(&parse_challenges(
-                response.headers(),
-            ))),
+            Ok(response) => {
+                let status = response.status();
+                let challenges = parse_challenges(response.headers());
+                let result = registry_auth_from_probe(status, &challenges);
+                if result.is_none() {
+                    // Do not let a transient response permanently poison the
+                    // host-wide auth cache as `Direct`.
+                    tracing::debug!(
+                        "OCI Mirror: auth probe {url} returned unusable status {status} or challenge"
+                    );
+                }
+                result
+            }
             Err(e) => {
                 // The artifact request that follows reports a better error than
                 // we could here, so a failed probe must not be fatal.
@@ -179,14 +192,56 @@ impl OciMiddleware {
         }
     }
 
+    /// Resolve a challenge returned by a concrete manifest or blob request.
+    /// Unlike the `/v2/` probe, this is authoritative for the requested
+    /// repository and therefore replaces the cached host-wide answer.
+    async fn authorization_from_challenges(
+        &self,
+        oci_url: &OCIUrl,
+        challenges: &[Challenge],
+    ) -> Result<Option<HeaderValue>, OciMiddlewareError> {
+        let auth = registry_auth_from_challenges(challenges);
+        self.registry_auth_cache
+            .lock()
+            .expect("OCI registry auth cache poisoned")
+            .insert(oci_url.host.clone(), auth.clone());
+
+        let credentials = self.stored_credentials(&oci_url.url).await;
+        match auth {
+            RegistryAuth::TokenExchange { realm, service } => {
+                let token_url =
+                    token_url(&realm, service.as_deref(), &oci_url.path, OciAction::Pull);
+                let token = get_token(&self.client, &token_url, credentials.as_ref()).await?;
+                let mut header = HeaderValue::from_str(&format!("Bearer {token}"))?;
+                header.set_sensitive(true);
+                Ok(Some(header))
+            }
+            RegistryAuth::Direct => Ok(credentials_header(credentials.as_ref())),
+        }
+    }
+
     /// Turn an `oci://` request into a request for the registry blob that holds
     /// the artifact.
-    async fn rewrite_to_blob_request(&self, req: &mut Request) -> Result<(), OciMiddlewareError> {
-        let oci_url = OCIUrl::new(req.url())?;
-        let authorization = self.authorization_header(&oci_url, OciAction::Pull).await?;
-        oci_url
+    async fn rewrite_to_blob_request(
+        &self,
+        oci_url: &OCIUrl,
+        req: &mut Request,
+    ) -> Result<(), OciMiddlewareError> {
+        let authorization = self.authorization_header(oci_url, OciAction::Pull).await?;
+        match oci_url
             .set_blob_url(&self.client, req, authorization.as_ref())
             .await
+        {
+            Err(OciMiddlewareError::AuthenticationRequired(challenges)) => {
+                let authorization = self
+                    .authorization_from_challenges(oci_url, &challenges)
+                    .await?;
+                oci_url
+                    .set_blob_url(&self.client, req, authorization.as_ref())
+                    .await
+            }
+            result => result,
+        }
     }
 }
 
@@ -204,11 +259,25 @@ enum RegistryAuth {
     Direct,
 }
 
-/// Pick the authentication flow from the challenges of a `GET /v2/` response.
+/// Interpret the result of the best-effort `GET /v2/` probe.
 ///
-/// A `Bearer` challenge whose `realm` is missing or unparsable degrades to
-/// [`RegistryAuth::Direct`] rather than erroring: a registry we cannot
-/// negotiate with may still accept stored credentials directly.
+/// Unexpected statuses and a `401` without a parseable challenge are not
+/// cached: both can be transient and neither tells us how the registry wants
+/// the concrete repository request authenticated.
+fn registry_auth_from_probe(status: StatusCode, challenges: &[Challenge]) -> Option<RegistryAuth> {
+    if status == StatusCode::UNAUTHORIZED {
+        return (!challenges.is_empty()).then(|| registry_auth_from_challenges(challenges));
+    }
+    status
+        .is_success()
+        .then(|| registry_auth_from_challenges(challenges))
+}
+
+/// Pick the authentication flow from a registry's challenges.
+///
+/// A `Bearer` challenge whose `realm` is missing, unparsable, or not HTTPS
+/// degrades to [`RegistryAuth::Direct`] rather than erroring: a registry we
+/// cannot negotiate with may still accept stored credentials directly.
 fn registry_auth_from_challenges(challenges: &[Challenge]) -> RegistryAuth {
     for challenge in challenges {
         if !challenge.scheme.eq_ignore_ascii_case("bearer") {
@@ -218,8 +287,11 @@ fn registry_auth_from_challenges(challenges: &[Challenge]) -> RegistryAuth {
             .params
             .get("realm")
             .and_then(|realm| Url::parse(realm).ok())
+            .filter(|realm| realm.scheme() == "https")
         else {
-            tracing::debug!("OCI Mirror: ignoring Bearer challenge without a usable realm");
+            // Basic credentials are forwarded to this endpoint during token
+            // exchange. Never allow a challenge to downgrade them to cleartext.
+            tracing::debug!("OCI Mirror: ignoring Bearer challenge without a usable HTTPS realm");
             continue;
         };
         return RegistryAuth::TokenExchange {
@@ -469,8 +541,14 @@ impl OCIUrl {
             }
 
             let manifest = manifest_request.send().await?;
+            if manifest.status() == StatusCode::UNAUTHORIZED {
+                let challenges = parse_challenges(manifest.headers());
+                if !challenges.is_empty() {
+                    return Err(OciMiddlewareError::AuthenticationRequired(challenges));
+                }
+            }
 
-            let manifest: Manifest = manifest.json().await?;
+            let manifest: Manifest = manifest.error_for_status()?.json().await?;
 
             let layer = if let Some(layer) = manifest
                 .layers
@@ -523,10 +601,38 @@ impl Middleware for OciMiddleware {
             return next.run(req, extensions).await;
         }
 
-        let res = self.rewrite_to_blob_request(&mut req).await;
+        let oci_url = match OCIUrl::new(req.url()) {
+            Ok(url) => url,
+            Err(e) => return Err(reqwest_middleware::Error::Middleware(e.into())),
+        };
+        let res = self.rewrite_to_blob_request(&oci_url, &mut req).await;
 
         match res {
-            Ok(_) => next.run(req, extensions).await,
+            Ok(_) => {
+                // Keep one copy so a repository-specific challenge can be
+                // answered and replayed exactly once.
+                let Some(mut retry_req) = req.try_clone() else {
+                    return next.run(req, extensions).await;
+                };
+                let response = next.clone().run(req, extensions).await?;
+                if response.status() != StatusCode::UNAUTHORIZED {
+                    return Ok(response);
+                }
+
+                let challenges = parse_challenges(response.headers());
+                if challenges.is_empty() {
+                    return Ok(response);
+                }
+                let authorization = self
+                    .authorization_from_challenges(&oci_url, &challenges)
+                    .await
+                    .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?;
+                let Some(authorization) = authorization else {
+                    return Ok(response);
+                };
+                retry_req.headers_mut().insert(AUTHORIZATION, authorization);
+                next.run(retry_req, extensions).await
+            }
             Err(e) => match e {
                 OciMiddlewareError::LayerNotFound => {
                     return Ok(create_404_response(
@@ -547,8 +653,8 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::{
-        Authentication, OciAction, RegistryAuth, credentials_header, parse_challenges,
-        registry_auth_from_challenges, token_url,
+        Authentication, OciAction, RegistryAuth, StatusCode, credentials_header, parse_challenges,
+        registry_auth_from_challenges, registry_auth_from_probe, token_url,
     };
     use crate::{Challenge, OciMiddleware};
 
@@ -655,6 +761,7 @@ mod tests {
         for header in [
             r#"Bearer service="ghcr.io""#,
             r#"Bearer realm="not a url""#,
+            r#"Bearer realm="http://registry.example/token""#,
             r#"Digest realm="https://registry.example/token""#,
             "%%% ###",
         ] {
@@ -666,6 +773,33 @@ mod tests {
         }
         // A 2xx `GET /v2/` carries no challenge at all.
         assert_eq!(registry_auth_from_challenges(&[]), RegistryAuth::Direct);
+    }
+
+    #[test]
+    fn transient_probe_responses_are_not_cached_as_direct() {
+        assert_eq!(
+            registry_auth_from_probe(StatusCode::TOO_MANY_REQUESTS, &[]),
+            None
+        );
+        assert_eq!(
+            registry_auth_from_probe(StatusCode::SERVICE_UNAVAILABLE, &[]),
+            None
+        );
+        assert_eq!(
+            registry_auth_from_probe(StatusCode::UNAUTHORIZED, &[]),
+            None
+        );
+        assert_eq!(
+            registry_auth_from_probe(StatusCode::OK, &[]),
+            Some(RegistryAuth::Direct)
+        );
+        assert!(matches!(
+            registry_auth_from_probe(
+                StatusCode::UNAUTHORIZED,
+                &challenges(r#"Bearer realm="https://registry.example/token""#)
+            ),
+            Some(RegistryAuth::TokenExchange { .. })
+        ));
     }
 
     // test pulling an image from OCI registry
