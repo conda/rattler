@@ -1841,6 +1841,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.ChannelNotice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChannelNotice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.repo_data.gateway.Gateway" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1868,6 +1879,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.channel_notices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channel_notices
       
     </span>
   </a>
@@ -1920,6 +1942,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayNamesResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GatewayNamesResult
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayQueryResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GatewayQueryResult
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3164,6 +3208,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.ChannelNotice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChannelNotice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rattler.repo_data.gateway.Gateway" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3191,6 +3246,17 @@
     <span class="md-ellipsis">
       
         __repr__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.Gateway.channel_notices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channel_notices
       
     </span>
   </a>
@@ -3243,6 +3309,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayNamesResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GatewayNamesResult
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rattler.repo_data.gateway.GatewayQueryResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GatewayQueryResult
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3412,6 +3500,56 @@ in CEP-42 priority order.</p>
 </div>
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.repo_data.gateway.ChannelNotice" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ChannelNotice</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.ChannelNotice" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>A CEP-6 notice published by a conda channel.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -3646,6 +3784,31 @@ gateway itself to methods that accepts it.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="rattler.repo_data.gateway.Gateway.channel_notices" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">channel_notices</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#rattler.repo_data.gateway.Gateway.channel_notices" class="headerlink" title="Permanent link">#</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">channel_notices</span><span class="p">(</span><span class="n">channels</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Fetch CEP-6 notices for the given channels.</p>
+<p>Results reuse the same expiration-aware cache as regular queries.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="rattler.repo_data.gateway.Gateway.channel_relations" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">channel_relations</span>
 
@@ -3830,7 +3993,8 @@ already been fetched by a <code>query</code> this is free.</p>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">platforms</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">channel_notices</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3922,6 +4086,22 @@ already been fetched by a <code>query</code> this is free.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_notices</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to fetch CEP-6 notices for this query.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -3937,7 +4117,7 @@ already been fetched by a <code>query</code> this is free.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a>]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayNamesResult (rattler.repo_data.gateway.GatewayNamesResult)" href="#rattler.repo_data.gateway.GatewayNamesResult">GatewayNamesResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3980,7 +4160,8 @@ already been fetched by a <code>query</code> this is free.</p>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">channel_relations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">channel_relations_max_depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">channel_notices</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4120,6 +4301,22 @@ is needed for custom sources, it must be implemented within the source itself.</
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>channel_notices</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to fetch CEP-6 notices for this query.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -4135,7 +4332,7 @@ is needed for custom sources, it must be implemented within the source itself.</
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4145,7 +4342,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4155,7 +4352,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4165,7 +4362,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4175,7 +4372,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4185,7 +4382,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4195,7 +4392,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4205,7 +4402,7 @@ is needed for custom sources, it must be implemented within the source itself.</
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="typing.List">List</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code>
+                  <code><a class="autorefs autorefs-internal" title="GatewayQueryResult (rattler.repo_data.gateway.GatewayQueryResult)" href="#rattler.repo_data.gateway.GatewayQueryResult">GatewayQueryResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -4227,6 +4424,104 @@ is needed for custom sources, it must be implemented within the source itself.</
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.repo_data.gateway.GatewayNamesResult" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">GatewayNamesResult</span>
+
+
+<a href="#rattler.repo_data.gateway.GatewayNamesResult" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="PackageName (rattler.package.package_name.PackageName)" href="../package_name/#rattler.package.package_name.PackageName">PackageName</a>]</code></p>
+
+
+
+        <p>Package names and CEP-6 notices returned by :meth:<code>Gateway.names</code>.</p>
+<p>This remains a list for compatibility with earlier releases.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rattler.repo_data.gateway.GatewayQueryResult" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">GatewayQueryResult</span>
+
+
+<a href="#rattler.repo_data.gateway.GatewayQueryResult" class="headerlink" title="Permanent link">#</a></h2>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="list">list</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="RepoDataRecord (rattler.repo_data.record.RepoDataRecord)" href="../repo_data_record/#rattler.repo_data.record.RepoDataRecord">RepoDataRecord</a>]]</code></p>
+
+
+
+        <p>Repodata and CEP-6 notices returned by :meth:<code>Gateway.query</code>.</p>
+<p>This remains a list for compatibility with earlier releases.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 
 
