@@ -168,8 +168,9 @@ impl AzureMiddleware {
     ///   public-channel read pay that timeout — and it would pull an ambient
     ///   credential into memory for a host the user never granted.
     ///
-    /// Under [`Auth::DefaultChain`] any signing failure is propagated. reqsign
-    /// collapses "no credential" and "broken credential" into the same
+    /// Under [`Auth::DefaultChain`] any signing failure is propagated, carrying the
+    /// host, the grant that required signing and the remedies. reqsign collapses "no
+    /// credential" and "broken credential" into the same
     /// [`reqsign_core::ErrorKind::CredentialInvalid`], and since the user asked for
     /// signing there is no case left where going anonymous is the right answer.
     async fn sign(&self, req: &mut Request, auth: Auth) -> MiddlewareResult<()> {
@@ -209,10 +210,27 @@ impl AzureMiddleware {
         })?;
         let (mut parts, ()) = http_req.into_parts();
 
-        self.signer
-            .sign(&mut parts, None)
-            .await
-            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::anyhow!(e)))?;
+        // reqsign says only "failed to load signing credential": its chain walks
+        // past a provider that errors exactly as it walks past one that finds
+        // nothing, so an expired `az login` and an empty environment arrive here
+        // indistinguishable, after however long the chain took to give up. The host
+        // and the grant that asked for signing are both in scope here and nowhere
+        // further up, so this is where they get attached.
+        self.signer.sign(&mut parts, None).await.map_err(|e| {
+            let authority = req.url().authority();
+            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                "could not resolve an Azure credential for `{authority}`, which \
+                 `[azure-options.\"{authority}\"] auth = true` requires: {e}\n\
+                 \n\
+                 Try one of:\n\
+                 \x20 - `az login`\n\
+                 \x20 - `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY` in the \
+                 environment\n\
+                 \x20 - remove `auth = true` to fetch this host anonymously\n\
+                 \n\
+                 Debug logging lists the credential providers that were tried."
+            ))
+        })?;
 
         *req.headers_mut() = parts.headers;
         let signed_url = Url::parse(&parts.uri.to_string()).map_err(|e| {
@@ -516,6 +534,21 @@ mod tests {
             req.headers().get(http::header::AUTHORIZATION).is_none(),
             "a failed signing attempt must not leave a partial Authorization header"
         );
+
+        // reqsign's own message names neither the host nor a remedy, and the chain
+        // hides which provider failed. Everything actionable has to come from here.
+        let message = result.unwrap_err().to_string();
+        for expected in [
+            "acct.blob.core.windows.net",
+            "auth = true",
+            "az login",
+            "AZURE_STORAGE_ACCOUNT_KEY",
+        ] {
+            assert!(
+                message.contains(expected),
+                "the failure must name `{expected}`, got: {message}"
+            );
+        }
     }
 
     /// A URL that already carries a SAS token must not be re-signed even where the
