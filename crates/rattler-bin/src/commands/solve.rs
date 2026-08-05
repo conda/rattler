@@ -117,17 +117,9 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    // In JSON mode all progress information goes to stderr so that stdout only
-    // contains the machine readable result.
-    let info = |msg: String| {
-        if opt.json {
-            eprintln!("{msg}");
-        } else {
-            println!("{msg}");
-        }
-    };
-
-    info(format!("Solving for platform: {}", opt.platform));
+    // All progress information goes to stderr so that stdout only contains the
+    // solved package set.
+    eprintln!("Solving for platform: {}", opt.platform);
 
     let match_spec_options = ParseMatchSpecOptions::strict()
         .with_extras(true)
@@ -184,11 +176,11 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     .context("failed to load repodata")?;
 
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
-    info(format!(
+    eprintln!(
         "Loaded {} records in {}",
         total_records,
         format_elapsed(start_load_repo_data.elapsed())
-    ));
+    );
 
     let virtual_packages = wrap_in_progress("determining virtual packages", || {
         if let Some(virtual_packages) = &opt.virtual_package {
@@ -200,12 +192,12 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         }
     })?;
 
-    info(format!(
+    eprintln!(
         "Virtual packages:\n{}\n",
         virtual_packages
             .iter()
             .format_with("\n", |i, f| f(&format_args!("  - {i}",)))
-    ));
+    );
 
     let solver_task = SolverTask {
         virtual_packages,
@@ -243,7 +235,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
     });
 
     if solved_packages.is_empty() {
-        info("No packages solved".to_string());
+        eprintln!("No packages solved");
         if opt.json {
             println!("[]");
         }
@@ -256,7 +248,7 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
             serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
         );
     } else {
-        println!(
+        eprintln!(
             "Solved {} package{} in {}:",
             solved_packages.len(),
             if solved_packages.len() == 1 { "" } else { "s" },
@@ -347,7 +339,8 @@ fn print_records(
         rows.push((fields, explicit));
     }
 
-    println!();
+    // Separates the table from the status messages on stderr.
+    eprintln!();
     let styled_header = header
         .clone()
         .map(|field| console::style(field).bold().to_string());
