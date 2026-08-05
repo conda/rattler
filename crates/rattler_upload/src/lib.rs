@@ -95,12 +95,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             let options = rattler_azure::AzureEndpointOptions::default();
             let credentials = azure_opts
                 .credentials
-                .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, || {
-                    Ok(rattler_azure::account_and_container(
-                        &channel.wire(options.scheme),
-                        options.addressing,
-                    )?)
-                })
+                .resolve(upload::AZURE_UPLOAD_SAS_PERMISSIONS, &channel, options)
                 .await
                 .into_diagnostic()?;
             upload::upload_package_to_azure(

@@ -5,7 +5,8 @@ use clap::Parser;
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::{
-    AzureCliSasError, AzureCoordinates, AzureCredentials, AzureUrlError, mint_user_delegation_sas,
+    AzureChannelUrl, AzureCliSasError, AzureCoordinates, AzureCredentials, AzureEndpointOptions,
+    AzureUrlError, account_and_container, mint_user_delegation_sas,
 };
 
 /// Default lifetime, in minutes, of a SAS minted from an `az login` session.
@@ -66,23 +67,31 @@ pub enum AzureAuthSource {
 impl AzureAuthSource {
     /// Resolve this source into concrete [`AzureCredentials`].
     ///
-    /// `permissions` and `cli_context` are consulted **only** for the
-    /// [`AzureAuthSource::AzureCli`] arm, which mints a SAS scoped to the
-    /// container returned by `cli_context` with those permissions. The account
-    /// key and SAS token arms never invoke `cli_context`, so callers pay for
-    /// account/container derivation only on the minting path.
+    /// `permissions`, `channel` and `options` are consulted **only** for the
+    /// [`AzureAuthSource::AzureCli`] arm, which mints a SAS scoped to the channel's
+    /// container with those permissions. Taking the channel and its options rather
+    /// than pre-derived coordinates is what keeps the account the SAS is minted for
+    /// and the scheme it is restricted to from coming from two different places.
     pub async fn resolve(
         self,
         permissions: &str,
-        cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
+        channel: &AzureChannelUrl,
+        options: AzureEndpointOptions,
     ) -> Result<AzureCredentials, AzureCredentialsError> {
         match self {
             AzureAuthSource::AccountKey(key) => Ok(AzureCredentials::AccountKey(key)),
             AzureAuthSource::SasToken(token) => Ok(AzureCredentials::SasToken(token)),
             AzureAuthSource::AzureCli { ttl } => {
-                let AzureCoordinates { account, container } = cli_context()?;
-                let token =
-                    mint_user_delegation_sas(&account, &container, permissions, ttl).await?;
+                let AzureCoordinates { account, container } =
+                    account_and_container(channel, options.addressing)?;
+                let token = mint_user_delegation_sas(
+                    &account,
+                    &container,
+                    permissions,
+                    ttl,
+                    options.scheme,
+                )
+                .await?;
                 Ok(AzureCredentials::SasToken(token))
             }
         }
@@ -200,15 +209,16 @@ impl AzureCredentialsOpts {
 
     /// Resolve the supplied options into concrete [`AzureCredentials`].
     ///
-    /// Precedence is applied by [`AzureCredentialsOpts::source`]. `permissions`
-    /// and `cli_context` are consulted only when the winning source is
+    /// Precedence is applied by [`AzureCredentialsOpts::source`]. `permissions`,
+    /// `channel` and `options` are consulted only when the winning source is
     /// `--azure-cli`; see [`AzureAuthSource::resolve`].
     pub async fn resolve(
         self,
         permissions: &str,
-        cli_context: impl FnOnce() -> Result<AzureCoordinates, AzureCredentialsError>,
+        channel: &AzureChannelUrl,
+        options: AzureEndpointOptions,
     ) -> Result<AzureCredentials, AzureCredentialsError> {
-        self.source()?.resolve(permissions, cli_context).await
+        self.source()?.resolve(permissions, channel, options).await
     }
 }
 
@@ -229,32 +239,40 @@ mod tests {
         }
     }
 
-    /// `cli_context` must not be invoked for the account-key/SAS-token paths.
-    fn unreachable_context() -> Result<AzureCoordinates, AzureCredentialsError> {
-        panic!("cli_context should not be called for non-azure-cli sources");
+    /// A channel whose coordinates cannot be derived under `options`: resolving a
+    /// verbatim credential must not need them, and this is what proves it.
+    fn underivable() -> (AzureChannelUrl, AzureEndpointOptions) {
+        let channel =
+            AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general").unwrap();
+        let options = AzureEndpointOptions::default();
+        assert!(account_and_container(&channel, options.addressing).is_err());
+        (channel, options)
     }
 
     #[tokio::test]
     async fn account_key_resolves() {
+        let (channel, options) = underivable();
         assert!(matches!(
-            opts(Some("key"), None, false).resolve("cw", unreachable_context).await,
+            opts(Some("key"), None, false).resolve("cw", &channel, options).await,
             Ok(AzureCredentials::AccountKey(k)) if k.expose_secret() == "key"
         ));
     }
 
     #[tokio::test]
     async fn sas_token_resolves() {
+        let (channel, options) = underivable();
         assert!(matches!(
-            opts(None, Some("sv=..."), false).resolve("cw", unreachable_context).await,
+            opts(None, Some("sv=..."), false).resolve("cw", &channel, options).await,
             Ok(AzureCredentials::SasToken(t)) if t.expose_secret() == "sv=..."
         ));
     }
 
     #[tokio::test]
     async fn none_is_rejected() {
+        let (channel, options) = underivable();
         assert!(matches!(
             opts(None, None, false)
-                .resolve("cw", unreachable_context)
+                .resolve("cw", &channel, options)
                 .await,
             Err(AzureCredentialsError::Missing)
         ));

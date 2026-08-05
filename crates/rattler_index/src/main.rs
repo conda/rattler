@@ -260,12 +260,7 @@ async fn main() -> anyhow::Result<()> {
             let options = azure_endpoint_options(&config, channel.host());
 
             let credentials = credentials
-                .resolve(AZURE_INDEX_SAS_PERMISSIONS, || {
-                    Ok(rattler_azure::account_and_container(
-                        &channel.wire(options.scheme),
-                        options.addressing,
-                    )?)
-                })
+                .resolve(AZURE_INDEX_SAS_PERMISSIONS, &channel, options)
                 .await?;
 
             index_azure_with_channel_metadata(
