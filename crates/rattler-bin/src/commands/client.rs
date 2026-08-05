@@ -67,7 +67,7 @@ pub fn create_client_with_middleware(
     #[cfg(feature = "azure")]
     let client = client.with(rattler_networking::AzureMiddleware::new(
         download_client,
-        HashMap::new(),
+        [],
     ));
 
     Ok(client.build())

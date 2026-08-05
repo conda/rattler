@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use rattler_azure::{Auth, AzureEndpointOptions, AzureHost, AzureScheme};
+use rattler_azure::{Auth, AzureEndpointOptions, AzureFetchOptions, AzureHost, AzureScheme};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -48,11 +48,6 @@ fn is_local(host: &AzureHost) -> bool {
 pub struct AzureOptionsMap(IndexMap<AzureHost, AzureEndpointOptions>);
 
 impl AzureOptionsMap {
-    /// Returns `true` if no Azure hosts are configured.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
     /// The options for `host`, or the defaults (anonymous, https, host-style)
     /// when it has no entry.
     ///
@@ -67,6 +62,14 @@ impl AzureOptionsMap {
     /// (`toml::Table` is a `BTreeMap`, so that is byte order, not write order).
     pub fn hosts(&self) -> impl Iterator<Item = &AzureHost> {
         self.0.keys()
+    }
+
+    /// The grants as the fetch path takes them, ready to hand to
+    /// `AzureMiddleware::new` without a caller rebuilding a map by hand.
+    pub fn fetch_options(&self) -> impl Iterator<Item = (AzureHost, AzureFetchOptions)> {
+        self.0
+            .iter()
+            .map(|(host, options)| (host.clone(), options.fetch()))
     }
 }
 
@@ -110,7 +113,7 @@ impl Config for AzureOptionsMap {
         // A host is granted or not as a whole, so mentioning a host in a
         // higher-precedence file replaces the lower file's entry outright rather
         // than merging field-wise the way `repodata-config` does.
-        let mut merged = self.0.clone();
+        let mut merged = self.0;
         for (key, value) in &other.0 {
             merged.insert(key.clone(), *value);
         }
@@ -185,6 +188,15 @@ mod tests {
         let unlisted = map.get(&host("someoneelse.blob.core.windows.net"));
         assert!(!unlisted.fetch().auth.is_granted());
         assert_eq!(unlisted, AzureEndpointOptions::default());
+
+        // The table feeds the fetch middleware directly, keys and all.
+        assert_eq!(
+            map.fetch_options().collect::<Vec<_>>(),
+            vec![
+                (host("127.0.0.1:10000"), azurite.fetch()),
+                (host("mycompany.blob.core.windows.net"), real.fetch()),
+            ]
+        );
     }
 
     /// A grant may only ride cleartext to an endpoint that is not routable off

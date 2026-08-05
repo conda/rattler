@@ -8,8 +8,12 @@
 //! What a host is *granted* — credentials, wire scheme, addressing style — is
 //! declared per host in [`options`] and never inferred from the host name, and
 //! the default grant is [`Auth::Anonymous`], so naming a host in a URL by itself
-//! sends nothing to it. Nothing here transmits a credential either: signing lives
-//! in `rattler_networking`, and [`account_and_container`] only reads a URL.
+//! sends nothing to it. Nothing here signs or sends a request either — that lives
+//! in `rattler_networking` — but two functions do handle a credential:
+//! `azblob_config` embeds the account key or SAS it is handed into the config it
+//! returns, and `mint_user_delegation_sas` spends the user's `az login` session to
+//! obtain one. Deriving coordinates from a URL ([`account_and_container`])
+//! touches no credential at all.
 //!
 //! Userinfo (`user:pass@host`) is rejected wherever a host is parsed, because
 //! `az://real.host@evil.example/…` reads as the real host while addressing the
@@ -189,17 +193,92 @@ pub enum AzureUrlError {
     InvalidScheme(String),
 }
 
+/// A storage account name that has passed Azure's naming rules: 3-24 characters
+/// of lowercase letters and digits.
+///
+/// Those rules are the only thing that keeps option-shaped text (`--as-user`,
+/// `-o`) out of the `az` argv in [`mint_user_delegation_sas`], so the mint takes
+/// this type: the guarantee is then carried by what the function accepts rather
+/// than by every call site remembering to derive its name through a validating
+/// path. The inner `String` is private and [`Self::new`] is the only way to one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountName(String);
+
+impl AccountName {
+    /// Check a name against Azure's storage account naming rules.
+    pub fn new(name: &str) -> Result<Self, AzureUrlError> {
+        let valid = (3..=24).contains(&name.len())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+        valid
+            .then(|| Self(name.to_string()))
+            .ok_or_else(|| AzureUrlError::InvalidAccountName(name.to_string()))
+    }
+
+    /// The validated name.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for AccountName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A blob container name that has passed Azure's naming rules: 3-63 characters of
+/// lowercase letters, digits and hyphens, with no leading or trailing hyphen and
+/// no consecutive hyphens.
+///
+/// Exists for the same reason as [`AccountName`], and is what the container half
+/// of the `az` argv is spelled as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContainerName(String);
+
+impl ContainerName {
+    /// Check a name against Azure's blob container naming rules.
+    pub fn new(name: &str) -> Result<Self, AzureUrlError> {
+        let valid = (3..=63).contains(&name.len())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && !name.starts_with('-')
+            && !name.ends_with('-')
+            && !name.contains("--");
+        valid
+            .then(|| Self(name.to_string()))
+            .ok_or_else(|| AzureUrlError::InvalidContainerName(name.to_string()))
+    }
+
+    /// The validated name.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ContainerName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// The storage account and container an Azure Blob channel URL resolves to.
+///
+/// The fields are public because their *types* are the invariant: a
+/// `AzureCoordinates` cannot be assembled from unvalidated text, whoever builds
+/// it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AzureCoordinates {
     /// The storage account name — the first host label under
     /// [`Addressing::HostStyle`], the first path segment under
     /// [`Addressing::PathStyle`].
-    pub account: String,
+    pub account: AccountName,
 
     /// The blob container name — the first path segment under
     /// [`Addressing::HostStyle`], the second under [`Addressing::PathStyle`].
-    pub container: String,
+    pub container: ContainerName,
 }
 
 /// Derive the storage account name and container from an Azure Blob channel URL.
@@ -267,41 +346,10 @@ pub fn account_and_container(
         }
     };
 
-    validate_account(account)?;
-    validate_container(container)?;
-
     Ok(AzureCoordinates {
-        account: account.to_string(),
-        container: container.to_string(),
+        account: AccountName::new(account)?,
+        container: ContainerName::new(container)?,
     })
-}
-
-/// Check a derived name against Azure's storage account naming rules.
-fn validate_account(name: &str) -> Result<(), AzureUrlError> {
-    let valid = (3..=24).contains(&name.len())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
-    valid
-        .then_some(())
-        .ok_or_else(|| AzureUrlError::InvalidAccountName(name.to_string()))
-}
-
-/// Check a derived name against Azure's blob container naming rules.
-///
-/// 3-63 characters of lowercase letters, digits and hyphens, with no leading or
-/// trailing hyphen and no consecutive hyphens.
-fn validate_container(name: &str) -> Result<(), AzureUrlError> {
-    let valid = (3..=63).contains(&name.len())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !name.starts_with('-')
-        && !name.ends_with('-')
-        && !name.contains("--");
-    valid
-        .then_some(())
-        .ok_or_else(|| AzureUrlError::InvalidContainerName(name.to_string()))
 }
 
 /// A normalized Azure Blob endpoint authority: a host, and its port when one is
@@ -340,8 +388,33 @@ impl AzureHost {
         let normalized = Self::parse_as(authority, "https")?;
         let verbatim = Self::parse_as(authority, "az")?;
 
+        // `url` reads a bare trailing colon as "no port at all", so `host:` would
+        // otherwise be accepted as `host` — a different endpoint from the one whose
+        // port the user was in the middle of writing. Port 0 it keeps, and `wire()`
+        // then hands out `https://host:0/…`, which no connection can be made to.
+        let port_reason = match (Self::written_port(authority), verbatim.port()) {
+            (Some(""), _) => Some("its port is empty"),
+            (_, Some(0)) => Some("port 0 cannot be connected to"),
+            _ => None,
+        };
+        if let Some(reason) = port_reason {
+            return Err(AzureUrlError::InvalidHostAuthority {
+                authority: authority.to_string(),
+                reason: reason.to_string(),
+            });
+        }
+
         let host = normalized.host().ok_or(AzureUrlError::NoHost)?.to_owned();
         Self::normalized(host, verbatim.port(), authority)
+    }
+
+    /// The port exactly as the authority spells it, when it spells one.
+    ///
+    /// An IPv6 literal is bracketed, so a colon inside it is never a port
+    /// delimiter — only a `]:port` suffix is.
+    fn written_port(authority: &str) -> Option<&str> {
+        let (_, port) = authority.rsplit_once(':')?;
+        (!port.ends_with(']')).then_some(port)
     }
 
     /// Parse `<scheme>://<authority>`, reporting a failure against the authority
@@ -355,16 +428,19 @@ impl AzureHost {
         })
     }
 
-    /// Apply the two rules the URL host parser does not: strip the DNS root
-    /// label, reject empty labels.
+    /// Apply the rules the URL host parser does not: strip the DNS root label,
+    /// reject empty labels, and hold the name to the 253-character limit DNS puts
+    /// on one.
     ///
-    /// Private, so every route in goes through [`parse`](Self::parse) and neither
-    /// rule can be skipped.
+    /// Private, so every route in goes through [`parse`](Self::parse) and no rule
+    /// can be skipped.
     fn normalized(
         host: url::Host,
         port: Option<u16>,
         authority: &str,
     ) -> Result<Self, AzureUrlError> {
+        const DNS_NAME_LIMIT: usize = 253;
+
         let url::Host::Domain(domain) = &host else {
             // An IP literal is already fully canonical, and has no labels.
             return Ok(Self { host, port });
@@ -387,6 +463,17 @@ impl AzureHost {
                 return Err(AzureUrlError::InvalidHostAuthority {
                     authority: authority.to_string(),
                     reason: "one of its labels is empty".to_string(),
+                });
+            }
+            // Measured after IDNA, since the punycode form is what is resolved.
+            if domain.len() > DNS_NAME_LIMIT {
+                return Err(AzureUrlError::InvalidHostAuthority {
+                    authority: authority.to_string(),
+                    reason: format!(
+                        "it is {} characters long, over the {DNS_NAME_LIMIT}-character limit DNS \
+                         puts on a name",
+                        domain.len()
+                    ),
                 });
             }
         }
@@ -545,8 +632,14 @@ pub struct AzureChannelUrl {
     /// The query, when there is one — a SAS token may be written inline.
     query: Option<String>,
 
-    /// The fragment, when there is one. Meaningless to a channel and never sent
-    /// on the wire, but dropping it would silently rewrite what the user typed.
+    /// The fragment, when there is one.
+    ///
+    /// Kept so [`canonical`](Self::canonical) spells the channel back the way the
+    /// user wrote it, which is also the spelling config keys are matched against.
+    /// It reaches no server: an HTTP request carries only the path and query, and
+    /// on a signed request it is gone from the URL as well, because
+    /// `AzureMiddleware::sign` round-trips through `http::Uri`, which has no
+    /// fragment.
     fragment: Option<String>,
 }
 
@@ -847,8 +940,8 @@ pub fn azblob_config(
 
     Ok(opendal::services::AzblobConfig {
         endpoint: Some(endpoint),
-        account_name: Some(account),
-        container,
+        account_name: Some(account.as_str().to_string()),
+        container: container.as_str().to_string(),
         root: Some(root),
         account_key,
         sas_token,
@@ -863,10 +956,6 @@ pub enum AzureCliSasError {
     /// The SAS expiry timestamp could not be computed.
     #[error("failed to compute the SAS expiry timestamp: {0}")]
     Expiry(String),
-
-    /// The `az` executable could not be found on `PATH`.
-    #[error("could not find the Azure CLI (`az`) on PATH; install it and run `az login`")]
-    AzNotFound(#[source] std::io::Error),
 
     /// The `az` executable could not be resolved on `PATH`.
     #[error("could not resolve the Azure CLI (`az`) on PATH; install it and run `az login`")]
@@ -919,8 +1008,8 @@ pub enum AzureCliSasError {
 /// policy, which this path deliberately does not create.
 #[cfg(feature = "clap")]
 pub async fn mint_user_delegation_sas(
-    account: &str,
-    container: &str,
+    account: &AccountName,
+    container: &ContainerName,
     permissions: &str,
     valid_for: std::time::Duration,
     scheme: AzureScheme,
@@ -950,13 +1039,7 @@ pub async fn mint_user_delegation_sas(
         ))
         .output()
         .await
-        .map_err(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                AzureCliSasError::AzNotFound(err)
-            } else {
-                AzureCliSasError::Spawn(err)
-            }
-        })?;
+        .map_err(AzureCliSasError::Spawn)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -977,8 +1060,8 @@ pub async fn mint_user_delegation_sas(
 /// value can be read as anything but one argument.
 #[cfg(feature = "clap")]
 fn generate_sas_args<'a>(
-    account: &'a str,
-    container: &'a str,
+    account: &'a AccountName,
+    container: &'a ContainerName,
     permissions: &'a str,
     expiry: &'a str,
     scheme: AzureScheme,
@@ -988,9 +1071,9 @@ fn generate_sas_args<'a>(
         "container",
         "generate-sas",
         "--account-name",
-        account,
+        account.as_str(),
         "--name",
-        container,
+        container.as_str(),
         "--permissions",
         permissions,
         "--expiry",
@@ -1029,6 +1112,13 @@ mod tests {
         AzureChannelUrl::parse(url).unwrap_or_else(|err| panic!("{url} should parse: {err}"))
     }
 
+    fn coordinates(account: &str, container: &str) -> AzureCoordinates {
+        AzureCoordinates {
+            account: AccountName::new(account).expect("test account name"),
+            container: ContainerName::new(container).expect("test container name"),
+        }
+    }
+
     #[test]
     fn normal_url_resolves() {
         assert_eq!(
@@ -1037,10 +1127,7 @@ mod tests {
                 Addressing::HostStyle
             )
             .unwrap(),
-            AzureCoordinates {
-                account: "acct".to_string(),
-                container: "general".to_string(),
-            }
+            coordinates("acct", "general")
         );
     }
 
@@ -1117,12 +1204,12 @@ mod tests {
         }
     }
 
-    /// An empty name reaching validation must be rejected by validation itself,
-    /// not only by a caller remembering to filter it out first.
+    /// An empty name reaching a constructor must be rejected there, not only by a
+    /// caller remembering to filter it out first.
     #[test]
     fn empty_components_are_rejected() {
-        assert!(validate_account("").is_err());
-        assert!(validate_container("").is_err());
+        assert!(AccountName::new("").is_err());
+        assert!(ContainerName::new("").is_err());
     }
 
     #[test]
@@ -1142,10 +1229,7 @@ mod tests {
                     Addressing::PathStyle
                 )
                 .unwrap(),
-                AzureCoordinates {
-                    account: "devstoreaccount1".to_string(),
-                    container: "general".to_string(),
-                },
+                coordinates("devstoreaccount1", "general"),
                 "path-style derivation failed for {host}"
             );
         }
@@ -1182,7 +1266,7 @@ mod tests {
             Addressing::PathStyle,
         )
         .expect("addressing is the user's call, so this is a warning and not an error");
-        assert_eq!(coords.account, "general");
+        assert_eq!(coords.account.as_str(), "general");
 
         assert!(logs_contain("path-style = true"));
         assert!(logs_contain("acct.blob.core.windows.net"));
@@ -1194,7 +1278,7 @@ mod tests {
             Addressing::PathStyle,
         )
         .unwrap();
-        assert_eq!(coords.account, "devstoreaccount1");
+        assert_eq!(coords.account.as_str(), "devstoreaccount1");
         assert!(!logs_contain("acct.blob.example.com"));
     }
 
@@ -1504,6 +1588,12 @@ mod tests {
     /// rather than silently reinterpreting.
     #[test]
     fn host_rejects_anything_that_is_not_a_bare_authority() {
+        // A name DNS cannot resolve and a port nothing can connect to: `wire()`
+        // would otherwise hand out `https://host:0/…`, and a bare `host:` would be
+        // silently read as the portless host, a different endpoint entirely.
+        // Labels of 60, so length is the only rule under test.
+        let label = "a".repeat(60);
+        let too_long = format!("{}.blob.example", [label.as_str(); 8].join("."));
         for authority in [
             "acct.blob.core.windows.net/general",
             "acct.blob.core.windows.net?sv=token",
@@ -1511,12 +1601,27 @@ mod tests {
             "https://acct.blob.core.windows.net",
             "",
             "acct.blob.core.windows.net:notaport",
+            "acct.blob.core.windows.net:",
+            "acct.blob.core.windows.net:0",
+            "[::1]:",
+            "[::1]:0",
+            &too_long,
         ] {
             assert!(
                 AzureHost::parse(authority).is_err(),
                 "expected a rejection for {authority:?}"
             );
         }
+
+        // A name right at the limit still parses, so the check bounds the length
+        // rather than the number of labels.
+        let at_limit = format!(
+            "{}.{}.blob.example",
+            [label.as_str(); 3].join("."),
+            "a".repeat(57)
+        );
+        assert_eq!(at_limit.len(), 253);
+        assert!(AzureHost::parse(&at_limit).is_ok());
     }
 
     fn hash_of(host: &AzureHost) -> u64 {
@@ -1753,8 +1858,16 @@ mod tests {
     #[cfg(feature = "clap")]
     #[test]
     fn https_only_follows_the_configured_scheme() {
-        let args =
-            |scheme| generate_sas_args("acct", "general", "cw", "2030-01-01T00:00:00Z", scheme);
+        let coordinates = coordinates("acct", "general");
+        let args = |scheme| {
+            generate_sas_args(
+                &coordinates.account,
+                &coordinates.container,
+                "cw",
+                "2030-01-01T00:00:00Z",
+                scheme,
+            )
+        };
 
         assert!(args(AzureScheme::Https).contains(&"--https-only"));
         assert!(!args(AzureScheme::Http).contains(&"--https-only"));

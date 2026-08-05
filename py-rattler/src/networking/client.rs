@@ -87,10 +87,7 @@ impl PyClientWithMiddleware {
                 PyMiddleware::Azure(_middleware) => {
                     // Anonymous only: the options table is not exposed to Python
                     // yet. See `PyAzureMiddleware`.
-                    client = client.with(AzureMiddleware::new(
-                        reqwest_client.clone(),
-                        std::collections::HashMap::new(),
-                    ));
+                    client = client.with(AzureMiddleware::new(reqwest_client.clone(), []));
                 }
                 PyMiddleware::S3(middleware) => {
                     client = client.with(S3Middleware::new(

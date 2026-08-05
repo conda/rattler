@@ -270,6 +270,11 @@ pub(crate) mod object_store {
         let already_exists =
             || miette::miette!("Package {destination} already exists. Use --force to overwrite.");
 
+        // `if_not_exists` is not evaluated here on either backend: both build their
+        // writer with a pure constructor and issue nothing until the first chunk, so
+        // a lost race always surfaces at `close()` below. This arm covers what
+        // `writer()` itself can reject — a capability opendal refuses up front — and
+        // exists so that the answer cannot depend on which backend is in play.
         let mut writer = match store.writer(target.key(), options).await {
             Ok(writer) => writer,
             Err(e) if e.kind() == ErrorKind::ConditionNotMatch => return Err(already_exists()),

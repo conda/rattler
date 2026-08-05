@@ -82,13 +82,10 @@ pub struct AzureMiddleware {
     /// separate code path.
     ///
     /// A plain `HashMap` rather than `rattler_config::AzureOptionsMap`, mirroring
-    /// [`crate::S3Middleware`]. No caller has a `rattler_config::Config` in hand
-    /// today — every one of them passes an empty table — so taking the config type
-    /// would buy a mandatory `rattler_config` edge on the `azure` feature for zero
-    /// saved conversions. When a caller does grow one, add a
-    /// `#[cfg(feature = "rattler_config")]` helper next to
-    /// [`crate::s3_middleware::compute_s3_config_from_config`] rather than changing
-    /// this signature.
+    /// [`crate::S3Middleware`]: taking the config type would put a mandatory
+    /// `rattler_config` edge on the `azure` feature. The constructors take any
+    /// iterator of host/options pairs instead, which `AzureOptionsMap` yields
+    /// directly from its own `fetch_options`.
     options: HashMap<AzureHost, AzureFetchOptions>,
 }
 
@@ -100,9 +97,13 @@ impl AzureMiddleware {
     /// client — proxy, CA bundle, and TLS settings carry through to those
     /// requests.
     ///
-    /// `options` is the `azure-options` table: the per-host grants. An empty map
-    /// means every `az://` request is anonymous.
-    pub fn new(client: Client, options: HashMap<AzureHost, AzureFetchOptions>) -> Self {
+    /// `options` is the `azure-options` table: the per-host grants, in any shape
+    /// that iterates them — `rattler_config::AzureOptionsMap::fetch_options` yields
+    /// exactly this. An empty iterator means every `az://` request is anonymous.
+    pub fn new(
+        client: Client,
+        options: impl IntoIterator<Item = (AzureHost, AzureFetchOptions)>,
+    ) -> Self {
         Self::with_credential_provider(client, DefaultCredentialProvider::new(), options)
     }
 
@@ -115,7 +116,7 @@ impl AzureMiddleware {
     fn with_credential_provider(
         client: Client,
         provider: impl ProvideCredential<Credential = Credential> + 'static,
-        options: HashMap<AzureHost, AzureFetchOptions>,
+        options: impl IntoIterator<Item = (AzureHost, AzureFetchOptions)>,
     ) -> Self {
         let ctx = Context::new()
             .with_file_read(TokioFileRead)
@@ -123,7 +124,10 @@ impl AzureMiddleware {
             .with_command_execute(TokioCommandExecute)
             .with_env(OsEnv);
         let signer = Signer::new(ctx, provider, RequestSigner::new());
-        Self { signer, options }
+        Self {
+            signer,
+            options: options.into_iter().collect(),
+        }
     }
 
     /// Resolve an `az://` request URL to the channel URL it names and the options
@@ -265,9 +269,13 @@ impl Middleware for AzureMiddleware {
 
         // Azure answers an unauthorized read of a private container with 404, not
         // 403, so "no grant" and "no such blob" are the same status on the wire.
-        // Say so once, naming the config the user would have to write — spelled
-        // through `AzureHost` so the key printed is the key a lookup arrives with.
-        if response.status() == http::StatusCode::NOT_FOUND && !options.auth.is_granted() {
+        // Say so once per host, naming the config the user would have to write —
+        // spelled through `AzureHost` so the key printed is the key a lookup arrives
+        // with.
+        if response.status() == http::StatusCode::NOT_FOUND
+            && !options.auth.is_granted()
+            && first_404_for_host(channel.host())
+        {
             // One line, and spelled the way `AzureUrlError::InvalidHost` spells its
             // fix: a wrapped multi-line hint is harder to grep out of a log, and
             // the two guided messages should read as the same instruction.
@@ -283,6 +291,23 @@ impl Middleware for AzureMiddleware {
 
         Ok(response)
     }
+}
+
+/// Whether `host` still owes the 404 hint, claiming it if so.
+///
+/// A 404 is the *normal* answer to plenty of requests a healthy public channel
+/// makes — the repodata gateway probes for a shard index under every subdir it
+/// fetches, and a non-sharded channel misses every time — so a hint emitted per
+/// response is a security warning printed repeatedly at users whose channel is
+/// fine. Once per host per process is enough for the one case it is about: a
+/// private container the user forgot to grant.
+fn first_404_for_host(host: &AzureHost) -> bool {
+    static HINTED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<AzureHost>>> =
+        std::sync::LazyLock::new(Default::default);
+    HINTED
+        .lock()
+        .expect("the 404-hint set is never held across a panic")
+        .insert(host.clone())
 }
 
 #[cfg(test)]
@@ -629,6 +654,43 @@ mod tests {
 
         assert!(logs_contain(&format!("[azure-options.\"{host}\"]")));
         assert!(logs_contain("auth = true"));
+    }
+
+    /// A public non-sharded channel 404s on every shard-index probe the repodata
+    /// gateway makes, so a hint per response is a security warning repeated at a
+    /// user whose channel is healthy.
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn the_404_hint_is_emitted_once_per_host() {
+        let host = spawn_404_server().await;
+        let client = reqwest_middleware::ClientBuilder::new(Client::new())
+            .with(middleware(options(
+                &host.to_string(),
+                emulator_entry(Auth::Anonymous),
+            )))
+            .build();
+
+        for subdir in ["noarch", "linux-64", "osx-64"] {
+            let status = client
+                .get(format!(
+                    "az://{host}/devstoreaccount1/c/{subdir}/repodata_shards.msgpack.zst"
+                ))
+                .send()
+                .await
+                .expect("request through azure middleware failed")
+                .status();
+            assert_eq!(status, 404);
+        }
+
+        logs_assert(|lines: &[&str]| {
+            let hints = lines
+                .iter()
+                .filter(|line| line.contains("auth = true"))
+                .count();
+            (hints == 1)
+                .then_some(())
+                .ok_or_else(|| format!("expected exactly one hint, got {hints}"))
+        });
     }
 
     /// With a grant in place a 404 means what it says, so the hint would be noise.
