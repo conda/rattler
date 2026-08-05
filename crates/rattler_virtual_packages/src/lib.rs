@@ -332,8 +332,15 @@ impl VirtualPackages {
             let win = if platform.is_windows() {
                 // Check override first, fall back to the default version
                 virtual_packages.win.or_else(|| {
+                    let version = defaults::default_windows_version();
+                    log_default_virtual_package(
+                        "__win",
+                        platform,
+                        &version,
+                        Windows::DEFAULT_ENV_NAME,
+                    );
                     Some(Windows {
-                        version: Some(defaults::default_windows_version()),
+                        version: Some(version),
                     })
                 })
             } else {
@@ -342,9 +349,14 @@ impl VirtualPackages {
 
             let linux = if platform.is_linux() {
                 virtual_packages.linux.or_else(|| {
-                    Some(Linux {
-                        version: defaults::default_linux_version(),
-                    })
+                    let version = defaults::default_linux_version();
+                    log_default_virtual_package(
+                        "__linux",
+                        platform,
+                        &version,
+                        Linux::DEFAULT_ENV_NAME,
+                    );
+                    Some(Linux { version })
                 })
             } else {
                 None
@@ -352,9 +364,17 @@ impl VirtualPackages {
 
             let osx = if platform.is_osx() {
                 // Check override first, fall back to the default version
-                virtual_packages
-                    .osx
-                    .or_else(|| defaults::default_mac_os_version(platform).map(Osx::from))
+                virtual_packages.osx.or_else(|| {
+                    defaults::default_mac_os_version(platform).map(|version| {
+                        log_default_virtual_package(
+                            "__osx",
+                            platform,
+                            &version,
+                            Osx::DEFAULT_ENV_NAME,
+                        );
+                        Osx { version }
+                    })
+                })
             } else {
                 None
             };
@@ -384,9 +404,16 @@ impl VirtualPackages {
             let libc = if platform.is_linux() {
                 // Check override first, fall back to the default glibc version
                 virtual_packages.libc.or_else(|| {
+                    let version = defaults::default_glibc_version();
+                    log_default_virtual_package(
+                        "__glibc",
+                        platform,
+                        &version,
+                        LibC::DEFAULT_ENV_NAME,
+                    );
                     Some(LibC {
                         family: "glibc".into(),
-                        version: defaults::default_glibc_version(),
+                        version,
                     })
                 })
             } else {
@@ -415,6 +442,19 @@ impl VirtualPackages {
             })
         }
     }
+}
+
+/// Logs that the version of a virtual package could not be detected for the
+/// target platform and that a default version is assumed instead.
+fn log_default_virtual_package(
+    name: &str,
+    platform: Platform,
+    version: &Version,
+    env_var_name: &str,
+) {
+    tracing::info!(
+        "cannot detect the version of the virtual package '{name}' when targeting '{platform}', assuming version {version}; set the {env_var_name} environment variable to override"
+    );
 }
 
 impl From<VirtualPackage> for GenericVirtualPackage {
