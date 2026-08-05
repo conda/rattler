@@ -158,26 +158,28 @@
 <a href=#156 id=156 data-nosnippet>156</a>                missing_shards_are_empty: _source_config.missing_shards_are_empty,
 <a href=#157 id=157 data-nosnippet>157</a>            },
 <a href=#158 id=158 data-nosnippet>158</a>            <span class="self">self</span>.gateway.concurrent_requests_semaphore.clone(),
-<a href=#159 id=159 data-nosnippet>159</a>            <span class="self">self</span>.reporter.as_deref(),
-<a href=#160 id=160 data-nosnippet>160</a>        )
-<a href=#161 id=161 data-nosnippet>161</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#162 id=162 data-nosnippet>162</a>
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="prelude-val">Ok</span>(SubdirData::from_client(client))
-<a href=#164 id=164 data-nosnippet>164</a>    }
-<a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">async fn </span>build_local(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;SubdirData, GatewayError&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span>channel = <span class="self">self</span>.channel.clone();
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>platform = <span class="self">self</span>.platform;
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>path = path.join(<span class="string">"repodata.json"</span>);
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>build_client =
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">move </span>|| LocalSubdirClient::from_file(<span class="kw-2">&amp;</span>path, channel.clone(), platform.as_str());
-<a href=#172 id=172 data-nosnippet>172</a>
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="attr">#[cfg(target_arch = <span class="string">"wasm32"</span>)]
-<a href=#174 id=174 data-nosnippet>174</a>        </span><span class="kw">let </span>client = build_client()<span class="question-mark">?</span>;
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
-<a href=#176 id=176 data-nosnippet>176</a>        </span><span class="kw">let </span>client = simple_spawn_blocking::tokio::run_blocking_task(build_client).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="prelude-val">Ok</span>(SubdirData::from_client(client))
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>}
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
+<a href=#160 id=160 data-nosnippet>160</a>            </span><span class="self">self</span>.gateway.io_concurrency_semaphore.clone(),
+<a href=#161 id=161 data-nosnippet>161</a>            <span class="self">self</span>.reporter.as_deref(),
+<a href=#162 id=162 data-nosnippet>162</a>        )
+<a href=#163 id=163 data-nosnippet>163</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="prelude-val">Ok</span>(SubdirData::from_client(client))
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">async fn </span>build_local(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;SubdirData, GatewayError&gt; {
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>channel = <span class="self">self</span>.channel.clone();
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>platform = <span class="self">self</span>.platform;
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span>path = path.join(<span class="string">"repodata.json"</span>);
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>build_client =
+<a href=#173 id=173 data-nosnippet>173</a>            <span class="kw">move </span>|| LocalSubdirClient::from_file(<span class="kw-2">&amp;</span>path, channel.clone(), platform.as_str());
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="attr">#[cfg(target_arch = <span class="string">"wasm32"</span>)]
+<a href=#176 id=176 data-nosnippet>176</a>        </span><span class="kw">let </span>client = build_client()<span class="question-mark">?</span>;
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"wasm32"</span>))]
+<a href=#178 id=178 data-nosnippet>178</a>        </span><span class="kw">let </span>client = simple_spawn_blocking::tokio::run_blocking_task(build_client).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="prelude-val">Ok</span>(SubdirData::from_client(client))
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>}
 </code></pre></div></section></main></body></html>
