@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GIT_DIR","GIT_LFS_SKIP_SMUDGE","GIT_TERMINAL_PROMPT"],"enum":["GitBinaryError","GitReference"],"fn":["resolve_relative_url"],"static":["GIT","GIT_LFS"],"struct":["CheckoutOptions","GitLfs"]};
+window.SIDEBAR_ITEMS = {"constant":["GIT_DIR","GIT_LFS_SKIP_SMUDGE","GIT_TERMINAL_PROMPT"],"enum":["GitBinaryError","GitReference"],"fn":["resolve_relative_url"],"static":["GIT","GIT_LFS"],"struct":["CheckoutOptions","GitLfs","LfsFilter"]};
