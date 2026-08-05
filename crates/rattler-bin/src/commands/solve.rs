@@ -77,20 +77,9 @@ pub struct Opt {
     #[clap(long)]
     exclude_newer: Option<ExcludeNewer>,
 
-    /// The format to print the solved packages in.
-    #[clap(long, default_value = "table")]
-    format: OutputFormat,
-}
-
-/// The format used to print the solved package set.
-#[derive(Default, Debug, Clone, Copy, ValueEnum)]
-pub enum OutputFormat {
-    /// Human readable table with aligned columns.
-    #[default]
-    Table,
-
-    /// Machine readable JSON.
-    Json,
+    /// Output in JSON format
+    #[clap(long)]
+    json: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -130,9 +119,8 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     // In JSON mode all progress information goes to stderr so that stdout only
     // contains the machine readable result.
-    let json_output = matches!(opt.format, OutputFormat::Json);
     let info = |msg: String| {
-        if json_output {
+        if opt.json {
             eprintln!("{msg}");
         } else {
             println!("{msg}");
@@ -256,33 +244,30 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
 
     if solved_packages.is_empty() {
         info("No packages solved".to_string());
-        if json_output {
+        if opt.json {
             println!("[]");
         }
         return Ok(());
     }
 
-    match opt.format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
-            );
-        }
-        OutputFormat::Table => {
-            println!(
-                "Solved {} package{} in {}:",
-                solved_packages.len(),
-                if solved_packages.len() == 1 { "" } else { "s" },
-                format_elapsed(solve_duration)
-            );
-            print_records(
-                &solved_packages,
-                &solver_result.extras,
-                &specs,
-                &channel_config,
-            );
-        }
+    if opt.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&solved_packages).into_diagnostic()?
+        );
+    } else {
+        println!(
+            "Solved {} package{} in {}:",
+            solved_packages.len(),
+            if solved_packages.len() == 1 { "" } else { "s" },
+            format_elapsed(solve_duration)
+        );
+        print_records(
+            &solved_packages,
+            &solver_result.extras,
+            &specs,
+            &channel_config,
+        );
     }
 
     Ok(())
