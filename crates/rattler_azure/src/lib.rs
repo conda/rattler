@@ -174,6 +174,35 @@ pub enum AzureUrlError {
         resolved: String,
     },
 
+    /// A path segment percent-decodes to bytes that are not UTF-8.
+    ///
+    /// Blob names are UTF-8, so there is nothing to send such a segment as. Decoding
+    /// lossily would substitute U+FFFD and address a different blob than the URL
+    /// names, silently and without an error at any layer.
+    #[error(
+        "Azure blob channel URL segment `{segment}` percent-decodes to bytes that are not UTF-8, \
+         so it cannot name a blob"
+    )]
+    NonUtf8Path {
+        /// The segment as written.
+        segment: String,
+        /// Where the decoded bytes stop being UTF-8.
+        #[source]
+        source: std::str::Utf8Error,
+    },
+
+    /// A path segment contains `%2F`, an encoded slash.
+    ///
+    /// One segment holding a slash and two segments are different blob paths, and
+    /// the URL Standard does not resolve `%2F`, so whichever reading we picked would
+    /// be a place the URL text does not say. Refusing keeps the written path and the
+    /// blob path the same shape.
+    #[error(
+        "Azure blob channel URL segment `{0}` contains an encoded slash (`%2F`); write the path \
+         separator as `/` if you mean a new segment"
+    )]
+    EncodedSlashInPath(String),
+
     /// The channel URL does not use the `az://` scheme.
     #[error(
         "Azure blob channel URL must use the `az://` scheme, e.g. \
@@ -567,6 +596,21 @@ impl AzureChannelUrl {
             });
         }
 
+        // Every segment must survive the round trip to a blob name. `%2F` is checked
+        // before decoding, because after it there is no telling it from a `/` the
+        // user wrote.
+        for segment in url.path_segments().into_iter().flatten() {
+            if segment.to_ascii_uppercase().contains("%2F") {
+                return Err(AzureUrlError::EncodedSlashInPath(segment.to_string()));
+            }
+            percent_encoding::percent_decode_str(segment)
+                .decode_utf8()
+                .map_err(|source| AzureUrlError::NonUtf8Path {
+                    segment: segment.to_string(),
+                    source,
+                })?;
+        }
+
         Ok(Self {
             host,
             path: url.path().to_string(),
@@ -768,8 +812,18 @@ pub fn azblob_config(
         channel
             .path_segments()
             .skip(consumed)
-            .map(|segment| percent_encoding::percent_decode_str(segment).decode_utf8_lossy())
-            .collect::<Vec<_>>()
+            // Infallible in practice: `AzureChannelUrl::parse` rejects a segment that
+            // does not decode to UTF-8. Erroring rather than substituting U+FFFD is
+            // what keeps that a guarantee instead of an assumption.
+            .map(|segment| {
+                percent_encoding::percent_decode_str(segment)
+                    .decode_utf8()
+                    .map_err(|source| AzureUrlError::NonUtf8Path {
+                        segment: segment.to_string(),
+                        source,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?
             .join("/")
     );
 
@@ -1619,6 +1673,38 @@ mod tests {
         ] {
             assert_eq!(channel(input).canonical().path(), path, "{input}");
         }
+    }
+
+    /// A segment that cannot become a blob name is refused, rather than becoming a
+    /// different blob name than the URL says.
+    #[test]
+    fn segments_that_cannot_name_a_blob_are_rejected() {
+        assert!(matches!(
+            AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/%ff"),
+            Err(AzureUrlError::NonUtf8Path { .. })
+        ));
+
+        // Both spellings: `url` normalizes the hex digits' case but not the escape.
+        for input in [
+            "az://acct.blob.core.windows.net/general/a%2Fb",
+            "az://acct.blob.core.windows.net/general/a%2fb",
+        ] {
+            assert!(
+                matches!(
+                    AzureChannelUrl::parse(input),
+                    Err(AzureUrlError::EncodedSlashInPath(_))
+                ),
+                "{input}"
+            );
+        }
+
+        // A percent escape that is valid UTF-8 is still a legitimate segment.
+        assert_eq!(
+            channel("az://acct.blob.core.windows.net/general/caf%C3%A9")
+                .canonical()
+                .path(),
+            "/general/caf%C3%A9"
+        );
     }
 
     /// `--https-only` restricts the SAS to TLS, so a host configured for http would
