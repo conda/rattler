@@ -18,6 +18,37 @@ fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }
 
+#[tokio::test]
+async fn test_invalid_package_is_reported_after_indexing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir).unwrap();
+    fs::write(subdir.join("broken-1.0-0.conda"), b"not a package").unwrap();
+
+    let error = index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap_err();
+    let rattler_index::error::RepodataError::SkippedPackages { stats } =
+        error.downcast_ref().unwrap()
+    else {
+        panic!("unexpected error: {error}");
+    };
+    assert_eq!(stats.total_skipped(), 1);
+    assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 0);
+    assert!(subdir.join("repodata.json").exists());
+}
+
 /// Validates that indexing creates correct repodata.json for .conda and .tar.bz2 packages.
 ///
 /// This test downloads sample packages, indexes them, and verifies:
