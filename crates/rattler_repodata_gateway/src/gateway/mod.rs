@@ -3925,10 +3925,10 @@ mod test {
         );
     }
 
-    /// A relation the explicit user order overrides surfaces as a
-    /// `UserOrderConflict` warning instead of being silently dropped.
+    /// A relation the explicit user order overrides is dropped without
+    /// a warning: the user cannot act on it, so it is only logged.
     #[tokio::test]
-    async fn test_cep42_user_order_conflict_surfaces_as_warning() {
+    async fn test_cep42_user_order_conflict_produces_no_warning() {
         let dir = tempfile::tempdir().unwrap();
         let bc_root = dir.path().join("bioconda");
         let cf_root = dir.path().join("conda-forge");
@@ -3941,8 +3941,7 @@ mod test {
 
         let gateway = Gateway::new();
         // The user puts bioconda FIRST, contradicting bioconda's own
-        // `base: conda-forge` declaration. The user wins; the dropped
-        // relation is reported.
+        // `base: conda-forge` declaration. The user wins.
         let output = gateway
             .query(
                 vec![bioconda, conda_forge],
@@ -3966,14 +3965,52 @@ mod test {
             .collect();
         assert_eq!(versions, ["2.0.0", "1.0.0"], "user order wins");
         assert!(
-            output.warnings.iter().any(|w| matches!(
-                w,
-                crate::GatewayWarning::ChannelRelations(
-                    crate::ChannelRelationsWarning::UserOrderConflict { .. }
-                )
-            )),
-            "expected UserOrderConflict warning; got {:?}",
+            output.warnings.is_empty(),
+            "overriding a relation via the explicit channel order must not warn; got {:?}",
             output.warnings,
         );
+    }
+
+    /// CEP-42 makes the explicit user order authoritative, so a
+    /// relation it overrides is not a violation even in `Strict` mode.
+    #[tokio::test]
+    async fn test_cep42_strict_mode_tolerates_user_order_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let bc_root = dir.path().join("bioconda");
+        let cf_root = dir.path().join("conda-forge");
+        write_test_subdir(&bc_root, "shared", "2.0.0", Some("../conda-forge"), None);
+        write_test_subdir(&cf_root, "shared", "1.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let bioconda = Channel::from_url(server.url().join("bioconda/").unwrap());
+        let conda_forge = Channel::from_url(server.url().join("conda-forge/").unwrap());
+
+        let gateway = Gateway::new();
+        let output = gateway
+            .query(
+                vec![bioconda, conda_forge],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .channel_relations(crate::ChannelRelationsMode::Strict)
+            .execute()
+            .await
+            .expect(
+                "the explicit channel order overriding a relation must not fail a Strict query",
+            );
+
+        let versions: Vec<String> = output
+            .repodata
+            .iter()
+            .map(|b| {
+                b.iter()
+                    .map(|r| r.package_record.version.as_str().to_string())
+                    .next()
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert_eq!(versions, ["2.0.0", "1.0.0"], "user order wins");
+        assert!(output.warnings.is_empty(), "got {:?}", output.warnings);
     }
 }

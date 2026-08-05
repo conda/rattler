@@ -41,8 +41,8 @@ pub struct PriorityEdge<K> {
 }
 
 /// Outcome of a channel priority resolution. Always succeeds; the
-/// caller surfaces `ignored_edges` / `broken_cycle_edges` as warnings
-/// or errors per its mode.
+/// caller logs `ignored_edges` and surfaces `broken_cycle_edges` as a
+/// warning or an error per its mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolution<K> {
     /// Final priority order, highest first.
@@ -50,8 +50,7 @@ pub struct Resolution<K> {
     /// Edges respected by `order`.
     pub edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped because they contradicted the user's
-    /// explicit ordering. Surfaced by the expander as
-    /// `UserOrderConflict` warnings.
+    /// explicit ordering. Logged at debug level by the expander.
     pub ignored_edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped to break a cycle.
     pub broken_cycle_edges: Vec<PriorityEdge<K>>,

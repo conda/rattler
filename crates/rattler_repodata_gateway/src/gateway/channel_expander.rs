@@ -40,8 +40,7 @@ pub enum ChannelRelationsMode {
 
 /// A non-fatal CEP-42 problem, collected on the query output in
 /// [`Warn`](ChannelRelationsMode::Warn) mode. In
-/// [`Strict`](ChannelRelationsMode::Strict) mode every variant except
-/// [`UserOrderConflict`](Self::UserOrderConflict) becomes a
+/// [`Strict`](ChannelRelationsMode::Strict) mode every variant becomes a
 /// [`GatewayError::ChannelRelationsError`](super::GatewayError::ChannelRelationsError).
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ChannelRelationsWarning {
@@ -121,19 +120,6 @@ pub enum ChannelRelationsWarning {
         platform: Platform,
         /// Display-formatted [`GatewayError`](super::GatewayError).
         error: String,
-    },
-
-    /// The relation contradicts the explicit channel order and was
-    /// ignored. Never fatal: the user's order wins.
-    #[error(
-        "CEP-42 relation `{from}` -> `{to}` contradicts the explicit \
-         channel order and was ignored"
-    )]
-    UserOrderConflict {
-        /// Channel the dropped edge ranked higher.
-        from: ChannelUrl,
-        /// Channel the dropped edge ranked lower.
-        to: ChannelUrl,
     },
 
     /// Relation edges dropped to break a cycle in the declared
@@ -452,8 +438,8 @@ impl ChannelExpander {
     }
 
     /// Report deferred depth refusals, resolve the priority order from
-    /// canonically sorted inputs (identical run to run), and surface
-    /// ignored and broken edges.
+    /// canonically sorted inputs (identical run to run), log edges the
+    /// user order overrides, and surface broken edges.
     pub fn finalize(&mut self) -> Result<Resolution<ChannelUrl>, super::GatewayError> {
         self.report_depth_refusals()?;
 
@@ -473,11 +459,14 @@ impl ChannelExpander {
         let resolution = resolve_channel_priority(&self.user_channels, &nodes, &edges);
 
         for edge in &resolution.ignored_edges {
-            // Never fatal: CEP-42 says the explicit user order wins.
-            self.push_warning(ChannelRelationsWarning::UserOrderConflict {
-                from: edge.from.clone(),
-                to: edge.to.clone(),
-            });
+            // Not a warning: CEP-42 says the explicit user order wins, so
+            // there is nothing for the user to act on.
+            tracing::debug!(
+                "CEP-42 relation `{}` -> `{}` contradicts the explicit channel \
+                 order and was ignored",
+                edge.from,
+                edge.to,
+            );
         }
         if !resolution.broken_cycle_edges.is_empty() {
             let broken_edges = resolution
