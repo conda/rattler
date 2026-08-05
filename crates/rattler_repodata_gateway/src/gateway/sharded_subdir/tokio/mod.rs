@@ -7,6 +7,8 @@ use std::{
 };
 
 use rattler_conda_types::Platform;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 
 use super::{
     add_trailing_slash, decode_zst_bytes_async, is_missing_sharded_repodata_status, parse_records,
@@ -307,6 +309,11 @@ impl SubdirClient for ShardedSubdir {
 
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.sharded_repodata.info.channel_relations.as_ref()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        &self.sharded_repodata.info.virtual_package_plugins
     }
 }
 

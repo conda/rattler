@@ -73,6 +73,8 @@ pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
 #[cfg(feature = "gateway")]
 mod gateway;
 
+#[cfg(all(feature = "gateway", feature = "experimental-virtual-package-plugins"))]
+pub use gateway::SubdirVirtualPackagePlugins;
 #[cfg(feature = "gateway")]
 pub use gateway::{
     CacheClearMode, ChannelConfig, ChannelRelationsMode, ChannelRelationsWarning,
