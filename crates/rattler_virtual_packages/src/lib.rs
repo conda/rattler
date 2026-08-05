@@ -33,6 +33,7 @@
 //! example.
 
 pub mod cuda;
+pub mod defaults;
 pub mod libc;
 pub mod linux;
 pub mod osx;
@@ -307,14 +308,15 @@ impl VirtualPackages {
     /// # Cross-compilation defaults
     ///
     /// When cross-compiling (targeting a platform different from the current one), the following
-    /// defaults are used if no override is provided:
+    /// defaults are used if no override is provided (see the [`defaults`] module, the versions
+    /// match the defaults used by pixi):
     ///
-    /// - **Windows** (`__win`): No version specified
-    /// - **Linux** (`__linux`): Version 0
-    /// - **OSX** (`__osx`): Version 0
+    /// - **Windows** (`__win`): Version 10.0
+    /// - **Linux** (`__linux`): Version 4.18
+    /// - **OSX** (`__osx`): Version 13.0
     /// - **iOS** (`__ios`): Version 0 (minimum supported iOS version)
     /// - **Android** (`__android`): Version 0 (minimum supported API level)
-    /// - **`LibC`** (`__glibc`): `glibc` with version 0 (only for Linux platforms)
+    /// - **`LibC`** (`__glibc`): `glibc` with version 2.28 (only for Linux platforms)
     /// - **CUDA** (`__cuda`): Not included (None)
     /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
     pub fn detect_for_platform(
@@ -328,10 +330,12 @@ impl VirtualPackages {
         } else {
             // When cross-compiling, respect overrides but fall back to defaults
             let win = if platform.is_windows() {
-                // Check override first, fall back to default (no version)
-                virtual_packages
-                    .win
-                    .or_else(|| Some(Windows { version: None }))
+                // Check override first, fall back to the default version
+                virtual_packages.win.or_else(|| {
+                    Some(Windows {
+                        version: Some(defaults::default_windows_version()),
+                    })
+                })
             } else {
                 None
             };
@@ -339,7 +343,7 @@ impl VirtualPackages {
             let linux = if platform.is_linux() {
                 virtual_packages.linux.or_else(|| {
                     Some(Linux {
-                        version: Version::major(0),
+                        version: defaults::default_linux_version(),
                     })
                 })
             } else {
@@ -347,12 +351,10 @@ impl VirtualPackages {
             };
 
             let osx = if platform.is_osx() {
-                // Check override first, fall back to version 0
-                virtual_packages.osx.or_else(|| {
-                    Some(Osx {
-                        version: Version::major(0),
-                    })
-                })
+                // Check override first, fall back to the default version
+                virtual_packages
+                    .osx
+                    .or_else(|| defaults::default_mac_os_version(platform).map(Osx::from))
             } else {
                 None
             };
@@ -380,11 +382,11 @@ impl VirtualPackages {
             };
 
             let libc = if platform.is_linux() {
-                // Check override first, fall back to glibc 0
+                // Check override first, fall back to the default glibc version
                 virtual_packages.libc.or_else(|| {
                     Some(LibC {
                         family: "glibc".into(),
-                        version: Version::major(0),
+                        version: defaults::default_glibc_version(),
                     })
                 })
             } else {
@@ -1426,6 +1428,46 @@ mod test {
         assert!(win_names.contains(&"__win".to_string()));
         assert!(!win_names.contains(&"__unix".to_string()));
         assert!(win_names.contains(&"__archspec".to_string()));
+    }
+
+    #[test]
+    fn test_cross_platform_default_versions() {
+        // When targeting a platform whose virtual packages cannot be detected
+        // on the host, the pixi default versions are used instead of 0. The
+        // host's own platform family is skipped because there the detected
+        // (host) versions take precedence over the defaults.
+        let overrides = VirtualPackageOverrides::default();
+        let current = Platform::current();
+
+        if !current.is_linux() {
+            let packages =
+                VirtualPackages::detect_for_platform(Platform::Linux64, &overrides).unwrap();
+            assert_eq!(
+                packages.linux.expect("__linux should be present").version,
+                defaults::default_linux_version()
+            );
+            let libc = packages.libc.expect("__glibc should be present");
+            assert_eq!(libc.family, "glibc");
+            assert_eq!(libc.version, defaults::default_glibc_version());
+        }
+
+        if !current.is_osx() {
+            let packages =
+                VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides).unwrap();
+            assert_eq!(
+                packages.osx.expect("__osx should be present").version,
+                defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
+            );
+        }
+
+        if !current.is_windows() {
+            let packages =
+                VirtualPackages::detect_for_platform(Platform::Win64, &overrides).unwrap();
+            assert_eq!(
+                packages.win.expect("__win should be present").version,
+                Some(defaults::default_windows_version())
+            );
+        }
     }
 
     #[test]
