@@ -1431,13 +1431,23 @@ mod test {
             .await
             .unwrap();
 
-        let total_records: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records, 19);
-
+        // Only consider records that were published before a fixed cutoff. New
+        // `openssl` builds appear in conda-forge all the time, so without a cutoff
+        // the expected record count would have to be bumped over and over again.
+        let exclude_newer: jiff::Timestamp = "2026-01-01T00:00:00Z".parse().unwrap();
         let mut repodata_records = records
             .iter()
-            .flat_map(|r| r.iter().cloned())
+            .flat_map(RepoData::iter)
+            .filter(|record| {
+                record
+                    .package_record
+                    .timestamp
+                    .is_some_and(|timestamp| timestamp < exclude_newer)
+            })
+            .cloned()
             .collect::<Vec<_>>();
+
+        assert_eq!(repodata_records.len(), 16);
 
         assert!(run_exports_missing(&repodata_records));
 
