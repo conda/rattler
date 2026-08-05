@@ -303,39 +303,8 @@ impl RepoDataQuery {
             return Ok(RepoDataQueryOutput::default());
         }
 
-        let channel_notices = self.channel_notices;
-        let initial_channels: Vec<_> = self
-            .sources
-            .iter()
-            .filter_map(|source| match source {
-                Source::Channel(channel) => Some(channel.clone()),
-                Source::Custom(_) => None,
-            })
-            .collect();
-        let gateway = self.gateway.clone();
-        let reporter = self.reporter.clone();
         let executor = QueryExecutor::new(self)?;
-        let ((mut output, channels), _) = futures::try_join!(executor.run(), async {
-            Ok::<_, GatewayError>(if channel_notices {
-                gateway
-                    .get_channel_notices(initial_channels.iter(), reporter.as_deref())
-                    .await
-            } else {
-                Vec::new()
-            })
-        })?;
-        // Fetch again with the complete channel set. Explicit channels hit the
-        // cache while this adds channels discovered through CEP-42.
-        let notices = if channel_notices {
-            gateway
-                .get_channel_notices(channels.iter(), reporter.as_deref())
-                .await
-        } else {
-            Vec::new()
-        };
-        GatewayInner::report_channel_notices(reporter.as_deref(), &notices);
-        output.notices = notices;
-        Ok(output)
+        executor.run().await
     }
 }
 
@@ -382,6 +351,63 @@ struct QueryExecutor {
 
     /// CEP-42 expansion state.
     expander: ChannelExpander,
+
+    /// CEP-6 notice collection state.
+    notices: NoticeCollector,
+}
+
+/// Collects CEP-6 notices while a query runs. Fetches are queued as channels
+/// enter the query — user-supplied and CEP-42-discovered alike — and their
+/// futures are driven concurrently with the query's subdir and record
+/// fetches. Notice failures are non-fatal by construction:
+/// [`GatewayInner::get_channel_notices`] never errors.
+struct NoticeCollector {
+    /// Whether notice fetching is enabled for the query.
+    enabled: bool,
+    /// Channels for which a fetch was already queued; guards against
+    /// queuing one fetch per platform.
+    seen: HashSet<ChannelUrl>,
+    /// In-flight notice fetches.
+    pending: FuturesUnordered<BoxFuture<Vec<ChannelNoticeResult>>>,
+    /// Notices collected so far.
+    collected: Vec<ChannelNoticeResult>,
+}
+
+impl NoticeCollector {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            seen: HashSet::new(),
+            pending: FuturesUnordered::new(),
+            collected: Vec::new(),
+        }
+    }
+
+    /// Queue a notice fetch for `channel` unless notices are disabled or a
+    /// fetch for the channel was already queued.
+    fn queue(
+        &mut self,
+        gateway: &Arc<GatewayInner>,
+        url: &ChannelUrl,
+        channel: Arc<Channel>,
+        reporter: Option<Arc<dyn Reporter>>,
+    ) {
+        if !self.enabled || !self.seen.insert(url.clone()) {
+            return;
+        }
+        let gateway = gateway.clone();
+        self.pending.push(box_future(async move {
+            gateway
+                .get_channel_notices(std::iter::once(channel.as_ref()), reporter.as_deref())
+                .await
+        }));
+    }
+
+    /// Record a completed batch, streaming it to the reporter.
+    fn collect(&mut self, reporter: Option<&dyn Reporter>, batch: Vec<ChannelNoticeResult>) {
+        GatewayInner::report_channel_notices(reporter, &batch);
+        self.collected.extend(batch);
+    }
 }
 
 impl QueryExecutor {
@@ -395,7 +421,7 @@ impl QueryExecutor {
             specs,
             recursive,
             reporter,
-            channel_notices: _,
+            channel_notices,
             channel_relations_mode,
             channel_relations_max_depth,
         } = query;
@@ -470,6 +496,7 @@ impl QueryExecutor {
         let total_handles = sources_with_idx.len() * platforms.len();
         let mut subdir_handles = Vec::with_capacity(total_handles);
         let pending_subdirs = FuturesUnordered::new();
+        let mut notices = NoticeCollector::new(channel_notices);
 
         for (caller_idx, source) in sources_with_idx {
             for &platform in &platforms {
@@ -479,6 +506,7 @@ impl QueryExecutor {
                 let (kind, pending) = match source_clone {
                     Source::Channel(channel) => {
                         let (url, channel) = expander.register_user_channel(channel);
+                        notices.queue(&gateway, &url, channel.clone(), reporter.clone());
                         let kind = SubdirKind::Channel {
                             url: url.clone(),
                             platform,
@@ -537,6 +565,7 @@ impl QueryExecutor {
             pending_subdirs,
             pending_records: FuturesUnordered::new(),
             expander,
+            notices,
         })
     }
 
@@ -860,7 +889,7 @@ impl QueryExecutor {
     }
 
     /// Run the main event loop.
-    async fn run(mut self) -> Result<(RepoDataQueryOutput, Vec<Channel>), GatewayError> {
+    async fn run(mut self) -> Result<RepoDataQueryOutput, GatewayError> {
         self.spawn_direct_url_fetches()?;
 
         loop {
@@ -904,6 +933,11 @@ impl QueryExecutor {
                     self.accumulate_records(target, pkg.records, &request);
                 }
 
+                // Handle any CEP-6 notices that were fetched
+                batch = self.notices.pending.select_next_some() => {
+                    self.notices.collect(self.reporter.as_deref(), batch);
+                }
+
                 // All futures have been handled, all subdirectories have been loaded and all
                 // repodata records have been fetched
                 complete => {
@@ -912,8 +946,7 @@ impl QueryExecutor {
             }
         }
 
-        let channels = self.expander.channels();
-        Ok((self.finalize_channel_relations()?, channels))
+        self.finalize_channel_relations()
     }
 
     /// Hand a freshly resolved subdir to the expander; schedule fetches
@@ -942,6 +975,8 @@ impl QueryExecutor {
         channel: Arc<Channel>,
         platform: Platform,
     ) {
+        self.notices
+            .queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
         let barrier = Arc::new(BarrierCell::new());
 
         let policy = if self.expander.strict() {
@@ -1060,7 +1095,7 @@ impl QueryExecutor {
         repodata.extend(handles.into_iter().map(|h| h.data));
         Ok(RepoDataQueryOutput {
             repodata,
-            notices: Vec::new(),
+            notices: self.notices.collected,
             warnings: self
                 .expander
                 .take_warnings()
@@ -1324,109 +1359,94 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
-        let channel_notices = self.channel_notices;
-        let initial_channels = self.channels.clone();
-        let notice_gateway = self.gateway.clone();
-        let notice_reporter = self.reporter.clone();
-        let initial_notices = async {
-            if channel_notices {
-                notice_gateway
-                    .get_channel_notices(initial_channels.iter(), notice_reporter.as_deref())
-                    .await
-            } else {
-                Vec::new()
-            }
-        };
+        let mut expander = ChannelExpander::new(
+            self.channel_relations_mode,
+            self.channel_relations_max_depth,
+            self.platforms.clone(),
+            self.reporter.clone(),
+        );
+        let mut notices = NoticeCollector::new(self.channel_notices);
 
-        let names = async move {
-            let mut expander = ChannelExpander::new(
-                self.channel_relations_mode,
-                self.channel_relations_max_depth,
-                self.platforms.clone(),
+        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
+        for channel in self.channels {
+            let (url, channel_arc) = expander.register_user_channel(channel);
+            notices.queue(
+                &self.gateway,
+                &url,
+                channel_arc.clone(),
                 self.reporter.clone(),
             );
-
-            let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> =
-                FuturesUnordered::new();
-            for channel in self.channels {
-                let (url, channel_arc) = expander.register_user_channel(channel);
-                for &platform in &self.platforms {
-                    pending.push(spawn_names_fetch(
-                        self.gateway.clone(),
-                        channel_arc.clone(),
-                        platform,
-                        url.clone(),
-                        self.reporter.clone(),
-                        FetchErrorPolicy::Propagate,
-                    ));
-                }
+            for &platform in &self.platforms {
+                pending.push(spawn_names_fetch(
+                    self.gateway.clone(),
+                    channel_arc.clone(),
+                    platform,
+                    url.clone(),
+                    self.reporter.clone(),
+                    FetchErrorPolicy::Propagate,
+                ));
             }
+        }
 
-            let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
-            let strict = expander.strict();
-            let policy = if strict {
-                FetchErrorPolicy::WrapAsChannelRelationsError
-            } else {
-                FetchErrorPolicy::SwallowAsWarning
-            };
-
-            while let Some(result) = pending.next().await {
-                let (url, platform, subdir, warning) = result?;
-                if let Some(w) = warning {
-                    expander.push_warning(w);
-                }
-                if let Some(subdir_names) = subdir.package_names() {
-                    names.extend(subdir_names);
-                }
-                for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                    pending.push(spawn_names_fetch(
-                        self.gateway.clone(),
-                        new_channel,
-                        new_plat,
-                        new_url,
-                        self.reporter.clone(),
-                        policy,
-                    ));
-                }
-            }
-
-            if expander.enabled() && expander.has_observed_relations() {
-                // Names are an unordered set; finalize only for its
-                // depth/cycle diagnostics and strict-mode errors.
-                expander.finalize()?;
-            }
-
-            let names = names
-                .into_iter()
-                .map(PackageName::try_from)
-                .collect::<Result<Vec<PackageName>, _>>()?;
-            Ok::<_, GatewayError>((
-                names,
-                expander
-                    .take_warnings()
-                    .into_iter()
-                    .map(GatewayWarning::from)
-                    .collect(),
-                expander.channels(),
-            ))
-        };
-
-        let (names, _initial_notices) = futures::join!(names, initial_notices);
-        let (names, warnings, channels) = names?;
-        // Explicit channels are cached; this second pass adds any channels
-        // discovered while resolving CEP-42 relations.
-        let notices = if channel_notices {
-            notice_gateway
-                .get_channel_notices(channels.iter(), notice_reporter.as_deref())
-                .await
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
+        let strict = expander.strict();
+        let policy = if strict {
+            FetchErrorPolicy::WrapAsChannelRelationsError
         } else {
-            Vec::new()
+            FetchErrorPolicy::SwallowAsWarning
         };
-        GatewayInner::report_channel_notices(notice_reporter.as_deref(), &notices);
+
+        loop {
+            select_biased! {
+                result = pending.select_next_some() => {
+                    let (url, platform, subdir, warning) = result?;
+                    if let Some(w) = warning {
+                        expander.push_warning(w);
+                    }
+                    if let Some(subdir_names) = subdir.package_names() {
+                        names.extend(subdir_names);
+                    }
+                    for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
+                        notices.queue(&self.gateway, &new_url, new_channel.clone(), self.reporter.clone());
+                        pending.push(spawn_names_fetch(
+                            self.gateway.clone(),
+                            new_channel,
+                            new_plat,
+                            new_url,
+                            self.reporter.clone(),
+                            policy,
+                        ));
+                    }
+                }
+
+                batch = notices.pending.select_next_some() => {
+                    notices.collect(self.reporter.as_deref(), batch);
+                }
+
+                complete => {
+                    break;
+                }
+            }
+        }
+
+        if expander.enabled() && expander.has_observed_relations() {
+            // Names are an unordered set; finalize only for its
+            // depth/cycle diagnostics and strict-mode errors.
+            expander.finalize()?;
+        }
+
+        let names = names
+            .into_iter()
+            .map(PackageName::try_from)
+            .collect::<Result<Vec<PackageName>, _>>()?;
         Ok(NamesQueryOutput {
             names,
-            notices,
-            warnings,
+            notices: notices.collected,
+            warnings: expander
+                .take_warnings()
+                .into_iter()
+                .map(GatewayWarning::from)
+                .collect(),
         })
     }
 }

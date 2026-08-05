@@ -221,17 +221,6 @@ impl ChannelExpander {
         &self.platforms
     }
 
-    /// All user-supplied and transitively discovered channels.
-    pub fn channels(&self) -> Vec<Channel> {
-        let mut channels: Vec<_> = self
-            .discovered
-            .values()
-            .map(|channel| channel.as_ref().clone())
-            .collect();
-        channels.sort_by(|left, right| left.base_url.cmp(&right.base_url));
-        channels
-    }
-
     /// `true` once any subdir contributed an edge; gates reordering.
     pub fn has_observed_relations(&self) -> bool {
         !self.edges.is_empty()
