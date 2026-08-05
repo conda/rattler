@@ -1404,26 +1404,37 @@ mod test {
 
     #[tokio::test]
     async fn test_ensure_run_exports_remote_conda_forge() {
-        // conda-forge's sharded repodata now embeds `run_exports` directly in the
-        // records. Disable sharded repodata so that the records are fetched from
-        // `repodata.json` (which does not contain `run_exports`). This ensures the
-        // records start out without `run_exports` and allows us to exercise
-        // `ensure_run_exports`.
-        let gateway = Gateway::builder()
-            .with_channel_config(crate::ChannelConfig {
-                default: SourceConfig {
-                    sharded_enabled: false,
-                    ..SourceConfig::default()
-                },
-                ..crate::ChannelConfig::default()
-            })
-            .finish();
+        // Serve a copy of the pinned conda-forge snapshot over HTTP so this test
+        // exercises the remote code path of `ensure_run_exports` without
+        // depending on live conda-forge data (which drifts and previously broke
+        // the record count assertion).
+        let channel_dir = tempfile::tempdir().unwrap();
+        for subdir in ["linux-64", "noarch"] {
+            let repodata = tools::fetch_test_conda_forge_repodata_async(subdir)
+                .await
+                .unwrap();
+            let subdir_dir = channel_dir.path().join(subdir);
+            std::fs::create_dir_all(&subdir_dir).unwrap();
+
+            // Remove the `base_url` so that the record urls (and with that the
+            // `run_exports.json` lookups) resolve relative to the local server
+            // instead of conda.anaconda.org.
+            let mut repodata: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(repodata).unwrap()).unwrap();
+            repodata["info"].as_object_mut().unwrap().remove("base_url");
+            std::fs::write(
+                subdir_dir.join("repodata.json"),
+                serde_json::to_string(&repodata).unwrap(),
+            )
+            .unwrap();
+        }
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let gateway = Gateway::new();
 
         let records = gateway
             .query(
-                vec![Channel::from_url(
-                    Url::parse("https://conda.anaconda.org/conda-forge/").unwrap(),
-                )],
+                vec![server.channel()],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
             )
@@ -1431,25 +1442,47 @@ mod test {
             .await
             .unwrap();
 
-        // Only consider records that were published before a fixed cutoff. New
-        // `openssl` builds appear in conda-forge all the time, so without a cutoff
-        // the expected record count would have to be bumped over and over again.
-        let exclude_newer: jiff::Timestamp = "2026-01-01T00:00:00Z".parse().unwrap();
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records, 3);
+
         let mut repodata_records = records
             .iter()
-            .flat_map(RepoData::iter)
-            .filter(|record| {
-                record
-                    .package_record
-                    .timestamp
-                    .is_some_and(|timestamp| timestamp < exclude_newer)
-            })
-            .cloned()
+            .flat_map(|r| r.iter().cloned())
             .collect::<Vec<_>>();
 
-        assert_eq!(repodata_records.len(), 16);
-
         assert!(run_exports_missing(&repodata_records));
+
+        // Serve a `run_exports.json` that covers the matched records. The run
+        // exports carry a marker value that the real packages do not contain, so
+        // we can verify below that they were fetched from the served file rather
+        // than extracted from the packages themselves.
+        for subdir in ["linux-64", "noarch"] {
+            let mut packages = serde_json::Map::new();
+            let mut conda_packages = serde_json::Map::new();
+            for record in repodata_records
+                .iter()
+                .filter(|record| record.package_record.subdir == subdir)
+            {
+                let file_name = record.identifier.to_file_name();
+                let entry = serde_json::json!({
+                    "run_exports": { "weak": ["from-run-exports-json"] }
+                });
+                if file_name.ends_with(".conda") {
+                    conda_packages.insert(file_name, entry);
+                } else {
+                    packages.insert(file_name, entry);
+                }
+            }
+            let run_exports = serde_json::json!({
+                "packages": packages,
+                "packages.conda": conda_packages,
+            });
+            std::fs::write(
+                channel_dir.path().join(subdir).join("run_exports.json"),
+                serde_json::to_string(&run_exports).unwrap(),
+            )
+            .unwrap();
+        }
 
         gateway
             .ensure_run_exports(repodata_records.iter_mut(), None)
@@ -1457,6 +1490,17 @@ mod test {
             .unwrap();
 
         assert!(run_exports_in_place(&repodata_records));
+
+        // The run exports must originate from the served `run_exports.json`, not
+        // from the package download fallback.
+        for record in &repodata_records {
+            assert_eq!(
+                record.package_record.run_exports.as_ref().unwrap().weak,
+                vec!["from-run-exports-json".to_string()],
+                "run_exports of {} should come from the served run_exports.json",
+                record.identifier
+            );
+        }
     }
 
     /// A mock `RepoDataSource` for testing custom source functionality.
