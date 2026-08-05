@@ -49,6 +49,7 @@ astral_async_zip = { workspace = true, features = [
   "tokio-fs",
 ] }
 astral-tokio-tar = { workspace = true }
+bytes = { workspace = true }
 async-compression = { workspace = true }
 zstd = { workspace = true, default-features = false }
 async-spooled-tempfile = { version = "0.1" }
@@ -81,6 +82,7 @@ features = ["reqwest"]
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+async-trait = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
 tools = { path = "../tools" }
 walkdir = { workspace = true }
