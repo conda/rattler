@@ -100,6 +100,16 @@ dbus-secret-service-keyring-store = { workspace = true, optional = true, feature
 windows-native-keyring-store = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
+# Declared rather than auto-discovered, so a feature name that stops matching is a
+# cargo error instead of a test binary that silently holds no tests.
+[[test]]
+name = "azure_azurite_fetch"
+required-features = ["azure"]
+
+[[test]]
+name = "azure_real_fetch"
+required-features = ["azure"]
+
 [dev-dependencies]
 anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }

@@ -197,7 +197,7 @@ mod test {
         )
     }
 
-    /// C2: without `--force`, uploading over an existing blob must error rather
+    /// without `--force`, uploading over an existing blob must error rather
     /// than silently overwrite it. The memory backend honours `if_not_exists` on
     /// every path and the fixture is a single block, so this covers the small-blob
     /// path only — for the multi-block behaviour see

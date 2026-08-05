@@ -4,9 +4,15 @@ on:
   pull_request:
     paths:
       - crates/rattler_azure/**
+      - crates/rattler_config/**
       - crates/rattler_index/**
       - crates/rattler_networking/**
       - crates/rattler_upload/**
+      # An opendal bump touches only the root manifest, and these tests are the
+      # canary for the opendal bug the upload path works around.
+      - Cargo.toml
+      - Cargo.lock
+      - test-data/**
       - pixi.toml
       - pixi.lock
       - .github/workflows/e2e-azure-tests.yml

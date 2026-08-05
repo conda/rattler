@@ -16,7 +16,6 @@
 //!
 //! Set `AZURE_TEST_HOST` to target a sovereign cloud or emulator directly
 //! (overrides the default `{account}.blob.core.windows.net` host).
-#![cfg(feature = "azure")]
 
 use std::collections::HashMap;
 

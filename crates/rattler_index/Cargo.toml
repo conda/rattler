@@ -79,6 +79,12 @@ url = { workspace = true }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
 
+# Declared rather than auto-discovered, so a feature name that stops matching is a
+# cargo error instead of a test binary that silently holds no tests.
+[[test]]
+name = "azure_azurite"
+required-features = ["azure"]
+
 [dev-dependencies]
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",

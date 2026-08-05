@@ -31,7 +31,6 @@
 //! version with `AuthorizationFailure` rather than `InvalidHeaderValue`, i.e. it
 //! validates the signature instead of rejecting the version. Add the flag only if
 //! an older emulator rejects the version outright.
-#![cfg(feature = "azure")]
 
 use std::{collections::HashMap, path::PathBuf};
 
@@ -130,25 +129,66 @@ fn verify_operator(prefix: &str) -> Operator {
         .finish()
 }
 
-/// Create the channel's container, which Azurite never does implicitly.
+/// Create the channel's container and clear this test's prefix inside it.
 ///
-/// This goes through `AzureMiddleware` because it is the one signer already
-/// reachable from here: opendal exposes no container-creation operation, and
-/// hand-rolling shared-key signing in a test fixture would be more code than the
-/// tests it supports.
-async fn ensure_container() {
+/// The clearing is what makes the assertions below mean anything: the emulator is
+/// long-lived, and a blob left by an earlier run answers the same read a correct
+/// run would produce — so a derivation that writes to the wrong prefix passes by
+/// finding the *previous* run's output. Removal goes through the hand-written
+/// operator, not the one under test, for the same reason.
+async fn ensure_empty_prefix(prefix: &str) {
+    ensure_container().await;
+    verify_operator(prefix)
+        .delete_with("")
+        .recursive(true)
+        .await
+        .expect("clearing the test prefix failed");
+}
+
+/// A signing client for the requests opendal cannot make.
+///
+/// `AzureMiddleware` is the one signer already reachable from here, and there is no
+/// opendal operation for creating a container or reading a block list — hand-rolling
+/// shared-key signing in a test fixture would be more code than the tests it
+/// supports.
+fn azure_client() -> reqwest_middleware::ClientWithMiddleware {
     let options = HashMap::from([(
         AzureHost::parse(AUTHORITY).expect("azurite authority is a valid host:port"),
         azurite_options().fetch(),
     )]);
-    let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+    reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
         .with(rattler_networking::AzureMiddleware::new(
             reqwest::Client::new(),
             options,
         ))
-        .build();
+        .build()
+}
 
-    let created = client
+/// How many blocks a blob was committed from.
+///
+/// The one witness that a write took Put Block List and not the single-shot Put
+/// Blob path — a single-shot blob has no committed blocks at all, whatever its
+/// size.
+async fn committed_block_count(prefix: &str, blob: &str) -> usize {
+    let body = azure_client()
+        .get(format!(
+            "az://{AUTHORITY}/{ACCOUNT}/{CONTAINER}/{prefix}/{blob}\
+             ?comp=blocklist&blocklisttype=committed"
+        ))
+        .send()
+        .await
+        .expect("get block list request failed")
+        .error_for_status()
+        .expect("get block list was refused")
+        .text()
+        .await
+        .expect("get block list body");
+    body.matches("<Block>").count()
+}
+
+/// Create the channel's container, which Azurite never does implicitly.
+async fn ensure_container() {
+    let created = azure_client()
         .put(format!(
             "az://{AUTHORITY}/{ACCOUNT}/{CONTAINER}?restype=container"
         ))
@@ -206,7 +246,7 @@ fn index_config(channel: AzureChannelUrl) -> IndexAzureConfig {
 async fn azurite_index_round_trip_through_a_path_style_entry() {
     with_azurite_credentials(async {
         const PREFIX: &str = "round-trip";
-        ensure_container().await;
+        ensure_empty_prefix(PREFIX).await;
 
         let seeded = verify_operator(PREFIX);
         seeded
@@ -263,7 +303,7 @@ async fn azurite_index_round_trip_through_a_path_style_entry() {
 async fn azurite_multi_block_write_keeps_cache_control() {
     with_azurite_credentials(async {
         const PREFIX: &str = "multi-block-cache-control";
-        ensure_container().await;
+        ensure_empty_prefix(PREFIX).await;
         let op = production_operator(&channel(PREFIX));
 
         // Two chunks' worth, so `write` is called more than once and the writer
@@ -294,6 +334,16 @@ async fn azurite_multi_block_write_keeps_cache_control() {
             Some(CACHE_CONTROL_REPODATA),
             "Put Block List should carry x-ms-blob-cache-control through its commit"
         );
+
+        // Without this the test still passes if opendal ever takes the single-shot
+        // path for the whole 5 MiB, and then it asserts nothing about the commit
+        // path it is named for. 5 MiB in 2 MiB chunks is three blocks.
+        assert_eq!(
+            committed_block_count(PREFIX, "noarch/repodata.json").await,
+            3,
+            "a 5 MiB write in 2 MiB chunks must commit three blocks through Put Block List; zero \
+             blocks means the single-shot Put Blob path was taken instead"
+        );
     })
     .await;
 }
@@ -321,7 +371,7 @@ async fn azurite_multi_block_write_keeps_cache_control() {
 async fn azurite_if_not_exists_is_dropped_on_the_multi_block_path() {
     with_azurite_credentials(async {
         const PREFIX: &str = "overwrite-guard";
-        ensure_container().await;
+        ensure_empty_prefix(PREFIX).await;
         let op = production_operator(&channel(PREFIX));
 
         // Baseline: below the chunk size, the guard works and opendal reports the

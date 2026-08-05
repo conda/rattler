@@ -1,11 +1,5 @@
 //! Live fetch-path integration tests against a local Azurite emulator.
 //!
-//! These are the read-side half of the answer to "has any of this been tested
-//! against a real Azure-compatible backend?". Everything else about the grant
-//! model is unit-tested with mocks; only Azurite can show that a granted entry
-//! produces a signature a real Azure Blob implementation accepts, and that an
-//! ungranted one does not.
-//!
 //! Everything is driven through a single `azure-options` entry, which is the
 //! point of the exercise — there is no out-of-band account or endpoint
 //! configuration on the fetch path:
@@ -25,13 +19,6 @@
 //! cargo nextest run -p rattler_networking --features azure --test azure_azurite_fetch \
 //!     --run-ignored all
 //! ```
-//!
-//! No `--skipApiVersionCheck` needed: the `x-ms-version` this middleware pins is
-//! older than what current Azurite accepts. Verified on 3.36.0, which answers
-//! that version with `AuthorizationFailure` rather than `InvalidHeaderValue`,
-//! i.e. it validates the signature instead of rejecting the version. Add the flag
-//! only if an older emulator rejects the version outright.
-#![cfg(feature = "azure")]
 
 use std::{
     collections::HashMap,
@@ -240,7 +227,7 @@ async fn azurite_granted_entry_fetches_repodata() {
 /// refuses it. This is the core claim of the anonymous-by-default model.
 ///
 /// The primary assertion is on the outgoing request, not the status: no
-/// `Authorization` header and no SAS `sig` reaches the wire. The 403 stays as a
+/// `Authorization` header and no SAS `sig` reaches the wire. The status is a
 /// secondary check that the container really is private, but on its own it would
 /// also pass while the account key was being sent with a signature Azurite
 /// rejected.
@@ -255,7 +242,7 @@ async fn azurite_ungranted_entry_is_refused_by_a_private_container() {
         async {
             // Seed with a grant, then read without one. The credential is present in
             // the environment throughout, so a success below would mean the grant
-            // check leaked it — not that the test was misconfigured.
+            // check leaked it
             seed(&client(Auth::DefaultChain)).await;
 
             let url = format!("{}/noarch/repodata.json", channel_url());
@@ -279,16 +266,16 @@ async fn azurite_ungranted_entry_is_refused_by_a_private_container() {
                  signature: {sent_url}"
             );
 
-            let status = resp.status();
-            assert!(
-                // Both statuses are correct answers to an unsigned read of a private
-                // container: Azurite says 403, real Azure says 404 so that a missing
-                // grant is indistinguishable from a missing blob. Accepting either
-                // keeps the assertion about "refused", which is the actual claim.
-                status == reqwest::StatusCode::FORBIDDEN
-                    || status == reqwest::StatusCode::NOT_FOUND,
-                "an ungranted read of a private container should be refused, got {status} for \
-                 {url}"
+            // 403 exactly, which is Azurite-specific: real Azure answers 404 to an
+            // unsigned read of a private container so that a missing grant is
+            // indistinguishable from a missing blob. This test only ever runs against
+            // the emulator, and accepting 404 too would also admit a request sent to
+            // the wrong URL — a wrong account segment or a dropped one both 404 here.
+            assert_eq!(
+                resp.status(),
+                reqwest::StatusCode::FORBIDDEN,
+                "Azurite refuses an unsigned read of a private container with 403; anything else \
+                 means the request did not reach the blob this URL names: {url}"
             );
         },
     )
