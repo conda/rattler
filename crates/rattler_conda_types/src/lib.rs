@@ -74,6 +74,8 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
+#[cfg(feature = "semver")]
+pub use version::VersionToSemverError;
 pub use version::{
     Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
     VersionBumpType, VersionExtendError, VersionWithSource,

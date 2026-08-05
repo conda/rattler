@@ -57,6 +57,7 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
+semver = { workspace = true, optional = true }
 fs-err = { workspace = true }
 memmap2 = { workspace = true }
 
