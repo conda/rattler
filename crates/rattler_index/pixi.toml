@@ -3,7 +3,7 @@ name = "rattler_index"
 
 [package.build.backend]
 name = "pixi-build-rust"
-version = "0.4.*"
+version = "0.5.*"
 channels = [
     "https://prefix.dev/pixi-build-backends",
     "https://prefix.dev/conda-forge"

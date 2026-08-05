@@ -18,6 +18,14 @@ requires-pixi = ">=0.67.0"
 # Use the same Rust version everywhere
 rust_compiler_version = ["1.95.0"]
 
+# The build backend has to match the build API version that pixi hands out, so
+# the workspace cutoff cannot hold it back. On Windows the MSVC runtime it links
+# against has to come along.
+[exclude-newer]
+pixi-build-rust = "0d"
+vc14_runtime = "0d"
+vcomp14 = "0d"
+
 [tasks]
 build = "cargo build"
 check = "cargo check"
