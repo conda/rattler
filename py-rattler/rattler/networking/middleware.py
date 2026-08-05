@@ -108,6 +108,9 @@ class RetryMiddleware:
 class OciMiddleware:
     """
     Middleware to handle `oci://` URLs
+
+    Authenticates by following the registry's `WWW-Authenticate` challenge, using any
+    credentials stored for the registry's host in the authentication storage.
     """
 
     def __init__(self) -> None:
