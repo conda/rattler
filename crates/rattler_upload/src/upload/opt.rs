@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, builder::TypedValueParser as _};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -439,8 +439,12 @@ pub struct AzureOpts {
     pub credentials: rattler_azure::clap::AzureCredentialsOpts,
 
     /// Replace files if it already exists.
-    #[arg(long)]
-    pub force: bool,
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        value_parser = clap::builder::BoolishValueParser::new().map(ForceOverwrite)
+    )]
+    pub force: ForceOverwrite,
 }
 
 #[derive(Debug)]
@@ -628,5 +632,22 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
+    }
+}
+
+#[cfg(all(test, feature = "azure"))]
+mod test {
+    use super::{AzureOpts, ForceOverwrite};
+    use clap::Parser;
+
+    /// `--force` stays a flag even though it parses into a newtype.
+    #[test]
+    fn test_azure_force_parses_as_a_flag() {
+        let args = ["az", "--channel", "az://account.blob.core.windows.net/c"];
+        let opts = AzureOpts::try_parse_from(args).unwrap();
+        assert_eq!(opts.force, ForceOverwrite(false));
+
+        let opts = AzureOpts::try_parse_from(args.iter().chain(["--force"].iter())).unwrap();
+        assert_eq!(opts.force, ForceOverwrite(true));
     }
 }
