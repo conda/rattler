@@ -340,6 +340,7 @@ struct GatewayInner {
 
     /// A semaphore to limit the number of concurrent IO operations (e.g.
     /// reading shard files from the on-disk cache).
+    #[cfg(not(target_arch = "wasm32"))]
     io_concurrency_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
