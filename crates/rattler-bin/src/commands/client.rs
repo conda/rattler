@@ -49,7 +49,10 @@ pub fn create_client_with_middleware(
         )))
         .with_arc(Arc::new(AuthChallengeMiddleware::default()));
 
-    let client = client.with(rattler_networking::OciMiddleware::new(download_client));
+    let client = client.with(
+        rattler_networking::OciMiddleware::new(download_client)
+            .with_authentication_storage(authentication_storage.clone()),
+    );
     #[cfg(feature = "s3")]
     let client = client.with(rattler_networking::S3Middleware::new(
         HashMap::new(),
