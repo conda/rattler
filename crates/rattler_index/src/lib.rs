@@ -1580,7 +1580,26 @@ pub async fn index_azure_with_channel_metadata(
 ) -> anyhow::Result<()> {
     let azblob_config = rattler_azure::azblob_config(&credentials, &channel, endpoint)?;
     let builder = azblob_config.into_builder();
-    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+    // opendal's default retry interceptor logs the error with its `url` context,
+    // and for a SAS the credential is *in* that URL — once per retry, at warn
+    // level. Same message, signature masked.
+    let op = Operator::new(builder)?
+        .layer(
+            RetryLayer::new().with_notify(|event: opendal::layers::RetryEvent<'_>| {
+                tracing::warn!(
+                    target: "opendal::layers::retry",
+                    "will retry {:?} (attempt {}) after {}s because: {}",
+                    event.op,
+                    event.attempt,
+                    event.retry_after.as_secs_f64(),
+                    rattler_redaction::redact_signatures_in_text(
+                        &format!("{:?}", event.err),
+                        rattler_redaction::DEFAULT_REDACTION_STR,
+                    ),
+                );
+            }),
+        )
+        .finish();
 
     index_with_channel_metadata(
         target_platform,

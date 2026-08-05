@@ -57,6 +57,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 ] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 hex = { workspace = true }
 rattler_azure = { workspace = true, optional = true, features = ["clap"] }

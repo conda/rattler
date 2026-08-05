@@ -2,12 +2,14 @@ use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
 use miette::IntoDiagnostic;
-use opendal::{Configurator, Operator, services::S3Config};
+use opendal::{Configurator, services::S3Config};
 use rattler_s3::ResolvedS3Credentials;
 use url::Url;
 
 use crate::upload::{
-    object_store::{BlobUploadTarget, PACKAGE_CONCURRENCY, stream_package_to_object_store},
+    object_store::{
+        BlobStore, BlobUploadTarget, PACKAGE_CONCURRENCY, stream_package_to_object_store,
+    },
     opt::ForceOverwrite,
     package::ExtractedPackage,
 };
@@ -41,7 +43,7 @@ pub async fn upload_package_to_s3(
         credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
 
     let builder = s3_config.into_builder();
-    let op = Operator::new(builder).into_diagnostic()?.finish();
+    let op = BlobStore::new(builder).into_diagnostic()?;
 
     // Upload multiple packages concurrently. Each individual package upload also
     // streams its chunks concurrently (see `upload_single_package`).
@@ -64,7 +66,7 @@ pub async fn upload_package_to_s3(
 
 /// Uploads a single package file to the S3 bucket via the given operator.
 async fn upload_single_package(
-    op: &Operator,
+    op: &BlobStore,
     channel: &Url,
     bucket: &str,
     package_file: &Path,

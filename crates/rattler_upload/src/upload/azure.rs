@@ -6,11 +6,13 @@ use std::{
 
 use futures::{StreamExt, TryStreamExt};
 use miette::IntoDiagnostic;
-use opendal::{Configurator, ErrorKind, Operator};
+use opendal::{Configurator, ErrorKind};
 use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpoint};
 
 use crate::upload::{
-    object_store::{BlobUploadTarget, PACKAGE_CONCURRENCY, stream_package_to_object_store},
+    object_store::{
+        BlobStore, BlobUploadTarget, PACKAGE_CONCURRENCY, stream_package_to_object_store,
+    },
     opt::ForceOverwrite,
     package::ExtractedPackage,
 };
@@ -44,7 +46,7 @@ pub async fn upload_package_to_azure(
         rattler_azure::azblob_config(&credentials, &channel, endpoint).into_diagnostic()?;
 
     let builder = config.into_builder();
-    let op = Operator::new(builder).into_diagnostic()?.finish();
+    let op = BlobStore::new(builder).into_diagnostic()?;
 
     // Upload multiple packages concurrently. Each package is written to its own
     // key, so the individual uploads are independent. The first failure aborts
@@ -120,7 +122,7 @@ fn summarize(outcomes: &[(PathBuf, PackageOutcome)], total: usize) -> String {
 
 /// Uploads a single package file to the Azure Blob container via the given operator.
 async fn upload_single_package(
-    op: &Operator,
+    op: &BlobStore,
     channel: &AzureChannelUrl,
     package_file: &Path,
     force: ForceOverwrite,
@@ -169,16 +171,16 @@ async fn upload_single_package(
 mod test {
     use std::path::PathBuf;
 
-    use opendal::{Operator, services::Memory};
+    use opendal::services::Memory;
     use rattler_azure::AzureChannelUrl;
 
-    use super::{PackageOutcome, summarize, upload_single_package};
+    use super::{BlobStore, PackageOutcome, summarize, upload_single_package};
     use crate::upload::opt::ForceOverwrite;
     use crate::upload::package::ExtractedPackage;
     use crate::upload::test_utils::test_package_path;
 
-    fn memory_operator() -> Operator {
-        Operator::new(Memory::default()).unwrap().finish()
+    fn memory_operator() -> BlobStore {
+        BlobStore::new(Memory::default()).unwrap()
     }
 
     fn test_channel() -> AzureChannelUrl {

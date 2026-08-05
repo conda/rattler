@@ -5062,6 +5062,8 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "toml",
+ "tracing",
+ "tracing-test",
  "url",
  "which",
 ]
@@ -5247,6 +5249,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rattler_repodata_gateway",
  "rattler_s3",
  "reqwest",
