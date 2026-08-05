@@ -71,6 +71,8 @@ impl LfsFixture {
         git(&["config", "user.name", "Test"]);
         // Disable signing so a global `commit.gpgSign = true` can't interfere.
         git(&["config", "commit.gpgsign", "false"]);
+        // Ignore the developer's global gitignore; e.g. `*.bin` would drop `data.bin`.
+        git(&["config", "core.excludesFile", ""]);
         git(&["lfs", "install", "--local"]);
 
         fs_err::write(
