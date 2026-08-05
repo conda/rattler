@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.12](https://github.com/conda/rattler/compare/rattler_shell-v0.27.11...rattler_shell-v0.27.12) - 2026-08-03
+
+### Other
+
+- updated the following local packages: rattler_pty
+
+## [0.27.11](https://github.com/conda/rattler/compare/rattler_shell-v0.27.10...rattler_shell-v0.27.11) - 2026-07-24
+
+### Fixed
+
+- *(shell)* preserve newlines in activation env vars ([#2591](https://github.com/conda/rattler/pull/2591))
+
+## [0.27.10](https://github.com/conda/rattler/compare/rattler_shell-v0.27.9...rattler_shell-v0.27.10) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.27.9](https://github.com/conda/rattler/compare/rattler_shell-v0.27.8...rattler_shell-v0.27.9) - 2026-07-09
 
 ### Other

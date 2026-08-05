@@ -1,6 +1,8 @@
 /// Derived from `uv-git` implementation
 /// Source: <https://github.com/astral-sh/uv/blob/4b8cc3e29e4c2a6417479135beaa9783b05195d3/crates/uv-git/src/lib.rs>
 /// This module expose types and functions to interact with Git repositories.
+use std::sync::Arc;
+
 use ::url::Url;
 pub use git::CheckoutOptions;
 use git::{GitBinaryError, GitReference};
@@ -12,6 +14,8 @@ pub mod resolver;
 pub mod sha;
 pub mod source;
 pub mod url;
+
+pub use rattler_networking::LazyClient;
 
 /// The query parameter used to specify the type of reference in a Git URL.
 pub const GIT_URL_QUERY_REV_TYPE: &str = "rev_type";
@@ -175,13 +179,13 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum GitError {
     #[error(transparent)]
     GitBinary(#[from] GitBinaryError),
 
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(Arc<std::io::Error>),
 
     #[error(transparent)]
     FromUtf8(#[from] std::string::FromUtf8Error),
@@ -192,6 +196,20 @@ pub enum GitError {
     #[error("failed to fetch {0}: {1}")]
     Fetch(String, String),
 
+    #[error("`git {0}` failed: {1}")]
+    Command(String, String),
+
+    #[error("could not find a branch, tag, or commit named `{reference}` in `{repository}`")]
+    ReferenceNotFound {
+        reference: String,
+        repository: String,
+        #[source]
+        source: Box<GitError>,
+    },
+
+    #[error("failed to fetch LFS objects for {0}: {1}")]
+    LfsFetch(String, String),
+
     #[error(transparent)]
     UrlParse(#[from] ::url::ParseError),
 
@@ -199,17 +217,41 @@ pub enum GitError {
     GitUrlFormat(String, String),
 
     #[error(transparent)]
-    ReqwestMiddleware(#[from] reqwest_middleware::Error),
+    ReqwestMiddleware(Arc<reqwest_middleware::Error>),
 
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    Reqwest(Arc<reqwest::Error>),
 
     #[error(transparent)]
-    Join(#[from] tokio::task::JoinError),
+    Join(Arc<tokio::task::JoinError>),
 
     #[error("corrupted or invalid git repository at {0}")]
     InvalidRepository(std::path::PathBuf),
 
     #[error("failed to set submodule url for {0}: {1}")]
     SubmoduleUrl(String, String),
+}
+
+impl From<std::io::Error> for GitError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(Arc::new(err))
+    }
+}
+
+impl From<reqwest_middleware::Error> for GitError {
+    fn from(err: reqwest_middleware::Error) -> Self {
+        Self::ReqwestMiddleware(Arc::new(err))
+    }
+}
+
+impl From<reqwest::Error> for GitError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::Reqwest(Arc::new(err))
+    }
+}
+
+impl From<tokio::task::JoinError> for GitError {
+    fn from(err: tokio::task::JoinError) -> Self {
+        Self::Join(Arc::new(err))
+    }
 }

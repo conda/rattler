@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16](https://github.com/conda/rattler/compare/rattler_pty-v0.2.15...rattler_pty-v0.2.16) - 2026-08-03
+
+### Fixed
+
+- Allow build on illumos for rattler_pty ([#2635](https://github.com/conda/rattler/pull/2635))
+
+## [0.2.15](https://github.com/conda/rattler/compare/rattler_pty-v0.2.14...rattler_pty-v0.2.15) - 2026-07-14
+
+### Other
+
+- update dependencies ([#2589](https://github.com/conda/rattler/pull/2589))
+
 ## [0.2.14](https://github.com/conda/rattler/compare/rattler_pty-v0.2.13...rattler_pty-v0.2.14) - 2026-06-26
 
 ### Fixed

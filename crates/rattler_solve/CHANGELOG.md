@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.0.0](https://github.com/conda/rattler/compare/rattler_solve-v8.0.0...rattler_solve-v9.0.0) - 2026-07-28
+
+### Fixed
+
+- Implement Flexible Channel Priority ([#2617](https://github.com/conda/rattler/pull/2617))
+
+## [8.0.0](https://github.com/conda/rattler/compare/rattler_solve-v7.2.2...rattler_solve-v8.0.0) - 2026-07-24
+
+### Added
+
+- let callers restrict which candidates a solve may pick ([#2609](https://github.com/conda/rattler/pull/2609))
+
+## [7.2.2](https://github.com/conda/rattler/compare/rattler_solve-v7.2.1...rattler_solve-v7.2.2) - 2026-07-14
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [7.2.1](https://github.com/conda/rattler/compare/rattler_solve-v7.2.0...rattler_solve-v7.2.1) - 2026-07-09
 
 ### Other

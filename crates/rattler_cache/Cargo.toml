@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.10.2"
+version = "0.10.4"
 description = "A crate to manage the caching of data in rattler"
 categories = { workspace = true }
 homepage = { workspace = true }
@@ -15,6 +15,9 @@ rustls = ["reqwest/rustls", "reqwest-middleware/rustls", "rattler_networking/rus
 native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
 
 [dependencies]
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
 ahash = { workspace = true }

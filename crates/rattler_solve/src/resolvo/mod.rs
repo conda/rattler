@@ -6,6 +6,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     marker::PhantomData,
+    sync::Arc,
 };
 
 use conda_sorting::SolvableSorter;
@@ -23,6 +24,7 @@ use resolvo::{
     VersionSetUnionId,
     utils::{Pool, VersionSet},
 };
+use url::Url;
 
 use crate::{
     CancellationToken, ChannelPriority, ExcludeNewer, IntoRepoData, SolveError, SolveStrategy,
@@ -316,6 +318,18 @@ pub struct CondaDependencyProvider<'a> {
     direct_dependencies: HashSet<NameId>,
 
     dependency_overrides: HashMap<PackageName, Vec<PreparedDependencyOverride>>,
+
+    /// The channel priority mode used for this solve.
+    channel_priority: ChannelPriority,
+
+    /// Maps a channel to its priority rank. Lower ranks indicate
+    /// higher-priority channels. Ranks are assigned in the order
+    /// channels are first encountered in the repodata,
+    /// which matches the order in which channels were provided to the solver.
+    ///
+    /// This is only populated (and consulted) for
+    /// [`ChannelPriority::Flexible`].
+    channel_order: HashMap<Option<String>, u32>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -333,9 +347,28 @@ impl<'a> CondaDependencyProvider<'a> {
         exclude_newer: Option<&ExcludeNewer>,
         strategy: SolveStrategy,
         dependency_overrides: Vec<DependencyOverride>,
+        excluded_candidates: &HashMap<Url, Arc<str>>,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
+
+        // Applies the caller's exclusions to a solvable that was just interned,
+        // reporting whether the record is excluded.
+        //
+        // Every site that interns a record has to go through this. The same
+        // record is interned once from the repodata and again when it is
+        // favored or locked, so an exclusion missed at any one of them lets the
+        // record back into the solve through that other door.
+        let exclude_if_requested =
+            |candidates: &mut Candidates, solvable: SolvableId, url: &Url| -> bool {
+                let Some(reason) = excluded_candidates.get(url) else {
+                    return false;
+                };
+                candidates
+                    .excluded
+                    .push((solvable, pool.intern_string(&**reason)));
+                true
+            };
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
@@ -361,6 +394,11 @@ impl<'a> CondaDependencyProvider<'a> {
         // Hashmap that maps the package name to the channel it was first found in.
         let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
+        // Maps each channel to a priority rank in the order channels are first
+        // encountered (which matches the order channels were provided). Lower
+        // rank == higher priority. Used by `ChannelPriority::Flexible`.
+        let mut channel_order = HashMap::<Option<String>, u32>::new();
+
         // Add additional records
         for repo_data in repodata {
             // Iterate over all records and dedup records that refer to the same package
@@ -379,14 +417,18 @@ impl<'a> CondaDependencyProvider<'a> {
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
-                // Determine if this record will be excluded by exclude_newer.
-                let excluded = exclude_newer.as_ref().is_some_and(|config| {
-                    config.is_excluded(
-                        &record.package_record.name,
-                        record.channel.as_deref(),
-                        record.package_record.timestamp.as_ref(),
-                    )
-                });
+                // Determine if this record will be excluded by the caller or
+                // by exclude_newer. Both count here: keeping an excluded
+                // record over its other-format twin would throw away the only
+                // candidate the solver may still pick.
+                let excluded = excluded_candidates.contains_key(&record.url)
+                    || exclude_newer.as_ref().is_some_and(|config| {
+                        config.is_excluded(
+                            &record.package_record.name,
+                            record.channel.as_deref(),
+                            record.package_record.timestamp.as_ref(),
+                        )
+                    });
 
                 let identifier = &record.identifier.identifier;
                 let archive_type = record.identifier.archive_type;
@@ -443,6 +485,16 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Update records with all entries in a single mutable borrow
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
+
+                // Record the priority rank of this channel (first-seen order).
+                if !channel_order.contains_key(&record.channel) {
+                    let next_rank = channel_order.len() as u32;
+                    channel_order.insert(record.channel.clone(), next_rank);
+                }
+
+                // Exclusions the caller derived from outside the repodata, for
+                // example from what a local package cache holds.
+                exclude_if_requested(candidates, solvable_id, &record.url);
 
                 if let Some(config) = &exclude_newer
                     && config.is_excluded(
@@ -541,14 +593,21 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
 
-        // Add favored packages to the records
+        // Add favored packages to the records.
+        //
+        // An excluded record must not become the favored one: favoring means
+        // the solver *prefers* it, so that would turn the exclusion into the
+        // opposite of what the caller asked for.
         for &favored_record in favored_records {
             let name =
                 pool.intern_package_name(NameType::from(&favored_record.package_record.name));
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
-            candidates.favored = Some(solvable);
+
+            if !exclude_if_requested(candidates, solvable, &favored_record.url) {
+                candidates.favored = Some(solvable);
+            }
         }
 
         for &locked_record in locked_records {
@@ -556,6 +615,14 @@ impl<'a> CondaDependencyProvider<'a> {
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
+
+            // The pin and the exclusion are applied independently. A locked
+            // record that is also excluded makes the solve unsatisfiable when
+            // the package is needed. Dropping the pin instead would let the
+            // solver quietly select a different version of a deliberately
+            // pinned package. The conflict report names the pin as the
+            // culprit together with the exclusion reason.
+            exclude_if_requested(candidates, solvable, &locked_record.url);
             candidates.locked = Some(solvable);
         }
 
@@ -591,7 +658,17 @@ impl<'a> CondaDependencyProvider<'a> {
             strategy,
             direct_dependencies,
             dependency_overrides: override_map,
+            channel_priority,
+            channel_order,
         })
+    }
+
+    /// Returns the priority rank for a channel, where a lower rank indicates a
+    /// higher-priority channel. Channels not seen during the construction sort last.
+    /// Channel strings are compared byte-for-byte as URL normalization is still missing
+    /// (see TODO: Normalize these channel names to urls above)
+    fn channel_rank(&self, channel: &Option<String>) -> u32 {
+        self.channel_order.get(channel).copied().unwrap_or(u32::MAX)
     }
 
     /// Returns all package names
@@ -768,6 +845,9 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     locked: None,
                     excluded: Vec::new(),
                     hint_dependencies_available: HintDependenciesAvailable::All,
+                    // Spread the rest, so the literal compiles against every
+                    // resolvo version in the supported range.
+                    ..Default::default()
                 })
             }
         }
@@ -1029,6 +1109,7 @@ impl super::SolverImpl for Solver {
             task.exclude_newer.as_ref(),
             task.strategy,
             dependency_overrides,
+            &task.excluded_candidates,
         )?;
 
         // Construct the requirements that the solver needs to satisfy.

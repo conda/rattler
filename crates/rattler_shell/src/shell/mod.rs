@@ -142,8 +142,12 @@ pub trait Shell {
     }
 
     /// Emits writing all current environment variables to stdout.
+    ///
+    /// Records are NUL-separated (`env -0`) rather than newline-separated
+    /// so that values which themselves contain newlines survive the
+    /// round-trip through [`Shell::parse_env`].
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "/usr/bin/env")
+        writeln!(f, "/usr/bin/env -0")
     }
 
     /// Write the script to the writer and do some post-processing for
@@ -152,14 +156,18 @@ pub trait Shell {
         f.write_all(script.as_bytes())
     }
 
-    /// Parses environment variables emitted by the `Shell::env` command.
+    /// Parses environment variables emitted by [`Shell::print_env`].
+    ///
+    /// The default implementation expects NUL-separated `KEY=VALUE`
+    /// records (see [`Shell::print_env`]), so a value containing a
+    /// newline is kept intact instead of being cut at the newline.
     fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
-        env.lines()
-            .filter_map(|line| {
-                line.split_once('=')
-                    // Trim " as CmdExe could add this to its variables.
-                    .map(|(key, value)| (key, value.trim_matches('"')))
-            })
+        env.split('\0')
+            .filter_map(|record| record.split_once('='))
+            // A record can carry a leading newline echoed just before the
+            // environment dump; variable names never do, so trimming the
+            // key is safe while the value is left untouched.
+            .map(|(key, value)| (key.trim_start_matches(['\n', '\r'].as_slice()), value))
             .collect()
     }
 
@@ -582,6 +590,19 @@ impl Shell for Xonsh {
     }
 }
 
+/// Parses newline-separated `KEY=VALUE` output, as emitted by the
+/// `print_env` of shells whose environment dump is line-based
+/// (cmd.exe's `@SET`, PowerShell's `dir env:`).
+fn parse_env_lines(env: &str) -> HashMap<&str, &str> {
+    env.lines()
+        .filter_map(|line| {
+            line.split_once('=')
+                // Trim " as CmdExe could add this to its variables.
+                .map(|(key, value)| (key, value.trim_matches('"')))
+        })
+        .collect()
+}
+
 /// A [`Shell`] implementation for the cmd.exe shell.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CmdExe;
@@ -650,6 +671,10 @@ impl Shell for CmdExe {
 
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, "@SET")
+    }
+
+    fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
+        parse_env_lines(env)
     }
 
     fn line_ending(&self) -> &str {
@@ -738,6 +763,10 @@ impl Shell for PowerShell {
     /// Emits writing all current environment variables to stdout.
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
+    }
+
+    fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
+        parse_env_lines(env)
     }
 
     fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {

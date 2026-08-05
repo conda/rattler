@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**"]
 name = "rattler"
-version = "0.47.0"
+version = "0.48.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -88,6 +88,6 @@ axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
-mockito = "1.0"
-tempfile = "3.0"
+mockito = "1"
+tempfile = { workspace = true }
 temp-env = { workspace = true }

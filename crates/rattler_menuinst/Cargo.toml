@@ -1,7 +1,7 @@
 [package]
 exclude = ["**/snapshots/**", "test-data/**"]
 name = "rattler_menuinst"
-version = "0.2.69"
+version = "0.2.72"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Install menu entries for a Conda package"
@@ -33,20 +33,20 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-quick-xml = "0.37.5"
-configparser = { version = "3.1.0" }
+quick-xml = "0.41"
+configparser = { version = "3" }
 shlex = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-known-folders = "1.2.0"
-windows = { version = "0.61.0", features = [
+known-folders = "1"
+windows = { version = "0.62", features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_Storage_EnhancedStorage",
     "Win32_System_Variant",
 ] }
-windows-registry = "0.5.2"
+windows-registry = "0.6"
 
 [dev-dependencies]
 insta = { workspace = true, features = ["json"] }
-configparser = { version = "3.1.0", features = ["indexmap"] }
+configparser = { version = "3", features = ["indexmap"] }
