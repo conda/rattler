@@ -37,6 +37,9 @@ enum OciMiddlewareError {
     #[error("Layer not found")]
     LayerNotFound,
 
+    #[error("Manifest request failed with status {0}")]
+    ManifestRequestFailed(StatusCode),
+
     #[error("Invalid OCI URL '{0}': {1}")]
     InvalidUrl(Url, &'static str),
 
@@ -548,7 +551,10 @@ impl OCIUrl {
                 }
             }
 
-            let manifest: Manifest = manifest.error_for_status()?.json().await?;
+            if !manifest.status().is_success() {
+                return Err(OciMiddlewareError::ManifestRequestFailed(manifest.status()));
+            }
+            let manifest: Manifest = manifest.json().await?;
 
             let layer = if let Some(layer) = manifest
                 .layers
@@ -634,11 +640,15 @@ impl Middleware for OciMiddleware {
                 next.run(retry_req, extensions).await
             }
             Err(e) => match e {
+                // Return clean 404s rather than erroring as callers safely handle them.
                 OciMiddlewareError::LayerNotFound => {
                     return Ok(create_404_response(
                         req.url(),
                         "No layer available for media type",
                     ));
+                }
+                OciMiddlewareError::ManifestRequestFailed(StatusCode::NOT_FOUND) => {
+                    return Ok(create_404_response(req.url(), "Manifest not found"));
                 }
                 _ => {
                     return Err(reqwest_middleware::Error::Middleware(e.into()));
@@ -831,6 +841,27 @@ mod tests {
             hex::encode(hash),
             "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
         );
+    }
+
+    /// Test that a missing package comes back as a plain 404.
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
+    #[tokio::test]
+    async fn test_oci_middleware_missing_package_is_404() {
+        let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
+        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
+            .with(middleware)
+            .build();
+
+        // Repo exists, version doesn't.
+        let response = client_with_middleware
+            .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/xtensor-999.999.999-h0000000_0.conda")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 404);
     }
 
     // test pulling an image from OCI registry
