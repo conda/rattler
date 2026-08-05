@@ -2,10 +2,6 @@
 //! detected from the host system, for example when detecting virtual packages
 //! for a platform other than the current one (see
 //! [`crate::VirtualPackages::detect_for_platform`]).
-//!
-//! The values match the defaults used by
-//! [pixi](https://github.com/prefix-dev/pixi) when no system requirements are
-//! specified.
 
 use rattler_conda_types::{Platform, Version};
 
