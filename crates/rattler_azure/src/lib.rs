@@ -9,8 +9,9 @@
 //! [`options`] and never inferred from the host name: the wire scheme and the
 //! addressing per host, and credentials per *container*, because that is the scope
 //! Azure's own RBAC has. The default grant is [`Auth::Anonymous`], so naming a host
-//! or a container in a URL by itself sends nothing to it. Nothing here signs or sends a request either — that lives
-//! in `rattler_networking` — but two functions do handle a credential:
+//! or a container in a URL by itself sends nothing to it. Nothing here signs or
+//! sends a request either — that lives in `rattler_networking` — but two functions
+//! do handle a credential:
 //! `azblob_config` embeds the account key or SAS it is handed into the config it
 //! returns, and `mint_user_delegation_sas` spends the user's `az login` session to
 //! obtain one. Deriving coordinates from a URL ([`account_and_container`])

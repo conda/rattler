@@ -4,9 +4,9 @@
 //! a host or one of its containers anything: without one, a channel on that host
 //! is fetched anonymously over https in host-style addressing. There is
 //! deliberately no hardcoded list of "official" Azure suffixes — since a grant must
-//! be written per host, suffix classification carries no security weight, and the
-//! absence of the list is what lets custom endpoints and the Azurite emulator work
-//! at all.
+//! be written out for the container it applies to, suffix classification carries no
+//! security weight, and the absence of the list is what lets custom endpoints and
+//! the Azurite emulator work at all.
 //!
 //! # Three types, one table
 //!
