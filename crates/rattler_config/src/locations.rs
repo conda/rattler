@@ -1,6 +1,22 @@
 //! Standard configuration file locations shared by rattler-based tools.
 //!
-//! Every tool has three conventional configuration locations, from lowest to
+//! Configuration comes from two layers:
+//!
+//! - the **shared** layer: files every rattler-based tool reads. They may
+//!   only contain the keys shared by all tools ([`crate::config::CommonConfig`]);
+//!   tool-specific keys in these files are ignored with a warning.
+//! - the **tool** layer: the tool's own files, which accept the shared keys
+//!   plus the tool-specific extension keys.
+//!
+//! The shared layer lives in the `rattler` directory:
+//! `/etc/rattler/config.toml` (`C:\ProgramData\rattler\config.toml` on
+//! Windows) and `$XDG_CONFIG_HOME/rattler/config.toml` (or the platform
+//! equivalent reported by [`dirs::config_dir`]). `$RATTLER_HOME/config.toml`
+//! is honored when the environment variable is set, but unlike the tool
+//! layer there is no `~/.rattler` fallback: the shared layer is pure
+//! configuration and does not warrant a home directory.
+//!
+//! Each tool has three conventional configuration locations, from lowest to
 //! highest precedence:
 //!
 //! 1. a system-wide file: `/etc/<tool>/config.toml` (Linux/macOS) or
@@ -12,16 +28,39 @@
 //!    environment variable is set (e.g. `PIXI_HOME`), otherwise
 //!    `~/.<tool>/config.toml`.
 //!
-//! [`config_search_paths`] combines these for a *list* of tools so that a
-//! tool can layer its own configuration on top of the configuration of the
-//! tools it cooperates with — e.g. `rattler-build` passing
-//! `&["pixi", "rattler-build"]` reads pixi's global configuration and
-//! overrides it with its own.
+//! [`config_search_paths`] combines both layers for a tool, from lowest to
+//! highest precedence: system shared, system tool, user shared, user tool.
+//! The user always overrides the system, and within each level the
+//! tool-specific file overrides the shared one.
 
 use std::path::PathBuf;
 
 /// The conventional file name of a configuration file.
 pub const CONFIG_FILE_NAME: &str = "config.toml";
+
+/// The directory name of the shared configuration layer.
+pub const SHARED_CONFIG_DIR: &str = "rattler";
+
+/// The configuration layer a file belongs to, which determines the keys the
+/// file may contain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigLayer {
+    /// A file shared by all rattler-based tools; only the common keys are
+    /// allowed.
+    Shared,
+    /// A tool's own file; common keys plus the tool's extension keys are
+    /// allowed.
+    Tool,
+}
+
+/// A candidate configuration file together with the layer it belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigLocation {
+    /// The path of the configuration file.
+    pub path: PathBuf,
+    /// The layer the file belongs to.
+    pub layer: ConfigLayer,
+}
 
 /// The name of the environment variable pointing at a tool's home directory,
 /// e.g. `PIXI_HOME` for `pixi` or `RATTLER_BUILD_HOME` for `rattler-build`.
@@ -71,27 +110,86 @@ pub fn tool_home(tool: &str) -> Option<PathBuf> {
     }
 }
 
-/// All configuration file locations for the given tools, from lowest to
-/// highest precedence: first the system-wide files of every tool, then the
-/// per-user files of every tool. Within each group, later tools in the list
-/// take precedence over earlier ones.
+/// The system-wide shared configuration file:
+/// `/etc/rattler/config.toml`, or `C:\ProgramData\rattler\config.toml` on
+/// Windows.
+pub fn shared_system_config_path() -> PathBuf {
+    system_config_path(SHARED_CONFIG_DIR)
+}
+
+/// The per-user shared configuration files, from lowest to highest
+/// precedence. Unlike [`user_config_paths`], `$RATTLER_HOME/config.toml` is
+/// only included when the environment variable is set: the shared layer has
+/// no `~/.rattler` fallback.
+pub fn shared_user_config_paths() -> Vec<PathBuf> {
+    [
+        // On macOS, honor an explicitly set XDG_CONFIG_HOME even though it
+        // is not part of the platform convention used by `dirs`.
+        #[cfg(target_os = "macos")]
+        std::env::var("XDG_CONFIG_HOME").ok().map(|d| {
+            PathBuf::from(d)
+                .join(SHARED_CONFIG_DIR)
+                .join(CONFIG_FILE_NAME)
+        }),
+        dirs::config_dir().map(|d| d.join(SHARED_CONFIG_DIR).join(CONFIG_FILE_NAME)),
+        std::env::var_os(home_env_var(SHARED_CONFIG_DIR))
+            .map(|home| PathBuf::from(home).join(CONFIG_FILE_NAME)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// All configuration file locations for a tool, from lowest to highest
+/// precedence: the system-wide shared file, the system-wide tool file, the
+/// per-user shared files, and the per-user tool files. The user always
+/// overrides the system, and within each level the tool file overrides the
+/// shared one.
 ///
 /// The returned paths are candidates; they are not checked for existence.
-/// Duplicates (e.g. from overlapping tool homes) are removed, keeping the
-/// occurrence with the highest precedence.
-pub fn config_search_paths(tools: &[&str]) -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = tools
-        .iter()
-        .map(|tool| system_config_path(tool))
-        .chain(tools.iter().flat_map(|tool| user_config_paths(tool)))
+/// Duplicates are removed, keeping the occurrence with the highest
+/// precedence; a path that appears in both layers (e.g. `RATTLER_HOME`
+/// pointing into a tool's directory) is parsed as a tool file, since the
+/// tool layer accepts a superset of the shared keys.
+pub fn config_search_paths(tool: &str) -> Vec<ConfigLocation> {
+    let mut locations: Vec<ConfigLocation> = [(shared_system_config_path(), ConfigLayer::Shared)]
+        .into_iter()
+        .chain([(system_config_path(tool), ConfigLayer::Tool)])
+        .chain(
+            shared_user_config_paths()
+                .into_iter()
+                .map(|path| (path, ConfigLayer::Shared)),
+        )
+        .chain(
+            user_config_paths(tool)
+                .into_iter()
+                .map(|path| (path, ConfigLayer::Tool)),
+        )
+        .map(|(path, layer)| ConfigLocation { path, layer })
         .collect();
 
-    // Deduplicate, keeping the *last* occurrence (highest precedence).
+    let tool_paths: std::collections::HashSet<PathBuf> = locations
+        .iter()
+        .filter(|location| location.layer == ConfigLayer::Tool)
+        .map(|location| location.path.clone())
+        .collect();
+
+    // Deduplicate by path, keeping the *last* occurrence (highest
+    // precedence). A path that also appears in the tool layer keeps the
+    // `Tool` parse mode regardless of which occurrence survives.
     let mut seen = std::collections::HashSet::new();
-    let mut deduped: Vec<PathBuf> = paths
+    let mut deduped: Vec<ConfigLocation> = locations
         .drain(..)
         .rev()
-        .filter(|path| seen.insert(path.clone()))
+        .filter(|location| seen.insert(location.path.clone()))
+        .map(|location| {
+            let layer = if tool_paths.contains(&location.path) {
+                ConfigLayer::Tool
+            } else {
+                ConfigLayer::Shared
+            };
+            ConfigLocation { layer, ..location }
+        })
         .collect();
     deduped.reverse();
     deduped
@@ -108,38 +206,66 @@ mod tests {
     }
 
     #[test]
-    fn search_paths_order_system_before_user() {
-        let paths = config_search_paths(&["pixi", "rattler-build"]);
-        let system_pixi = system_config_path("pixi");
-        let user_pixi = user_config_paths("pixi");
-
-        let system_pos = paths.iter().position(|p| p == &system_pixi);
-        let user_pos = user_pixi
-            .first()
-            .and_then(|first| paths.iter().position(|p| p == first));
-
-        if let (Some(system_pos), Some(user_pos)) = (system_pos, user_pos) {
+    fn shared_user_paths_have_no_dotdir_fallback() {
+        // Without RATTLER_HOME set, the shared layer must not fall back to
+        // `~/.rattler` the way `user_config_paths` falls back to `~/.<tool>`.
+        if std::env::var_os("RATTLER_HOME").is_none()
+            && let Some(home) = dirs::home_dir()
+        {
+            let dotdir = home.join(".rattler").join(CONFIG_FILE_NAME);
             assert!(
-                system_pos < user_pos,
-                "system config must have lower precedence than user config"
+                !shared_user_config_paths().contains(&dotdir),
+                "shared layer must not use a ~/.rattler dotdir"
             );
         }
     }
 
     #[test]
-    fn search_paths_order_within_user_group_follows_tool_order() {
-        let paths = config_search_paths(&["pixi", "rattler-build"]);
-        let pixi_user = user_config_paths("pixi");
-        let rb_user = user_config_paths("rattler-build");
+    fn search_paths_interleave_layers_by_level() {
+        let locations = config_search_paths("pixi");
+        let position = |path: &std::path::Path| locations.iter().position(|l| l.path == path);
 
-        if let (Some(pixi_first), Some(rb_last)) = (pixi_user.first(), rb_user.last()) {
-            let pixi_pos = paths.iter().position(|p| p == pixi_first);
-            let rb_pos = paths.iter().position(|p| p == rb_last);
-            if let (Some(pixi_pos), Some(rb_pos)) = (pixi_pos, rb_pos) {
-                assert!(
-                    pixi_pos < rb_pos,
-                    "later tools must take precedence over earlier ones"
-                );
+        let system_shared = position(&shared_system_config_path());
+        let system_tool = position(&system_config_path("pixi"));
+        let user_shared = shared_user_config_paths().first().and_then(|p| position(p));
+        let user_tool = user_config_paths("pixi").first().and_then(|p| position(p));
+
+        if let (Some(system_shared), Some(system_tool)) = (system_shared, system_tool) {
+            assert!(
+                system_shared < system_tool,
+                "system tool config must override system shared config"
+            );
+        }
+        if let (Some(system_tool), Some(user_shared)) = (system_tool, user_shared) {
+            assert!(
+                system_tool < user_shared,
+                "user shared config must override system tool config"
+            );
+        }
+        if let (Some(user_shared), Some(user_tool)) = (user_shared, user_tool) {
+            assert!(
+                user_shared < user_tool,
+                "user tool config must override user shared config"
+            );
+        }
+    }
+
+    #[test]
+    fn search_paths_mark_layers() {
+        let locations = config_search_paths("pixi");
+        let tool_paths: Vec<PathBuf> = [system_config_path("pixi")]
+            .into_iter()
+            .chain(user_config_paths("pixi"))
+            .collect();
+        for location in &locations {
+            let is_shared_path = location.path == shared_system_config_path()
+                || shared_user_config_paths().contains(&location.path);
+            // A path in both layers is parsed as a tool file.
+            match location.layer {
+                ConfigLayer::Shared => {
+                    assert!(is_shared_path && !tool_paths.contains(&location.path));
+                }
+                ConfigLayer::Tool => assert!(tool_paths.contains(&location.path)),
             }
         }
     }

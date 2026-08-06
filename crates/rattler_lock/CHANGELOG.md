@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_lock-v0.31.7...rattler_lock-v0.32.0) - 2026-08-03
+
+### Added
+
+- add `lfs` field to git source locations in the lock file ([#2633](https://github.com/conda/rattler/pull/2633))
+
 ## [0.31.7](https://github.com/conda/rattler/compare/rattler_lock-v0.31.6...rattler_lock-v0.31.7) - 2026-07-28
 
 ### Other

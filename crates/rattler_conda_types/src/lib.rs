@@ -7,6 +7,7 @@ pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;
+mod channel_notice;
 mod explicit_environment_spec;
 mod flags;
 pub mod match_spec;
@@ -38,6 +39,7 @@ use std::path::{Path, PathBuf};
 pub use build_spec::{BuildNumber, BuildNumberSpec, OrdOperator, ParseBuildNumberSpecError};
 pub use channel::{Channel, ChannelConfig, ChannelUrl, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
+pub use channel_notice::{ChannelNotice, ChannelNoticeLevel, ChannelNotices};
 pub use environment_yaml::{EnvironmentYaml, MatchSpecOrSubSection};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
@@ -74,6 +76,8 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
+#[cfg(feature = "semver")]
+pub use version::VersionToSemverError;
 pub use version::{
     Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
     VersionBumpType, VersionExtendError, VersionWithSource,

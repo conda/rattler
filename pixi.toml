@@ -18,12 +18,20 @@ requires-pixi = ">=0.67.0"
 # Use the same Rust version everywhere
 rust_compiler_version = ["1.95.0"]
 
+# The build backend has to match the build API version that pixi hands out, so
+# the workspace cutoff cannot hold it back. On Windows the MSVC runtime it links
+# against has to come along.
+[exclude-newer]
+pixi-build-rust = "0d"
+vc14_runtime = "0d"
+vcomp14 = "0d"
+
 [tasks]
 build = "cargo build"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools,rattler_conda_types/semver -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 

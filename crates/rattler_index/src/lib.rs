@@ -31,8 +31,9 @@ use opendal::{Configurator, Operator, services::FsConfig};
 #[cfg(feature = "azure")]
 use rattler_azure::{AzureChannelUrl, AzureCredentials, AzureEndpoint};
 use rattler_conda_types::{
-    ChannelInfo, ChannelRelations, PackageRecord, PatchInstructions, Platform, RepoData, Shard,
-    ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages, WhlPackageRecord,
+    ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, PackageRecord, PatchInstructions,
+    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages,
+    WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
@@ -59,17 +60,22 @@ use tracing::Instrument;
 #[cfg(feature = "s3")]
 use url::Url;
 
-/// Channel metadata written into generated repodata.
+/// Metadata published while indexing a channel.
 ///
-/// Distinct from [`IndexChannelConfig`] — that type describes the indexer's
-/// behavior knobs (zst, shards, revisions, ...). `ChannelMetadata` is just the
-/// data that ends up under `info` in the generated repodata.
+/// Distinct from [`IndexChannelConfig`] — that type also describes indexer
+/// behavior knobs (zst, shards, revisions, ...). This type contains metadata
+/// written to generated repodata and the channel-root `notices.json` file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ChannelMetadata {
     /// The `info.base_url` value written to `repodata.json`.
     pub base_url: Option<String>,
     /// The `info.channel_relations` value written to `repodata.json`.
     pub channel_relations: Option<ChannelRelations>,
+    /// CEP-6 notices to write to the channel root.
+    ///
+    /// `None` leaves an existing `notices.json` untouched, while `Some` writes
+    /// the supplied notices (including an explicitly empty list).
+    pub notices: Option<Vec<ChannelNotice>>,
 }
 
 impl ChannelMetadata {
@@ -81,6 +87,7 @@ impl ChannelMetadata {
                 .channel_relations
                 .clone()
                 .filter(|relations| !relations.is_empty()),
+            notices: config.notices.clone(),
         }
     }
 }
@@ -136,6 +143,7 @@ pub struct IndexStats {
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
+const CHANNEL_NOTICES: &str = "notices.json";
 const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
 const CACHE_CONTROL_IMMUTABLE: &str = "public, max-age=31536000, immutable";
 const CACHE_CONTROL_REPODATA: &str = "public, max-age=300"; // 5 minutes
@@ -1685,6 +1693,11 @@ pub async fn index_with_channel_metadata(
     precondition_checks: PreconditionChecks,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
+    let notices_metadata = if channel_metadata.notices.is_some() {
+        Some(RepodataFileMetadata::new(&op, CHANNEL_NOTICES, precondition_checks).await?)
+    } else {
+        None
+    };
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.
@@ -1789,7 +1802,45 @@ pub async fn index_with_channel_metadata(
             }
         }
     }
+
+    // Publish notices only after all repodata updates succeeded, so a failed
+    // indexing operation cannot partially update channel-level messaging.
+    if let (Some(notices), Some(metadata)) = (&channel_metadata.notices, notices_metadata.as_ref())
+    {
+        write_channel_notices_with_metadata(&op, notices, metadata).await?;
+    }
+
     Ok(stats)
+}
+
+/// Write CEP-6 channel notices to the channel root.
+pub async fn write_channel_notices(op: &Operator, notices: &[ChannelNotice]) -> anyhow::Result<()> {
+    let metadata =
+        RepodataFileMetadata::new(op, CHANNEL_NOTICES, PreconditionChecks::Disabled).await?;
+    write_channel_notices_with_metadata(op, notices, &metadata).await
+}
+
+async fn write_channel_notices_with_metadata(
+    op: &Operator,
+    notices: &[ChannelNotice],
+    metadata: &RepodataFileMetadata,
+) -> anyhow::Result<()> {
+    let bytes = serde_json::to_vec_pretty(&ChannelNotices {
+        notices: notices.to_vec(),
+    })?;
+    let mut writer = op
+        .write_with(CHANNEL_NOTICES, bytes)
+        .content_type("application/json")
+        .cache_control(CACHE_CONTROL_REPODATA);
+    if metadata.precondition_checks.is_enabled() {
+        if let Some(etag) = &metadata.etag {
+            writer = writer.if_match(etag);
+        } else if !metadata.file_existed {
+            writer = writer.if_not_exists(true);
+        }
+    }
+    writer.await?;
+    Ok(())
 }
 
 /// Ensures that a channel has a valid `noarch/repodata.json` file.

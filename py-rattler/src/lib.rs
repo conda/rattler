@@ -73,7 +73,7 @@ use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
 use repo_data::{
     PyChannelInfo, PyChannelRelations, PyRepoData,
-    gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
+    gateway::{PyChannelNotice, PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
     sparse::{PyPackageFormatSelection, PySparseRepoData},
 };
@@ -147,6 +147,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyChannelRelations>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
+    m.add_class::<PyChannelNotice>()?;
     m.add_class::<PySourceConfig>()?;
     m.add_class::<PyFetchRepoDataOptions>()?;
 
@@ -198,6 +199,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(
         wrap_pyfunction!(package_streaming::fetch_raw_package_file_from_url, &m).unwrap(),
     )?;
+    m.add_class::<package_streaming::archive::PyPackageArchive>()?;
+    m.add_class::<package_streaming::archive::PySectionStream>()?;
+    m.add_class::<package_streaming::archive::PyArchiveEntry>()?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;

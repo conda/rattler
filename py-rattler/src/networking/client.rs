@@ -79,7 +79,12 @@ impl PyClientWithMiddleware {
                     client = client.with(RetryTransientMiddleware::new_with_policy(policy));
                 }
                 PyMiddleware::Oci(_middleware) => {
-                    client = client.with(OciMiddleware::new(reqwest_client.clone()));
+                    client = client.with(
+                        OciMiddleware::new(reqwest_client.clone()).with_authentication_storage(
+                            AuthenticationStorage::from_env_and_defaults()
+                                .map_err(PyRattlerError::from)?,
+                        ),
+                    );
                 }
                 PyMiddleware::Gcs(middleware) => {
                     client = client.with(GCSMiddleware::from(middleware));

@@ -26,6 +26,7 @@ use crate::config::{
     build::BuildConfig, concurrency::ConcurrencyConfig, index::IndexConfig, proxy::ProxyConfig,
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
+use crate::locations::{ConfigLayer, ConfigLocation};
 
 pub mod azure;
 pub mod build;
@@ -511,10 +512,64 @@ where
         ))
     }
 
+    /// Parse a *shared* configuration file from a TOML string.
+    ///
+    /// Shared files (see [`crate::locations::ConfigLayer::Shared`]) may only
+    /// contain the keys shared by all rattler-based tools: the document is
+    /// deserialized into [`CommonConfig`] alone and the extension is left at
+    /// its default. Returns the parsed configuration together with the set
+    /// of keys [`CommonConfig`] did not recognize, including extension keys
+    /// the tool itself would understand, so that a shared file means the
+    /// same thing to every tool reading it.
+    pub fn from_toml_str_shared(input: &str) -> Result<(Self, BTreeSet<String>), toml::de::Error> {
+        let mut unknown = BTreeSet::new();
+        let common: CommonConfig = serde_ignored::deserialize(
+            toml::de::Deserializer::parse(input)?,
+            |path: serde_ignored::Path<'_>| {
+                unknown.insert(path.to_string());
+            },
+        )?;
+
+        Ok((
+            Self {
+                common,
+                extensions: T::default(),
+                loaded_from: Vec::new(),
+            },
+            unknown,
+        ))
+    }
+
+    /// Parse the file at `path` according to its `layer` and merge it into
+    /// `self`, warning about ignored keys.
+    fn merge_from_path(self, path: &Path, layer: ConfigLayer) -> Result<Self, LoadError> {
+        let content = fs_err::read_to_string(path)?;
+        let (mut other, unused) = match layer {
+            ConfigLayer::Shared => Self::from_toml_str_shared(&content)?,
+            ConfigLayer::Tool => Self::from_toml_str(&content)?,
+        };
+        for key in &unused {
+            match layer {
+                ConfigLayer::Shared => tracing::warn!(
+                    "Ignoring configuration key `{key}` in {}: not a key shared by all rattler-based tools",
+                    path.display()
+                ),
+                ConfigLayer::Tool => tracing::warn!(
+                    "Ignoring unknown configuration key `{key}` in {}",
+                    path.display()
+                ),
+            }
+        }
+        other.loaded_from.push(path.to_path_buf());
+        self.merge_config(&other)
+            .map_err(|e| LoadError::MergeError(e, path.to_path_buf()))
+    }
+
     /// Load the configuration by merging all the given files, in order:
-    /// later files take precedence over earlier ones. Unrecognized keys are
-    /// reported as `tracing` warnings; the merged configuration is validated
-    /// before it is returned.
+    /// later files take precedence over earlier ones. Every file is parsed
+    /// as a tool file (common keys plus extension keys); unrecognized keys
+    /// are reported as `tracing` warnings. The merged configuration is
+    /// validated before it is returned.
     ///
     /// Missing files result in an error; callers that search default
     /// locations should filter for existing files first (see
@@ -524,37 +579,43 @@ where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
+        Self::load_from_locations(paths.into_iter().map(|path| ConfigLocation {
+            path: path.as_ref().to_path_buf(),
+            layer: ConfigLayer::Tool,
+        }))
+    }
+
+    /// Load the configuration by merging all the given locations, in order:
+    /// later locations take precedence over earlier ones. Each file is
+    /// parsed according to its layer: shared files accept only the common
+    /// keys (see [`ConfigBase::from_toml_str_shared`]), tool files also
+    /// accept the extension keys. Unrecognized keys are reported as
+    /// `tracing` warnings; the merged configuration is validated before it
+    /// is returned.
+    pub fn load_from_locations<I>(locations: I) -> Result<Self, LoadError>
+    where
+        I: IntoIterator<Item = ConfigLocation>,
+    {
         let mut config = Self::default();
 
-        for path in paths {
-            let path = path.as_ref();
-            let content = fs_err::read_to_string(path)?;
-            let (mut other, unused) = Self::from_toml_str(&content)?;
-            for key in &unused {
-                tracing::warn!(
-                    "Ignoring unknown configuration key `{key}` in {}",
-                    path.display()
-                );
-            }
-            other.loaded_from.push(path.to_path_buf());
-            config = config
-                .merge_config(&other)
-                .map_err(|e| LoadError::MergeError(e, path.to_path_buf()))?;
+        for location in locations {
+            config = config.merge_from_path(&location.path, location.layer)?;
         }
 
         config.validate()?;
         Ok(config)
     }
 
-    /// Load the configuration from the default locations of the given tools
-    /// (e.g. `&["pixi", "rattler-build"]`), skipping files that do not
-    /// exist. See [`crate::locations::config_search_paths`] for the exact
-    /// search order.
-    pub fn load_from_default_locations(tool_dirs: &[&str]) -> Result<Self, LoadError> {
-        Self::load_from_files(
-            crate::locations::config_search_paths(tool_dirs)
+    /// Load the configuration from the default locations of the given tool
+    /// (e.g. `"rattler-build"`), skipping files that do not exist: the
+    /// shared `rattler` configuration layered with the tool's own files.
+    /// See [`crate::locations::config_search_paths`] for the exact search
+    /// order.
+    pub fn load_from_default_locations(tool: &str) -> Result<Self, LoadError> {
+        Self::load_from_locations(
+            crate::locations::config_search_paths(tool)
                 .into_iter()
-                .filter(|path| path.is_file()),
+                .filter(|location| location.path.is_file()),
         )
     }
 }

@@ -242,6 +242,7 @@ expression: "(unused, normalized(config))"
                     repodata_revisions: None,
                     package_revision_assignment: None,
                     base_url: None,
+                    notices: None,
                     channel_relations: None,
                 },
                 per_channel: {
@@ -253,6 +254,7 @@ expression: "(unused, normalized(config))"
                         base_url: Some(
                             "../packages/",
                         ),
+                        notices: None,
                         channel_relations: None,
                     },
                 },

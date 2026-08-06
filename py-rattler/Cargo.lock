@@ -122,9 +122,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "apple-native-keyring-store"
@@ -4067,7 +4067,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -4117,6 +4117,7 @@ name = "rattler_azure"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "indexmap 2.14.0",
  "jiff",
  "opendal",
  "percent-encoding",
@@ -4240,7 +4241,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.30.10"
+version = "0.30.11"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4280,7 +4281,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.31.7"
+version = "0.32.0"
 dependencies = [
  "ahash",
  "file_url",
@@ -4315,7 +4316,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.71"
+version = "0.2.72"
 dependencies = [
  "configparser",
  "dirs",
@@ -4396,6 +4397,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "async-spooled-tempfile",
+ "bytes",
  "bzip2",
  "filetime",
  "fs-err",
@@ -4427,7 +4429,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "libc",
  "nix",
@@ -4524,7 +4526,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.27.11"
+version = "0.27.12"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4571,8 +4573,11 @@ dependencies = [
  "rattler_conda_types",
  "regex",
  "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "windows-sys 0.61.2",
  "winver",
 ]
 

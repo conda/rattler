@@ -1,12 +1,12 @@
 //! Integration tests for the Git LFS fetch path. Builds a tiny fixture repo
-//! with `*.bin filter=lfs` in `.gitattributes` and one binary file.
+//! with `*.bin filter=lfs` in `.gitattributes` and two binary files.
 //! Requires `git-lfs` on the host; tests skip themselves when it's missing.
 
 use std::path::Path;
 use std::process::Command;
 
 use rattler_git::LazyClient;
-use rattler_git::{GitUrl, sha::GitSha, source::GitSource};
+use rattler_git::{GitUrl, LfsFilter, sha::GitSha, source::GitSource};
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
@@ -35,7 +35,7 @@ fn require_git_lfs(test: &str) -> bool {
     ok
 }
 
-/// A tiny git repository with one LFS-tracked file (`data.bin`).
+/// A tiny git repository with two LFS-tracked files.
 struct LfsFixture {
     /// Kept alive to prevent cleanup until the fixture is dropped.
     _tempdir: tempfile::TempDir,
@@ -86,6 +86,7 @@ impl LfsFixture {
             b"\x00\x01\x02\x03binary payload\xff\xfe",
         )
         .unwrap();
+        fs_err::write(repo_path.join("other.bin"), b"other LFS payload").unwrap();
 
         git(&["add", "."]);
         git(&["commit", "--message", "v0.1.0"]);
@@ -217,4 +218,104 @@ fn cached_fetch_with_lfs_artifacts_is_ready() {
     let second = make_source().fetch().expect("cached fetch should succeed");
     assert!(second.lfs_ready());
     assert_eq!(second.commit(), first.commit());
+}
+
+/// A plain checkout followed by an LFS checkout of the same commit must not
+/// reuse the pointer-only checkout directory.
+#[test]
+fn same_commit_plain_then_lfs_uses_distinct_checkouts() {
+    if !require_git_lfs("same_commit_plain_then_lfs_uses_distinct_checkouts") {
+        return;
+    }
+    let repo = LfsFixture::new();
+    let original = fs_err::read(repo.repo_path.join("data.bin")).unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let git_url = GitUrl::try_from(repo.base_url.clone()).unwrap();
+
+    let plain = GitSource::new(git_url.clone(), panic_client(), cache.path())
+        .with_lfs(Some(false))
+        .fetch()
+        .expect("plain fetch should succeed");
+    let lfs = GitSource::new(git_url, panic_client(), cache.path())
+        .with_lfs(Some(true))
+        .fetch()
+        .expect("LFS fetch should succeed");
+
+    assert_eq!(plain.commit(), lfs.commit());
+    assert_ne!(plain.path(), lfs.path());
+    assert!(is_lfs_pointer(&plain.path().join("data.bin")));
+    assert_eq!(fs_err::read(lfs.path().join("data.bin")).unwrap(), original);
+}
+
+/// The reverse order must also keep a later plain checkout from reusing or
+/// modifying the materialized LFS checkout.
+#[test]
+fn same_commit_lfs_then_plain_uses_distinct_checkouts() {
+    if !require_git_lfs("same_commit_lfs_then_plain_uses_distinct_checkouts") {
+        return;
+    }
+    let repo = LfsFixture::new();
+    let original = fs_err::read(repo.repo_path.join("data.bin")).unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let git_url = GitUrl::try_from(repo.base_url.clone()).unwrap();
+
+    let lfs = GitSource::new(git_url.clone(), panic_client(), cache.path())
+        .with_lfs(Some(true))
+        .fetch()
+        .expect("LFS fetch should succeed");
+    let plain = GitSource::new(git_url, panic_client(), cache.path())
+        .with_lfs(None)
+        .fetch()
+        .expect("plain fetch should succeed");
+
+    assert_eq!(lfs.commit(), plain.commit());
+    assert_ne!(lfs.path(), plain.path());
+    assert!(is_lfs_pointer(&plain.path().join("data.bin")));
+    assert_eq!(fs_err::read(lfs.path().join("data.bin")).unwrap(), original);
+}
+
+/// Include and exclude patterns limit both fetching and materialization. A
+/// different filter gets a different checkout path.
+#[test]
+fn lfs_path_filters_materialize_only_the_requested_subset() {
+    if !require_git_lfs("lfs_path_filters_materialize_only_the_requested_subset") {
+        return;
+    }
+    let repo = LfsFixture::new();
+    let data = fs_err::read(repo.repo_path.join("data.bin")).unwrap();
+    let other = fs_err::read(repo.repo_path.join("other.bin")).unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let git_url = GitUrl::try_from(repo.base_url.clone()).unwrap();
+
+    let data_only = GitSource::new(git_url.clone(), panic_client(), cache.path())
+        .with_lfs(Some(true))
+        .with_lfs_filter(LfsFilter {
+            include: Some("*.bin".to_string()),
+            exclude: Some("other.bin".to_string()),
+        })
+        .fetch()
+        .expect("filtered LFS fetch should succeed");
+
+    assert!(data_only.lfs_ready());
+    assert_eq!(
+        fs_err::read(data_only.path().join("data.bin")).unwrap(),
+        data
+    );
+    assert!(is_lfs_pointer(&data_only.path().join("other.bin")));
+
+    let other_only = GitSource::new(git_url, panic_client(), cache.path())
+        .with_lfs(Some(true))
+        .with_lfs_filter(LfsFilter {
+            include: Some("other.bin".to_string()),
+            exclude: None,
+        })
+        .fetch()
+        .expect("second filtered LFS fetch should succeed");
+
+    assert_ne!(data_only.path(), other_only.path());
+    assert!(is_lfs_pointer(&other_only.path().join("data.bin")));
+    assert_eq!(
+        fs_err::read(other_only.path().join("other.bin")).unwrap(),
+        other
+    );
 }

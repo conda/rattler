@@ -233,6 +233,7 @@ fn validate_virtual_package_dependencies(
     let virtual_packages = rattler_virtual_packages::VirtualPackages::detect_for_platform(
         platform,
         &rattler_virtual_packages::VirtualPackageOverrides::from_env(),
+        rattler::default_cache_dir().ok().as_deref(),
     )
     .into_diagnostic()
     .with_context(|| format!("failed to determine virtual packages for {platform}"))?

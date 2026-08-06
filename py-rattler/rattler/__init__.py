@@ -2,6 +2,7 @@ from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
     ChannelInfo,
+    ChannelNotice,
     ChannelRelations,
     PackageRecord,
     RepoData,
@@ -10,6 +11,8 @@ from rattler.repo_data import (
     PatchInstructions,
     SparseRepoData,
     Gateway,
+    GatewayNamesResult,
+    GatewayQueryResult,
     SourceConfig,
     PackageFormatSelection,
     RepoDataSource,
@@ -59,6 +62,7 @@ __all__ = [
     "MatchSpec",
     "NamelessMatchSpec",
     "ChannelInfo",
+    "ChannelNotice",
     "ChannelRelations",
     "PackageRecord",
     "Channel",
@@ -106,6 +110,8 @@ __all__ = [
     "FileMode",
     "IndexJson",
     "Gateway",
+    "GatewayNamesResult",
+    "GatewayQueryResult",
     "SourceConfig",
     "RepoDataSource",
     "NoArchType",

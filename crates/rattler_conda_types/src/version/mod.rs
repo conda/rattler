@@ -18,12 +18,17 @@ use smallvec::SmallVec;
 mod flags;
 pub(crate) mod parse;
 mod segment;
+#[cfg(feature = "semver")]
+mod semver;
 mod with_source;
 
 pub(crate) mod bump;
 pub use bump::{VersionBumpError, VersionBumpType};
 use flags::Flags;
 use segment::Segment;
+// Disambiguated from the `semver` crate, which is used by the module itself.
+#[cfg(feature = "semver")]
+pub use self::semver::VersionToSemverError;
 use thiserror::Error;
 pub use with_source::VersionWithSource;
 

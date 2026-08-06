@@ -329,6 +329,7 @@ mod tests {
             },
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -397,6 +398,7 @@ mod tests {
             },
             None,
             None,
+            None,
         )
         .await
         .err()
@@ -436,6 +438,7 @@ mod tests {
                 action: CacheAction::NoCache,
                 missing_shards_are_empty: false,
             },
+            None,
             None,
             None,
         )
@@ -480,6 +483,7 @@ mod tests {
             },
             None,
             None,
+            None,
         )
         .await
         .expect("the index is served, so it is cached now");
@@ -493,6 +497,7 @@ mod tests {
                 action: cache_only_action,
                 missing_shards_are_empty,
             },
+            None,
             None,
             None,
         )
@@ -522,6 +527,7 @@ mod tests {
                 action: CacheAction::ForceCacheOnly,
                 missing_shards_are_empty: true,
             },
+            None,
             None,
             None,
         )
