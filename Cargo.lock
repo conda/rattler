@@ -5066,6 +5066,7 @@ dependencies = [
  "regex",
  "rmp-serde",
  "rstest",
+ "semver",
  "serde",
  "serde-untagged",
  "serde_json",
