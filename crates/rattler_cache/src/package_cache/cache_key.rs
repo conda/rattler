@@ -1,6 +1,8 @@
-use rattler_conda_types::PackageRecord;
-use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_conda_types::utils::{InvalidPathComponentError, ensure_safe_path_component};
+use rattler_conda_types::{
+    MatchSpec, PackageName, PackageRecord, VersionWithSource, match_spec::Matches,
+    package::{BuildString, CondaArchiveIdentifier},
+};
 use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
 use std::path::Path;
 
@@ -82,6 +84,44 @@ impl CacheKey {
     /// Return the md5 hash of the package if it is known.
     pub fn md5(&self) -> Option<Md5Hash> {
         self.md5
+    }
+
+    /// Matches the parts of a [`MatchSpec`] represented by a cache key.
+    ///
+    /// A cache key contains name, version, build string and optional hashes.
+    /// Specifications constraining any other package metadata cannot be
+    /// evaluated reliably and therefore do not match.
+    pub(crate) fn matches_spec(&self, spec: &MatchSpec) -> bool {
+        if spec.build_number.is_some()
+            || spec.file_name.is_some()
+            || spec.extras.is_some()
+            || spec.flags.is_some()
+            || spec.channel.is_some()
+            || spec.subdir.is_some()
+            || spec.namespace.is_some()
+            || spec.url.is_some()
+            || spec.license.is_some()
+            || spec.license_family.is_some()
+            || spec.condition.is_some()
+            || spec.track_features.is_some()
+        {
+            return false;
+        }
+
+        let Ok(name) = self.name.parse::<PackageName>() else {
+            return false;
+        };
+        let Ok(version) = self.version.parse::<VersionWithSource>() else {
+            return false;
+        };
+        let mut record = PackageRecord::new(
+            name,
+            version,
+            BuildString::new_unchecked(self.build_string.clone()),
+        );
+        record.sha256 = self.sha256;
+        record.md5 = self.md5;
+        spec.matches(&record)
     }
 }
 

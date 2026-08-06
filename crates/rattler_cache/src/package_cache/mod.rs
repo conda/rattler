@@ -20,7 +20,9 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::{PackageRecord, RepoDataRecord, package::CondaArchiveIdentifier};
+use rattler_conda_types::{
+    MatchSpec, PackageRecord, RepoDataRecord, package::CondaArchiveIdentifier,
+};
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     LazyClient,
@@ -52,15 +54,45 @@ pub struct PackageCache {
     cache_origin: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct PackageCacheInner {
     layers: Vec<PackageCacheLayer>,
 }
 
+#[derive(Clone)]
 pub struct PackageCacheLayer {
     path: PathBuf,
-    packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
+    packages: Arc<DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>>,
     validation_mode: ValidationMode,
+    filter: PackageCacheLayerFilter,
+}
+
+/// Controls which packages may be read from or written to a package-cache layer.
+///
+/// Include and exclude specifications are matched using the package name,
+/// version, build string, and hashes available in a [`CacheKey`]. A package is
+/// accepted when it matches at least one include specification (or there are no
+/// includes) and does not match any exclude specification. `MatchSpec` fields
+/// that are not represented by a cache key never match.
+#[derive(Clone, Debug, Default)]
+pub struct PackageCacheLayerFilter {
+    includes: Vec<MatchSpec>,
+    excludes: Vec<MatchSpec>,
+}
+
+impl PackageCacheLayerFilter {
+    fn accepts(&self, cache_key: &CacheKey) -> bool {
+        let included = self.includes.is_empty()
+            || self
+                .includes
+                .iter()
+                .any(|spec| cache_key.matches_spec(spec));
+        included
+            && !self
+                .excludes
+                .iter()
+                .any(|spec| cache_key.matches_spec(spec))
+    }
 }
 
 /// A snapshot of the packages present in a [`PackageCache`] at the moment it
@@ -77,12 +109,19 @@ pub struct PackageCacheLayer {
 #[derive(Debug, Clone)]
 pub struct CacheIndex {
     /// Directory names as produced by [`CacheKey::to_path_segment`], mapped to
-    /// the sha256 each layer records for that entry (absent when the entry
-    /// predates hash recording, or its metadata could not be read). Every
-    /// layer holding the name contributes, in layer order: lookup walks past
-    /// a layer whose hash does not match, so the index must too.
-    entries: HashMap<String, Vec<Option<Sha256Hash>>>,
+    /// the sha256 and filter of each layer holding that entry. A sha256 is
+    /// absent when the entry predates hash recording or its metadata could not
+    /// be read. Every layer holding the name contributes, in layer order:
+    /// lookup walks past a filtered or hash-mismatching layer, so the index
+    /// must too.
+    entries: HashMap<String, Vec<CacheIndexEntry>>,
     cache_origin: bool,
+}
+
+#[derive(Debug, Clone)]
+struct CacheIndexEntry {
+    sha256: Option<Sha256Hash>,
+    filter: PackageCacheLayerFilter,
 }
 
 impl CacheIndex {
@@ -147,8 +186,9 @@ impl CacheIndex {
         // still needs the network. Apply the very same rule here, to every
         // layer: lookup continues past a mismatching layer, so a match
         // anywhere is a match.
-        cached_sha256s.iter().any(|cached_sha256| {
-            !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), cached_sha256.as_ref())
+        cached_sha256s.iter().any(|entry| {
+            entry.filter.accepts(cache_key)
+                && !cache_lock::sha256_mismatch(cache_key.sha256().as_ref(), entry.sha256.as_ref())
         })
     }
 
@@ -201,8 +241,8 @@ pub enum PackageCacheError {
     #[error("failed to interact with the package cache layer.")]
     LayerError(#[source] Box<dyn std::error::Error + Send + Sync>), // Wraps layer-specific errors
 
-    /// There are no writable layers to cache package to
-    #[error("no writable layers to cache package to")]
+    /// There are no eligible writable layers to cache the package to.
+    #[error("no eligible writable layers to cache package to")]
     NoWritableLayers,
 
     /// The cache key contains metadata that could lead to path traversal.
@@ -278,6 +318,49 @@ fn is_mounted_readonly(_path: &Path) -> bool {
 }
 
 impl PackageCacheLayer {
+    /// Creates an unfiltered package-cache layer with default validation.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            packages: Arc::new(DashMap::default()),
+            validation_mode: ValidationMode::default(),
+            filter: PackageCacheLayerFilter::default(),
+        }
+    }
+
+    /// Sets the validation mode used by this layer.
+    pub fn with_validation_mode(mut self, validation_mode: ValidationMode) -> Self {
+        self.validation_mode = validation_mode;
+        self
+    }
+
+    /// Adds an inclusion [`MatchSpec`] to this layer.
+    ///
+    /// Multiple inclusion specifications are combined with OR. If no
+    /// inclusion specification is configured, all packages are included.
+    pub fn with_filter(mut self, spec: MatchSpec) -> Self {
+        self.filter.includes.push(spec);
+        self
+    }
+
+    /// Excludes packages matching `spec` from this layer.
+    ///
+    /// Exclusions take precedence over inclusion specifications.
+    pub fn excluding(mut self, spec: MatchSpec) -> Self {
+        self.filter.excludes.push(spec);
+        self
+    }
+
+    /// Returns the root directory of this layer.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns whether this layer accepts `cache_key`.
+    pub fn accepts(&self, cache_key: &CacheKey) -> bool {
+        self.filter.accepts(cache_key)
+    }
+
     /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
         self.path
@@ -387,6 +470,28 @@ impl PackageCache {
         }
     }
 
+    /// Prepends a configured layer to this cache.
+    ///
+    /// Existing layers, filters, cached-origin behavior, and in-memory entry
+    /// coordination are preserved. This is useful for adding a temporary
+    /// overlay to an already configured cache.
+    pub fn with_prepended_layer(mut self, layer: PackageCacheLayer) -> Self {
+        Arc::make_mut(&mut self.inner).layers.insert(0, layer);
+        self
+    }
+
+    /// Excludes packages matching `spec` from every existing layer.
+    ///
+    /// Combined with [`Self::with_prepended_layer`], this allows a package to
+    /// be routed exclusively to a new layer without reconstructing the
+    /// existing cache or losing custom cache directories.
+    pub fn excluding_from_all_layers(mut self, spec: MatchSpec) -> Self {
+        for layer in &mut Arc::make_mut(&mut self.inner).layers {
+            layer.filter.excludes.push(spec.clone());
+        }
+        self
+    }
+
     /// Acquires a global lock on the package cache.
     ///
     /// This lock can be used to coordinate multiple package operations,
@@ -430,17 +535,27 @@ impl PackageCache {
         I: IntoIterator,
         I::Item: Into<PathBuf>,
     {
-        let layers = paths
+        let layers: Vec<_> = paths
             .into_iter()
-            .map(|path| PackageCacheLayer {
-                path: path.into(),
-                packages: DashMap::default(),
-                validation_mode,
-            })
+            .map(|path| PackageCacheLayer::new(path).with_validation_mode(validation_mode))
             .collect();
 
+        Self::from_layers(layers, cache_origin)
+    }
+
+    /// Constructs a cache from configured layers.
+    ///
+    /// This constructor enables per-layer routing through
+    /// [`PackageCacheLayer::with_filter`] and [`PackageCacheLayer::excluding`].
+    /// Unfiltered layers retain the behavior of [`PackageCache::new_layered`].
+    pub fn from_layers<I>(layers: I, cache_origin: bool) -> Self
+    where
+        I: IntoIterator<Item = PackageCacheLayer>,
+    {
         Self {
-            inner: Arc::new(PackageCacheInner { layers }),
+            inner: Arc::new(PackageCacheInner {
+                layers: layers.into_iter().collect(),
+            }),
             cache_origin,
         }
     }
@@ -455,17 +570,17 @@ impl PackageCache {
     /// thousands of filesystem calls. It runs on a blocking thread to keep
     /// them off the async runtime.
     pub async fn index(&self) -> std::io::Result<CacheIndex> {
-        let layer_paths: Vec<PathBuf> = self
+        let layers: Vec<(PathBuf, PackageCacheLayerFilter)> = self
             .inner
             .layers
             .iter()
-            .map(|layer| layer.path.clone())
+            .map(|layer| (layer.path.clone(), layer.filter.clone()))
             .collect();
         let cache_origin = self.cache_origin;
 
         let scan = tokio::task::spawn_blocking(move || {
-            let mut entries: HashMap<String, Vec<Option<Sha256Hash>>> = HashMap::new();
-            for layer_path in layer_paths {
+            let mut entries: HashMap<String, Vec<CacheIndexEntry>> = HashMap::new();
+            for (layer_path, filter) in layers {
                 let dir = match fs_err::read_dir(&layer_path) {
                     Ok(dir) => dir,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
@@ -480,7 +595,13 @@ impl PackageCache {
                         let sha256 = cache_lock::peek_sha256(&entry.path());
                         // Every layer holding the name contributes: lookup
                         // walks past a layer whose hash does not match.
-                        entries.entry(name.to_owned()).or_default().push(sha256);
+                        entries
+                            .entry(name.to_owned())
+                            .or_default()
+                            .push(CacheIndexEntry {
+                                sha256,
+                                filter: filter.clone(),
+                            });
                     }
                 }
             }
@@ -524,10 +645,10 @@ impl PackageCache {
     ///
     /// ## Layer Priority
     ///
-    /// Layers are checked in the order they were provided to [`PackageCache::new_layered`].
-    /// If a valid package is found in any layer, it is returned immediately. If no valid
-    /// package is found in any layer, the package is fetched and written to the first
-    /// writable layer.
+    /// Eligible layers are checked in configured order. If a valid package is
+    /// found in any eligible layer, it is returned immediately. Otherwise the
+    /// package is fetched and written to the first eligible writable layer.
+    /// Unfiltered layers are eligible for every package.
     ///
     /// If the package is already being fetched by another task/thread the
     /// request is coalesced. No duplicate fetch is performed.
@@ -547,9 +668,12 @@ impl PackageCache {
         // Reject keys that could escape the cache root (GHSA-h672-p7h7-97v9).
         let cache_segment = cache_key.to_path_segment()?;
 
-        let (_, writable_layers) = self.split_layers();
-
-        for layer in self.inner.layers.iter() {
+        for layer in self
+            .inner
+            .layers
+            .iter()
+            .filter(|layer| layer.accepts(&cache_key))
+        {
             let cache_path = layer.path.join(&cache_segment);
 
             if cache_path.exists() {
@@ -576,9 +700,16 @@ impl PackageCache {
             }
         }
 
-        // No matches in all layers, let's write to the first writable layer
-        tracing::debug!("no matches in all layers. writing to first writable layer");
-        if let Some(layer) = writable_layers.first() {
+        // No matches in eligible layers: write to the first eligible,
+        // writable layer.
+        tracing::debug!("no matches in eligible layers; writing to first eligible writable layer");
+        if let Some(layer) = self
+            .inner
+            .layers
+            .iter()
+            .filter(|layer| layer.accepts(&cache_key))
+            .find(|layer| !layer.is_readonly())
+        {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
                 Ok(cache_metadata) => Ok(cache_metadata),
                 Err(e) => Err(e.into()),
@@ -1156,7 +1287,9 @@ mod test {
     use rattler_conda_types::package::{
         BuildString, CondaArchiveIdentifier, PackageFile, PathsJson,
     };
-    use rattler_conda_types::{PackageName, PackageRecord, RepoDataRecord, VersionWithSource};
+    use rattler_conda_types::{
+        MatchSpec, PackageName, PackageRecord, RepoDataRecord, VersionWithSource,
+    };
     use rattler_digest::{
         Sha256, compute_bytes_digest, compute_file_digest, parse_digest_from_hex,
     };
@@ -1169,7 +1302,7 @@ mod test {
     use tokio_stream::StreamExt;
     use url::Url;
 
-    use super::{PackageCache, cache_lock, rename_with_retry};
+    use super::{PackageCache, PackageCacheLayer, cache_lock, rename_with_retry};
     use crate::{
         package_cache::{CacheKey, PackageCacheError},
         validation::{ValidationMode, validate_package_directory},
@@ -1718,6 +1851,125 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(50)).await;
+    }
+
+    fn clobber_python_spec() -> MatchSpec {
+        "clobber-python ==0.1.0 cpython".parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_layer_filters_route_packages_to_different_layers() {
+        let temp = tempdir().unwrap();
+        let global = tempdir().unwrap();
+        let spec = clobber_python_spec();
+        let cache = PackageCache::new(global.path())
+            .excluding_from_all_layers(spec.clone())
+            .with_prepended_layer(PackageCacheLayer::new(temp.path()).with_filter(spec));
+
+        let python = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let other = get_test_data_dir().join("clobber/clobber-pypy-0.1.0-h4616a5c_0.conda");
+
+        let python_metadata = cache
+            .get_or_fetch_from_path(&python, None, None)
+            .await
+            .unwrap();
+        let other_metadata = cache
+            .get_or_fetch_from_path(&other, None, None)
+            .await
+            .unwrap();
+
+        assert!(python_metadata.path().starts_with(temp.path()));
+        assert!(
+            !global
+                .path()
+                .join(python_metadata.path().file_name().unwrap())
+                .exists()
+        );
+        assert!(other_metadata.path().starts_with(global.path()));
+        assert!(
+            !temp
+                .path()
+                .join(other_metadata.path().file_name().unwrap())
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_layer_filters_apply_to_lookup_and_index() {
+        let temp = tempdir().unwrap();
+        let global = tempdir().unwrap();
+        let package = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+        let identifier = CondaArchiveIdentifier::try_from_path(&package).unwrap();
+
+        // Seed an entry that the subsequently routed cache must not use.
+        PackageCache::new(global.path())
+            .get_or_fetch_from_path(&package, None, None)
+            .await
+            .unwrap();
+
+        let spec = clobber_python_spec();
+        let cache = PackageCache::from_layers(
+            [
+                PackageCacheLayer::new(temp.path()).with_filter(spec.clone()),
+                PackageCacheLayer::new(global.path()).excluding(spec),
+            ],
+            false,
+        );
+
+        assert!(
+            !cache
+                .index()
+                .await
+                .unwrap()
+                .contains_path(identifier, &package)
+        );
+        let metadata = cache
+            .get_or_fetch_from_path(&package, None, None)
+            .await
+            .unwrap();
+        assert!(metadata.path().starts_with(temp.path()));
+    }
+
+    #[tokio::test]
+    async fn test_first_eligible_layer_wins() {
+        let first = tempdir().unwrap();
+        let second = tempdir().unwrap();
+        let package = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        for path in [first.path(), second.path()] {
+            PackageCache::new(path)
+                .get_or_fetch_from_path(&package, None, None)
+                .await
+                .unwrap();
+        }
+
+        let cache = PackageCache::from_layers(
+            [
+                PackageCacheLayer::new(first.path()),
+                PackageCacheLayer::new(second.path()),
+            ],
+            false,
+        );
+        let metadata = cache
+            .get_or_fetch_from_path(&package, None, None)
+            .await
+            .unwrap();
+        assert!(metadata.path().starts_with(first.path()));
+    }
+
+    #[tokio::test]
+    async fn test_no_eligible_writable_layer() {
+        let layer = tempdir().unwrap();
+        let cache = PackageCache::from_layers(
+            [PackageCacheLayer::new(layer.path()).with_filter(clobber_python_spec())],
+            false,
+        );
+        let package = get_test_data_dir().join("clobber/clobber-pypy-0.1.0-h4616a5c_0.conda");
+
+        assert_matches!(
+            cache.get_or_fetch_from_path(&package, None, None).await,
+            Err(PackageCacheError::NoWritableLayers)
+        );
     }
 
     /// An index over a cache directory that does not exist yet is empty rather
