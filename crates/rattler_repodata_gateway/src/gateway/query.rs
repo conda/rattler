@@ -538,6 +538,10 @@ impl QueryExecutor {
                         (SubdirKind::Custom, fut)
                     }
                     Source::SparseRepoData(sparse) => {
+                        let kind = SubdirKind::Channel {
+                            url: sparse.channel.base_url.clone(),
+                            platform,
+                        };
                         // A single `SparseRepoData` only ever represents one
                         // channel/subdir pair, so every other platform is
                         // treated as having no records, same as a channel
@@ -558,7 +562,7 @@ impl QueryExecutor {
                                 warning: None,
                             })
                         });
-                        (SubdirKind::Custom, fut)
+                        (kind, fut)
                     }
                 };
 
