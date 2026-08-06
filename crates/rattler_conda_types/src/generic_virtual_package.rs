@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
 /// `version` and a `build_string`. Virtual packages without a build identifier
-/// (e.g. `__cuda`) carry an empty build string.
+/// (e.g. `__cuda`) carry the build string `"0"`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GenericVirtualPackage {
     /// The name of the package
@@ -14,7 +14,7 @@ pub struct GenericVirtualPackage {
     /// The version of the package
     pub version: Version,
 
-    /// The build identifier of the package. Empty when the virtual package
+    /// The build identifier of the package. `"0"` when the virtual package
     /// has no build identifier.
     pub build_string: BuildString,
 }
@@ -51,10 +51,10 @@ impl<'de> Deserialize<'de> for GenericVirtualPackage {
             .unwrap_or("0")
             .parse()
             .map_err(serde::de::Error::custom)?;
-        let build_string = parts
-            .next()
-            .map(BuildString::new_unchecked)
-            .unwrap_or_default();
+        let build_string = parts.next().map_or_else(
+            || BuildString::new_unchecked("0"),
+            BuildString::new_unchecked,
+        );
 
         Ok(GenericVirtualPackage {
             name,
@@ -83,15 +83,16 @@ mod tests {
         let p = GenericVirtualPackage {
             name: "foo".parse().unwrap(),
             version: "1.2.3".parse().unwrap(),
-            build_string: BuildString::default(),
+            build_string: BuildString::new_unchecked("0"),
         };
         let s = serde_json::to_string(&p).unwrap();
-        assert_eq!(s, "\"foo=1.2.3\"");
+        assert_eq!(s, "\"foo=1.2.3=0\"");
         let p2: GenericVirtualPackage = serde_json::from_str(&s).unwrap();
         assert_eq!(p, p2);
 
+        // A missing version and build string default to "0".
         let p2: GenericVirtualPackage = serde_json::from_str("\"__cuda\"").unwrap();
         let s = serde_json::to_string(&p2).unwrap();
-        assert_eq!(s, "\"__cuda=0\"");
+        assert_eq!(s, "\"__cuda=0=0\"");
     }
 }

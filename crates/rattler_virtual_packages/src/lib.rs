@@ -1236,7 +1236,7 @@ impl From<Ios> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__ios"),
             version: ios.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }
@@ -1296,7 +1296,7 @@ impl From<Android> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__android"),
             version: android.version,
-            build_string: "0".into(),
+            build_string: BuildString::new_unchecked("0"),
         }
     }
 }

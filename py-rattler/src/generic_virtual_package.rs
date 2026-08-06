@@ -33,8 +33,8 @@ impl From<PyVirtualPackage> for PyGenericVirtualPackage {
 
 #[pymethods]
 impl PyGenericVirtualPackage {
-    /// Constructs a new `GenericVirtualPackage`. An empty `build_string`
-    /// records the virtual package as having no build identifier.
+    /// Constructs a new `GenericVirtualPackage`. Virtual packages without a
+    /// build identifier use `"0"` as their `build_string`.
     #[new]
     pub fn new(name: PyPackageName, version: PyVersion, build_string: String) -> Self {
         Self {

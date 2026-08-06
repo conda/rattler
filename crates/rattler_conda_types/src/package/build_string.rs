@@ -24,30 +24,27 @@ pub enum BuildStringError {
     },
 
     /// The value is empty. CEP26 requires a build string to contain at least
-    /// one character. Use [`BuildString::empty`] to explicitly represent the
-    /// absence of a build string.
-    #[error(
-        "build string is empty: CEP26 requires at least one character (use `BuildString::empty` to represent the absence of a build string)"
-    )]
+    /// one character. Packages without a meaningful build string should use
+    /// `"0"` instead.
+    #[error("build string is empty: CEP26 requires at least one character")]
     Empty,
 }
 
 /// A conda build string.
 ///
-/// `BuildString` is an opaque newtype around a `String`. The empty value is a
-/// first-class state: packages without a built artifact (or virtual packages
-/// without a build identifier) carry an empty `BuildString` rather than a
-/// missing one. The empty value is *not* itself a valid CEP26 build string --
-/// it is the sentinel for "no build string". Construct it explicitly with
-/// [`BuildString::empty`] (or `Default`). [`BuildString::new`] performs strict
-/// CEP26 validation (allowed characters, length, non-empty);
-/// [`BuildString::new_unchecked`] skips validation.
+/// `BuildString` is an opaque newtype around a `String`. [`BuildString::new`]
+/// performs strict CEP26 validation (allowed characters, length, non-empty);
+/// [`BuildString::new_unchecked`] skips validation. Packages without a
+/// meaningful build string (e.g. virtual packages without a build identifier)
+/// should use `"0"`. An empty value can still be encountered when reading
+/// existing data (deserialization does not validate) but cannot be
+/// constructed through the validating API.
 ///
 /// The internal structure of the build string (prefix, hash, build number) is
 /// intentionally not exposed -- callers should treat the value as a single
 /// opaque token. Use [`BuildString::append`] / [`BuildString::prepend`] to
 /// build composite values; both validate the combined result.
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct BuildString(String);
 
@@ -58,22 +55,12 @@ impl BuildString {
     /// Construct a `BuildString` with CEP26 validation.
     ///
     /// Returns `Err(...)` if `value` is empty, contains a disallowed
-    /// character, or exceeds the maximum length. To represent a package
-    /// without a build string use [`BuildString::empty`] instead.
+    /// character, or exceeds the maximum length. Packages without a
+    /// meaningful build string should use `"0"` instead.
     pub fn new(value: impl Into<String>) -> Result<Self, BuildStringError> {
         let value = value.into();
         Self::validate(&value)?;
         Ok(Self(value))
-    }
-
-    /// Construct the empty `BuildString`, the explicit sentinel for "this
-    /// package has no build string" (e.g. source packages without a built
-    /// artifact, or virtual packages without a build identifier).
-    ///
-    /// The empty value is not a valid CEP26 build string and can therefore
-    /// never collide with the build string of a real package.
-    pub fn empty() -> Self {
-        Self(String::new())
     }
 
     /// Construct a `BuildString` without validation.
@@ -104,10 +91,7 @@ impl BuildString {
     /// only). The receiver is left unchanged if validation fails.
     pub fn append(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
         let combined = format!("{}{}", self.0, other.as_ref());
-        // Combining two empty values leaves the empty sentinel, which is fine.
-        if !combined.is_empty() {
-            Self::validate(&combined)?;
-        }
+        Self::validate(&combined)?;
         self.0 = combined;
         Ok(())
     }
@@ -117,10 +101,7 @@ impl BuildString {
     /// only). The receiver is left unchanged if validation fails.
     pub fn prepend(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
         let combined = format!("{}{}", other.as_ref(), self.0);
-        // Combining two empty values leaves the empty sentinel, which is fine.
-        if !combined.is_empty() {
-            Self::validate(&combined)?;
-        }
+        Self::validate(&combined)?;
         self.0 = combined;
         Ok(())
     }
@@ -239,12 +220,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_is_empty() {
-        assert!(BuildString::empty().is_empty());
-        assert_eq!(BuildString::empty(), BuildString::default());
-    }
-
-    #[test]
     fn new_accepts_max_length() {
         let input = "a".repeat(64);
         let bs = BuildString::new(&input).unwrap();
@@ -255,16 +230,6 @@ mod tests {
     fn new_unchecked_accepts_anything() {
         let bs = BuildString::new_unchecked("not-valid!");
         assert_eq!(bs.as_str(), "not-valid!");
-    }
-
-    #[test]
-    fn new_unchecked_accepts_empty() {
-        assert!(BuildString::new_unchecked("").is_empty());
-    }
-
-    #[test]
-    fn default_is_empty() {
-        assert!(BuildString::default().is_empty());
     }
 
     #[test]
@@ -285,20 +250,6 @@ mod tests {
     fn append_empty_is_noop() {
         let mut bs = BuildString::new("py").unwrap();
         bs.append("").unwrap();
-        assert_eq!(bs.as_str(), "py");
-    }
-
-    #[test]
-    fn append_empty_onto_empty_stays_empty() {
-        let mut bs = BuildString::empty();
-        bs.append("").unwrap();
-        assert!(bs.is_empty());
-    }
-
-    #[test]
-    fn append_onto_empty() {
-        let mut bs = BuildString::default();
-        bs.append("py").unwrap();
         assert_eq!(bs.as_str(), "py");
     }
 
@@ -356,15 +307,6 @@ mod tests {
         let bs = BuildString::new("py36h1af98f8_2").unwrap();
         let json = serde_json::to_string(&bs).unwrap();
         assert_eq!(json, "\"py36h1af98f8_2\"");
-        let parsed: BuildString = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed, bs);
-    }
-
-    #[test]
-    fn serde_roundtrip_empty() {
-        let bs = BuildString::default();
-        let json = serde_json::to_string(&bs).unwrap();
-        assert_eq!(json, "\"\"");
         let parsed: BuildString = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, bs);
     }
