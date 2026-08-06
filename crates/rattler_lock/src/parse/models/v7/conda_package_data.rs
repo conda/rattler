@@ -14,7 +14,7 @@ use serde_with::serde_as;
 use url::Url;
 
 use crate::{
-    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
+    CondaPackageData, ConversionError, UrlOrPath, VariantValue, Verbatim,
     conda::CondaBinaryData,
     utils::derived_fields::{self, LocationDerivedFields},
 };
@@ -50,8 +50,12 @@ fn skip_variant_serialization(input: &Option<Cow<'_, BTreeMap<String, VariantVal
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub(crate) struct CondaPackageDataModel<'a> {
     /// The location of the package. This can be a URL or a path.
+    ///
+    /// Stored verbatim so a relative path round-trips: the `given` string is
+    /// re-emitted on serialization, while the inner value is left for the
+    /// consumer to resolve against the lock file's base directory.
     #[serde(rename = "conda")]
-    pub location: UrlOrPath,
+    pub location: Cow<'a, Verbatim<UrlOrPath>>,
 
     // Unique identifiers go to the top
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -134,7 +138,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
-        let derived = LocationDerivedFields::new(&value.location);
+        let derived = LocationDerivedFields::new(value.location.inner());
         let build = value
             .build
             .map(Cow::into_owned)
@@ -199,6 +203,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
         // Binary packages require a valid archive filename
         if value
             .location
+            .inner()
             .file_name()
             .is_none_or(|name| DistArchiveIdentifier::try_from_filename(name).is_none())
         {
@@ -216,7 +221,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
         }?;
 
         Ok(CondaBinaryData {
-            location: value.location,
+            location: value.location.into_owned(),
             file_name,
             channel: value
                 .channel
@@ -239,7 +244,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
 impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
     fn from(value: &'a CondaBinaryData) -> Self {
         let package_record = &value.package_record;
-        let derived = LocationDerivedFields::new(&value.location);
+        let derived = LocationDerivedFields::new(value.location.inner());
         let derived_build_number =
             derived_fields::derive_build_number_from_build(&package_record.build).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
@@ -254,7 +259,7 @@ impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
             .map(Cow::into_owned);
 
         Self {
-            location: value.location.clone(),
+            location: Cow::Borrowed(&value.location),
             name: (Some(package_record.name.as_source())
                 != derived.name.as_ref().map(PackageName::as_source))
             .then_some(Cow::Borrowed(&package_record.name)),
