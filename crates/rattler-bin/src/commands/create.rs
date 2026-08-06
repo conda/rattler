@@ -246,6 +246,7 @@ pub async fn create(opt: Opt, offline: bool) -> miette::Result<()> {
             VirtualPackages::detect_for_platform(
                 install_platform,
                 &VirtualPackageOverrides::from_env(),
+                rattler::default_cache_dir().ok().as_deref(),
             )
             .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
             .into_diagnostic()

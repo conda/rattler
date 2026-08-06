@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use pyo3::{PyResult, pyclass, pymethods};
 use rattler_virtual_packages::{Override, VirtualPackage, VirtualPackageOverrides};
 
@@ -177,14 +179,23 @@ impl PyVirtualPackage {
     // we just warn directly from python.
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {
-        Self::detect(&PyVirtualPackageOverrides::none())
+        Self::detect(&PyVirtualPackageOverrides::none(), None)
     }
 
+    /// Returns virtual packages detected for the current system with the given overrides. If
+    /// `cache_dir` is given, expensive detection results (currently CUDA) are cached there across
+    /// processes until the next reboot.
     #[staticmethod]
-    pub fn detect(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
-        Ok(VirtualPackage::detect(&overrides.clone().into())
-            .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
-            .map_err(PyRattlerError::from)?)
+    #[pyo3(signature = (overrides, cache_dir=None))]
+    pub fn detect(
+        overrides: &PyVirtualPackageOverrides,
+        cache_dir: Option<PathBuf>,
+    ) -> PyResult<Vec<Self>> {
+        Ok(
+            VirtualPackage::detect(&overrides.clone().into(), cache_dir.as_deref())
+                .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
+                .map_err(PyRattlerError::from)?,
+        )
     }
 
     pub fn as_generic(&self) -> PyGenericVirtualPackage {

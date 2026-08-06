@@ -17,6 +17,8 @@ once_cell = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 archspec = { workspace = true }
@@ -26,6 +28,11 @@ plist = { workspace = true }
 
 [target.'cfg(target_os="windows")'.dependencies]
 winver = { workspace = true }
+windows-sys = { workspace = true, features = [
+    "Win32_System_SystemInformation",
+    "Win32_System_Registry",
+    "Win32_Devices_DeviceAndDriverInstallation",
+] }
 
 [dev-dependencies]
 temp-env = { workspace = true }

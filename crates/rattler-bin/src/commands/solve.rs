@@ -186,9 +186,13 @@ pub async fn solve(opt: Opt, offline: bool) -> miette::Result<()> {
         if let Some(virtual_packages) = &opt.virtual_package {
             parse_virtual_packages(virtual_packages)
         } else {
-            VirtualPackages::detect_for_platform(opt.platform, &VirtualPackageOverrides::from_env())
-                .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
-                .into_diagnostic()
+            VirtualPackages::detect_for_platform(
+                opt.platform,
+                &VirtualPackageOverrides::from_env(),
+                rattler::default_cache_dir().ok().as_deref(),
+            )
+            .map(|vpkgs| vpkgs.into_generic_virtual_packages().collect::<Vec<_>>())
+            .into_diagnostic()
         }
     })?;
 

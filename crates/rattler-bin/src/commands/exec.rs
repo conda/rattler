@@ -262,13 +262,15 @@ async fn create_exec_prefix(options: CreateExecPrefixOptions<'_>) -> miette::Res
     tracing::debug!("loaded {} records from repodata", total_records);
 
     // Determine virtual packages of the current platform
-    let virtual_packages: Vec<GenericVirtualPackage> =
-        VirtualPackage::detect(&VirtualPackageOverrides::from_env())
-            .into_diagnostic()
-            .context("failed to determine virtual packages")?
-            .into_iter()
-            .map(GenericVirtualPackage::from)
-            .collect();
+    let virtual_packages: Vec<GenericVirtualPackage> = VirtualPackage::detect(
+        &VirtualPackageOverrides::from_env(),
+        rattler::default_cache_dir().ok().as_deref(),
+    )
+    .into_diagnostic()
+    .context("failed to determine virtual packages")?
+    .into_iter()
+    .map(GenericVirtualPackage::from)
+    .collect();
 
     let solver_task = SolverTask {
         specs: specs.to_vec(),
