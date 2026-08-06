@@ -414,8 +414,9 @@ pub struct PackageRecord {
     pub arch: Option<String>,
 
     /// The build string of the package. Source packages without a built
-    /// artifact carry an empty build string.
-    #[serde(default, skip_serializing_if = "BuildString::is_empty")]
+    /// artifact carry an empty build string. The field is always serialized
+    /// (as `""` when empty) and required when deserializing, matching how
+    /// conda itself treats the `build` key in repodata and conda-meta files.
     pub build: BuildString,
 
     /// The build number of the package

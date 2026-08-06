@@ -32,15 +32,13 @@ impl InstallationResultRecord {
         match self {
             InstallationResultRecord::Max(prefix_record) => Ok(prefix_record),
             InstallationResultRecord::Min(minimal_prefix_record) => {
-                let name = minimal_prefix_record.name.as_normalized();
-                let version = &minimal_prefix_record.version;
-                let build = &minimal_prefix_record.build;
-                let record_name = if build.is_empty() {
-                    format!("{version}-{name}.json")
-                } else {
-                    format!("{build}-{version}-{name}.json")
-                };
-                let record_path = prefix.as_ref().join(record_name);
+                let record_name = format!(
+                    "{name}-{version}-{build}.json",
+                    name = minimal_prefix_record.name.as_normalized(),
+                    version = minimal_prefix_record.version,
+                    build = minimal_prefix_record.build,
+                );
+                let record_path = prefix.as_ref().join("conda-meta").join(record_name);
                 PrefixRecord::from_path(record_path)
             }
         }

@@ -14,14 +14,22 @@ pub enum BuildStringError {
         character: char,
     },
 
-    /// The value exceeds the byte length CEP26 allows for a build string.
-    #[error("build string is too long: CEP26 allows at most {max} bytes, got {actual}")]
+    /// The value exceeds the length CEP26 allows for a build string.
+    #[error("build string is too long: CEP26 allows at most {max} characters, got {actual}")]
     TooLong {
-        /// The actual byte length of the offending value.
+        /// The actual length of the offending value.
         actual: usize,
-        /// The maximum byte length CEP26 allows.
+        /// The maximum length CEP26 allows.
         max: usize,
     },
+
+    /// The value is empty. CEP26 requires a build string to contain at least
+    /// one character. Use [`BuildString::empty`] to explicitly represent the
+    /// absence of a build string.
+    #[error(
+        "build string is empty: CEP26 requires at least one character (use `BuildString::empty` to represent the absence of a build string)"
+    )]
+    Empty,
 }
 
 /// A conda build string.
@@ -29,9 +37,11 @@ pub enum BuildStringError {
 /// `BuildString` is an opaque newtype around a `String`. The empty value is a
 /// first-class state: packages without a built artifact (or virtual packages
 /// without a build identifier) carry an empty `BuildString` rather than a
-/// missing one. Use [`BuildString::new`] for CEP26 validation (allowed
-/// characters and byte length); [`BuildString::new_unchecked`] skips
-/// validation.
+/// missing one. The empty value is *not* itself a valid CEP26 build string --
+/// it is the sentinel for "no build string". Construct it explicitly with
+/// [`BuildString::empty`] (or `Default`). [`BuildString::new`] performs strict
+/// CEP26 validation (allowed characters, length, non-empty);
+/// [`BuildString::new_unchecked`] skips validation.
 ///
 /// The internal structure of the build string (prefix, hash, build number) is
 /// intentionally not exposed -- callers should treat the value as a single
@@ -47,13 +57,23 @@ impl BuildString {
 
     /// Construct a `BuildString` with CEP26 validation.
     ///
-    /// Returns `Err(...)` if `value` contains a disallowed character or
-    /// exceeds the maximum length. The empty string is accepted and yields an
-    /// empty `BuildString`.
+    /// Returns `Err(...)` if `value` is empty, contains a disallowed
+    /// character, or exceeds the maximum length. To represent a package
+    /// without a build string use [`BuildString::empty`] instead.
     pub fn new(value: impl Into<String>) -> Result<Self, BuildStringError> {
         let value = value.into();
         Self::validate(&value)?;
         Ok(Self(value))
+    }
+
+    /// Construct the empty `BuildString`, the explicit sentinel for "this
+    /// package has no build string" (e.g. source packages without a built
+    /// artifact, or virtual packages without a build identifier).
+    ///
+    /// The empty value is not a valid CEP26 build string and can therefore
+    /// never collide with the build string of a real package.
+    pub fn empty() -> Self {
+        Self(String::new())
     }
 
     /// Construct a `BuildString` without validation.
@@ -84,7 +104,10 @@ impl BuildString {
     /// only). The receiver is left unchanged if validation fails.
     pub fn append(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
         let combined = format!("{}{}", self.0, other.as_ref());
-        Self::validate(&combined)?;
+        // Combining two empty values leaves the empty sentinel, which is fine.
+        if !combined.is_empty() {
+            Self::validate(&combined)?;
+        }
         self.0 = combined;
         Ok(())
     }
@@ -94,19 +117,27 @@ impl BuildString {
     /// only). The receiver is left unchanged if validation fails.
     pub fn prepend(&mut self, other: impl AsRef<str>) -> Result<(), BuildStringError> {
         let combined = format!("{}{}", other.as_ref(), self.0);
-        Self::validate(&combined)?;
+        // Combining two empty values leaves the empty sentinel, which is fine.
+        if !combined.is_empty() {
+            Self::validate(&combined)?;
+        }
         self.0 = combined;
         Ok(())
     }
 
     fn validate(value: &str) -> Result<(), BuildStringError> {
+        if value.is_empty() {
+            return Err(BuildStringError::Empty);
+        }
+        Self::check_invalid_chars(value)?;
+        // Valid values are ASCII only, so bytes == characters here.
         if value.len() > Self::MAX_LEN {
             return Err(BuildStringError::TooLong {
                 actual: value.len(),
                 max: Self::MAX_LEN,
             });
         }
-        Self::check_invalid_chars(value)
+        Ok(())
     }
 
     fn check_invalid_chars(value: &str) -> Result<(), BuildStringError> {
@@ -202,9 +233,15 @@ mod tests {
     }
 
     #[test]
-    fn new_accepts_empty() {
-        let bs = BuildString::new("").unwrap();
-        assert!(bs.is_empty());
+    fn new_rejects_empty() {
+        let err = BuildString::new("").unwrap_err();
+        assert!(matches!(err, BuildStringError::Empty));
+    }
+
+    #[test]
+    fn empty_is_empty() {
+        assert!(BuildString::empty().is_empty());
+        assert_eq!(BuildString::empty(), BuildString::default());
     }
 
     #[test]
@@ -249,6 +286,13 @@ mod tests {
         let mut bs = BuildString::new("py").unwrap();
         bs.append("").unwrap();
         assert_eq!(bs.as_str(), "py");
+    }
+
+    #[test]
+    fn append_empty_onto_empty_stays_empty() {
+        let mut bs = BuildString::empty();
+        bs.append("").unwrap();
+        assert!(bs.is_empty());
     }
 
     #[test]
