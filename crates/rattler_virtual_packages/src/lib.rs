@@ -308,15 +308,15 @@ impl VirtualPackages {
     /// # Cross-compilation defaults
     ///
     /// When cross-compiling (targeting a platform different from the current one), the following
-    /// defaults are used if no override is provided (see the [`defaults`] module, the versions
-    /// match the defaults used by pixi):
+    /// defaults are used if no override is provided (see the [`defaults`] module):
     ///
-    /// - **Windows** (`__win`): Version 10.0
-    /// - **Linux** (`__linux`): Version 4.18
-    /// - **OSX** (`__osx`): Version 13.0
+    /// - **Windows** (`__win`): [`defaults::default_windows_version`]
+    /// - **Linux** (`__linux`): [`defaults::default_linux_version`]
+    /// - **OSX** (`__osx`): [`defaults::default_mac_os_version`]
     /// - **iOS** (`__ios`): Version 0 (minimum supported iOS version)
     /// - **Android** (`__android`): Version 0 (minimum supported API level)
-    /// - **`LibC`** (`__glibc`): `glibc` with version 2.28 (only for Linux platforms)
+    /// - **`LibC`** (`__glibc`): `glibc` with [`defaults::default_glibc_version`] (only for Linux
+    ///   platforms)
     /// - **CUDA** (`__cuda`): Not included (None)
     /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
     pub fn detect_for_platform(
