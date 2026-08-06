@@ -714,7 +714,7 @@ mod tests {
             let mut package_record = PackageRecord::new(
                 name,
                 VersionWithSource::from_str("1.0.0").unwrap(),
-                "pyhbf21a9e_0".to_string(),
+                rattler_conda_types::package::BuildString::new("pyhbf21a9e_0").unwrap(),
             );
             package_record.subdir = "noarch".to_string();
 

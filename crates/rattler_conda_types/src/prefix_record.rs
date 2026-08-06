@@ -274,8 +274,8 @@ impl PrefixRecord {
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
     /// `<package_name>-<version>-<build>.json`. The three segments are always
-    /// present (an empty build string yields a trailing `-`) so that the file
-    /// name can be parsed back by splitting on the last two `-` characters.
+    /// present so that the file name can be parsed back by splitting on the
+    /// last two `-` characters.
     pub fn file_name(&self) -> String {
         let record = &self.repodata_record.package_record;
         format!(
@@ -473,12 +473,14 @@ mod test {
     }
 
     /// The canonical conda-meta file name must always contain three
-    /// `-`-separated segments, even when the build string is empty, because
-    /// `MinimalPrefixRecord::from_path` parses the name, version and build
-    /// back out of the file name by splitting on the last two `-` characters.
+    /// `-`-separated segments because `MinimalPrefixRecord::from_path` parses
+    /// the name, version and build back out of the file name by splitting on
+    /// the last two `-` characters.
     #[test]
-    fn test_file_name_with_empty_build_round_trips() {
+    fn test_file_name_round_trips() {
         use std::str::FromStr;
+
+        use itertools::Itertools;
 
         use crate::{
             PackageName, PackageRecord, RepoDataRecord, Version,
@@ -490,7 +492,7 @@ mod test {
                 package_record: PackageRecord::new(
                     PackageName::new_unchecked("foo-bar"),
                     Version::from_str("1.0").unwrap(),
-                    BuildString::empty(),
+                    BuildString::new_unchecked("0"),
                 ),
                 identifier: "foo-bar-1.0-py37_0.conda"
                     .parse::<DistArchiveIdentifier>()
@@ -502,10 +504,9 @@ mod test {
         );
 
         let file_name = record.file_name();
-        assert_eq!(file_name, "foo-bar-1.0-.json");
+        assert_eq!(file_name, "foo-bar-1.0-0.json");
 
         // Parse it back the same way `MinimalPrefixRecord::from_path` does.
-        use itertools::Itertools;
         let (build, version, name) = file_name
             .strip_suffix(".json")
             .unwrap()
@@ -514,7 +515,7 @@ mod test {
             .unwrap();
         assert_eq!(name, "foo-bar");
         assert_eq!(version, "1.0");
-        assert_eq!(build, "");
+        assert_eq!(build, "0");
     }
 
     #[test]

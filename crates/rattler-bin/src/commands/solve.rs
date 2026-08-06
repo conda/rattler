@@ -11,7 +11,7 @@ use miette::{Context, IntoDiagnostic};
 use rattler::{default_cache_dir, package_cache::PackageCache};
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseMatchSpecOptions, Platform, RepoDataRecord, Version,
+    ParseMatchSpecOptions, Platform, RepoDataRecord, Version, package::BuildString,
 };
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
@@ -288,7 +288,7 @@ fn parse_virtual_packages(
                     .get(1)
                     .map_or(Version::from_str("0"), |s| Version::from_str(s))
                     .into_diagnostic()?,
-                build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
+                build_string: BuildString::new(*elems.get(2).unwrap_or(&"0")).into_diagnostic()?,
             })
         })
         .collect::<miette::Result<Vec<_>>>()
@@ -326,7 +326,7 @@ fn print_records(
         let fields = [
             name,
             record.package_record.version.to_string(),
-            record.package_record.build.clone(),
+            record.package_record.build.to_string(),
             format_channel(record, channel_config),
         ];
         for (width, field) in widths.iter_mut().zip(&fields) {

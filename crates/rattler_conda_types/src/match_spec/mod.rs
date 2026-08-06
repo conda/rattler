@@ -1183,7 +1183,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::default(),
+                BuildString::new_unchecked("0"),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1219,7 +1219,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::default(),
+                BuildString::new_unchecked("0"),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1248,7 +1248,7 @@ mod tests {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                BuildString::default(),
+                BuildString::new_unchecked("0"),
             ),
             identifier: "mamba-1.0-py37_0.conda"
                 .parse::<DistArchiveIdentifier>()
@@ -1402,17 +1402,17 @@ mod tests {
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("13.0").unwrap(),
-            BuildString::default(),
+            BuildString::new_unchecked("0"),
         )));
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("11.0").unwrap(),
-            BuildString::default(),
+            BuildString::new_unchecked("0"),
         )));
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            BuildString::default(),
+            BuildString::new_unchecked("0"),
         )));
 
         let spec = MatchSpec::from_str(
@@ -1426,13 +1426,13 @@ mod tests {
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
-            BuildString::default(),
+            BuildString::new_unchecked("0"),
         )));
         assert!(spec.matches(&{
             let mut record = PackageRecord::new(
                 PackageName::from_str("foo-bar").unwrap(),
                 Version::from_str("12.0").unwrap(),
-                BuildString::default(),
+                BuildString::new_unchecked("0"),
             );
             record.license = Some("MIT".into());
             record
