@@ -292,8 +292,9 @@ async fn main() -> anyhow::Result<()> {
 ///
 /// A host without an entry and a host with an empty entry are defined to behave
 /// identically, so this never has to report which of the two it found. The entry's
-/// `auth` grant is not part of the result: indexing signs with the credential its
-/// caller supplied, so there is no ambient chain for a grant to gate.
+/// per-container grants are not part of the result: indexing signs with the
+/// credential its caller supplied, so there is no ambient chain for a grant to
+/// gate.
 #[cfg(feature = "azure")]
 fn azure_endpoint(config: &Option<Config>, host: &AzureHost) -> AzureEndpoint {
     config
@@ -378,9 +379,11 @@ mod tests {
         let config = config_from(
             r#"
             [azure-options."127.0.0.1:10000"]
-            auth = true
             scheme = "http"
             path-style = true
+
+            [azure-options."127.0.0.1:10000".auth]
+            general = true
             "#,
         );
         let channel =

@@ -209,14 +209,25 @@ expression: "(unused, normalized(config))"
             azure_options: AzureOptionsMap(
                 {
                     AzureHost("127.0.0.1:10000"): AzureEndpointOptions {
-                        auth: DefaultChain,
                         scheme: Http,
                         addressing: PathStyle,
+                        auth: {
+                            ContainerName(
+                                "general",
+                            ): DefaultChain,
+                        },
                     },
                     AzureHost("mycompany.blob.core.windows.net"): AzureEndpointOptions {
-                        auth: DefaultChain,
                         scheme: Https,
                         addressing: HostStyle,
+                        auth: {
+                            ContainerName(
+                                "public",
+                            ): Anonymous,
+                            ContainerName(
+                                "releases",
+                            ): DefaultChain,
+                        },
                     },
                 },
             ),

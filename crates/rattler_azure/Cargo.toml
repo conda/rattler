@@ -18,13 +18,16 @@ clap = ["dep:clap", "dep:jiff", "dep:which", "dep:tokio"]
 # `azblob_config`: build an opendal `AzblobConfig` from a channel URL.
 opendal = ["dep:opendal"]
 # Serde derives for the `azure-options` config table: the per-host endpoint
-# options and the `AzureHost` used as their map key. The types themselves are
-# always compiled; only the derives are gated. Pulls in `serde` alone, so config
-# crates can depend on this crate with default features off.
-serde = ["dep:serde"]
+# options, the `AzureHost` used as their map key and the `ContainerName` keying
+# their per-container grants. The types themselves are always compiled; only the
+# derives are gated. Pulls in `serde` alone, so config crates can depend on this
+# crate with default features off.
+serde = ["dep:serde", "indexmap/serde"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
+# The per-container grant table, which keeps the order the config file wrote.
+indexmap = { workspace = true }
 jiff = { workspace = true, optional = true }
 opendal = { workspace = true, default-features = false, features = [
   "services-azblob",

@@ -8,7 +8,6 @@
 //!
 //! ```toml
 //! [azure-options."127.0.0.1:10000"]
-//! auth = true
 //! scheme = "http"
 //! path-style = true
 //! ```
@@ -37,7 +36,7 @@ use std::{collections::HashMap, path::PathBuf};
 use opendal::{Configurator, ErrorKind, Operator, services::AzblobConfig};
 use rattler_azure::{
     Addressing, Auth, AzureChannelUrl, AzureCredentials, AzureEndpoint, AzureEndpointOptions,
-    AzureHost, AzureScheme,
+    AzureHost, AzureScheme, ContainerName,
 };
 use rattler_index::{IndexAzureConfig, PackageRevisionAssignment, index_azure};
 
@@ -83,9 +82,16 @@ fn channel(prefix: &str) -> AzureChannelUrl {
 
 /// The `azure-options` entry for the emulator: the only configuration these tests
 /// hand to the indexer.
+///
+/// The grant on `CONTAINER` is for the fetch-side fixture below — `index_azure`
+/// signs with the credential it is handed and never reads a grant — and it is
+/// written per container because that is the only scope a grant has.
 fn azurite_options() -> AzureEndpointOptions {
     AzureEndpointOptions::new(
-        Auth::DefaultChain,
+        [(
+            ContainerName::new(CONTAINER).expect("azurite container name"),
+            Auth::DefaultChain,
+        )],
         AzureEndpoint {
             scheme: AzureScheme::Http,
             addressing: Addressing::PathStyle,
@@ -154,7 +160,7 @@ async fn ensure_empty_prefix(prefix: &str) {
 fn azure_client() -> reqwest_middleware::ClientWithMiddleware {
     let options = HashMap::from([(
         AzureHost::parse(AUTHORITY).expect("azurite authority is a valid host:port"),
-        azurite_options().fetch(),
+        azurite_options(),
     )]);
     reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
         .with(rattler_networking::AzureMiddleware::new(
@@ -206,7 +212,7 @@ async fn ensure_container() {
 /// Run `body` with the emulator credentials in the environment.
 ///
 /// reqsign's env provider sits first in its default chain, so a shared key is how
-/// an `auth = true` grant resolves against Azurite — it rejects the AAD bearer
+/// a container's grant resolves against Azurite — it rejects the AAD bearer
 /// tokens the rest of the chain produces. The chain itself is left alone.
 async fn with_azurite_credentials<F: Future<Output = ()>>(body: F) {
     temp_env::async_with_vars(

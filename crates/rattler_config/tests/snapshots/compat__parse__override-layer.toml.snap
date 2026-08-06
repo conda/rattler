@@ -137,7 +137,20 @@ expression: "(unused, normalized(config))"
                 },
             ),
             azure_options: AzureOptionsMap(
-                {},
+                {
+                    AzureHost("mycompany.blob.core.windows.net"): AzureEndpointOptions {
+                        scheme: Https,
+                        addressing: HostStyle,
+                        auth: {
+                            ContainerName(
+                                "public",
+                            ): Anonymous,
+                            ContainerName(
+                                "staging",
+                            ): DefaultChain,
+                        },
+                    },
+                },
             ),
             index_config: IndexConfig {
                 default: IndexChannelConfig {

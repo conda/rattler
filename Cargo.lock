@@ -5054,6 +5054,7 @@ name = "rattler_azure"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "indexmap 2.14.0",
  "jiff",
  "opendal",
  "percent-encoding",

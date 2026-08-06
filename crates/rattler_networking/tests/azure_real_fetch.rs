@@ -19,7 +19,7 @@
 
 use std::collections::HashMap;
 
-use rattler_azure::{Auth, AzureFetchOptions, AzureHost};
+use rattler_azure::{Auth, AzureEndpoint, AzureEndpointOptions, AzureHost, ContainerName};
 use rattler_networking::AzureMiddleware;
 use reqwest_middleware::ClientBuilder;
 
@@ -34,15 +34,20 @@ async fn azure_middleware_fetches_real_repodata() {
         .unwrap_or_else(|_| format!("{account}.blob.core.windows.net"));
 
     // The grant is what makes this the AAD test rather than an anonymous read: an
-    // `azure-options` entry for the host is the only thing that lets the
+    // `azure-options` entry naming this container is the only thing that lets the
     // `az login` credential attach to it, and it makes a broken credential fail
-    // loudly instead of falling through to an unsigned 404.
+    // loudly instead of falling through to an unsigned 404. Sibling containers on
+    // the same account are unaffected, which is the point of keying it per
+    // container.
     let options = HashMap::from([(
         AzureHost::parse(&host).expect("AZURE_TEST_HOST is not a valid host[:port]"),
-        AzureFetchOptions {
-            auth: Auth::DefaultChain,
-            ..Default::default()
-        },
+        AzureEndpointOptions::new(
+            [(
+                ContainerName::new(&container).expect("AZURE_TEST_CONTAINER is not a valid name"),
+                Auth::DefaultChain,
+            )],
+            AzureEndpoint::default(),
+        ),
     )]);
 
     let client = ClientBuilder::new(reqwest::Client::new())

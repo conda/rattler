@@ -5,10 +5,11 @@
 //!
 //! This crate does not police which hosts are legitimate Azure endpoints: the
 //! host a channel URL names is taken to be the storage endpoint it says it is.
-//! What a host is *granted* — credentials, wire scheme, addressing style — is
-//! declared per host in [`options`] and never inferred from the host name, and
-//! the default grant is [`Auth::Anonymous`], so naming a host in a URL by itself
-//! sends nothing to it. Nothing here signs or sends a request either — that lives
+//! What is *granted* — credentials, wire scheme, addressing style — is declared in
+//! [`options`] and never inferred from the host name: the wire scheme and the
+//! addressing per host, and credentials per *container*, because that is the scope
+//! Azure's own RBAC has. The default grant is [`Auth::Anonymous`], so naming a host
+//! or a container in a URL by itself sends nothing to it. Nothing here signs or sends a request either — that lives
 //! in `rattler_networking` — but two functions do handle a credential:
 //! `azblob_config` embeds the account key or SAS it is handed into the config it
 //! returns, and `mint_user_delegation_sas` spends the user's `az login` session to
@@ -234,7 +235,19 @@ impl std::fmt::Display for AccountName {
 ///
 /// Exists for the same reason as [`AccountName`], and is what the container half
 /// of the `az` argv is spelled as.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// It is also the key of an `auth` table in `azure-options`, which is why it is
+/// hashable and has the same string serde bridge [`AzureHost`] has: a grant is
+/// written per container, and the name a grant is stored under must be the name a
+/// lookup arrives with. Azure's rules do the normalizing for free — a container
+/// name is lowercase by construction, so unlike a host there is only ever one
+/// spelling of one container.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Deserialize, serde::Serialize),
+    serde(try_from = "String", into = "String")
+)]
 pub struct ContainerName(String);
 
 impl ContainerName {
@@ -261,6 +274,32 @@ impl ContainerName {
 impl std::fmt::Display for ContainerName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+impl std::str::FromStr for ContainerName {
+    type Err = AzureUrlError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+/// The serde bridge for using a `ContainerName` as a map key: serde hands map keys
+/// over as owned strings, so `serde(try_from = "String")` is what routes a written
+/// `auth` key through [`ContainerName::new`] instead of storing it raw. A key Azure
+/// would refuse is then a config error at load, not a grant that can never match.
+impl TryFrom<String> for ContainerName {
+    type Error = AzureUrlError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+
+impl From<ContainerName> for String {
+    fn from(container: ContainerName) -> Self {
+        container.0
     }
 }
 
@@ -314,18 +353,15 @@ pub fn account_and_container(
     addressing: Addressing,
 ) -> Result<AzureCoordinates, AzureUrlError> {
     let host = channel.host();
-    // Empty segments are never a valid name, so an empty one is a missing one.
-    let mut segments = channel
-        .path_segments()
-        .map(|segment| (!segment.is_empty()).then_some(segment));
-    let mut next_segment = || segments.next().flatten();
+    let container_segment =
+        || segment(channel, addressing.container_segment()).ok_or(AzureUrlError::NoContainer);
 
     let (account, container) = match addressing {
         Addressing::HostStyle => {
             let account = host
                 .account_label()
                 .ok_or_else(|| AzureUrlError::InvalidHost(host.to_string()))?;
-            (account, next_segment().ok_or(AzureUrlError::NoContainer)?)
+            (account, container_segment()?)
         }
         Addressing::PathStyle => {
             if host.is_known_azure_blob_endpoint() {
@@ -340,8 +376,8 @@ pub fn account_and_container(
                 );
             }
             (
-                next_segment().ok_or(AzureUrlError::NoAccount)?,
-                next_segment().ok_or(AzureUrlError::NoContainer)?,
+                segment(channel, 0).ok_or(AzureUrlError::NoAccount)?,
+                container_segment()?,
             )
         }
     };
@@ -350,6 +386,43 @@ pub fn account_and_container(
         account: AccountName::new(account)?,
         container: ContainerName::new(container)?,
     })
+}
+
+/// The container an Azure Blob URL names, when it names one.
+///
+/// This is the fetch path's half of [`account_and_container`]: a grant is written
+/// per container, so the middleware needs the container and nothing else — no
+/// account, which is what keeps a URL on a host that cannot carry an account label
+/// (an IP literal read host-style) from failing here where it fetches happily
+/// today.
+///
+/// The two answers it can give are deliberately different:
+///
+/// - `Ok(None)`: the URL has no container segment — the host root, or a path too
+///   short to have one under this addressing. There is nothing to attribute a
+///   grant to, so the caller sends nothing.
+/// - `Err`: the segment is there but is not a name Azure allows for a container.
+///   No legitimate blob request can land here, so this is a malformed endpoint
+///   rather than an ungranted one, and saying so beats going quietly anonymous and
+///   surfacing later as an unexplained 401.
+pub fn container(
+    channel: &AzureChannelUrl,
+    addressing: Addressing,
+) -> Result<Option<ContainerName>, AzureUrlError> {
+    segment(channel, addressing.container_segment())
+        .map(ContainerName::new)
+        .transpose()
+}
+
+/// The `index`-th path segment, or `None` when it is missing or empty.
+///
+/// An empty segment is a missing one: no Azure name may be empty, so `//general`
+/// has no first segment rather than an unnamed one.
+fn segment(channel: &AzureChannelUrl, index: usize) -> Option<&str> {
+    channel
+        .path_segments()
+        .nth(index)
+        .filter(|segment| !segment.is_empty())
 }
 
 /// A normalized Azure Blob endpoint authority: a host, and its port when one is
@@ -850,8 +923,8 @@ fn strip_az_scheme(value: &str) -> Option<&str> {
 /// The account name, endpoint, container and root prefix are all derived from the
 /// channel URL, read the way `options.addressing` says to read it and reached over
 /// `options.scheme`; the credentials supply only the account key or SAS token.
-/// `options.auth` is not consulted — this is the write path, where the credential
-/// has already been chosen by the caller.
+/// The per-container grants are not part of [`AzureEndpoint`] at all — this is the
+/// write path, where the credential has already been chosen by the caller.
 ///
 /// Taking the [`AzureChannelUrl`] rather than a wire `Url` is what keeps the
 /// scheme in the config from disagreeing with the scheme in the endpoint: both
@@ -1129,6 +1202,99 @@ mod tests {
             .unwrap(),
             coordinates("acct", "general")
         );
+    }
+
+    /// The fetch path's derivation: it must find the same container
+    /// `account_and_container` does, under both addressing styles, and it must not
+    /// inherit that function's account rules — a host-style IP literal has no
+    /// account label, but it still has a container, and a fetch for it is a request
+    /// that works today.
+    #[test]
+    fn container_is_derived_from_the_addressing() {
+        for (url, addressing, expected) in [
+            (
+                "az://acct.blob.core.windows.net/general/noarch",
+                Addressing::HostStyle,
+                "general",
+            ),
+            (
+                "az://127.0.0.1:10000/devstoreaccount1/general/noarch",
+                Addressing::PathStyle,
+                "general",
+            ),
+            (
+                "az://127.0.0.1:10000/general/noarch",
+                Addressing::HostStyle,
+                "general",
+            ),
+        ] {
+            assert_eq!(
+                container(&channel(url), addressing).unwrap(),
+                Some(ContainerName::new(expected).unwrap()),
+                "{url}"
+            );
+        }
+
+        // Where both derivations answer, they must answer the same thing: a grant
+        // looked up for one container and applied to another is a security bug.
+        for (url, addressing) in [
+            (
+                "az://acct.blob.core.windows.net/general/noarch",
+                Addressing::HostStyle,
+            ),
+            (
+                "az://127.0.0.1:10000/devstoreaccount1/general",
+                Addressing::PathStyle,
+            ),
+        ] {
+            assert_eq!(
+                container(&channel(url), addressing).unwrap(),
+                Some(
+                    account_and_container(&channel(url), addressing)
+                        .unwrap()
+                        .container
+                ),
+                "{url}"
+            );
+        }
+    }
+
+    /// A URL with no container segment is not an error: there is nothing to
+    /// attribute a grant to, so the fetch path sends nothing and stays total for
+    /// URLs that are not channel-scoped.
+    #[test]
+    fn a_url_without_a_container_names_none() {
+        for (url, addressing) in [
+            ("az://acct.blob.core.windows.net", Addressing::HostStyle),
+            ("az://acct.blob.core.windows.net/", Addressing::HostStyle),
+            (
+                "az://127.0.0.1:10000/devstoreaccount1",
+                Addressing::PathStyle,
+            ),
+            ("az://127.0.0.1:10000/", Addressing::PathStyle),
+        ] {
+            assert_eq!(container(&channel(url), addressing).unwrap(), None, "{url}");
+        }
+    }
+
+    /// A segment that cannot be a container name is a malformed endpoint, not an
+    /// ungranted one — Azure forbids uppercase, so no legitimate request lands
+    /// here. Going quietly anonymous would surface as an unexplained 401 instead of
+    /// naming the fault.
+    #[test]
+    fn a_url_with_an_unusable_container_is_an_error() {
+        for url in [
+            "az://acct.blob.core.windows.net/General/noarch",
+            "az://acct.blob.core.windows.net/ab/noarch",
+            "az://acct.blob.core.windows.net/a--b/noarch",
+        ] {
+            let err = container(&channel(url), Addressing::HostStyle)
+                .expect_err("an illegal container name must be reported");
+            assert!(
+                matches!(err, AzureUrlError::InvalidContainerName(_)),
+                "{url}: {err}"
+            );
+        }
     }
 
     #[test]

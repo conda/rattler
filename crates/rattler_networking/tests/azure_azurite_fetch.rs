@@ -6,9 +6,11 @@
 //!
 //! ```toml
 //! [azure-options."127.0.0.1:10000"]
-//! auth = true
 //! scheme = "http"
 //! path-style = true
+//!
+//! [azure-options."127.0.0.1:10000".auth]
+//! cli-channel = true
 //! ```
 //!
 //! Run with:
@@ -26,7 +28,9 @@ use std::{
 };
 
 use async_trait::async_trait;
-use rattler_azure::{Auth, AzureFetchOptions, AzureHost, AzureScheme};
+use rattler_azure::{
+    Addressing, Auth, AzureEndpoint, AzureEndpointOptions, AzureHost, AzureScheme, ContainerName,
+};
 use rattler_networking::AzureMiddleware;
 use reqwest::{
     Request, Response,
@@ -79,17 +83,27 @@ fn channel_url() -> String {
     format!("az://{AUTHORITY}/{ACCOUNT}/{CONTAINER}")
 }
 
-/// The one `azure-options` entry these tests run on, with `auth` as the only
-/// variable. `scheme` and `path-style` stay set even in the ungranted case: the
-/// entry is what makes the emulator reachable at all, and keeping it identical
+/// The one `azure-options` entry these tests run on, with the container's grant as
+/// the only variable. `scheme` and `path-style` stay set even in the ungranted case:
+/// the entry is what makes the emulator reachable at all, and keeping it identical
 /// means the two tests differ in the grant and nothing else.
-fn azurite_entry(auth: Auth) -> HashMap<AzureHost, AzureFetchOptions> {
+///
+/// The grant is written for `CONTAINER` specifically, which is also what makes the
+/// ungranted case below a real test of the per-container lookup rather than of an
+/// empty table: `Auth::Anonymous` here is the container named and *refused*.
+fn azurite_entry(auth: Auth) -> HashMap<AzureHost, AzureEndpointOptions> {
     HashMap::from([(
         AzureHost::parse(AUTHORITY).expect("azurite authority is a valid host:port"),
-        AzureFetchOptions {
-            auth,
-            scheme: AzureScheme::Http,
-        },
+        AzureEndpointOptions::new(
+            [(
+                ContainerName::new(CONTAINER).expect("azurite container name"),
+                auth,
+            )],
+            AzureEndpoint {
+                scheme: AzureScheme::Http,
+                addressing: Addressing::PathStyle,
+            },
+        ),
     )])
 }
 
@@ -223,7 +237,8 @@ async fn azurite_granted_entry_fetches_repodata() {
     .await;
 }
 
-/// Without `auth = true` the request goes out unsigned, and a private container
+/// Without a grant for this container the request goes out unsigned, and a private
+/// container
 /// refuses it. This is the core claim of the anonymous-by-default model.
 ///
 /// The primary assertion is on the outgoing request, not the status: no
