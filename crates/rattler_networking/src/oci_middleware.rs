@@ -229,10 +229,11 @@ impl OciMiddleware {
         &self,
         oci_url: &OCIUrl,
         req: &mut Request,
+        expected_sha256: Option<&str>,
     ) -> Result<(), OciMiddlewareError> {
         let authorization = self.authorization_header(oci_url, OciAction::Pull).await?;
         match oci_url
-            .set_blob_url(&self.client, req, authorization.as_ref())
+            .set_blob_url(&self.client, req, authorization.as_ref(), expected_sha256)
             .await
         {
             Err(OciMiddlewareError::AuthenticationRequired(challenges)) => {
@@ -240,11 +241,44 @@ impl OciMiddleware {
                     .authorization_from_challenges(oci_url, &challenges)
                     .await?;
                 oci_url
-                    .set_blob_url(&self.client, req, authorization.as_ref())
+                    .set_blob_url(&self.client, req, authorization.as_ref(), expected_sha256)
                     .await
             }
             result => result,
         }
+    }
+
+    /// Send `req` downstream, keeping one copy so a repository-specific
+    /// `WWW-Authenticate` challenge can be answered and the request replayed
+    /// exactly once.
+    async fn run_with_challenge_retry(
+        &self,
+        oci_url: &OCIUrl,
+        req: Request,
+        extensions: &mut Extensions,
+        next: &Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        let Some(mut retry_req) = req.try_clone() else {
+            return next.clone().run(req, extensions).await;
+        };
+        let response = next.clone().run(req, extensions).await?;
+        if response.status() != StatusCode::UNAUTHORIZED {
+            return Ok(response);
+        }
+
+        let challenges = parse_challenges(response.headers());
+        if challenges.is_empty() {
+            return Ok(response);
+        }
+        let Some(authorization) = self
+            .authorization_from_challenges(oci_url, &challenges)
+            .await
+            .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?
+        else {
+            return Ok(response);
+        };
+        retry_req.headers_mut().insert(AUTHORIZATION, authorization);
+        next.clone().run(retry_req, extensions).await
     }
 }
 
@@ -513,11 +547,15 @@ impl OCIUrl {
 
     /// Point `req` at the blob holding this artifact, authenticated with
     /// `authorization` (which the registry's challenge decided upon).
+    ///
+    /// With `expected_sha256` the blob is addressed directly; without it the
+    /// manifest is pulled first to learn the digest.
     pub async fn set_blob_url(
         &self,
         client: &LazyClient,
         req: &mut Request,
         authorization: Option<&HeaderValue>,
+        expected_sha256: Option<&str>,
     ) -> Result<(), OciMiddlewareError> {
         if let Some(header) = authorization {
             req.headers_mut().insert(AUTHORIZATION, header.clone());
@@ -525,11 +563,7 @@ impl OCIUrl {
 
         // if we know the hash, we can pull the artifact directly
         // if we don't, we need to pull the manifest and then pull the artifact
-        if let Some(expected_sha_hash) = req
-            .headers()
-            .get("X-Expected-Sha256")
-            .and_then(|s| s.to_str().ok())
-        {
+        if let Some(expected_sha_hash) = expected_sha256 {
             *req.url_mut() = self.blob_url(&format!("sha256:{expected_sha_hash}"))?;
         } else {
             // get the tag from the URL retrieve the manifest
@@ -611,50 +645,63 @@ impl Middleware for OciMiddleware {
             Ok(url) => url,
             Err(e) => return Err(reqwest_middleware::Error::Middleware(e.into())),
         };
-        let res = self.rewrite_to_blob_request(&oci_url, &mut req).await;
 
-        match res {
-            Ok(_) => {
-                // Keep one copy so a repository-specific challenge can be
-                // answered and replayed exactly once.
-                let Some(mut retry_req) = req.try_clone() else {
-                    return next.run(req, extensions).await;
-                };
-                let response = next.clone().run(req, extensions).await?;
-                if response.status() != StatusCode::UNAUTHORIZED {
-                    return Ok(response);
-                }
+        let expected_sha256 = req
+            .headers()
+            .get("X-Expected-Sha256")
+            .and_then(|s| s.to_str().ok())
+            .map(ToString::to_string);
 
-                let challenges = parse_challenges(response.headers());
-                if challenges.is_empty() {
-                    return Ok(response);
-                }
-                let authorization = self
-                    .authorization_from_challenges(&oci_url, &challenges)
-                    .await
-                    .map_err(|e| reqwest_middleware::Error::Middleware(e.into()))?;
-                let Some(authorization) = authorization else {
-                    return Ok(response);
-                };
-                retry_req.headers_mut().insert(AUTHORIZATION, authorization);
-                next.run(retry_req, extensions).await
-            }
-            Err(e) => match e {
-                // Return clean 404s rather than erroring as callers safely handle them.
-                OciMiddlewareError::LayerNotFound => {
-                    return Ok(create_404_response(
-                        req.url(),
-                        "No layer available for media type",
-                    ));
-                }
-                OciMiddlewareError::ManifestRequestFailed(StatusCode::NOT_FOUND) => {
-                    return Ok(create_404_response(req.url(), "Manifest not found"));
-                }
-                _ => {
-                    return Err(reqwest_middleware::Error::Middleware(e.into()));
-                }
-            },
+        if let Err(e) = self
+            .rewrite_to_blob_request(&oci_url, &mut req, expected_sha256.as_deref())
+            .await
+        {
+            return lookup_error_to_response(e, req.url());
         }
+
+        let fallback_req = if expected_sha256.is_some() {
+            req.try_clone()
+        } else {
+            None
+        };
+        let response = self
+            .run_with_challenge_retry(&oci_url, req, extensions, &next)
+            .await?;
+
+        // Pull-through caches (e.g. Amazon ECR) only import an artifact once
+        // its manifest is pulled, so a digest-addressed blob can 404 while the
+        // manifest route still works. Retry through the manifest once.
+        let Some(mut fallback_req) = fallback_req else {
+            return Ok(response);
+        };
+        if response.status() != StatusCode::NOT_FOUND {
+            return Ok(response);
+        }
+        if let Err(e) = self
+            .rewrite_to_blob_request(&oci_url, &mut fallback_req, None)
+            .await
+        {
+            return lookup_error_to_response(e, fallback_req.url());
+        }
+        self.run_with_challenge_retry(&oci_url, fallback_req, extensions, &next)
+            .await
+    }
+}
+
+/// Determine whether a lookup error is a safe 404 or a fatal error.
+fn lookup_error_to_response(
+    error: OciMiddlewareError,
+    url: &Url,
+) -> reqwest_middleware::Result<Response> {
+    match error {
+        OciMiddlewareError::LayerNotFound => Ok(create_404_response(
+            url,
+            "No layer available for media type",
+        )),
+        OciMiddlewareError::ManifestRequestFailed(StatusCode::NOT_FOUND) => {
+            Ok(create_404_response(url, "Manifest not found"))
+        }
+        _ => Err(reqwest_middleware::Error::Middleware(error.into())),
     }
 }
 
@@ -843,6 +890,37 @@ mod tests {
         );
     }
 
+    /// A digest the registry does not have falls back to the manifest, which
+    /// still resolves the layer. This is the path that makes a pull-through
+    /// cache import the artifact.
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
+    #[tokio::test]
+    async fn test_oci_middleware_unknown_digest_falls_back_to_manifest() {
+        let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
+        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
+            .with(middleware)
+            .build();
+
+        let response = client_with_middleware
+            .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/xtensor-0.25.0-h2ffa867_0.conda")
+            .header(
+                "X-Expected-Sha256",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+        let hash = Sha256::digest(response.bytes().await.unwrap());
+        assert_eq!(
+            hex::encode(hash),
+            "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
+        );
+    }
+
     /// Test that a missing package comes back as a plain 404.
     #[cfg(any(feature = "rustls", feature = "native-tls"))]
     #[tokio::test]
@@ -857,6 +935,32 @@ mod tests {
         // Repo exists, version doesn't.
         let response = client_with_middleware
             .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/xtensor-999.999.999-h0000000_0.conda")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 404);
+    }
+
+    /// The fallback must not turn a package that really is missing into an
+    /// error: the manifest 404s too and that is the answer.
+    #[cfg(any(feature = "rustls", feature = "native-tls"))]
+    #[tokio::test]
+    async fn test_oci_middleware_missing_package_with_digest_is_404() {
+        let client = reqwest::Client::new();
+        let middleware = OciMiddleware::new(client.clone());
+
+        let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
+            .with(middleware)
+            .build();
+
+        // Repo exists, version doesn't.
+        let response = client_with_middleware
+            .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/xtensor-999.999.999-h0000000_0.conda")
+            .header(
+                "X-Expected-Sha256",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            )
             .send()
             .await
             .unwrap();
