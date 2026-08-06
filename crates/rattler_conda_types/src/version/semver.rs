@@ -478,15 +478,17 @@ mod test {
     fn test_ordering_divergence() {
         // semver orders numeric identifiers below alphanumeric ones, conda
         // orders numbers above strings.
-        let numeric = Version::from(SemverVersion::parse("1.0.0-alpha.1").unwrap());
-        let alphanumeric = Version::from(SemverVersion::parse("1.0.0-alpha.beta").unwrap());
-        assert!(numeric > alphanumeric);
+        let numeric = SemverVersion::parse("1.0.0-alpha.1").unwrap();
+        let alphanumeric = SemverVersion::parse("1.0.0-alpha.beta").unwrap();
+        assert!(numeric < alphanumeric);
+        assert!(Version::from(&numeric) > Version::from(&alphanumeric));
 
         // `post` is special in conda, so it sorts above the release instead of
         // below it.
-        let post = Version::from(SemverVersion::parse("1.0.0-post").unwrap());
-        let release = Version::from(SemverVersion::parse("1.0.0").unwrap());
-        assert!(post > release);
+        let post = SemverVersion::parse("1.0.0-post").unwrap();
+        let release = SemverVersion::parse("1.0.0").unwrap();
+        assert!(post < release);
+        assert!(Version::from(&post) > Version::from(&release));
     }
 
     /// A version with more identifiers than can be encoded must not panic.
