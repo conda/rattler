@@ -610,7 +610,7 @@ impl PyRecord {
         if let Some(ts) = timestamp {
             self.as_package_record_mut().timestamp = Some(TimestampMs::from_timestamp_millis(
                 jiff::Timestamp::from_millisecond(ts)
-                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
+                    .map_err(|err| PyValueError::new_err(format!("Invalid timestamp: {err}")))?,
             ));
         } else {
             self.as_package_record_mut().timestamp = None;

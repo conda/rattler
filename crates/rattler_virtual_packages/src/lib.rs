@@ -44,6 +44,7 @@ use std::{
     env, fmt,
     fmt::Display,
     hash::{Hash, Hasher},
+    path::Path,
     str::FromStr,
     sync::Arc,
 };
@@ -158,6 +159,33 @@ pub trait EnvOverride: Sized {
         ov.map_or_else(Self::detect_from_host, |ov| {
             Self::detect_with_fallback(ov, Self::detect_from_host)
         })
+    }
+
+    /// Detect the virtual package for the current system, using `cache_dir` for any on-disk
+    /// detection cache.
+    ///
+    /// The default implementation ignores `cache_dir` and defers to
+    /// [`EnvOverride::detect_from_host`]. Virtual packages with an expensive detection step (such
+    /// as CUDA) override this to thread the cache directory through.
+    fn detect_from_host_with_cache_dir(
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        let _ = cache_dir;
+        Self::detect_from_host()
+    }
+
+    /// Like [`EnvOverride::detect`] but funnels the host detection through
+    /// [`EnvOverride::detect_from_host_with_cache_dir`] so an on-disk detection cache can be used.
+    fn detect_cached(
+        ov: Option<&Override>,
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        ov.map_or_else(
+            || Self::detect_from_host_with_cache_dir(cache_dir),
+            |ov| {
+                Self::detect_with_fallback(ov, || Self::detect_from_host_with_cache_dir(cache_dir))
+            },
+        )
     }
 }
 
@@ -274,12 +302,32 @@ impl VirtualPackages {
 
     /// Detect the virtual packages of the current system with the given
     /// overrides.
-    pub fn detect(overrides: &VirtualPackageOverrides) -> Result<Self, DetectVirtualPackageError> {
-        let cuda = Cuda::detect(overrides.cuda.as_ref())?;
-        let mut cuda_arch = CudaArch::detect(overrides.cuda_arch.as_ref())?;
+    ///
+    /// `cache_dir` is used to cache expensive detection results (currently CUDA) on disk across
+    /// processes; pass `None` to disable the on-disk cache.
+    pub fn detect(
+        overrides: &VirtualPackageOverrides,
+        cache_dir: Option<&Path>,
+    ) -> Result<Self, DetectVirtualPackageError> {
+        tracing::trace!(
+            cache_dir = %cache_dir.map_or_else(
+                || "<disabled>".to_string(),
+                |path| path.display().to_string()
+            ),
+            "detecting virtual packages"
+        );
+
+        let cuda = Cuda::detect_with_cache_dir(overrides.cuda.as_ref(), cache_dir)?;
+        tracing::trace!(?cuda, "detected CUDA virtual package");
+        let mut cuda_arch =
+            CudaArch::detect_with_cache_dir(overrides.cuda_arch.as_ref(), cache_dir)?;
+        tracing::trace!(?cuda_arch, "detected CUDA architecture virtual package");
 
         // Enforce CEP requirement: __cuda_arch must be absent when __cuda is absent
         if cuda.is_none() {
+            if cuda_arch.is_some() {
+                tracing::debug!("dropping __cuda_arch because __cuda was not detected");
+            }
             cuda_arch = None;
         }
 
@@ -322,8 +370,9 @@ impl VirtualPackages {
     pub fn detect_for_platform(
         platform: Platform,
         overrides: &VirtualPackageOverrides,
+        cache_dir: Option<&Path>,
     ) -> Result<Self, DetectVirtualPackageError> {
-        let virtual_packages = Self::detect(overrides)?;
+        let virtual_packages = Self::detect(overrides, cache_dir)?;
         if platform == Platform::current() {
             // If we're targeting the current platform, just return the detected packages
             Ok(virtual_packages)
@@ -483,18 +532,21 @@ impl VirtualPackage {
     /// the versions could not be properly detected.
     #[deprecated(
         since = "1.1.0",
-        note = "Use `VirtualPackage::detect(&VirtualPackageOverrides::default())` instead."
+        note = "Use `VirtualPackage::detect(&VirtualPackageOverrides::default(), None)` instead."
     )]
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
-        Self::detect(&VirtualPackageOverrides::default())
+        Self::detect(&VirtualPackageOverrides::default(), None)
     }
 
     /// Detect the virtual packages of the current system with the given
     /// overrides.
+    ///
+    /// See [`VirtualPackages::detect`] for the `cache_dir` semantics.
     pub fn detect(
         overrides: &VirtualPackageOverrides,
+        cache_dir: Option<&Path>,
     ) -> Result<Vec<Self>, DetectVirtualPackageError> {
-        Ok(VirtualPackages::detect(overrides)?
+        Ok(VirtualPackages::detect(overrides, cache_dir)?
             .into_virtual_packages()
             .collect())
     }
@@ -706,8 +758,19 @@ pub struct Cuda {
 
 impl Cuda {
     /// Returns the maximum Cuda version available on the current platform.
-    pub fn current() -> Option<Self> {
-        cuda::cuda_version().map(|version| Self { version })
+    ///
+    /// See [`cuda::cuda_info`] for the `cache_dir` semantics.
+    pub fn current(cache_dir: Option<&Path>) -> Option<Self> {
+        cuda::cuda_version(cache_dir).map(|version| Self { version })
+    }
+
+    /// Detect the Cuda virtual package with the given override, using `cache_dir` for the on-disk
+    /// detection cache.
+    pub fn detect_with_cache_dir(
+        ov: Option<&Override>,
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        <Self as EnvOverride>::detect_cached(ov, cache_dir)
     }
 }
 
@@ -724,7 +787,12 @@ impl EnvOverride for Cuda {
         })
     }
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
-        Ok(Self::current())
+        Ok(Self::current(None))
+    }
+    fn detect_from_host_with_cache_dir(
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current(cache_dir))
     }
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA";
 }
@@ -776,12 +844,22 @@ impl CudaArch {
     /// * No CUDA drivers are installed
     /// * No CUDA devices are detected
     /// * Device enumeration fails
-    /// * The system is using musl libc (dynamic library loading not supported)
-    pub fn current() -> Option<Self> {
-        cuda::cuda_arch().map(|arch_info| Self {
+    ///
+    /// See [`cuda::cuda_info`] for the `cache_dir` semantics.
+    pub fn current(cache_dir: Option<&Path>) -> Option<Self> {
+        cuda::cuda_arch(cache_dir).map(|arch_info| Self {
             version: Version::from_str(&format!("{}.{}", arch_info.major, arch_info.minor))
                 .unwrap_or_else(|_| Version::major(u64::from(arch_info.major))),
         })
+    }
+
+    /// Detect the CUDA compute capability virtual package with the given override, using
+    /// `cache_dir` for the on-disk detection cache.
+    pub fn detect_with_cache_dir(
+        ov: Option<&Override>,
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        <Self as EnvOverride>::detect_cached(ov, cache_dir)
     }
 }
 
@@ -799,7 +877,13 @@ impl EnvOverride for CudaArch {
     }
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
-        Ok(Self::current())
+        Ok(Self::current(None))
+    }
+
+    fn detect_from_host_with_cache_dir(
+        cache_dir: Option<&Path>,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current(cache_dir))
     }
 
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA_ARCH";
@@ -1265,7 +1349,7 @@ mod test {
     #[test]
     fn doesnt_crash() {
         let virtual_packages =
-            VirtualPackages::detect(&VirtualPackageOverrides::default()).unwrap();
+            VirtualPackages::detect(&VirtualPackageOverrides::default(), None).unwrap();
         println!("{virtual_packages:#?}");
     }
 
@@ -1437,7 +1521,7 @@ mod test {
 
         // Test Linux 64-bit
         let linux_packages =
-            VirtualPackages::detect_for_platform(Platform::Linux64, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::Linux64, &overrides, None).unwrap();
         let linux_names: Vec<String> = linux_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1449,7 +1533,7 @@ mod test {
 
         // Test macOS ARM64
         let osx_packages =
-            VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides, None).unwrap();
         let osx_names: Vec<String> = osx_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1460,7 +1544,7 @@ mod test {
 
         // Test Windows 64-bit
         let win_packages =
-            VirtualPackages::detect_for_platform(Platform::Win64, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::Win64, &overrides, None).unwrap();
         let win_names: Vec<String> = win_packages
             .into_generic_virtual_packages()
             .map(|pkg| pkg.name.as_normalized().to_string())
@@ -1481,7 +1565,7 @@ mod test {
 
         if !current.is_linux() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::Linux64, &overrides).unwrap();
+                VirtualPackages::detect_for_platform(Platform::Linux64, &overrides, None).unwrap();
             assert_eq!(
                 packages.linux.expect("__linux should be present").version,
                 defaults::default_linux_version()
@@ -1493,7 +1577,7 @@ mod test {
 
         if !current.is_osx() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides).unwrap();
+                VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides, None).unwrap();
             assert_eq!(
                 packages.osx.expect("__osx should be present").version,
                 defaults::default_mac_os_version(Platform::OsxArm64).unwrap()
@@ -1502,7 +1586,7 @@ mod test {
 
         if !current.is_windows() {
             let packages =
-                VirtualPackages::detect_for_platform(Platform::Win64, &overrides).unwrap();
+                VirtualPackages::detect_for_platform(Platform::Win64, &overrides, None).unwrap();
             assert_eq!(
                 packages.win.expect("__win should be present").version,
                 Some(defaults::default_windows_version())
@@ -1517,6 +1601,7 @@ mod test {
         let ios_packages = VirtualPackages::detect_for_platform(
             Platform::IosArm64,
             &VirtualPackageOverrides::default(),
+            None,
         )
         .unwrap();
         let ios_names: Vec<String> = ios_packages
@@ -1533,7 +1618,8 @@ mod test {
             ..Default::default()
         };
         let ios_packages =
-            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::IosSimulatorArm64, &overrides, None)
+                .unwrap();
         let ios = ios_packages
             .into_generic_virtual_packages()
             .find(|pkg| pkg.name.as_normalized() == "__ios")
@@ -1545,6 +1631,7 @@ mod test {
         let android_packages = VirtualPackages::detect_for_platform(
             Platform::AndroidAarch64,
             &VirtualPackageOverrides::default(),
+            None,
         )
         .unwrap();
         let android_names: Vec<String> = android_packages
@@ -1561,7 +1648,8 @@ mod test {
             ..Default::default()
         };
         let android_packages =
-            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, &overrides).unwrap();
+            VirtualPackages::detect_for_platform(Platform::AndroidArmV7a, &overrides, None)
+                .unwrap();
         let android = android_packages
             .into_generic_virtual_packages()
             .find(|pkg| pkg.name.as_normalized() == "__android")
@@ -1630,7 +1718,7 @@ mod test {
 
         // Case 1: Both not present - cuda_arch should be None
         let overrides = VirtualPackageOverrides::default();
-        let packages = VirtualPackages::detect(&overrides).unwrap();
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
         // If cuda is None, cuda_arch must also be None
         if packages.cuda.is_none() {
             assert!(
@@ -1646,7 +1734,7 @@ mod test {
             cuda_arch: Some(cuda_arch_override),
             ..Default::default()
         };
-        let packages = VirtualPackages::detect(&overrides).unwrap();
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
         if packages.cuda.is_none() {
             assert!(
                 packages.cuda_arch.is_none(),
@@ -1662,7 +1750,7 @@ mod test {
             cuda_arch: Some(cuda_arch_override),
             ..Default::default()
         };
-        let packages = VirtualPackages::detect(&overrides).unwrap();
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
         assert!(
             packages.cuda.is_some(),
             "cuda should be present with override"
@@ -1682,7 +1770,7 @@ mod test {
             cuda_arch: Some(cuda_arch_override),
             ..Default::default()
         };
-        let packages = VirtualPackages::detect(&overrides).unwrap();
+        let packages = VirtualPackages::detect(&overrides, None).unwrap();
         assert!(
             packages.cuda.is_none(),
             "cuda should be None with empty string override"

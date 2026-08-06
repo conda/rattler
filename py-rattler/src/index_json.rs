@@ -261,7 +261,7 @@ impl PyIndexJson {
         if let Some(ts) = timestamp {
             self.inner.timestamp = Some(TimestampMs::from_timestamp_millis(
                 jiff::Timestamp::from_millisecond(ts)
-                    .map_err(|_| PyValueError::new_err("Invalid timestamp"))?,
+                    .map_err(|err| PyValueError::new_err(format!("Invalid timestamp: {err}")))?,
             ));
         } else {
             self.inner.timestamp = None;
