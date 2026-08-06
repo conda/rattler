@@ -82,7 +82,7 @@ pub struct SparseRepoData {
     inner: SparseRepoDataInner,
 
     /// The channel from which this data was downloaded.
-    channel: Channel,
+    pub channel: Channel,
 
     /// The subdirectory from where the repodata is downloaded
     subdir: String,

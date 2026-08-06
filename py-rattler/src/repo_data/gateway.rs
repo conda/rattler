@@ -160,7 +160,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
 
     // Then try to extract as SparseRepoData
     if let Ok(sparse) = obj.extract::<PyRef<'_, PySparseRepoData>>() {
-        return Ok(Source::from(sparse.as_repo_data_source()));
+        return Ok(Source::from(sparse.as_source()?));
     }
 
     // Check if it implements the RepoDataSource protocol
