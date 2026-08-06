@@ -15,6 +15,7 @@ use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+    local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData},
 };
@@ -525,6 +526,29 @@ impl QueryExecutor {
                     Source::Custom(custom_source) => {
                         let client = CustomSourceClient::new(custom_source, platform);
                         let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
+                        let b = barrier.clone();
+                        let fut = box_future(async move {
+                            b.set(subdir.clone()).expect("subdir was set twice");
+                            Ok(PendingSubdirOk {
+                                subdir,
+                                kind_url_and_platform: None,
+                                warning: None,
+                            })
+                        });
+                        (SubdirKind::Custom, fut)
+                    }
+                    Source::SparseRepoData(sparse) => {
+                        // A single `SparseRepoData` only ever represents one
+                        // channel/subdir pair, so every other platform is
+                        // treated as having no records, same as a channel
+                        // that doesn't publish a given subdir.
+                        let subdir = if platform.as_str() == sparse.subdir() {
+                            Arc::new(Subdir::Found(SubdirData::from_client(
+                                LocalSubdirClient::new(sparse),
+                            )))
+                        } else {
+                            Arc::new(Subdir::NotFound)
+                        };
                         let b = barrier.clone();
                         let fut = box_future(async move {
                             b.set(subdir.clone()).expect("subdir was set twice");

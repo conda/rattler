@@ -369,11 +369,14 @@ impl PyGateway {
         // Separate channels and custom sources
         let mut channels: Vec<rattler_conda_types::Channel> = Vec::new();
         let mut custom_sources: Vec<Arc<dyn rattler_repodata_gateway::RepoDataSource>> = Vec::new();
+        let mut sparse_sources: Vec<Arc<rattler_repodata_gateway::sparse::SparseRepoData>> =
+            Vec::new();
 
         for source in rust_sources {
             match source {
                 Source::Channel(channel) => channels.push(channel),
                 Source::Custom(custom) => custom_sources.push(custom),
+                Source::SparseRepoData(sparse) => sparse_sources.push(sparse),
             }
         }
 
