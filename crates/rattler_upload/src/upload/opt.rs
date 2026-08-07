@@ -1,7 +1,9 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::{Parser, builder::TypedValueParser as _};
+use clap::Parser;
+#[cfg(feature = "azure")]
+use clap::builder::TypedValueParser as _;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;

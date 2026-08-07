@@ -131,7 +131,7 @@ pub(crate) fn ensure_no_colliding_hosts(document: &toml::Table) -> Result<(), St
 
     let mut seen: IndexMap<AzureHost, &String> = IndexMap::new();
     for written in table.keys() {
-        // An unparseable key is serde's error to report, not ours.
+        // An unparsable key is serde's error to report, not ours.
         let Ok(host) = AzureHost::parse(written) else {
             continue;
         };
@@ -457,7 +457,7 @@ releases = true
     /// A key that cannot be a host is a config error worth naming, not an entry
     /// that silently never matches.
     #[test]
-    fn an_unparseable_key_is_rejected() {
+    fn an_unparsable_key_is_rejected() {
         let err = toml::from_str::<AzureOptionsMap>(
             "[\"acct.blob.example/general\".auth]\nreleases = true\n",
         )

@@ -120,6 +120,7 @@ pub(crate) mod object_store {
         }
 
         /// Metadata for one blob, used by the callers' overwrite guards.
+        #[cfg(feature = "azure")]
         pub(crate) async fn stat(&self, path: &str) -> Result<opendal::Metadata, BlobStoreError> {
             self.0.stat(path).await.map_err(BlobStoreError::new)
         }
