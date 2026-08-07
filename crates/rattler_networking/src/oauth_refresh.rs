@@ -423,6 +423,9 @@ mod tests {
             let success_count = success_count.clone();
             let invalid_grant_count = invalid_grant_count.clone();
             move |form| {
+                // Omitting scope preserves the originally granted channel and
+                // Basilisk access (RFC 6749 section 6).
+                assert!(!form.contains_key("scope"));
                 let presented = form.get("refresh_token").cloned().unwrap_or_default();
                 let mut valid = valid_refresh_token.lock().unwrap();
                 if presented == *valid {
