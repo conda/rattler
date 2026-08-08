@@ -165,6 +165,30 @@ async def test_solve_with_repodata() -> None:
 
 
 @pytest.mark.asyncio
+async def test_solve_accepts_sparse_repodata_as_source() -> None:
+    """`solve` should accept `SparseRepoData` instances directly in `sources`,
+    without needing a `Gateway` to fetch them."""
+    linux64_chan = Channel("conda-forge")
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    linux64_path = os.path.join(data_dir, "channels/dummy/linux-64/repodata.json")
+    linux64_data = SparseRepoData(
+        channel=linux64_chan,
+        subdir="linux-64",
+        path=linux64_path,
+    )
+
+    solved_data = await solve(
+        [linux64_data],
+        ["foobar"],
+        platforms=["linux-64"],
+    )
+
+    assert isinstance(solved_data, list)
+    assert isinstance(solved_data[0], RepoDataRecord)
+    assert len(solved_data) == 2
+
+
+@pytest.mark.asyncio
 async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_channel: Channel) -> None:
     """Test that a conditional root requirement is included when the condition is satisfied."""
     from rattler import GenericVirtualPackage, MatchSpec, PackageName, Version

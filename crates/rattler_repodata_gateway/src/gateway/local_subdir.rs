@@ -22,6 +22,12 @@ pub struct LocalSubdirClient {
 }
 
 impl LocalSubdirClient {
+    /// Create a client directly from an already-loaded [`SparseRepoData`],
+    /// without parsing anything from disk.
+    pub fn new(sparse: Arc<SparseRepoData>) -> Self {
+        Self { sparse }
+    }
+
     pub fn from_file(
         repodata_path: &Path,
         channel: Channel,

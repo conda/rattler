@@ -22,10 +22,13 @@ pub struct PySparseRepoData {
     // in a RwLock because most of the time we just want to be able to read from it. We only
     // need write access to close it.
     //
-    // This whole thing is then wrapped in an Arc so we can share this with a background thread
-    // without blocking the GIL.
-    pub(crate) inner: Arc<RwLock<Option<SparseRepoData>>>,
-    subdir: String,
+    // The `SparseRepoData` itself is wrapped in an `Arc` too, so `as_source` can hand out a
+    // cheap clone of the *same* `Arc` on every call rather than re-parsing or copying data.
+    //
+    // This whole thing is then wrapped in an outer Arc so we can share this with a background
+    // thread without blocking the GIL.
+    pub(crate) inner: Arc<RwLock<Option<Arc<SparseRepoData>>>>,
+    pub(crate) subdir: String,
 }
 
 impl PySparseRepoData {
@@ -33,13 +36,24 @@ impl PySparseRepoData {
     pub(crate) fn from_args(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
         Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
     }
+
+    /// Returns the underlying `SparseRepoData` so it can be passed directly
+    /// to `Gateway::query` as a `Source::SparseRepoData` (e.g. via `solve`'s
+    /// `sources` argument).
+    pub(crate) fn as_source(&self) -> PyResult<Arc<SparseRepoData>> {
+        self.inner
+            .read()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
+    }
 }
 
 impl From<SparseRepoData> for PySparseRepoData {
     fn from(value: SparseRepoData) -> Self {
         Self {
             subdir: value.subdir().to_owned(),
-            inner: Arc::new(RwLock::new(Some(value))),
+            inner: Arc::new(RwLock::new(Some(Arc::new(value)))),
         }
     }
 }
@@ -228,7 +242,7 @@ impl PySparseRepoData {
         let repo_data_refs = repo_data_locks
             .iter()
             .map(|s| {
-                s.as_ref()
+                s.as_deref()
                     .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
             })
             .collect::<Result<Vec<_>, _>>()?;

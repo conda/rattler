@@ -469,11 +469,14 @@ def _convert_sources(sources: Iterable[Any]) -> List[Any]:
     Channels are converted to their internal PyChannel representation.
     Custom RepoDataSource implementations are wrapped in an adapter that
     converts between FFI types and Python wrapper types.
+    SparseRepoData objects are converted to their internal PySparseRepoData
+    representation.
 
     Raises:
         TypeError: If a source doesn't implement the required interface.
     """
     from rattler.repo_data.source import RepoDataSource
+    from rattler.repo_data.sparse import SparseRepoData
 
     converted = []
     for source in sources:
@@ -483,12 +486,15 @@ def _convert_sources(sources: Iterable[Any]) -> List[Any]:
         elif isinstance(source, Channel):
             # Channel object - extract PyChannel
             converted.append(source._channel)
+        elif isinstance(source, SparseRepoData):
+            # SparseRepoData object - extract PySparseRepoData
+            converted.append(source._sparse)
         elif isinstance(source, RepoDataSource):
             # Wrap RepoDataSource in adapter for FFI type conversion
             converted.append(_RepoDataSourceAdapter(source))
         else:
             raise TypeError(
-                f"Expected Channel, str, or object implementing RepoDataSource protocol, "
+                f"Expected Channel, str, SparseRepoData, or object implementing RepoDataSource protocol, "
                 f"got {type(source).__name__}. "
                 f"See rattler.RepoDataSource for the required interface."
             )

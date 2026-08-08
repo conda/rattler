@@ -1876,6 +1876,79 @@ mod test {
         );
     }
 
+    /// Loads the `dummy` test channel's `linux-64` subdir as a `SparseRepoData`.
+    /// `foobar` depends on `bors`, which is used to exercise recursive queries.
+    fn dummy_sparse_repo_data() -> crate::sparse::SparseRepoData {
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("dummy", &channel_config).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/dummy/linux-64/repodata.json");
+        crate::sparse::SparseRepoData::from_file(channel, "linux-64", path, None).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_sparse_repodata_source() {
+        let gateway = Gateway::new();
+        let source = Arc::new(dummy_sparse_repo_data());
+
+        // Query the sparse repodata directly for `foobar`.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(source.clone())],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(!all_records.is_empty(), "should have foobar records");
+        assert!(
+            all_records
+                .iter()
+                .all(|r| r.package_record.name.as_normalized() == "foobar"),
+            "non-recursive query should only return foobar records"
+        );
+
+        // A recursive query should also pull in `bors`, `foobar`'s dependency.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(source.clone())],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records
+                .iter()
+                .any(|r| r.package_record.name.as_normalized() == "bors"),
+            "recursive query should also fetch foobar's dependency bors"
+        );
+
+        // A `SparseRepoData` only ever represents the one channel/subdir pair it was
+        // loaded from; other platforms should yield no records.
+        let records = gateway
+            .query(
+                vec![super::Source::SparseRepoData(source)],
+                vec![Platform::Win64],
+                vec![PackageName::from_str("foobar").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert!(
+            all_records.is_empty(),
+            "querying a platform other than the sparse repodata's own subdir should be empty"
+        );
+    }
+
     #[tokio::test]
     async fn test_mixed_channel_and_custom_source() {
         let gateway = Gateway::new();
