@@ -1,0 +1,71 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - crates/rattler_azure/**
+      - crates/rattler_config/**
+      - crates/rattler_index/**
+      - crates/rattler_networking/**
+      - crates/rattler_upload/**
+      # An opendal bump touches only the root manifest, and these tests are the
+      # canary for the opendal bug the upload path works around.
+      - Cargo.toml
+      - Cargo.lock
+      - test-data/**
+      - pixi.toml
+      - pixi.lock
+      - .github/workflows/e2e-azure-tests.yml
+
+name: E2E Azure Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-azurite-test:
+    name: E2E Index/Fetch [Azurite]
+    runs-on: ubuntu-latest
+
+    env:
+      # Enable sccache.
+      #
+      # This environment variable is picked up by pixi build which will then
+      # set up the rust build using sccache.
+      SCCACHE_GHA_ENABLED: "true"
+
+    # No secrets: the emulator's `devstoreaccount1` credentials are published
+    # constants, spelled out in the tests, and only ever reach loopback.
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.36.0
+        ports:
+          - 10000:10000
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 10000"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          submodules: recursive
+
+      - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          environments: default
+
+      - name: Run the Azurite integration tests
+        run: |
+          pixi run -vv -- cargo nextest run --run-ignored all \
+            --features rattler_networking/azure \
+            -p rattler_index --test azure_azurite \
+            -p rattler_networking --test azure_azurite_fetch

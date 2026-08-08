@@ -1,7 +1,60 @@
+use std::borrow::Cow;
+
 use url::Url;
 
 /// A default string to use for redaction.
 pub const DEFAULT_REDACTION_STR: &str = "********";
+
+/// Query parameters whose value is the signature of a pre-signed URL, and is
+/// therefore the credential itself: `sig` is Azure's SAS signature and
+/// `x-amz-signature` is the S3/SigV4 equivalent. Everything else in such a URL
+/// (the validity window, the permissions) is inert without them.
+const SIGNATURE_PARAMS: &[&str] = &["sig", "x-amz-signature"];
+
+/// Mask the signature of a pre-signed URL wherever one appears in `text`.
+///
+/// Takes text rather than a [`Url`] because that is the shape the leak has: a
+/// storage backend quotes the request URL inside an error message, and for a SAS
+/// the credential is *in* that URL, so the message must be scrubbed before it is
+/// logged or shown. A `?`/`&` and a `=` are all that is needed to find the value;
+/// anything that cannot appear in a query value ends it.
+pub fn redact_signatures_in_text<'a>(text: &'a str, redaction: &str) -> Cow<'a, str> {
+    let mut out = String::new();
+    // Also the "nothing was masked" flag: a masked value always starts past 0.
+    let mut written = 0;
+
+    for (separator, _) in text.char_indices().filter(|(_, c)| *c == '?' || *c == '&') {
+        let pair = &text[separator + 1..];
+        let Some(equals) = pair.find('=') else {
+            continue;
+        };
+        if !SIGNATURE_PARAMS
+            .iter()
+            .any(|param| pair[..equals].eq_ignore_ascii_case(param))
+        {
+            continue;
+        }
+
+        let value = separator + 1 + equals + 1;
+        let end = value
+            + text[value..]
+                .find(|c: char| c == '&' || c.is_whitespace() || "\"',)]}".contains(c))
+                .unwrap_or(text.len() - value);
+        if end == value || value < written {
+            continue;
+        }
+
+        out.push_str(&text[written..value]);
+        out.push_str(redaction);
+        written = end;
+    }
+
+    if written == 0 {
+        return Cow::Borrowed(text);
+    }
+    out.push_str(&text[written..]);
+    Cow::Owned(out)
+}
 
 /// Anaconda channels are not always publicly available. This function checks if a URL contains a
 /// secret by identifying whether it contains certain patterns. If it does, the function returns a
@@ -26,6 +79,14 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
     let mut url = url.clone();
     if url.password().is_some() {
         url.set_password(Some(redaction)).ok()?;
+    }
+
+    // A pre-signed URL carries its credential in the query, so a URL that reached
+    // here from an error or a log line has to lose it.
+    if let Some(query) = url.query()
+        && let Cow::Owned(masked) = redact_signatures_in_text(&format!("?{query}"), redaction)
+    {
+        url.set_query(Some(&masked[1..]));
     }
 
     let mut segments = url.path_segments()?;
@@ -94,6 +155,52 @@ impl Redact for Url {
 mod test {
     use super::*;
     use std::str::FromStr;
+
+    /// The signature is the credential; the rest of a SAS is inert without it and
+    /// is worth keeping, because the account, container and expiry are what make
+    /// the error message useful.
+    #[test]
+    fn test_redact_signatures_in_text() {
+        let message = "unexpected status code 403, url=https://acct.blob.core.windows.net/c/p?sv=2025-01-05&se=2026-08-05T00%3A00Z&sig=aBcD%2Fefg%3D, op=stat";
+        assert_eq!(
+            redact_signatures_in_text(message, DEFAULT_REDACTION_STR),
+            format!(
+                "unexpected status code 403, url=https://acct.blob.core.windows.net/c/p?sv=2025-01-05&se=2026-08-05T00%3A00Z&sig={DEFAULT_REDACTION_STR}, op=stat"
+            )
+        );
+
+        // Presigned S3, and a signature that runs to the end of the text.
+        assert_eq!(
+            redact_signatures_in_text(
+                "https://b.s3.amazonaws.com/k?X-Amz-Credential=AK&X-Amz-Signature=deadbeef",
+                "X"
+            ),
+            "https://b.s3.amazonaws.com/k?X-Amz-Credential=AK&X-Amz-Signature=X"
+        );
+
+        // Text with nothing to mask is borrowed, not rebuilt.
+        assert!(matches!(
+            redact_signatures_in_text("https://prefix.dev/conda-forge?a=b", "X"),
+            Cow::Borrowed(_)
+        ));
+
+        // A query param that merely ends in `sig` is not the signature.
+        assert_eq!(
+            redact_signatures_in_text("https://h/p?design=keep&sig=drop", "X"),
+            "https://h/p?design=keep&sig=X"
+        );
+
+        // And the same through the `Url` entry point every existing caller uses.
+        assert_eq!(
+            Url::from_str("https://acct.blob.core.windows.net/c/p?sv=2025-01-05&sig=secret")
+                .unwrap()
+                .redact()
+                .to_string(),
+            format!(
+                "https://acct.blob.core.windows.net/c/p?sv=2025-01-05&sig={DEFAULT_REDACTION_STR}"
+            )
+        );
+    }
 
     #[test]
     fn test_remove_known_secrets_from_url() {

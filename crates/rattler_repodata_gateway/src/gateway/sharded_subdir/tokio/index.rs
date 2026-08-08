@@ -15,7 +15,7 @@ use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
 use futures::{TryFutureExt, future::OptionFuture};
-use http::{HeaderMap, Method, Uri};
+use http::{HeaderMap, Method, StatusCode, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use rattler_conda_types::Channel;
 use rattler_networking::LazyClient;
@@ -267,46 +267,55 @@ pub async fn fetch_index(
                         return Err(create_subdir_not_found_error(channel_base_url));
                     }
 
-                    match cache_header.policy.after_response(
+                    let after_response = cache_header.policy.after_response(
                         &state_request,
                         &response,
                         SystemTime::now(),
-                    ) {
-                        AfterResponse::NotModified(_policy, _) => {
-                            // The cached file is still valid
-                            match read_shard_index_from_reader(&mut cache_reader).await {
-                                Ok(shard_index) => {
-                                    tracing::debug!("shard index cache was not modified");
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
-                                    // If reading the file failed for some reason we'll just
-                                    // fetch it again.
-                                    return Ok(shard_index);
+                    );
+
+                    // The status is consulted directly rather than left to
+                    // `after_response` alone, which only reports `NotModified` when the
+                    // 304 echoes back the validator it matched. Azure Blob does not: it
+                    // answers a conditional GET with a bare 304 carrying no `etag` and no
+                    // `last-modified`, just `x-ms-error-code: ConditionNotMet`. That
+                    // reads as `Modified`, and a 304 then reaches `from_response`, which
+                    // rejects it for not being a success — so every `az://` sharded
+                    // channel failed on the *second* fetch, once there was a cache entry
+                    // to revalidate. A 304 is only ever sent because the validator we
+                    // ourselves sent matched, so it is trustworthy on its own here, which
+                    // is also how the `repodata.json` path has always read it.
+                    if response.status() == StatusCode::NOT_MODIFIED
+                        || matches!(after_response, AfterResponse::NotModified(..))
+                    {
+                        // The cached file is still valid
+                        match read_shard_index_from_reader(&mut cache_reader).await {
+                            Ok(shard_index) => {
+                                tracing::debug!("shard index cache was not modified");
+                                if let Some((reporter, index)) = download_reporter {
+                                    reporter.on_download_complete(response.url(), index);
                                 }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "the cached shard index has been corrupted: {e}"
-                                    );
-                                    if let Some((reporter, index)) = download_reporter {
-                                        reporter.on_download_complete(response.url(), index);
-                                    }
+                                return Ok(shard_index);
+                            }
+                            Err(e) => {
+                                // Fall through to the unconditional fetch below.
+                                tracing::warn!("the cached shard index has been corrupted: {e}");
+                                if let Some((reporter, index)) = download_reporter {
+                                    reporter.on_download_complete(response.url(), index);
                                 }
                             }
                         }
-                        AfterResponse::Modified(policy, _) => {
-                            // Close the old file so we can create a new one.
-                            tracing::debug!("shard index cache has become stale");
-                            return from_response(
-                                cache_reader.into_inner(),
-                                &cache_path,
-                                policy,
-                                response,
-                                download_reporter,
-                                request_permit,
-                            )
-                            .await;
-                        }
+                    } else if let AfterResponse::Modified(policy, _) = after_response {
+                        // Close the old file so we can create a new one.
+                        tracing::debug!("shard index cache has become stale");
+                        return from_response(
+                            cache_reader.into_inner(),
+                            &cache_path,
+                            policy,
+                            response,
+                            download_reporter,
+                            request_permit,
+                        )
+                        .await;
                     }
                 }
             }

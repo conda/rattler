@@ -16,13 +16,14 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls", "s3", "gcs", "oauth"]
+default = ["rustls", "s3", "gcs", "azure", "oauth"]
 native-tls = [
   "reqwest/native-tls",
   "rattler/native-tls",
   "rattler_repodata_gateway/native-tls",
   "rattler_networking/native-tls",
   "rattler_cache/native-tls",
+  "rattler_upload/native-tls",
 ]
 rustls = [
   "reqwest/rustls",
@@ -30,9 +31,11 @@ rustls = [
   "rattler_repodata_gateway/rustls",
   "rattler_networking/rustls",
   "rattler_cache/rustls",
+  "rattler_upload/rustls",
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
+azure = ["rattler_networking/azure", "rattler_upload/azure"]
 oauth = ["rattler/oauth"]
 
 [dependencies]
@@ -68,7 +71,9 @@ rattler_menuinst = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = [
   "reqwest",
 ] }
-rattler_upload = { workspace = true }
+rattler_upload = { workspace = true, default-features = false, features = [
+  "sigstore-sign",
+] }
 rattler_shell = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "query"] }
 reqwest-middleware = { workspace = true }

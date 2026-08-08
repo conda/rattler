@@ -1,17 +1,24 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "s3")]
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
+#[cfg(feature = "azure")]
+use rattler_azure::{AzureChannelUrl, AzureEndpoint, AzureHost};
 use rattler_conda_types::Platform;
 use rattler_config::config::{
     concurrency::default_max_concurrent_solves, index::IndexChannelConfig,
 };
+#[cfg(feature = "s3")]
+use rattler_index::PreconditionChecks;
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, index_fs_with_channel_metadata,
 };
+#[cfg(feature = "azure")]
+use rattler_index::{IndexAzureConfig, index_azure_with_channel_metadata};
 #[cfg(feature = "s3")]
-use rattler_index::{IndexS3Config, PreconditionChecks, index_s3_with_channel_metadata};
+use rattler_index::{IndexS3Config, index_s3_with_channel_metadata};
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
@@ -30,6 +37,12 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
         ))
     }
 }
+
+/// SAS permissions requested when minting a user-delegation SAS for indexing.
+/// Indexing does a read-modify-write of repodata and lists/reads packages, so it
+/// needs read, write, list, and create (`r` + `w` + `l` + `c`).
+#[cfg(feature = "azure")]
+const AZURE_INDEX_SAS_PERMISSIONS: &str = "rwlc";
 
 /// The `rattler-index` CLI.
 #[derive(Parser)]
@@ -98,6 +111,23 @@ enum Commands {
 
         #[clap(flatten)]
         credentials: rattler_s3::clap::S3CredentialsOpts,
+    },
+
+    /// Index a channel stored in an Azure Blob container.
+    #[cfg(feature = "azure")]
+    #[command(name = "az")]
+    Azblob {
+        /// The Azure Blob channel URL, e.g.
+        /// `az://<account>.blob.core.windows.net/<container>/<channel>`.
+        ///
+        /// Parsed into an [`AzureChannelUrl`] rather than a wire `Url`: the wire
+        /// scheme comes from the host's `azure-options` entry, which is not read
+        /// until after clap has run, and the `az://` spelling is what
+        /// `[index-config."…"]` keys are matched against.
+        channel: AzureChannelUrl,
+
+        #[clap(flatten)]
+        credentials: rattler_azure::clap::AzureCredentialsOpts,
     },
 }
 
@@ -213,9 +243,64 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "azure")]
+        Commands::Azblob {
+            channel,
+            credentials,
+        } => {
+            // `canonical()`, not the wire URL: `[index-config."az://…"]` is how a
+            // user keys an Azure channel, and matching the https spelling meant
+            // such a key never applied to anything.
+            let target = channel.canonical().to_string();
+            let resolved = resolve_index_channel_config(&config, &target);
+            let (write_zst, write_shards, repodata_revisions, package_revision_assignment) =
+                effective_index_options(&resolved);
+            let channel_metadata = ChannelMetadata::from_index_config(&resolved);
+
+            let endpoint = azure_endpoint(&config, channel.host());
+
+            let credentials = credentials
+                .resolve(AZURE_INDEX_SAS_PERMISSIONS, &channel, endpoint)
+                .await?;
+
+            index_azure_with_channel_metadata(
+                IndexAzureConfig {
+                    channel,
+                    credentials,
+                    endpoint,
+                    target_platform: cli.target_platform,
+                    repodata_patch: cli.repodata_patch,
+                    write_zst,
+                    write_shards,
+                    repodata_revisions,
+                    package_revision_assignment,
+                    force: cli.force,
+                    max_parallel,
+                    multi_progress: Some(multi_progress),
+                },
+                channel_metadata,
+            )
+            .await
+        }
     }?;
     println!("Finished indexing channel.");
     Ok(())
+}
+
+/// How to address a channel's host, from its `[azure-options."<host>"]` entry, or
+/// the https host-style defaults when there is no config file or no entry.
+///
+/// A host without an entry and a host with an empty entry are defined to behave
+/// identically, so this never has to report which of the two it found. The entry's
+/// per-container grants are not part of the result: indexing signs with the
+/// credential its caller supplied, so there is no ambient chain for a grant to
+/// gate.
+#[cfg(feature = "azure")]
+fn azure_endpoint(config: &Option<Config>, host: &AzureHost) -> AzureEndpoint {
+    config
+        .as_ref()
+        .map(|config| config.azure_options.get(host).endpoint())
+        .unwrap_or_default()
 }
 
 fn resolve_index_channel_config(config: &Option<Config>, target: &str) -> IndexChannelConfig {
@@ -243,4 +328,108 @@ fn effective_index_options(
         repodata_revisions,
         package_revision_assignment,
     )
+}
+
+#[cfg(all(test, feature = "azure"))]
+mod tests {
+    use rattler_azure::{Addressing, AzureCredentials, AzureScheme};
+
+    use super::*;
+
+    /// Load a config from TOML the way `--config` does, through a real file, so
+    /// the test exercises the same deserialization the CLI does.
+    fn config_from(toml: &str) -> Option<Config> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("rattler-config.toml");
+        std::fs::write(&path, toml).expect("write config");
+        Some(Config::load_from_files(vec![path]).expect("config should load"))
+    }
+
+    /// Reviewer issue 5: `[index-config."az://…"]` is the only spelling a user
+    /// would write for an Azure channel, and matching the https wire URL meant it
+    /// never applied to anything.
+    #[test]
+    fn index_config_is_keyed_by_the_canonical_az_url() {
+        let config = config_from(
+            r#"
+            [index-config."az://acct.blob.core.windows.net/general"]
+            write-shards = false
+            "#,
+        );
+        let channel =
+            AzureChannelUrl::parse("az://acct.blob.core.windows.net/general/mychannel").unwrap();
+
+        let resolved = resolve_index_channel_config(&config, channel.canonical().as_str());
+        assert_eq!(resolved.write_shards, Some(false));
+
+        // The spelling this used to match against, kept as the negative half of
+        // the proof: had the key been written in wire form it would still be dead.
+        let wire = channel.wire(AzureScheme::Https).to_string();
+        assert_eq!(
+            resolve_index_channel_config(&config, &wire).write_shards,
+            None
+        );
+    }
+
+    /// An Azurite entry has to carry all the way to the opendal config, because
+    /// every one of these four fields is derived differently under path-style and
+    /// a wrong one fails silently.
+    #[test]
+    fn a_path_style_entry_drives_the_azurite_index_config() {
+        let config = config_from(
+            r#"
+            [azure-options."127.0.0.1:10000"]
+            scheme = "http"
+            path-style = true
+
+            [azure-options."127.0.0.1:10000".auth]
+            general = true
+            "#,
+        );
+        let channel =
+            AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general/mychannel")
+                .unwrap();
+
+        let endpoint = azure_endpoint(&config, channel.host());
+        assert_eq!(endpoint.scheme, AzureScheme::Http);
+        assert_eq!(endpoint.addressing, Addressing::PathStyle);
+
+        let azblob = rattler_azure::azblob_config(
+            &AzureCredentials::AccountKey("key".into()),
+            &channel,
+            endpoint,
+        )
+        .expect("an Azurite channel must build an opendal config");
+
+        assert_eq!(
+            azblob.endpoint.as_deref(),
+            Some("http://127.0.0.1:10000/devstoreaccount1")
+        );
+        assert_eq!(azblob.account_name.as_deref(), Some("devstoreaccount1"));
+        assert_eq!(azblob.container, "general");
+        assert_eq!(azblob.root.as_deref(), Some("/mychannel"));
+    }
+
+    /// Without an entry the same URL is an error, not a silently different
+    /// endpoint: host-style cannot read an account out of an IP literal, and the
+    /// error names the config line that fixes it.
+    #[test]
+    fn an_emulator_host_without_an_entry_is_a_guided_error() {
+        let channel =
+            AzureChannelUrl::parse("az://127.0.0.1:10000/devstoreaccount1/general").unwrap();
+        let endpoint = azure_endpoint(&None, channel.host());
+
+        let err = rattler_azure::azblob_config(
+            &AzureCredentials::AccountKey("key".into()),
+            &channel,
+            endpoint,
+        )
+        .expect_err("host-style cannot address an IP literal");
+        let message = err.to_string();
+        assert!(
+            message.contains("[azure-options.\"127.0.0.1:10000\"]"),
+            "{message}"
+        );
+        assert!(message.contains("path-style = true"), "{message}");
+    }
 }

@@ -968,6 +968,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
 name = "base64-simd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4075,6 +4081,7 @@ checksum = "96c9c85ce253ff87225e7669979d877a20c98a06604ec9d6dd5f4473e08f1ae1"
 dependencies = [
  "opendal-core",
  "opendal-layer-retry",
+ "opendal-service-azblob",
  "opendal-service-fs",
  "opendal-service-s3",
 ]
@@ -4115,6 +4122,37 @@ checksum = "7b2a25a718afb81fad81cb9a0580a1cb989221fa2317f888c6a37f8dad408eb7"
 dependencies = [
  "backon",
  "log",
+ "opendal-core",
+]
+
+[[package]]
+name = "opendal-service-azblob"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0030644366ef5d8cbe3a4a5822bf99a4aafddc1666e9d24b44d158d9062fc76a"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "http 1.5.0",
+ "log",
+ "opendal-core",
+ "opendal-service-azure-common",
+ "quick-xml 0.39.4",
+ "reqsign-azure-storage",
+ "reqsign-core",
+ "reqsign-file-read-tokio",
+ "serde",
+ "sha2 0.11.0",
+ "uuid",
+]
+
+[[package]]
+name = "opendal-service-azure-common"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b489f13c42e69d69bdd72952b634356ec43a7881a20259b38b540fcecdf4051"
+dependencies = [
+ "http 1.5.0",
  "opendal-core",
 ]
 
@@ -4358,6 +4396,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
+name = "pbkdf2"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
+dependencies = [
+ "digest 0.10.7",
+ "hmac 0.12.1",
+]
+
+[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4515,12 +4563,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "pkcs5"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e847e2c91a18bfa887dd028ec33f2fe6f25db77db3619024764914affe8b69a6"
+dependencies = [
+ "aes",
+ "cbc",
+ "der",
+ "pbkdf2",
+ "scrypt",
+ "sha2 0.10.9",
+ "spki",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
 dependencies = [
  "der",
+ "pkcs5",
+ "rand_core 0.6.4",
  "spki",
 ]
 
@@ -4991,6 +5056,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_azure"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "indexmap 2.14.0",
+ "jiff",
+ "opendal",
+ "percent-encoding",
+ "secrecy",
+ "serde",
+ "thiserror 2.0.19",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-test",
+ "url",
+ "which",
+]
+
+[[package]]
 name = "rattler_cache"
 version = "0.10.4"
 dependencies = [
@@ -5092,6 +5177,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.14.0",
  "insta",
+ "rattler_azure",
  "rattler_conda_types",
  "serde",
  "serde_ignored",
@@ -5153,6 +5239,7 @@ version = "0.30.11"
 dependencies = [
  "ahash",
  "anyhow",
+ "astral-reqwest-middleware",
  "bytes",
  "clap",
  "clap-verbosity-flag",
@@ -5164,11 +5251,13 @@ dependencies = [
  "indicatif",
  "jiff",
  "opendal",
+ "rattler_azure",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rattler_repodata_gateway",
  "rattler_s3",
  "reqwest",
@@ -5178,6 +5267,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tar",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
@@ -5299,8 +5389,14 @@ dependencies = [
  "itertools 0.15.0",
  "keyring-core",
  "netrc-rs",
+ "rattler_azure",
  "rattler_config",
  "regex",
+ "reqsign-azure-storage",
+ "reqsign-command-execute-tokio",
+ "reqsign-core",
+ "reqsign-file-read-tokio",
+ "reqsign-http-send-reqwest",
  "reqwest",
  "retry-policies",
  "rstest",
@@ -5564,6 +5660,7 @@ dependencies = [
  "indicatif",
  "miette",
  "opendal",
+ "rattler_azure",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
@@ -5744,13 +5841,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqsign-core"
-version = "3.2.0"
+name = "reqsign-azure-storage"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e38b44697c60a823705ccef85cb04d8e0527c9d16ed7c58bf1c6395bdd24ceb"
+checksum = "2824e7da3c2cc42ac3406c674eb57c89127fdcd97f3a73c608cfc680505ea134"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
+ "bytes",
+ "form_urlencoded",
+ "http 1.5.0",
+ "log",
+ "pem",
+ "percent-encoding",
+ "reqsign-core",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+]
+
+[[package]]
+name = "reqsign-command-execute-tokio"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53507459e278a2574b643521d631a9c99b1111ac33975c1ad3999e3898155211"
+dependencies = [
+ "reqsign-core",
+ "tokio",
+]
+
+[[package]]
+name = "reqsign-core"
+version = "3.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c07dd510b1e1b9b241883e483358147fb2ed2d497a7b39b065ba61eb93deceb0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
  "bytes",
  "futures",
  "hex",
@@ -5759,6 +5887,9 @@ dependencies = [
  "jiff",
  "log",
  "percent-encoding",
+ "rsa",
+ "serde",
+ "serde_json",
  "sha1 0.11.0",
  "sha2 0.11.0",
  "windows-sys 0.61.2",
@@ -5773,6 +5904,22 @@ dependencies = [
  "anyhow",
  "reqsign-core",
  "tokio",
+]
+
+[[package]]
+name = "reqsign-http-send-reqwest"
+version = "4.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac9cadffa4b1f5011d396f73faadc2169ff97e280e595c959ee37ae5c1bd5ea8"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-channel",
+ "http 1.5.0",
+ "http-body-util",
+ "reqsign-core",
+ "reqwest",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -5910,6 +6057,7 @@ dependencies = [
  "pkcs1",
  "pkcs8",
  "rand_core 0.6.4",
+ "sha2 0.10.9",
  "signature",
  "spki",
  "subtle",
@@ -6114,6 +6262,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "salsa20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6160,6 +6317,17 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "scrypt"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
+dependencies = [
+ "pbkdf2",
+ "salsa20",
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "sec1"

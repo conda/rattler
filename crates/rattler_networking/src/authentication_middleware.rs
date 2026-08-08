@@ -35,6 +35,13 @@ impl Middleware for AuthenticationMiddleware {
             return next.run(req, extensions).await;
         }
 
+        // Entries here are keyed by host alone, so without this gate a
+        // `*.blob.core.windows.net` token would attach to `az://` too. Those schemes
+        // carry their own signing middleware and their own grant model.
+        if !matches!(req.url().scheme(), "http" | "https") {
+            return next.run(req, extensions).await;
+        }
+
         let url = req.url().clone();
         match self.auth_storage.get_by_url_with_host(url) {
             Err(_) => {
@@ -428,6 +435,36 @@ mod tests {
         );
 
         storage.delete(host)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "keyring")]
+    #[tokio::test]
+    async fn non_http_schemes_are_left_unauthenticated() -> anyhow::Result<()> {
+        let tdir = tempdir()?;
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::from(FileStorage::from_path(
+            tdir.path().to_path_buf().join("auth.json"),
+        )?));
+        storage.store(
+            "*.blob.core.windows.net",
+            &Authentication::BearerToken("xyztokytoken".to_string()),
+        )?;
+
+        let (client, mut captured_rx) = make_client_harness(&storage);
+        let request = client
+            .get("az://acct.blob.core.windows.net/channel/noarch/repodata.json")
+            .build()?;
+        let _ = client.execute(request).await;
+
+        let captured_request = captured_rx.recv().await.unwrap();
+        assert_eq!(
+            captured_request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION),
+            None
+        );
+
         Ok(())
     }
 

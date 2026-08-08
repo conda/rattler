@@ -2,6 +2,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+#[cfg(feature = "azure")]
+use clap::builder::TypedValueParser as _;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use url::Url;
@@ -123,6 +125,9 @@ pub enum ServerType {
     Cloudsmith(CloudsmithOpts),
     #[cfg(feature = "s3")]
     S3(S3Opts),
+    #[cfg(feature = "azure")]
+    #[command(name = "az")]
+    Azure(AzureOpts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
 }
@@ -416,6 +421,34 @@ pub struct S3Opts {
     pub force: bool,
 }
 
+/// Options for uploading to Azure Blob Storage.
+///
+/// Authentication is supplied with either an account key or a shared access
+/// signature (SAS) token; the two are mutually exclusive.
+#[cfg(feature = "azure")]
+#[derive(Clone, Debug, PartialEq, Parser)]
+pub struct AzureOpts {
+    /// The channel URL in the Azure Blob container to upload the package to,
+    /// e.g., `az://myaccount.blob.core.windows.net/my-container/my-channel`
+    ///
+    /// Kept as an [`AzureChannelUrl`](rattler_azure::AzureChannelUrl) rather than
+    /// a wire `Url`, so the scheme the request goes out over is chosen where the
+    /// endpoint options are known instead of being fixed at parse time.
+    #[arg(short, long, env = "AZURE_CHANNEL")]
+    pub channel: rattler_azure::AzureChannelUrl,
+
+    #[clap(flatten)]
+    pub credentials: rattler_azure::clap::AzureCredentialsOpts,
+
+    /// Replace files if it already exists.
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        value_parser = clap::builder::BoolishValueParser::new().map(ForceOverwrite)
+    )]
+    pub force: ForceOverwrite,
+}
+
 #[derive(Debug)]
 #[allow(missing_docs)]
 pub struct AnacondaData {
@@ -601,5 +634,22 @@ impl CondaForgeData {
             provider,
             dry_run,
         }
+    }
+}
+
+#[cfg(all(test, feature = "azure"))]
+mod test {
+    use super::{AzureOpts, ForceOverwrite};
+    use clap::Parser;
+
+    /// `--force` stays a flag even though it parses into a newtype.
+    #[test]
+    fn test_azure_force_parses_as_a_flag() {
+        let args = ["az", "--channel", "az://account.blob.core.windows.net/c"];
+        let opts = AzureOpts::try_parse_from(args).unwrap();
+        assert_eq!(opts.force, ForceOverwrite(false));
+
+        let opts = AzureOpts::try_parse_from(args.iter().chain(["--force"].iter())).unwrap();
+        assert_eq!(opts.force, ForceOverwrite(true));
     }
 }

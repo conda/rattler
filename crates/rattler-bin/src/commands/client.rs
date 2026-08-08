@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+#[cfg(any(feature = "s3", feature = "azure"))]
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_networking::{
@@ -50,7 +52,7 @@ pub fn create_client_with_middleware(
         .with_arc(Arc::new(AuthChallengeMiddleware::default()));
 
     let client = client.with(
-        rattler_networking::OciMiddleware::new(download_client)
+        rattler_networking::OciMiddleware::new(download_client.clone())
             .with_authentication_storage(authentication_storage.clone()),
     );
     #[cfg(feature = "s3")]
@@ -60,6 +62,14 @@ pub fn create_client_with_middleware(
     ));
     #[cfg(feature = "gcs")]
     let client = client.with(rattler_networking::GCSMiddleware::default());
+    // `az://` URLs carry the full blob endpoint, so the middleware needs no
+    // configuration to *reach* one — it just swaps the scheme. The empty options
+    // table means every `az://` fetch here is anonymous.
+    #[cfg(feature = "azure")]
+    let client = client.with(rattler_networking::AzureMiddleware::new(
+        download_client,
+        [],
+    ));
 
     Ok(client.build())
 }

@@ -23,6 +23,11 @@ thiserror = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 indexmap = { workspace = true }
+# Default features off: this pulls in only `serde`, so the config crate stays
+# free of the networking/opendal/CLI weight behind the azure feature flags.
+rattler_azure = { workspace = true, default-features = false, features = [
+  "serde",
+] }
 rattler_conda_types = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_ignored = { workspace = true }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from rattler.networking.middleware import (
     AddHeadersMiddleware,
     AuthenticationMiddleware,
+    AzureMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
     OciMiddleware,
@@ -27,6 +28,7 @@ class Client:
                 | MirrorMiddleware
                 | OciMiddleware
                 | GCSMiddleware
+                | AzureMiddleware
                 | S3Middleware
             ]
             | None
@@ -74,7 +76,7 @@ class Client:
     ) -> Client:
         """
         Returns a client with the standard middleware stack: retry,
-        authentication, OCI, GCS and S3.
+        authentication, OCI, GCS, Azure and S3.
 
         Args:
             max_retries: Maximum retry attempts for transient errors (default 3).
@@ -96,6 +98,7 @@ class Client:
                 AuthenticationMiddleware(),
                 OciMiddleware(),
                 GCSMiddleware(),
+                AzureMiddleware(),
                 S3Middleware(),
             ],
             headers=headers,

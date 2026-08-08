@@ -2,7 +2,10 @@
 
 `rattler_index` creates or updates conda channel indexes by writing
 `repodata.json`, optional compressed repodata, and optional sharded repodata for
-packages stored on a local filesystem or in S3.
+packages stored on a local filesystem, in S3, or in Azure Blob Storage.
+
+S3 support requires the `s3` feature; Azure Blob Storage support requires the
+`azure` feature.
 
 ## CLI Usage
 
@@ -18,13 +21,98 @@ Index an S3 channel:
 rattler-index --config ./rattler-config.toml s3 s3://my-bucket/my-channel
 ```
 
+Index an Azure Blob Storage channel:
+
+```shell
+rattler-index --config ./rattler-config.toml az \
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel \
+    --azure-cli
+```
+
+Indexing writes to the container through opendal, which only accepts a storage
+account key or a shared access signature (SAS) token — it cannot use an `az
+login` AAD bearer token directly. Supply one of:
+
+- `--azure-cli`: mint a short-lived user-delegation SAS from the current `az
+  login` session automatically. Requires the Azure CLI (`az`) on `PATH` and a
+  prior `az login`. The minted SAS is scoped to the target container, granted
+  only the permissions indexing needs, and expires after 30 minutes by default
+  (`--azure-cli-sas-ttl-minutes`, plus two minutes of clock-skew headroom). A SAS
+  cannot be individually revoked, so it is kept short-lived on purpose.
+- `--account-key` / `AZURE_STORAGE_KEY`: a storage account key.
+- `--sas-token` / `AZURE_STORAGE_SAS_TOKEN`: a SAS token you supply yourself.
+
+To mint a SAS manually instead of using `--azure-cli` (for example, to reuse it
+across several commands), generate one from your `az login` session and pass it
+via `--sas-token`:
+
+```shell
+export AZURE_STORAGE_SAS_TOKEN=$(az storage container generate-sas \
+    --account-name my-storage-account --name my-container \
+    --permissions rwlc --expiry "$(date -u -d '+30 minutes' +%Y-%m-%dT%H:%MZ)" \
+    --auth-mode login --as-user --https-only -o tsv)
+rattler-index --config ./rattler-config.toml az \
+    az://my-storage-account.blob.core.windows.net/my-container/my-channel
+```
+
 The `--config` flag points at the same TOML configuration file used by pixi. It
-configures S3 credentials, concurrency, and per-channel index options under the
-`[index-config]` section.
+configures S3 credentials, Azure endpoint options, concurrency, and per-channel
+index options under the `[index-config]` section.
 
 When `--config` is omitted, `rattler-index` falls back to its built-in defaults
 (`write-zst = true`, `write-shards = true`, no advertised repodata revisions,
 `from-index-json` revision assignment, no channel metadata).
+
+## Remote storage credentials
+
+S3 endpoint and region settings live under `[s3-options.<bucket>]`, keyed by
+bucket name:
+
+```toml
+[s3-options.my-bucket]
+endpoint-url = "https://my-bucket.s3.amazonaws.com"
+region = "eu-central-1"
+force-path-style = false
+```
+
+Azure Blob channels need no block for the common case: the account, container and
+endpoint (including sovereign clouds) are all read from the channel URL
+`az://<account>.blob.core.windows.net/<container>/<channel>`. The `az://` scheme
+is required and is rewritten to `https://` for the request; a bare `https://` URL
+is rejected. Credentials are never stored in the config — they are resolved at
+runtime from `--account-key` / `--sas-token`, an `az login` session
+(`--azure-cli`), or the `DefaultCredentialProvider` chain.
+
+A host whose first label is not the storage account, or that is not reached over
+https, needs an entry under `[azure-options."<host>"]`. The key is the host with
+its port when the URL has one:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `scheme` | string | The scheme `az://` is rewritten to: `"https"` (default) or `"http"`. Use `http` for local emulators only. |
+| `path-style` | boolean | Where the storage account is found. `false` (default) reads it from the first host label. `true` reads it from the first path segment instead, which is the only form that works for an IP-literal or single-label host. |
+| `auth` | table | Which containers on the host may be sent credentials **when fetching**: one `<container> = true` line each. A container not listed is fetched anonymously, so one account can hold private and anonymous-read containers side by side — which is what Azure's per-container RBAC enforces. There is no host-wide switch, because a grant covering every container on an account, including ones created later, is not something to be able to write by accident. This is the only way a credential attaches on the fetch path, so keep these entries in your user-level config file, never in a checked-in project file. It has no effect on `rattler-index` or `rattler upload`, which take their credentials from the command line. |
+
+Indexing a channel in the Azurite emulator needs the two wire settings (add an
+`auth` line per container if the same host is also fetched from):
+
+```toml
+[azure-options."127.0.0.1:10000"]
+scheme = "http"
+path-style = true
+
+[azure-options."127.0.0.1:10000".auth]
+general = true
+```
+
+```shell
+export AZURE_STORAGE_KEY=<the Azurite account key>
+rattler-index --config ./rattler-config.toml az \
+    az://127.0.0.1:10000/devstoreaccount1/general/my-channel
+```
+
+Without the entry, that URL fails: host-style addressing cannot read an account
+name out of `127.0.0.1`, and the error tells you which line to add.
 
 ## Per-channel index configuration
 

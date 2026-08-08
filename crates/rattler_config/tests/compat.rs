@@ -185,6 +185,12 @@ const EDIT_MATRIX: &[(&str, &str)] = &[
         "s3-options.some-bucket",
         r#"{"endpoint-url": "https://s3.example.com", "region": "auto", "force-path-style": true}"#,
     ),
+    // Quoted, because every Azure authority contains dots. The grant is a table
+    // keyed by container, so there is no host-wide `auth` value to set.
+    (
+        r#"azure-options."acct.blob.core.windows.net""#,
+        r#"{"auth": {"releases": true}}"#,
+    ),
 ];
 
 /// Every key in the matrix can be set on a fully populated config, the
@@ -229,6 +235,52 @@ fn edit_matrix_set_roundtrip_unset() {
             "{key}: unset must restore the default without collateral changes"
         );
     }
+}
+
+/// A grant is settable per container, and there is no host-wide switch to set by
+/// mistake: `azure-options."<host>".auth` is a table of containers, so a bool
+/// aimed at it has nowhere to land. That refusal is the central safety property of
+/// the per-container design, and `config set` is where a user would try it.
+#[test]
+fn edit_grants_one_container_at_a_time() {
+    let host = rattler_azure::AzureHost::parse("acct.blob.core.windows.net").unwrap();
+    let releases = rattler_azure::ContainerName::new("releases").unwrap();
+    let public = rattler_azure::ContainerName::new("public").unwrap();
+
+    let mut config = Config::default();
+    for (container, value) in [("releases", "true"), ("public", "false")] {
+        let key = format!(r#"azure-options."acct.blob.core.windows.net".auth.{container}"#);
+        config
+            .set(&key, Some(value.to_string()))
+            .unwrap_or_else(|e| panic!("{key} must be settable: {e}"));
+    }
+
+    let entry = config.azure_options.get(&host);
+    assert!(entry.fetch(Some(&releases)).auth.is_granted());
+    assert!(!entry.fetch(Some(&public)).auth.is_granted());
+
+    // The whole point: no host-level `auth` value exists to grant every container
+    // on the account at once.
+    assert!(
+        config
+            .set(
+                r#"azure-options."acct.blob.core.windows.net".auth"#,
+                Some("true".to_string())
+            )
+            .is_err(),
+        "a host-wide grant must not be settable"
+    );
+
+    // Revoking one grant leaves the other alone.
+    config
+        .set(
+            r#"azure-options."acct.blob.core.windows.net".auth.releases"#,
+            None,
+        )
+        .unwrap();
+    let entry = config.azure_options.get(&host);
+    assert!(!entry.fetch(Some(&releases)).auth.is_granted());
+    assert_eq!(entry.grants().count(), 1, "`public` must survive");
 }
 
 /// Unknown keys must be rejected by `set` (both set and unset direction).
@@ -276,6 +328,19 @@ fn merge_semantics() {
     let per_channel = &merged.repodata_config.per_channel[&prefix_dev];
     assert_eq!(per_channel.disable_sharded, Some(true)); // from layer 1
     assert_eq!(per_channel.disable_zstd, Some(true)); // from layer 2
+    // `azure-options` grants merge per container: the lower layer's `releases`
+    // survives a layer that names only `staging` and `public`.
+    let mycompany = merged
+        .azure_options
+        .get(&rattler_azure::AzureHost::parse("mycompany.blob.core.windows.net").unwrap());
+    for (container, granted) in [("releases", true), ("staging", true), ("public", false)] {
+        let container = rattler_azure::ContainerName::new(container).unwrap();
+        assert_eq!(
+            mycompany.fetch(Some(&container)).auth.is_granted(),
+            granted,
+            "{container}"
+        );
+    }
     // concurrency: explicitly set values win over the lower layer.
     assert_eq!(merged.concurrency.solves, 9);
     assert_eq!(merged.concurrency.downloads, 12);

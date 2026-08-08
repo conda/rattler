@@ -17,6 +17,15 @@ native-tls = ["reqwest/native-tls", "ambient-id/native-tls"]
 rustls = ["reqwest/rustls", "ambient-id/rustls"]
 gcs = ["google-cloud-auth", "tokio/sync"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
+azure = [
+    "dep:rattler_azure",
+    "dep:reqsign-core",
+    "dep:reqsign-azure-storage",
+    "dep:reqsign-command-execute-tokio",
+    "dep:reqsign-file-read-tokio",
+    "dep:reqsign-http-send-reqwest",
+    "tokio",
+]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 keyring = [
     "keyring-core",
@@ -27,7 +36,7 @@ keyring = [
 ]
 
 [package.metadata.docs.rs]
-features = ["gcs", "s3"]
+features = ["gcs", "s3", "azure"]
 
 [dependencies]
 ambient-id = { workspace = true, features = ["reqwest-middleware"] }
@@ -67,7 +76,13 @@ thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
+rattler_azure = { workspace = true, optional = true }
 rattler_config = { workspace = true, optional = true }
+reqsign-core = { workspace = true, optional = true }
+reqsign-azure-storage = { workspace = true, optional = true }
+reqsign-command-execute-tokio = { workspace = true, optional = true }
+reqsign-file-read-tokio = { workspace = true, optional = true }
+reqsign-http-send-reqwest = { workspace = true, optional = true }
 
 [target.'cfg( target_arch = "wasm32" )'.dependencies]
 getrandom = { workspace = true, features = ["wasm_js"] }
@@ -84,6 +99,16 @@ dbus-secret-service-keyring-store = { workspace = true, optional = true, feature
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
+
+# Declared rather than auto-discovered, so a feature name that stops matching is a
+# cargo error instead of a test binary that silently holds no tests.
+[[test]]
+name = "azure_azurite_fetch"
+required-features = ["azure"]
+
+[[test]]
+name = "azure_real_fetch"
+required-features = ["azure"]
 
 [dev-dependencies]
 anyhow = { workspace = true }

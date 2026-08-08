@@ -2,7 +2,7 @@ import io
 
 import pytest
 from pathlib import Path
-from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
+from rattler.networking.middleware import AzureMiddleware, MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import (
     download_and_extract,
     download_bytes,
@@ -139,3 +139,7 @@ async def test_download_from_oci(tmpdir: Path) -> None:
 
 def test_instantiate_gcs_middleware() -> None:
     _client = Client([GCSMiddleware()])
+
+
+def test_instantiate_azure_middleware() -> None:
+    _client = Client([AzureMiddleware()])

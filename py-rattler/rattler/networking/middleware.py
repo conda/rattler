@@ -5,6 +5,7 @@ from typing import Callable
 from rattler.rattler import (
     PyAddHeadersMiddleware,
     PyAuthenticationMiddleware,
+    PyAzureMiddleware,
     PyGCSMiddleware,
     PyMirrorMiddleware,
     PyOciMiddleware,
@@ -154,6 +155,37 @@ class GCSMiddleware:
 
     def __init__(self) -> None:
         self._middleware = PyGCSMiddleware()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class AzureMiddleware:
+    """
+    Middleware to work with az:// URLs.
+
+    Fetches are anonymous. The per-host `azure-options` table (credential grants,
+    `scheme`, `path-style`) is not exposed to Python yet — unlike `S3Config`, which
+    does expose per-bucket configuration — so a private container cannot be read
+    from Python, and an emulator or custom endpoint cannot be reached at all. Azure
+    answers an unauthorized read of a private container with a 404, so that is what
+    surfaces. Follow-up work.
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import Client
+    >>> middleware = AzureMiddleware()
+    >>> middleware
+    AzureMiddleware()
+    >>> Client([middleware])
+    Client()
+    >>>
+    ```
+    """
+
+    def __init__(self) -> None:
+        self._middleware = PyAzureMiddleware()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

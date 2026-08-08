@@ -39,6 +39,20 @@ endpoint-url = "https://s3.example.com"
 region = "eu-central-1"
 force-path-style = true
 
+# A private channel on real Azure: the grant is written per container, so the
+# anonymous-read container on the same account stays anonymous.
+[azure-options."mycompany.blob.core.windows.net".auth]
+releases = true
+public = false
+
+# A local Azurite emulator: the entry is also the endpoint trust declaration.
+[azure-options."127.0.0.1:10000"]
+scheme = "http"
+path-style = true
+
+[azure-options."127.0.0.1:10000".auth]
+general = true
+
 [index-config]
 write-zst = true
 write-shards = false

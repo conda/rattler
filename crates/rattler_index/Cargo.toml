@@ -13,7 +13,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls", "s3"]
+default = ["rustls", "s3", "azure"]
 native-tls = [
   "reqwest/native-tls",
   "rattler_package_streaming/native-tls",
@@ -28,6 +28,7 @@ rustls = [
   "opendal/reqwest-rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
+azure = ["opendal/services-azblob", "dep:rattler_azure", "rattler_azure/opendal"]
 
 [[bin]]
 name = "rattler-index"
@@ -56,8 +57,10 @@ rattler_networking = { workspace = true, default-features = false, features = [
 ] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 hex = { workspace = true }
+rattler_azure = { workspace = true, optional = true, features = ["clap"] }
 rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
@@ -76,9 +79,26 @@ url = { workspace = true }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
 
+# Declared rather than auto-discovered, so a feature name that stops matching is a
+# cargo error instead of a test binary that silently holds no tests.
+[[test]]
+name = "azure_azurite"
+required-features = ["azure"]
+
 [dev-dependencies]
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
   "sparse",
 ] }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
+# `AzureMiddleware` is the only shared-key signer reachable from a test here, and
+# the Azurite tests need one to create a container: opendal has no
+# container-creation operation.
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+  "azure",
+] }
+reqwest-middleware = { workspace = true }
+# Puts Azurite's development credentials in the environment for reqsign's env
+# provider without an unsafe `set_var`.
+temp-env = { workspace = true }
