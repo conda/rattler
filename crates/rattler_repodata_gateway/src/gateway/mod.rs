@@ -7,6 +7,8 @@ mod channel_relations;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
 mod error;
+#[cfg(feature = "gha")]
+pub mod gha;
 #[cfg(feature = "indicatif")]
 mod indicatif;
 mod local_subdir;

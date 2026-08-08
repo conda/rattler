@@ -5436,6 +5436,7 @@ dependencies = [
  "libc",
  "memmap2",
  "parking_lot",
+ "percent-encoding",
  "pin-project-lite",
  "proptest",
  "rattler_cache",
@@ -5468,6 +5469,7 @@ dependencies = [
  "url",
  "wasmtimer",
  "windows-sys 0.61.2",
+ "zip",
  "zstd",
 ]
 
