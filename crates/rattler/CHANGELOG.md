@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- prefix.dev OAuth logins now request Basilisk query access while retaining channel access. Pixi users must upgrade to the eventual Pixi release containing this change, then run `pixi auth logout prefix.dev` and `pixi auth login prefix.dev` to update existing credentials.
+
 ## [0.48.1](https://github.com/conda/rattler/compare/rattler-v0.48.0...rattler-v0.48.1) - 2026-08-03
 
 ### Other

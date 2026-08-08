@@ -268,7 +268,7 @@ fn normalize_login_host(host: &str) -> String {
         .unwrap_or_else(|| host.trim_end_matches('/').to_string())
 }
 
-/// prefix.dev's default channel scopes
+/// prefix.dev's default OAuth scopes.
 #[cfg(feature = "oauth")]
 const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "openid",
@@ -276,6 +276,7 @@ const PREFIX_DEV_OAUTH_SCOPES: &[&str] = &[
     "offline_access",
     "channel:read",
     "channel:upload",
+    "basilisk:query",
 ];
 
 /// Built-in OAuth defaults for a known host.
@@ -1524,7 +1525,23 @@ mod tests {
         let prefix = default_oauth_config_for_host("prefix.dev").unwrap();
         assert_eq!(prefix.issuer_url, "https://prefix.dev");
         assert_eq!(prefix.client_id, "rattler");
-        assert!(prefix.scopes.iter().any(|s| s == "channel:upload"));
+        assert_eq!(
+            prefix
+                .scopes
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>(),
+            [
+                "openid",
+                "profile",
+                "offline_access",
+                "channel:read",
+                "channel:upload",
+                "basilisk:query",
+            ]
+            .into_iter()
+            .map(ToString::to_string)
+            .collect()
+        );
     }
 
     #[cfg(feature = "oauth")]
