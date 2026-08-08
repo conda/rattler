@@ -90,6 +90,7 @@ nav:
           - solve: solver.md
           - install: installer.md
           - index: index_.md
+          - logging: logging.md
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md

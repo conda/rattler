@@ -10,6 +10,7 @@ extend-exclude = [
   "crates/rattler_libsolv_c",
   "test-data",
   "crates/rattler_index/tests/test_index.rs",
+  "py-rattler/vendor", # vendored third-party code, kept verbatim
   "js-rattler/src/PackageName.test.ts", # complains about valid test names in strings
 ]
 ignore-hidden = false

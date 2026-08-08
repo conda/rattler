@@ -6,7 +6,9 @@
 //! files from one package, open a [`crate::archive::PackageArchive`] instead.
 
 use rattler_conda_types::package::{CondaArchiveType, PackageFile};
+use rattler_redaction::{DEFAULT_REDACTION_STR, redact_known_secrets_from_url};
 use reqwest_middleware::ClientWithMiddleware;
+use tracing::instrument;
 use url::Url;
 
 pub use super::full_download::{
@@ -48,6 +50,7 @@ pub async fn fetch_package_file_from_remote_url<P: PackageFile>(
 
 /// Fetch the raw bytes for a file path inside a remote package.
 /// Returns `Ok(None)` when the path does not exist in the archive.
+#[instrument(skip_all, fields(url = %redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).as_ref().unwrap_or(&url), path = %target_path.display()))]
 pub async fn fetch_file_from_remote_url(
     client: ClientWithMiddleware,
     url: Url,
