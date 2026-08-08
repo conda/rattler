@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.0...rattler_conda_types-v0.49.1) - 2026-08-08
+
+### Added
+
+- *(rattler_conda_types)* convert to and from `semver::Version` ([#2641](https://github.com/conda/rattler/pull/2641))
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
 ## [0.49.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.48.1...rattler_conda_types-v0.49.0) - 2026-07-24
 
 ### Added

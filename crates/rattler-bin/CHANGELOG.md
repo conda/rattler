@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/rattler-bin-v0.2.7...rattler-bin-v0.2.8) - 2026-08-08
+
+### Added
+
+- Improve `rattler solve` output ([#2644](https://github.com/conda/rattler/pull/2644))
+
+### Fixed
+
+- follow the OCI registry's WWW-Authenticate challenge ([#2628](https://github.com/conda/rattler/pull/2628))
+
+### Other
+
+- speed up CUDA virtual package detection ([#2568](https://github.com/conda/rattler/pull/2568))
+- unblock pixi setup and source package builds ([#2642](https://github.com/conda/rattler/pull/2642))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/rattler-bin-v0.2.6...rattler-bin-v0.2.7) - 2026-08-03
 
 ### Other

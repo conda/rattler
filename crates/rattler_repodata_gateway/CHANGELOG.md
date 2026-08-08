@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.31.0...rattler_repodata_gateway-v0.32.0) - 2026-08-08
+
+### Added
+
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
+### Fixed
+
+- *(repodata-gateway)* limit concurrent shard cache reads ([#2163](https://github.com/conda/rattler/pull/2163))
+- *(repodata_gateway)* test remote run_exports against a local server ([#2648](https://github.com/conda/rattler/pull/2648))
+- Failing test ([#2647](https://github.com/conda/rattler/pull/2647))
+
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.30.1...rattler_repodata_gateway-v0.31.0) - 2026-07-24
 
 ### Added

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v4.1.0...rattler_virtual_packages-v5.0.0) - 2026-08-08
+
+### Added
+
+- Introduce default versions for virtual packages ([#2646](https://github.com/conda/rattler/pull/2646))
+
+### Other
+
+- speed up CUDA virtual package detection ([#2568](https://github.com/conda/rattler/pull/2568))
+
 ## [4.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v4.0.0...rattler_virtual_packages-v4.1.0) - 2026-07-28
 
 ### Added

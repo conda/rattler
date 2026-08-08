@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_git-v0.2.1...rattler_git-v0.3.0) - 2026-08-08
+
+### Fixed
+
+- *(rattler_git)* harden LFS checkouts and add path filters ([#2640](https://github.com/conda/rattler/pull/2640))
+
 ## [0.2.1](https://github.com/conda/rattler/compare/rattler_git-v0.2.0...rattler_git-v0.2.1) - 2026-07-24
 
 ### Other
