@@ -1,26 +1,55 @@
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::package::{IndexJson, PathsJson};
+use rattler_conda_types::package::{IndexJson, PackageFile, PathsJson};
 use rattler_package_streaming::reqwest::fetch::fetch_package_file_from_remote_url;
+use rattler_package_streaming::seek::read_package_file;
 use url::Url;
 
-/// Inspect package metadata from a remote conda package.
+/// Inspect package metadata from a local or remote conda package.
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
-    /// URL of the conda package to inspect (must be a .conda archive)
+    /// Path or URL to the conda package to inspect (.conda or .tar.bz2 archive)
     #[clap(required = true)]
-    url: Url,
+    package: String,
 
     /// Number of files to print
     #[clap(long, default_value_t = 10)]
     limit: usize,
 }
 
-pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
-    let client = super::client::create_client_with_middleware(offline)?;
+/// Reads a typed package file from either a remote URL or a local path.
+async fn read_file<P: PackageFile + Send + 'static>(
+    package: &str,
+    offline: bool,
+) -> miette::Result<P> {
+    if let Some(url) = parse_remote_url(package) {
+        let client = super::client::create_client_with_middleware(offline)?;
+        fetch_package_file_from_remote_url(client, url)
+            .await
+            .into_diagnostic()
+    } else {
+        let package = package.to_string();
+        tokio::task::spawn_blocking(move || read_package_file::<P>(&package))
+            .await
+            .into_diagnostic()?
+            .into_diagnostic()
+    }
+}
 
-    let index_json: IndexJson = fetch_package_file_from_remote_url(client.clone(), opt.url.clone())
+/// Parses the argument as a remote URL, returning `None` for local paths
+/// (including `file://` URLs).
+fn parse_remote_url(package: &str) -> Option<Url> {
+    match Url::parse(package) {
+        // A single-character scheme is almost certainly a Windows drive letter
+        // (e.g. `C:\pkgs\foo.conda`), not a URL scheme. Treat those and
+        // `file://` URLs as local paths.
+        Ok(url) if url.scheme().len() > 1 && url.scheme() != "file" => Some(url),
+        _ => None,
+    }
+}
+
+pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
+    let index_json: IndexJson = read_file(&opt.package, offline)
         .await
-        .into_diagnostic()
         .context("failed to read index.json")?;
 
     println!("name: {}", index_json.name.as_normalized());
@@ -45,9 +74,8 @@ pub async fn inspect(opt: Opt, offline: bool) -> miette::Result<()> {
         }
     }
 
-    let paths_json: PathsJson = fetch_package_file_from_remote_url(client, opt.url)
+    let paths_json: PathsJson = read_file(&opt.package, offline)
         .await
-        .into_diagnostic()
         .context("failed to read paths.json")?;
 
     let total = paths_json.paths.len();
