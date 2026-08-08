@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5](https://github.com/conda/rattler/compare/rattler_cache-v0.10.4...rattler_cache-v0.10.5) - 2026-08-08
+
+### Added
+
+- *(rattler_cache)* add package layer filtering ([#2652](https://github.com/conda/rattler/pull/2652))
+
 ## [0.10.4](https://github.com/conda/rattler/compare/rattler_cache-v0.10.3...rattler_cache-v0.10.4) - 2026-07-24
 
 ### Added

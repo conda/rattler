@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.4](https://github.com/conda/rattler/compare/rattler_networking-v0.30.3...rattler_networking-v0.30.4) - 2026-08-08
+
+### Fixed
+
+- *(rattler_networking)* report a missing OCI manifest as a 404 instead of erroring ([#2651](https://github.com/conda/rattler/pull/2651))
+- follow the OCI registry's WWW-Authenticate challenge ([#2628](https://github.com/conda/rattler/pull/2628))
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_networking-v0.30.2...rattler_networking-v0.30.3) - 2026-07-24
 
 ### Other

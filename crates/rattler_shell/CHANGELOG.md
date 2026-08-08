@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.13](https://github.com/conda/rattler/compare/rattler_shell-v0.27.12...rattler_shell-v0.27.13) - 2026-08-08
+
+### Fixed
+
+- *(shell)* escape env var values in activation script ([#2621](https://github.com/conda/rattler/pull/2621))
+
 ## [0.27.12](https://github.com/conda/rattler/compare/rattler_shell-v0.27.11...rattler_shell-v0.27.12) - 2026-08-03
 
 ### Other
