@@ -1284,7 +1284,9 @@ mod test {
     };
     use bytes::Bytes;
     use futures::stream;
-    use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
+    use rattler_conda_types::package::{
+        BuildString, CondaArchiveIdentifier, PackageFile, PathsJson,
+    };
     use rattler_conda_types::{
         MatchSpec, PackageName, PackageRecord, RepoDataRecord, VersionWithSource,
     };
@@ -2019,7 +2021,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            "cpython".to_string(),
+            BuildString::new_unchecked("cpython"),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2062,7 +2064,7 @@ mod test {
         let mut package_record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            "cpython".to_string(),
+            BuildString::new_unchecked("cpython"),
         );
         package_record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2120,7 +2122,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            "cpython".to_string(),
+            BuildString::new_unchecked("cpython"),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2175,7 +2177,7 @@ mod test {
             package_record: PackageRecord::new(
                 PackageName::new_unchecked("clobber-python"),
                 "0.1.0".parse::<VersionWithSource>().unwrap(),
-                "cpython".to_string(),
+                BuildString::new_unchecked("cpython"),
             ),
             url: record_url,
             channel: None,
@@ -2202,7 +2204,7 @@ mod test {
         let mut record = PackageRecord::new(
             PackageName::new_unchecked("clobber-python"),
             "0.1.0".parse::<VersionWithSource>().unwrap(),
-            "cpython".to_string(),
+            BuildString::new_unchecked("cpython"),
         );
         record.sha256 = Some(compute_file_digest::<Sha256>(&package_path).unwrap());
 
@@ -2352,7 +2354,7 @@ mod test {
         let record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             "1.0".parse::<VersionWithSource>().unwrap(),
-            r"x\..\..\..\escaped".to_string(),
+            BuildString::new_unchecked(r"x\..\..\..\escaped"),
         );
         let key = CacheKey::from(&record);
 
@@ -2724,7 +2726,7 @@ mod test {
             let mut record = PackageRecord::new(
                 PackageName::new_unchecked("clobber-python"),
                 "0.1.0".parse::<VersionWithSource>().unwrap(),
-                "cpython".to_string(),
+                BuildString::new_unchecked("cpython"),
             );
             record.sha256 = Some(compute_file_digest::<Sha256>(archive).unwrap());
             record

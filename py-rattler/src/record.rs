@@ -14,7 +14,7 @@ use pyo3::{
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
-    package::{DistArchiveIdentifier, IndexJson, PackageFile},
+    package::{BuildString, DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
 };
@@ -191,6 +191,11 @@ impl PyRecord {
         noarch: Option<PyNoArchType>,
         python_site_packages_path: Option<String>,
     ) -> Self {
+        // Deliberately unchecked: `PackageRecord.build` is not always a CEP26
+        // conda build string. Wheel records (`WhlPackageRecord`) carry the
+        // wheel tag (e.g. `py3-none-any`) verbatim, and source packages have
+        // an empty build.
+        let build = BuildString::new_unchecked(build);
         let noarch = noarch.map(Into::into);
         Self {
             inner: RecordInner::Package(Arc::new(PackageRecord {
@@ -368,15 +373,18 @@ impl PyRecord {
         self.as_package_record_mut().arch = arch;
     }
 
-    /// The build string of the package.
+    /// The build string of the package. Returns an empty string when the
+    /// package has no build (e.g. a source package without a built artifact).
     #[getter]
     pub fn build(&self) -> String {
-        self.as_package_record().build.clone()
+        self.as_package_record().build.to_string()
     }
 
     #[setter]
     pub fn set_build(&mut self, build: String) {
-        self.as_package_record_mut().build = build;
+        // Unchecked for the same reason as `create`: wheel records store the
+        // wheel tag in this field, which is not a valid CEP26 build string.
+        self.as_package_record_mut().build = BuildString::new_unchecked(build);
     }
 
     /// The build number of the package.

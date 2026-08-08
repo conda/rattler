@@ -72,7 +72,7 @@ impl CacheKey {
         Ok(Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record.build.clone(),
+            build_string: record.build.to_string(),
             sha256: record.sha256,
             md5: record.md5,
             extension: archive_identifier.archive_type.extension().to_string(),
@@ -89,14 +89,16 @@ pub enum CacheKeyError {
 #[cfg(test)]
 mod tests {
     use super::CacheKey;
-    use rattler_conda_types::{PackageName, PackageRecord, VersionWithSource};
+    use rattler_conda_types::{
+        PackageName, PackageRecord, VersionWithSource, package::BuildString,
+    };
 
     #[test]
     fn to_path_segment_rejects_path_traversal() {
         let record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             "1.0".parse::<VersionWithSource>().unwrap(),
-            r"x\..\..\..\project\.git\hooks".to_string(),
+            BuildString::new_unchecked(r"x\..\..\..\project\.git\hooks"),
         );
         let key = CacheKey::create(&record, "demo-1.0-0.tar.bz2").unwrap();
         assert!(key.to_path_segment().is_err());
@@ -107,7 +109,7 @@ mod tests {
         let record = PackageRecord::new(
             PackageName::new_unchecked("demo"),
             "1.0".parse::<VersionWithSource>().unwrap(),
-            "py39h6fdeb60_14".to_string(),
+            BuildString::new_unchecked("py39h6fdeb60_14"),
         );
         let key = CacheKey::create(&record, "demo-1.0-0.tar.bz2").unwrap();
         assert!(key.to_path_segment().is_ok());
