@@ -1,6 +1,10 @@
 #![allow(clippy::option_option)]
 
-use std::{collections::BTreeSet, io, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io,
+    path::Path,
+};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -68,6 +72,9 @@ pub struct PackageRecordPatch {
     /// not required to be installed, but if they are installed they must follow
     /// these constraints.
     pub constrains: Option<Vec<String>>,
+
+    /// Optional dependency groups keyed by extra name.
+    pub extra_depends: Option<BTreeMap<String, Vec<String>>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
@@ -240,6 +247,13 @@ impl PackageRecord {
             self.purls = package_urls.clone();
         }
     }
+
+    fn apply_v3_patch(&mut self, patch: &PackageRecordPatch) {
+        self.apply_patch(patch);
+        if let Some(extra_depends) = &patch.extra_depends {
+            self.extra_depends = extra_depends.clone();
+        }
+    }
 }
 
 /// Apply a patch to a repodata file
@@ -271,17 +285,17 @@ pub fn apply_patches_impl(
     // Apply patches to v3 packages
     for (identifier, patch) in instructions.v3.tar_bz2.iter() {
         if let Some(record) = v3.tar_bz2.get_mut(identifier) {
-            record.apply_patch(patch);
+            record.apply_v3_patch(patch);
         }
     }
     for (identifier, patch) in instructions.v3.conda.iter() {
         if let Some(record) = v3.conda.get_mut(identifier) {
-            record.apply_patch(patch);
+            record.apply_v3_patch(patch);
         }
     }
     for (identifier, patch) in instructions.v3.whl.iter() {
         if let Some(record) = v3.whl.get_mut(identifier) {
-            record.package_record.apply_patch(patch);
+            record.package_record.apply_v3_patch(patch);
         }
     }
     for (extension, patch) in instructions.v3.extensions.iter() {
