@@ -360,10 +360,7 @@ class Gateway:
         return GatewayQueryResult(
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
-            [
-                UnsupportedRepodataRevision._from_py(report)
-                for report in py_unsupported_repodata_revisions
-            ],
+            [UnsupportedRepodataRevision._from_py(report) for report in py_unsupported_repodata_revisions],
         )
 
     async def names(
@@ -419,10 +416,7 @@ class Gateway:
         return GatewayNamesResult(
             [PackageName._from_py_package_name(package_name) for package_name in py_package_names],
             [ChannelNotice._from_py(notice) for notice in py_notices],
-            [
-                UnsupportedRepodataRevision._from_py(report)
-                for report in py_unsupported_repodata_revisions
-            ],
+            [UnsupportedRepodataRevision._from_py(report) for report in py_unsupported_repodata_revisions],
         )
 
     async def channel_notices(

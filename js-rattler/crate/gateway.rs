@@ -101,15 +101,10 @@ struct UnsupportedRepodataRevisionCollector(Arc<Mutex<Vec<UnsupportedRepodataRev
 
 impl UnsupportedRepodataRevisionCollector {
     fn into_reports(self) -> Vec<UnsupportedRepodataRevisionReport> {
-        std::mem::take(
-            &mut *self
-                .0
-                .lock()
-                .expect("revision collector poisoned"),
-        )
-        .into_iter()
-        .map(UnsupportedRepodataRevisionReport::from)
-        .collect()
+        std::mem::take(&mut *self.0.lock().expect("revision collector poisoned"))
+            .into_iter()
+            .map(UnsupportedRepodataRevisionReport::from)
+            .collect()
     }
 }
 
@@ -313,9 +308,7 @@ impl JsGateway {
 mod tests {
     use rattler_conda_types::{RepodataRevision, RepodataRevisionMetadata};
 
-    use super::{
-        Reporter, UnsupportedRepodataRevision, UnsupportedRepodataRevisionCollector,
-    };
+    use super::{Reporter, UnsupportedRepodataRevision, UnsupportedRepodataRevisionCollector};
 
     fn report(
         channel: &str,
