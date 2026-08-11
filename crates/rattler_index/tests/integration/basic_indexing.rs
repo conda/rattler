@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     fs::File,
     path::{Path, PathBuf},
@@ -611,6 +612,127 @@ async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions
             "unchanged-array": ["opaque", { "nested-null": null }]
         })
     );
+}
+
+async fn assert_invalid_multi_subdir_patch_is_preflighted(
+    linux_patch: Value,
+    expected_error: &str,
+) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut original_repodata = HashMap::new();
+    for subdir in ["noarch", "linux-64"] {
+        let subdir_path = temp_dir.path().join(subdir);
+        fs::create_dir_all(&subdir_path).unwrap();
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "info": { "subdir": subdir },
+            "packages": {},
+            "packages.conda": {},
+            "v3": {},
+            "repodata_version": 1
+        }))
+        .unwrap();
+        fs::write(subdir_path.join("repodata.json"), &bytes).unwrap();
+        original_repodata.insert(subdir, bytes);
+    }
+
+    let patch_source = temp_dir.path().join("invalid-patch-source");
+    let patch_info_dir = patch_source.join("info");
+    let patch_noarch_dir = patch_source.join("noarch");
+    let patch_linux_dir = patch_source.join("linux-64");
+    fs::create_dir_all(&patch_info_dir).unwrap();
+    fs::create_dir_all(&patch_noarch_dir).unwrap();
+    fs::create_dir_all(&patch_linux_dir).unwrap();
+    fs::write(
+        patch_info_dir.join("index.json"),
+        r#"{
+            "build": "0",
+            "build_number": 0,
+            "name": "repodata-patches",
+            "noarch": "generic",
+            "subdir": "noarch",
+            "version": "1.0"
+        }"#,
+    )
+    .unwrap();
+    fs::write(patch_noarch_dir.join("patch_instructions.json"), "{}").unwrap();
+    fs::write(
+        patch_linux_dir.join("patch_instructions.json"),
+        serde_json::to_vec(&linux_patch).unwrap(),
+    )
+    .unwrap();
+
+    let patch_name = "repodata-patches-1.0-0.conda";
+    write_conda_package(
+        File::create(temp_dir.path().join("noarch").join(patch_name)).unwrap(),
+        &patch_source,
+        &[
+            patch_info_dir.join("index.json"),
+            patch_noarch_dir.join("patch_instructions.json"),
+            patch_linux_dir.join("patch_instructions.json"),
+        ],
+        CompressionLevel::Default,
+        None,
+        "repodata-patches-1.0-0",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let error = index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: None,
+        repodata_patch: Some(patch_name.to_string()),
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap_err();
+    let error = error.to_string();
+    assert!(error.contains("invalid repodata patch for subdir linux-64"));
+    assert!(error.contains(expected_error), "unexpected error: {error}");
+
+    for (subdir, expected) in original_repodata {
+        assert_eq!(
+            fs::read(temp_dir.path().join(subdir).join("repodata.json")).unwrap(),
+            expected,
+            "{subdir} repodata changed before global patch preflight completed"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_legacy_patch_preflight_rejects_invalid_subdir_before_any_subdir_write() {
+    assert_invalid_multi_subdir_patch_is_preflighted(
+        serde_json::json!({
+            "packages": {
+                "demo-1.0-0.tar.bz2": {
+                    "extra_depends": { "test": ["pytest >=8"] }
+                }
+            }
+        }),
+        "legacy repodata patches cannot set extra_depends",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_v3_patch_preflight_rejects_invalid_subdir_before_any_subdir_write() {
+    assert_invalid_multi_subdir_patch_is_preflighted(
+        serde_json::json!({
+            "v3": {
+                "conda": {
+                    "demo-1.0-0": { "depends": ["python[version="] }
+                }
+            }
+        }),
+        "failed to parse depends MatchSpec",
+    )
+    .await;
 }
 
 #[tokio::test]
