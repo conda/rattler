@@ -188,16 +188,16 @@ pub async fn simple_solve(
     // Use matching repodata metadata when older locked packages omit dependencies.
     // The URL identifies the exact artifact, avoiding metadata from an identically named
     // package in another channel or subdirectory.
-    let repodata_metadata: HashMap<
-        &Url,
-        (&Vec<String>, &BTreeMap<String, Vec<String>>),
-    > = repodata
+    let repodata_metadata: HashMap<&Url, (&Vec<String>, &BTreeMap<String, Vec<String>>)> = repodata
         .iter()
         .flat_map(|r| r.iter())
         .map(|rec| {
             (
                 &rec.url,
-                (&rec.package_record.depends, &rec.package_record.extra_depends),
+                (
+                    &rec.package_record.depends,
+                    &rec.package_record.extra_depends,
+                ),
             )
         })
         .collect();
