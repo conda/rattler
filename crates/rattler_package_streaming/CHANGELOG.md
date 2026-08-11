@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.9...rattler_package_streaming-v0.27.0) - 2026-08-11
+
+### Added
+
+- add PackageArchive for sparse reads from conda packages ([#2632](https://github.com/conda/rattler/pull/2632))
+
 ## [0.26.9](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.26.8...rattler_package_streaming-v0.26.9) - 2026-07-24
 
 ### Other
