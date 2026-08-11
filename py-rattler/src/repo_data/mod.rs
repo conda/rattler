@@ -1,11 +1,39 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use pyo3::{PyResult, pyclass, pymethods};
-use rattler_conda_types::{ChannelInfo, ChannelRelations, RepoData};
+use rattler_conda_types::{ChannelInfo, ChannelRelations, RepoData, RepodataRevisions};
 
 use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};
 
 use patch_instructions::PyPatchInstructions;
+
+/// The Python representation of metadata for one advertised repodata revision.
+pub(crate) type PyRepodataRevisionMetadata = (
+    Option<String>,
+    Option<u64>,
+    Option<i64>,
+    Option<i64>,
+);
+
+/// Convert revision metadata to a Python-friendly, `vN`-keyed mapping.
+pub(crate) fn repodata_revisions_to_python(
+    revisions: &RepodataRevisions,
+) -> BTreeMap<String, PyRepodataRevisionMetadata> {
+    revisions
+        .iter()
+        .map(|(revision, metadata)| {
+            (
+                revision.to_string(),
+                (
+                    metadata.message.clone(),
+                    metadata.n_packages,
+                    metadata.oldest.map(|timestamp| timestamp.timestamp_millis()),
+                    metadata.newest.map(|timestamp| timestamp.timestamp_millis()),
+                ),
+            )
+        })
+        .collect()
+}
 
 pub mod gateway;
 pub mod patch_instructions;
@@ -53,6 +81,16 @@ impl PyRepoData {
     #[getter]
     pub fn version(&self) -> Option<u64> {
         self.inner.version
+    }
+
+    /// Returns the revisions advertised by the repodata, keyed by `vN`.
+    #[getter]
+    pub fn repodata_revisions(&self) -> BTreeMap<String, PyRepodataRevisionMetadata> {
+        self.inner
+            .info
+            .as_ref()
+            .map(|info| repodata_revisions_to_python(&info.repodata_revisions))
+            .unwrap_or_default()
     }
 }
 
@@ -109,6 +147,12 @@ impl PyChannelInfo {
     #[getter]
     pub fn base_url(&self) -> Option<String> {
         self.inner.base_url.clone()
+    }
+
+    /// Returns the revisions advertised by the repodata, keyed by `vN`.
+    #[getter]
+    pub fn repodata_revisions(&self) -> BTreeMap<String, PyRepodataRevisionMetadata> {
+        repodata_revisions_to_python(&self.inner.repodata_revisions)
     }
 
     /// Channel relations declared by this channel (CEP-42). `None` when the
