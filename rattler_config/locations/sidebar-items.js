@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CONFIG_FILE_NAME"],"fn":["config_search_paths","system_config_path","tool_home","user_config_paths"]};
+window.SIDEBAR_ITEMS = {"constant":["CONFIG_FILE_NAME","SHARED_CONFIG_DIR"],"enum":["ConfigLayer"],"fn":["config_search_paths","shared_system_config_path","shared_user_config_paths","system_config_path","tool_home","user_config_paths"],"struct":["ConfigLocation"]};

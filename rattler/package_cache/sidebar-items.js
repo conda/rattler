@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["PackageCacheError","PackageCacheLayerError"],"struct":["BucketKey","CacheGlobalLock","CacheIndex","CacheKey","CacheMetadata","PackageCache","PackageCacheLayer"],"trait":["CacheReporter"]};
+window.SIDEBAR_ITEMS = {"enum":["PackageCacheError","PackageCacheLayerError"],"struct":["BucketKey","CacheGlobalLock","CacheIndex","CacheKey","CacheMetadata","PackageCache","PackageCacheLayer","PackageCacheLayerFilter"],"trait":["CacheReporter"]};
