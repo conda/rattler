@@ -1,6 +1,7 @@
 import json
 import random
 import datetime
+from pathlib import Path
 
 from rattler import Channel, NoArchType, PackageRecord, PackageName, RepoData, VersionWithSource
 
@@ -114,7 +115,7 @@ def test_package_record_setters_and_serialization() -> None:
     assert record.legacy_bz2_md5 == b"1234" * 4
 
 
-def test_flags_roundtrip_preserves_unknown_strings(tmp_path) -> None:
+def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
     flags = ["optional", "future-flag"]
     constructed = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=flags)
     assert constructed.flags == flags
