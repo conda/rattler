@@ -548,12 +548,20 @@ mod test {
                 "info": {
                     "subdir": "noarch",
                     "repodata_revisions": {
+                        "v1": {
+                            "message": "v1 layout is not modeled",
+                            "n_packages": 1
+                        },
                         "v4": {
+                            "message": "newer artifacts are available",
                             "n_packages": 2,
                             "oldest": 1768249989851,
                             "newest": 1773851561010
                         }
                     }
+                },
+                "v1": {
+                    "demo-2.0-0.conda": {}
                 },
                 "packages": {},
                 "packages.conda": {
@@ -604,12 +612,23 @@ mod test {
 
         assert_eq!(records.iter().map(RepoData::len).sum::<usize>(), 1);
         let messages = reporter.messages.lock().unwrap();
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].subdir, "noarch");
         assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
-        assert_eq!(messages[0].revision.revision, RepodataRevision::Unknown(4));
-        assert_eq!(messages[0].revision.n_packages, Some(2));
-        assert_eq!(messages[1], messages[0]);
+        assert_eq!(messages[0].revision, RepodataRevision::V1);
+        assert_eq!(messages[0].metadata.n_packages, Some(1));
+        assert_eq!(messages[1].revision, RepodataRevision::from(4));
+        assert_eq!(
+            serde_json::to_value(&messages[1].metadata).unwrap(),
+            serde_json::json!({
+                "message": "newer artifacts are available",
+                "n_packages": 2,
+                "oldest": 1768249989851i64,
+                "newest": 1773851561010i64
+            })
+        );
+        assert_eq!(messages[2], messages[0]);
+        assert_eq!(messages[3], messages[1]);
     }
 
     #[tokio::test]

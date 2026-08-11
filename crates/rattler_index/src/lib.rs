@@ -30,8 +30,8 @@ use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
     ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, PackageRecord, PatchInstructions,
-    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Packages,
-    WhlPackageRecord,
+    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Extensions,
+    V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
@@ -741,39 +741,41 @@ async fn index_subdir_inner(
     )
     .await?;
 
-    // Step 2: Read any previous repodata.json files with conditional check.
-    // This file already contains a lot of information about the packages that we
-    // can reuse.
-    let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord> =
-        if force {
-            HashMap::default()
-        } else {
-            let (repodata_path, read_metadata) = if repodata_patch.is_some() {
-                (
-                    format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
-                    metadata.repodata_from_packages.as_ref().unwrap(),
-                )
-            } else {
-                (format!("{subdir}/{REPODATA}"), &metadata.repodata)
-            };
+    // Step 2: Read previous typed records. In patch mode they come from the
+    // unpatched source file, while published metadata and opaque v3 buckets
+    // always come from repodata.json.
+    let package_source = if repodata_patch.is_some() {
+        read_existing_repodata(
+            &op,
+            &format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
+            metadata.repodata_from_packages.as_ref().unwrap(),
+        )
+        .await?
+    } else {
+        read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata).await?
+    };
+    let existing_repodata = if repodata_patch.is_some() {
+        let published =
+            read_existing_repodata(&op, &format!("{subdir}/{REPODATA}"), &metadata.repodata)
+                .await?;
+        merge_patch_repodata(package_source, published)
+    } else {
+        package_source
+    };
 
-            match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
-                Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
-                    Ok(repodata) => package_records_from_repodata(repodata),
-                    Err(err) => {
-                        tracing::warn!(
-                            "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
-                        );
-                        HashMap::default()
-                    }
-                },
-                Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
-                    tracing::info!("Could not find {repodata_path}. Creating new one.");
-                    HashMap::default()
-                }
-                Err(err) => return Err(err.into()),
-            }
-        };
+    let ExistingRepodata {
+        packages: mut registered_packages,
+        v3_extensions,
+        repodata_revisions: existing_repodata_revisions,
+    } = if force {
+        ExistingRepodata {
+            packages: HashMap::default(),
+            v3_extensions: existing_repodata.v3_extensions,
+            repodata_revisions: existing_repodata.repodata_revisions,
+        }
+    } else {
+        existing_repodata
+    };
 
     // List all the packages in the subdirectory.
     let uploaded_packages: HashSet<DistArchiveIdentifier> = op
@@ -917,7 +919,10 @@ async fn index_subdir_inner(
         IndexMap::default();
     let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
-    let mut v3 = V3Packages::default();
+    let mut v3 = V3Packages {
+        extensions: v3_extensions,
+        ..V3Packages::default()
+    };
     let latest_revision = latest_repodata_revision(&repodata_revisions);
     for (filename, package) in registered_packages {
         let revision =
@@ -937,7 +942,13 @@ async fn index_subdir_inner(
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: channel_metadata.base_url,
-            repodata_revisions: repodata_revisions_for_packages(&repodata_revisions, &v3),
+            repodata_revisions: repodata_revisions_for_packages(
+                &repodata_revisions,
+                &existing_repodata_revisions,
+                &packages,
+                &conda_packages,
+                &v3,
+            ),
             channel_relations: channel_metadata.channel_relations,
         }),
         packages,
@@ -972,17 +983,103 @@ where
     Ok(encoded)
 }
 
+fn validate_configured_repodata_revisions(
+    revisions: &[RepodataRevisionInfo],
+) -> Result<(), RepodataError> {
+    for revision in revisions {
+        if !revision.revision.uses_legacy_package_layout()
+            && revision.revision != RepodataRevision::V3
+        {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "repodata revision {} is not supported by this indexer",
+                revision.revision
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn latest_repodata_revision(revisions: &[RepodataRevisionInfo]) -> RepodataRevision {
     revisions
         .iter()
         .map(|revision| revision.revision)
         .max()
-        .unwrap_or(RepodataRevision::Legacy)
+        .unwrap_or(RepodataRevision::V0)
 }
 
-fn package_records_from_repodata(
-    repodata: RepoData,
-) -> ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord> {
+#[derive(Default)]
+struct ExistingRepodata {
+    packages: ahash::HashMap<DistArchiveIdentifier, IndexedPackageRecord>,
+    v3_extensions: V3Extensions,
+    repodata_revisions: RepodataRevisions,
+}
+
+fn merge_patch_repodata(
+    package_source: ExistingRepodata,
+    published: ExistingRepodata,
+) -> ExistingRepodata {
+    ExistingRepodata {
+        packages: package_source.packages,
+        v3_extensions: published.v3_extensions,
+        repodata_revisions: published.repodata_revisions,
+    }
+}
+
+async fn read_existing_repodata(
+    op: &Operator,
+    repodata_path: &str,
+    metadata: &RepodataFileMetadata,
+) -> Result<ExistingRepodata, RepodataError> {
+    match crate::utils::read_with_metadata_check(op, repodata_path, metadata).await {
+        Ok(bytes) => {
+            let bytes = bytes.to_vec();
+            reject_unsupported_producer_revisions(&bytes)?;
+            match serde_json::from_slice::<RepoData>(&bytes) {
+                Ok(repodata) => Ok(package_records_from_repodata(repodata)),
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to parse {repodata_path}: {err}. Not reusing content from this file"
+                    );
+                    Ok(ExistingRepodata::default())
+                }
+            }
+        }
+        Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
+            tracing::info!("Could not find {repodata_path}. Creating new one.");
+            Ok(ExistingRepodata::default())
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn reject_unsupported_producer_revisions(bytes: &[u8]) -> Result<(), RepodataError> {
+    let Ok(serde_json::Value::Object(repodata)) = serde_json::from_slice(bytes) else {
+        return Ok(());
+    };
+
+    for key in repodata.keys() {
+        let is_revision_key = key
+            .strip_prefix('v')
+            .or_else(|| key.strip_prefix('V'))
+            .is_some_and(|number| {
+                !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+            });
+        if is_revision_key && key != "v3" {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "repodata producer map {key} is not supported by this indexer"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
+    let repodata_revisions = repodata
+        .info
+        .as_ref()
+        .map(|info| info.repodata_revisions.clone())
+        .unwrap_or_default();
     let mut packages = ahash::HashMap::default();
 
     packages.extend(
@@ -995,30 +1092,30 @@ fn package_records_from_repodata(
                     identifier,
                     IndexedPackageRecord {
                         record,
-                        repodata_revision: RepodataRevision::Legacy,
+                        repodata_revision: RepodataRevision::V0,
                         wheel_url: None,
                     },
                 )
             }),
     );
 
-    packages.extend(
-        repodata
-            .v3
-            .into_records_with_url()
-            .map(|(identifier, record, wheel_url)| {
-                (
-                    identifier,
-                    IndexedPackageRecord {
-                        record,
-                        repodata_revision: RepodataRevision::V3,
-                        wheel_url,
-                    },
-                )
-            }),
-    );
+    let (v3_records, v3_extensions) = repodata.v3.into_records_with_url_and_extensions();
+    packages.extend(v3_records.map(|(identifier, record, wheel_url)| {
+        (
+            identifier,
+            IndexedPackageRecord {
+                record,
+                repodata_revision: RepodataRevision::V3,
+                wheel_url,
+            },
+        )
+    }));
 
-    packages
+    ExistingRepodata {
+        packages,
+        v3_extensions,
+        repodata_revisions,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1034,8 +1131,8 @@ fn insert_package_record_by_revision(
         record, wheel_url, ..
     } = package;
 
-    match revision {
-        RepodataRevision::Legacy => match filename.archive_type {
+    if revision.uses_legacy_package_layout() {
+        match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 packages.insert(filename, record);
             }
@@ -1048,8 +1145,9 @@ fn insert_package_record_by_revision(
                     filename.archive_type
                 )));
             }
-        },
-        RepodataRevision::V3 => match filename.archive_type {
+        }
+    } else if revision == RepodataRevision::V3 {
+        match filename.archive_type {
             DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 v3.tar_bz2.insert(filename.identifier, record);
             }
@@ -1070,12 +1168,11 @@ fn insert_package_record_by_revision(
                     },
                 );
             }
-        },
-        RepodataRevision::Unknown(unsupported) => {
-            return Err(RepodataError::Other(anyhow::anyhow!(
-                "repodata revision v{unsupported} is not supported by this indexer"
-            )));
         }
+    } else {
+        return Err(RepodataError::Other(anyhow::anyhow!(
+            "repodata revision {revision} is not supported by this indexer"
+        )));
     }
 
     Ok(())
@@ -1106,36 +1203,57 @@ impl RevisionStats {
 
 fn repodata_revisions_for_packages(
     configured: &[RepodataRevisionInfo],
+    existing: &RepodataRevisions,
+    legacy_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    legacy_conda_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     v3: &V3Packages,
 ) -> RepodataRevisions {
     // `BTreeMap` keeps the result ordered ascending regardless of input order.
-    let mut revisions = configured
+    // Existing package statistics are deliberately discarded: generated
+    // statistics always describe the typed records written below.
+    let mut revisions = existing
         .iter()
-        .filter(|info| info.revision != RepodataRevision::Legacy)
-        .map(|info| (info.revision, info.metadata()))
+        .filter(|(revision, _)| {
+            revision.uses_legacy_package_layout() || **revision == RepodataRevision::V3
+        })
+        .map(|(revision, metadata)| {
+            (
+                *revision,
+                RepodataRevisionMetadata {
+                    message: metadata.message.clone(),
+                    ..RepodataRevisionMetadata::default()
+                },
+            )
+        })
         .collect::<BTreeMap<_, RepodataRevisionMetadata>>();
+    for info in configured {
+        if let Some(message) = &info.message {
+            revisions.entry(info.revision).or_default().message = Some(message.clone());
+        } else {
+            revisions.entry(info.revision).or_default();
+        }
+    }
 
     let mut stats = BTreeMap::<RepodataRevision, RevisionStats>::new();
+    for record in legacy_packages
+        .values()
+        .chain(legacy_conda_packages.values())
+    {
+        stats.entry(RepodataRevision::V0).or_default().add(record);
+    }
     for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
     }
 
     for (revision, revision_stats) in stats {
         let metadata = revisions.entry(revision).or_default();
-        if metadata.n_packages.is_none() {
-            metadata.n_packages = Some(revision_stats.n_packages);
-        }
-        if metadata.oldest.is_none() {
-            metadata.oldest = revision_stats.oldest;
-        }
-        if metadata.newest.is_none() {
-            metadata.newest = revision_stats.newest;
-        }
+        metadata.n_packages = Some(revision_stats.n_packages);
+        metadata.oldest = revision_stats.oldest;
+        metadata.newest = revision_stats.newest;
     }
 
-    // Currently only v3 package maps are supported, but keep configured
-    // revisions with zero packages so clients can still surface channel
-    // capability information.
+    // Keep configured revisions with zero packages so clients can still
+    // surface channel capability information.
     for metadata in revisions.values_mut() {
         if metadata.n_packages.is_none() {
             metadata.n_packages = Some(0);
@@ -1289,6 +1407,12 @@ pub async fn write_repodata(
                 created_at: Some(jiff::Timestamp::now()),
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
+            },
+            // Known v3 buckets are distributed into individual shards. Keep
+            // opaque buckets on the sharded index so they are not lost.
+            v3: V3Packages {
+                extensions: repodata.v3.extensions,
+                ..V3Packages::default()
             },
             shards: shards
                 .iter()
@@ -1585,6 +1709,8 @@ pub async fn index_with_channel_metadata(
     precondition_checks: PreconditionChecks,
     channel_metadata: ChannelMetadata,
 ) -> anyhow::Result<IndexStats> {
+    validate_configured_repodata_revisions(&repodata_revisions)?;
+
     let notices_metadata = if channel_metadata.notices.is_some() {
         Some(RepodataFileMetadata::new(&op, CHANNEL_NOTICES, precondition_checks).await?)
     } else {
@@ -1891,7 +2017,9 @@ mod tests {
             },
         );
 
-        let records = package_records_from_repodata(repodata);
+        let ExistingRepodata {
+            packages: records, ..
+        } = package_records_from_repodata(repodata);
         let dist_identifier = DistArchiveIdentifier::new(identifier.clone(), WheelArchiveType::Whl);
         let indexed_record = records
             .get(&dist_identifier)
@@ -1919,5 +2047,208 @@ mod tests {
         assert!(packages.is_empty());
         assert!(conda_packages.is_empty());
         assert!(v3.whl.contains_key(&identifier));
+    }
+
+    #[test]
+    fn legacy_revision_metadata_includes_configured_message_and_package_stats() {
+        let mut legacy_packages = IndexMap::default();
+        let mut legacy_conda_packages = IndexMap::default();
+        let oldest: rattler_conda_types::utils::TimestampMs =
+            serde_json::from_str("1710000000000").unwrap();
+        let newest: rattler_conda_types::utils::TimestampMs =
+            serde_json::from_str("1720000000000").unwrap();
+
+        let mut tar_bz2_record = PackageRecord::new(
+            PackageName::new_unchecked("legacy-tar"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        tar_bz2_record.timestamp = Some(oldest);
+        legacy_packages.insert(
+            DistArchiveIdentifier::try_from_filename("legacy-tar-1.0-0.tar.bz2").unwrap(),
+            tar_bz2_record,
+        );
+
+        let mut conda_record = PackageRecord::new(
+            PackageName::new_unchecked("legacy-conda"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        conda_record.timestamp = Some(newest);
+        legacy_conda_packages.insert(
+            DistArchiveIdentifier::try_from_filename("legacy-conda-1.0-0.conda").unwrap(),
+            conda_record,
+        );
+
+        let existing = RepodataRevisions::from([(
+            RepodataRevision::V0,
+            RepodataRevisionMetadata {
+                message: Some("stale message".to_string()),
+                n_packages: Some(99),
+                oldest: Some(newest),
+                newest: Some(newest),
+            },
+        )]);
+        let revisions = repodata_revisions_for_packages(
+            &[RepodataRevisionInfo {
+                revision: RepodataRevision::V0,
+                message: Some("legacy packages".to_string()),
+            }],
+            &existing,
+            &legacy_packages,
+            &legacy_conda_packages,
+            &V3Packages::default(),
+        );
+
+        assert_eq!(revisions.len(), 1);
+        let metadata = &revisions[&RepodataRevision::V0];
+        assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
+        assert_eq!(metadata.n_packages, Some(2));
+        assert_eq!(metadata.oldest, Some(oldest));
+        assert_eq!(metadata.newest, Some(newest));
+    }
+
+    #[test]
+    fn patch_reindex_uses_published_extensions_and_revision_messages() {
+        let mut extensions = V3Extensions::default();
+        extensions
+            .insert("zip", serde_json::json!({ "future": true }))
+            .unwrap();
+        let published = ExistingRepodata {
+            v3_extensions: extensions,
+            repodata_revisions: RepodataRevisions::from([(
+                RepodataRevision::V3,
+                RepodataRevisionMetadata {
+                    message: Some("published message".to_string()),
+                    ..RepodataRevisionMetadata::default()
+                },
+            )]),
+            ..ExistingRepodata::default()
+        };
+
+        let merged = merge_patch_repodata(ExistingRepodata::default(), published);
+        assert_eq!(
+            merged.v3_extensions.get("zip"),
+            Some(&serde_json::json!({ "future": true }))
+        );
+        assert_eq!(
+            merged.repodata_revisions[&RepodataRevision::V3]
+                .message
+                .as_deref(),
+            Some("published message")
+        );
+    }
+
+    #[test]
+    fn indexer_rejects_unsupported_configured_revisions() {
+        let err = validate_configured_repodata_revisions(&[RepodataRevisionInfo {
+            revision: RepodataRevision::from(4),
+            message: None,
+        }])
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("repodata revision v4 is not supported by this indexer")
+        );
+    }
+
+    #[test]
+    fn indexer_rejects_unsupported_producer_maps() {
+        for key in ["v4", "V3", "v03", "v18446744073709551616"] {
+            let repodata =
+                format!(r#"{{"packages": {{}}, "packages.conda": {{}}, "{key}": {{}}}}"#);
+            let err = reject_unsupported_producer_revisions(repodata.as_bytes()).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains(&format!("repodata producer map {key} is not supported")),
+                "unexpected error for {key}: {err}"
+            );
+        }
+
+        reject_unsupported_producer_revisions(
+            br#"{"packages": {}, "packages.conda": {}, "v3": {}}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn existing_revision_message_is_preserved_without_an_override() {
+        let existing = RepodataRevisions::from([(
+            RepodataRevision::V3,
+            RepodataRevisionMetadata {
+                message: Some("existing message".to_string()),
+                n_packages: Some(99),
+                ..RepodataRevisionMetadata::default()
+            },
+        )]);
+        let empty = IndexMap::default();
+
+        let preserved =
+            repodata_revisions_for_packages(&[], &existing, &empty, &empty, &V3Packages::default());
+        assert_eq!(
+            preserved[&RepodataRevision::V3].message.as_deref(),
+            Some("existing message")
+        );
+        assert_eq!(preserved[&RepodataRevision::V3].n_packages, Some(0));
+
+        let overridden = repodata_revisions_for_packages(
+            &[RepodataRevisionInfo {
+                revision: RepodataRevision::V3,
+                message: Some("caller message".to_string()),
+            }],
+            &existing,
+            &empty,
+            &empty,
+            &V3Packages::default(),
+        );
+        assert_eq!(
+            overridden[&RepodataRevision::V3].message.as_deref(),
+            Some("caller message")
+        );
+    }
+
+    #[test]
+    fn indexer_only_produces_v0_and_v3_package_layouts() {
+        let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
+        let indexed_record = |revision| IndexedPackageRecord {
+            record: PackageRecord::new(
+                PackageName::new_unchecked("demo"),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            ),
+            repodata_revision: revision,
+            wheel_url: None,
+        };
+
+        let mut packages = IndexMap::default();
+        let mut conda_packages = IndexMap::default();
+        let mut v3 = V3Packages::default();
+        insert_package_record_by_revision(
+            &mut packages,
+            &mut conda_packages,
+            &mut v3,
+            filename.clone(),
+            indexed_record(RepodataRevision::V0),
+            RepodataRevision::V0,
+        )
+        .unwrap();
+        assert!(packages.contains_key(&filename));
+
+        for revision in [
+            RepodataRevision::V1,
+            RepodataRevision::V2,
+            RepodataRevision::from(4),
+        ] {
+            let err = insert_package_record_by_revision(
+                &mut IndexMap::default(),
+                &mut IndexMap::default(),
+                &mut V3Packages::default(),
+                filename.clone(),
+                indexed_record(revision),
+                revision,
+            )
+            .unwrap_err();
+            assert!(err.to_string().contains(&revision.to_string()));
+        }
     }
 }

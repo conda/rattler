@@ -126,7 +126,7 @@ impl ParseMatchSpecOptions {
     /// whether they want strict or lenient parsing independently from the
     /// repodata revision syntax surface.
     pub fn with_repodata_revision(mut self, revision: RepodataRevision) -> Self {
-        let allow_v3_syntax = !matches!(revision, RepodataRevision::Legacy);
+        let allow_v3_syntax = !revision.uses_legacy_package_layout();
         self.allow_extras = allow_v3_syntax;
         self.allow_conditionals = allow_v3_syntax;
         self.allow_flags = allow_v3_syntax;
@@ -186,8 +186,7 @@ mod tests {
         assert!(options.allow_conditionals());
         assert!(options.allow_flags());
 
-        let options =
-            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::Legacy);
+        let options = ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V0);
         assert_eq!(options.strictness(), ParseStrictness::Lenient);
         assert!(!options.allow_extras());
         assert!(!options.allow_conditionals());

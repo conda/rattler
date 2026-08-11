@@ -69,8 +69,8 @@ pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
     RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
-    SubdirRunExportsJson, UrlOrPath, V3Packages, ValidatePackageRecordsError, WhlPackageRecord,
-    compute_package_url,
+    ReservedV3ExtensionError, SubdirRunExportsJson, UrlOrPath, V3Extensions, V3Packages,
+    ValidatePackageRecordsError, WhlPackageRecord, compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
 };

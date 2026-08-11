@@ -51,7 +51,7 @@ pub enum PackageRevisionAssignment {
     #[default]
     FromIndexJson,
     /// Assign every package to the newest revision configured for the index.
-    /// If no revisions are configured, packages are assigned to `Legacy`.
+    /// If no revisions are configured, packages use the v0 legacy layout.
     Latest,
 }
 
@@ -268,9 +268,7 @@ where
                     RepodataRevision::from_str(&s)
                         .map(|revision| RepodataRevisionInfo {
                             revision,
-                            n_packages: None,
-                            oldest: None,
-                            newest: None,
+                            message: None,
                         })
                         .map_err(D::Error::custom)
                 })

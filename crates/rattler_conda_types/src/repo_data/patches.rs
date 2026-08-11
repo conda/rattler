@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
-    PackageRecord, PackageUrl, RepoData, Shard,
+    PackageRecord, PackageUrl, RepoData, Shard, V3Extensions,
     package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
 };
 
@@ -171,12 +171,22 @@ pub struct V3PackagePatches {
     /// Patches for v3 whl package records
     #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
     pub whl: ahash::HashMap<ArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for archive extensions not yet modeled by rattler.
+    ///
+    /// These are preserved without interpretation so patch files do not lose
+    /// data for newer repodata revisions.
+    #[serde(flatten, default, skip_serializing_if = "V3Extensions::is_empty")]
+    pub extensions: V3Extensions,
 }
 
 impl V3PackagePatches {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
-        self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+        self.tar_bz2.is_empty()
+            && self.conda.is_empty()
+            && self.whl.is_empty()
+            && self.extensions.is_empty()
     }
 }
 
@@ -274,6 +284,21 @@ pub fn apply_patches_impl(
             record.package_record.apply_patch(patch);
         }
     }
+    for (extension, patch) in instructions.v3.extensions.iter() {
+        if patch.is_null() {
+            v3.extensions.remove(extension);
+        } else if let Some(bucket) = v3.extensions.get_mut(extension) {
+            apply_extension_patch(bucket, patch);
+        } else {
+            // `V3Extensions` rejects reserved names on construction, so an
+            // extension deserialized from patch instructions is safe to add.
+            let mut bucket = serde_json::Value::Null;
+            apply_extension_patch(&mut bucket, patch);
+            v3.extensions
+                .insert(extension.clone(), bucket)
+                .expect("v3 extension patch used a reserved bucket name");
+        }
+    }
 
     // Mark packages as removed. Note: we only add them to the `removed` set
     // and do NOT remove them from the package maps. The `removed` key signals
@@ -297,6 +322,35 @@ pub fn apply_patches_impl(
                 // DistArchiveIdentifier is not currently supported for v3.
             }
         }
+    }
+}
+
+/// Applies an unknown extension patch using JSON Merge Patch semantics.
+///
+/// Extension schemas are intentionally opaque, so recursively merging JSON
+/// objects preserves untouched data while letting patch instructions update
+/// individual fields. As specified by RFC 7396, an object patch treats a
+/// non-object or absent target as an empty object. Non-object values are
+/// replaced wholesale.
+fn apply_extension_patch(target: &mut serde_json::Value, patch: &serde_json::Value) {
+    if let Some(patch) = patch.as_object() {
+        if !target.is_object() {
+            *target = serde_json::Value::Object(serde_json::Map::new());
+        }
+
+        let target = target
+            .as_object_mut()
+            .expect("target was made into an object");
+        for (key, patch_value) in patch {
+            if patch_value.is_null() {
+                target.remove(key);
+            } else {
+                let target_value = target.entry(key.clone()).or_insert(serde_json::Value::Null);
+                apply_extension_patch(target_value, patch_value);
+            }
+        }
+    } else {
+        *target = patch.clone();
     }
 }
 
@@ -356,6 +410,165 @@ mod test {
         let patch_instructions: PatchInstructions =
             serde_json::from_str(&patch_instructions).unwrap();
         patch_instructions
+    }
+
+    #[test]
+    fn test_v3_extension_patches_are_applied() {
+        let raw = serde_json::json!({
+            "packages": {},
+            "packages.conda": {},
+            "v3": {
+                "conda": {
+                    "demo-1.0-0": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["original"],
+                        "name": "demo",
+                        "subdir": "noarch",
+                        "version": "1.0"
+                    }
+                },
+                "zip": {
+                    "demo-1.0-0": {
+                        "future_field": "original",
+                        "remove_me": true,
+                        "nested": { "keep": true, "remove_me": true }
+                    }
+                },
+                "removed-extension": { "old": true }
+            },
+            "repodata_version": 1
+        });
+        let mut repodata: RepoData = serde_json::from_value(raw).unwrap();
+        let patch = serde_json::json!({
+            "v3": {
+                "conda": {
+                    "demo-1.0-0": { "depends": ["patched"] }
+                },
+                "zip": {
+                    "demo-1.0-0": {
+                        "future_field": "patched",
+                        "remove_me": null,
+                        "nested": { "added": true, "remove_me": null }
+                    }
+                },
+                "new-extension": { "new": true },
+                "removed-extension": null
+            }
+        });
+        let instructions: PatchInstructions = serde_json::from_value(patch.clone()).unwrap();
+
+        assert_eq!(
+            instructions.v3.extensions.get("zip"),
+            Some(&patch["v3"]["zip"])
+        );
+        assert_eq!(
+            serde_json::to_string(&instructions).unwrap(),
+            serde_json::to_string(&patch).unwrap()
+        );
+
+        repodata.apply_patches(&instructions);
+        assert_eq!(
+            repodata.v3.conda.values().next().unwrap().depends,
+            vec!["patched"]
+        );
+        assert_eq!(
+            repodata.v3.extensions.get("zip"),
+            Some(&serde_json::json!({
+                "demo-1.0-0": {
+                    "future_field": "patched",
+                    "nested": { "keep": true, "added": true }
+                }
+            }))
+        );
+        assert_eq!(
+            repodata.v3.extensions.get("new-extension"),
+            Some(&serde_json::json!({ "new": true }))
+        );
+        assert!(repodata.v3.extensions.get("removed-extension").is_none());
+    }
+
+    #[test]
+    fn test_v3_extension_patches_apply_merge_patch_to_absent_values() {
+        let mut repodata: RepoData = serde_json::from_value(serde_json::json!({
+            "packages": {},
+            "packages.conda": {},
+            "v3": {},
+            "repodata_version": 1
+        }))
+        .unwrap();
+        let instructions: PatchInstructions = serde_json::from_value(serde_json::json!({
+            "v3": {
+                "zip": {
+                    "discard_from_new_bucket": null,
+                    "metadata": {
+                        "discard_from_new_object": null,
+                        "preserve": true
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        repodata.apply_patches(&instructions);
+
+        // RFC 7396 treats a missing target as an empty object before applying
+        // an object patch, so null values must not be retained in new buckets.
+        assert_eq!(
+            repodata.v3.extensions.get("zip"),
+            Some(&serde_json::json!({
+                "metadata": { "preserve": true }
+            }))
+        );
+    }
+
+    #[test]
+    fn test_v3_extension_patches_replace_scalar_and_object_buckets() {
+        let mut repodata: RepoData = serde_json::from_value(serde_json::json!({
+            "packages": {},
+            "packages.conda": {},
+            "v3": {
+                "scalar-target": "before",
+                "object-target": {
+                    "keep": true,
+                    "nested": { "keep": true, "remove": true }
+                }
+            },
+            "repodata_version": 1
+        }))
+        .unwrap();
+        let instructions: PatchInstructions = serde_json::from_value(serde_json::json!({
+            "v3": {
+                "scalar-target": {
+                    "discard_from_new_object": null,
+                    "nested": {
+                        "discard_from_new_nested_object": null,
+                        "keep": true
+                    }
+                },
+                "object-target": ["replacement"],
+                "absent-scalar": false
+            }
+        }))
+        .unwrap();
+
+        repodata.apply_patches(&instructions);
+
+        // Object patches turn scalar and absent targets into empty objects,
+        // and nulls remove keys at every depth. Scalar patches replace an
+        // existing object wholesale.
+        assert_eq!(
+            repodata.v3.extensions.get("scalar-target"),
+            Some(&serde_json::json!({ "nested": { "keep": true } }))
+        );
+        assert_eq!(
+            repodata.v3.extensions.get("object-target"),
+            Some(&serde_json::json!(["replacement"]))
+        );
+        assert_eq!(
+            repodata.v3.extensions.get("absent-scalar"),
+            Some(&serde_json::json!(false))
+        );
     }
 
     #[test]

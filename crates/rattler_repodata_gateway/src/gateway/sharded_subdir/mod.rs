@@ -182,7 +182,9 @@ mod tests {
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
+    use rattler_conda_types::{
+        Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo, V3Packages,
+    };
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -224,11 +226,12 @@ mod tests {
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
                 },
+                v3: V3Packages::default(),
                 shards,
             };
 
             // Encode the index as msgpack and compress with zstd
-            let index_bytes = rmp_serde::to_vec(&sharded_index).unwrap();
+            let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
             let shard_requests = Arc::new(AtomicUsize::new(0));

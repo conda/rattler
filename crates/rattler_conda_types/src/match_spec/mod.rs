@@ -406,7 +406,7 @@ impl MatchSpec {
         if self.extras.is_some() || self.condition.is_some() || self.flags.is_some() {
             RepodataRevision::V3
         } else {
-            RepodataRevision::Legacy
+            RepodataRevision::V0
         }
     }
 

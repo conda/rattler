@@ -148,7 +148,7 @@ impl IndexJson {
         {
             RepodataRevision::V3
         } else {
-            RepodataRevision::Legacy
+            RepodataRevision::V0
         }
     }
 
@@ -156,11 +156,11 @@ impl IndexJson {
     /// required repodata revision.
     pub fn validate(&self) -> Result<(), ValidateIndexJsonError> {
         let required_revision = self.required_repodata_revision();
-        if matches!(required_revision, RepodataRevision::Legacy) && !self.extra_depends.is_empty() {
+        if required_revision.uses_legacy_package_layout() && !self.extra_depends.is_empty() {
             return Err(ValidateIndexJsonError::LegacyExtraDepends);
         }
 
-        if matches!(required_revision, RepodataRevision::Legacy) && !self.flags.is_empty() {
+        if required_revision.uses_legacy_package_layout() && !self.flags.is_empty() {
             return Err(ValidateIndexJsonError::LegacyFlags);
         }
 
@@ -212,7 +212,7 @@ impl IndexJson {
             }
         })?;
 
-        if matches!(required_revision, RepodataRevision::Legacy) {
+        if required_revision.uses_legacy_package_layout() {
             if matchspec.extras.is_some() {
                 return Err(ValidateIndexJsonError::LegacyMatchSpecExtras {
                     field,
