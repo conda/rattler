@@ -240,11 +240,6 @@ pub fn binary_ranged_read(
     start: usize,
     end: usize,
 ) -> Vec<u8> {
-    assert!(
-        new_prefix.len() <= old_prefix.len(),
-        "new prefix cannot be longer than old prefix in binary mode"
-    );
-
     let src_len = source.len();
     let actual_end = end.min(src_len);
     let actual_start = start.min(src_len);
@@ -252,7 +247,16 @@ pub fn binary_ranged_read(
         return vec![];
     }
 
-    let length_change = old_prefix.len() - new_prefix.len();
+    // Binary replacement is length-preserving: the bytes freed by
+    // `old_prefix` → `new_prefix` are repaid as NUL padding. A `new_prefix`
+    // longer than `old_prefix` cannot be expressed without growing the file,
+    // which would corrupt every offset downstream. This never happens for a
+    // conda mount — placeholders are padded so any real prefix fits — but a
+    // FUSE/NFS read thread must not panic on bad input (a panic takes down the
+    // whole mount), so serve the raw window unchanged instead of asserting.
+    let Some(length_change) = old_prefix.len().checked_sub(new_prefix.len()) else {
+        return source[actual_start..actual_end].to_vec();
+    };
     let mut buffer = Vec::with_capacity(actual_end - actual_start);
 
     // Seek: skip groups that end at or before the window start (output and
@@ -431,7 +435,6 @@ mod tests {
     use super::*;
 
     // ── Text mode tests ──────────────────────────────────────────────
-
     fn text_test(
         placeholder: &[u8],
         prefix: &[u8],
@@ -929,6 +932,20 @@ mod tests {
                 assert!(out.len() <= source.len(), "groups {groups:?}");
             }
         }
+    }
+
+    #[test]
+    fn binary_longer_new_prefix_does_not_panic() {
+        // A `new_prefix` longer than the placeholder is impossible for a real
+        // conda mount, but must degrade to raw bytes rather than panic the
+        // read thread. `binary_test` can't be used (it asserts an exact
+        // transform); here we only require a bounded, panic-free result.
+        let source = b"12345/PFX67890\x00tail";
+        let groups = collect_binary_offsets(source, b"/PFX");
+        let out = binary_ranged_read(source, b"/PFX", b"/much-longer-prefix", &groups, 0, 100);
+        assert_eq!(out, source, "raw window served verbatim when new > old");
+        let mid = binary_ranged_read(source, b"/PFX", b"/much-longer-prefix", &groups, 5, 10);
+        assert_eq!(mid, &source[5..10]);
     }
 
     #[test]

@@ -12,7 +12,7 @@ use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::UNIX_EPOCH,
 };
 
@@ -81,6 +81,57 @@ impl CodesignCache {
     }
 }
 
+/// Bounded LRU cache of memory-mapped source files, keyed by inode.
+///
+/// A ranged read serves a single `[offset, offset + size)` window, but a
+/// client streaming a file issues many such reads back-to-back. Mapping the
+/// source afresh on every window means an `open` + `mmap` (a syscall plus
+/// page-table setup) per window; caching the mapping collapses that to one map
+/// per file. An `Mmap` keeps the underlying file referenced by the kernel on
+/// its own, so a cached entry holds no Rust `File` and leaks no descriptor —
+/// the bound only caps virtual-address use for very large environments.
+///
+/// Eviction is least-recently-used: `get` moves the hit entry to the back, so
+/// the file a client is actively streaming is never the one evicted.
+struct MmapCache {
+    map: HashMap<u64, Arc<Mmap>>,
+    order: VecDeque<u64>,
+    max_entries: usize,
+}
+
+impl MmapCache {
+    fn new(max_entries: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            max_entries,
+        }
+    }
+
+    fn get(&mut self, ino: u64) -> Option<Arc<Mmap>> {
+        let mmap = self.map.get(&ino)?.clone();
+        if let Some(pos) = self.order.iter().position(|&i| i == ino) {
+            self.order.remove(pos);
+        }
+        self.order.push_back(ino);
+        Some(mmap)
+    }
+
+    fn insert(&mut self, ino: u64, mmap: Arc<Mmap>) {
+        if self.map.insert(ino, mmap).is_none() {
+            self.order.push_back(ino);
+            while self.map.len() > self.max_entries {
+                match self.order.pop_front() {
+                    Some(old) => {
+                        self.map.remove(&old);
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+}
+
 /// Read the first `n` bytes of a file (fewer when the file is shorter).
 ///
 /// Used to load just the shebang region during plan construction; `n` comes
@@ -119,6 +170,9 @@ pub struct VirtualFS {
     /// ad-hoc re-signing, since codesign requires the full file.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     codesign_cache: Mutex<CodesignCache>,
+    /// Cache of memory-mapped source files, keyed by inode, so streaming a
+    /// prefix-replaced file doesn't re-`open` + re-`mmap` it on every window.
+    mmap_cache: Mutex<MmapCache>,
 }
 
 impl VirtualFS {
@@ -314,6 +368,7 @@ impl VirtualFS {
             gid: current_uid_gid().1,
             offset_cache,
             codesign_cache: Mutex::new(CodesignCache::new(16)),
+            mmap_cache: Mutex::new(MmapCache::new(128)),
         }
     }
 
@@ -445,6 +500,27 @@ impl VirtualFS {
         Ok(ContentSource::Direct(path))
     }
 
+    /// Memory-map the source file for `ino`, reusing a cached mapping when one
+    /// exists. On a miss the file is mapped once and the mapping cached; a
+    /// concurrent miss on the same inode simply maps twice and keeps whichever
+    /// mapping the cache records — both are valid views of an immutable cache
+    /// file.
+    fn mmap_for(&self, ino: u64, path: &Path) -> Result<Arc<Mmap>, i32> {
+        if let Some(mmap) = self.mmap_cache.lock().unwrap().get(ino) {
+            return Ok(mmap);
+        }
+        let file = File::open(path).map_err(|e| {
+            tracing::warn!("failed to open {}: {}", path.display(), e);
+            EIO
+        })?;
+        let mmap = Arc::new(unsafe { Mmap::map(&file) }.map_err(|e| {
+            tracing::warn!("failed to memory map {}: {}", path.display(), e);
+            EIO
+        })?);
+        self.mmap_cache.lock().unwrap().insert(ino, mmap.clone());
+        Ok(mmap)
+    }
+
     pub(crate) fn do_read(&self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, i32> {
         let index = self.validate_ino(ino)?;
 
@@ -487,22 +563,17 @@ impl VirtualFS {
         // Has prefix placeholder — use ranged replacement
         let placeholder = current_file.prefix_placeholder.as_ref().unwrap();
 
-        let file = File::open(&path).map_err(|e| {
-            tracing::warn!("failed to open {}: {}", path.display(), e);
-            EIO
-        })?;
-
-        let mmap = unsafe { Mmap::map(&file) }.map_err(|e| {
-            tracing::warn!("failed to memory map {}: {}", path.display(), e);
-            EIO
-        })?;
+        let mmap = self.mmap_for(ino, &path)?;
 
         let old_prefix = placeholder.placeholder.as_bytes();
         let new_prefix_str = self.mount_point.to_string_lossy();
         let new_prefix = new_prefix_str.as_bytes();
 
         let start = offset as usize;
-        let end = start + size as usize;
+        // `offset` is client-supplied and unclamped here; the ranged reads
+        // clamp `end` to the transformed length, but the addition itself must
+        // not wrap for a pathological offset.
+        let end = start.saturating_add(size as usize);
 
         let Some(plan) = self.offset_cache.get(&ino) else {
             // No plan — serve source bytes directly
