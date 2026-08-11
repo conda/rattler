@@ -11,6 +11,7 @@ from enum import Enum
 
 from rattler.rattler import PySparseRepoData, PyPackageFormatSelection
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revisions_from_py
 
 
 class PackageFormatSelection(Enum):
@@ -247,6 +248,15 @@ class SparseRepoData:
         ```
         """
         return self._sparse.subdir
+
+    @property
+    def repodata_revisions(self) -> dict[str, RepodataRevisionMetadata]:
+        """Revisions advertised by this repodata, keyed by ``vN``.
+
+        Each value includes the optional publisher-supplied ``message`` and
+        indexer-derived package statistics when available.
+        """
+        return _repodata_revisions_from_py(self._sparse.repodata_revisions)
 
     @staticmethod
     def load_records_recursive(

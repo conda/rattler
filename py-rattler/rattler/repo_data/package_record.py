@@ -201,6 +201,7 @@ class PackageRecord:
         license_family: Optional[str] = None,
         python_site_packages_path: Optional[str] = None,
         extra_depends: Optional[Dict[str, List[str]]] = None,
+        flags: Optional[List[str]] = None,
     ) -> None:
         if isinstance(subdir, str):
             try:
@@ -260,6 +261,8 @@ class PackageRecord:
             self._record.license_family = license_family
         if extra_depends is not None:
             self._record.extra_depends = extra_depends
+        if flags is not None:
+            self._record.flags = flags
 
     @property
     def arch(self) -> Optional[str]:
@@ -460,6 +463,30 @@ class PackageRecord:
     @features.setter
     def features(self, value: Optional[str]) -> None:
         self._record.features = value
+
+    @property
+    def flags(self) -> List[str]:
+        """Plain string flags used to select package variants.
+
+        Rattler preserves unrecognized flags so applications can round-trip
+        flags introduced by newer repodata revisions.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=["optional", "future-flag"])
+        >>> record.flags
+        ['optional', 'future-flag']
+        >>> record.flags = ["another-future-flag"]
+        >>> record.flags
+        ['another-future-flag']
+        ```
+        """
+        return self._record.flags
+
+    @flags.setter
+    def flags(self, value: List[str]) -> None:
+        self._record.flags = value
 
     @property
     def legacy_bz2_md5(self) -> Optional[bytes]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Optional, Union, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 
 if TYPE_CHECKING:
@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from rattler.repo_data import PatchInstructions, RepoDataRecord
 
 from rattler.rattler import PyChannelInfo, PyChannelRelations, PyRepoData
+from rattler.repo_data.revisions import RepodataRevisionMetadata, _repodata_revisions_from_py
 
 
 class ChannelRelations:
@@ -83,6 +84,15 @@ class ChannelInfo:
             return None
         return ChannelRelations._from_inner(relations)
 
+    @property
+    def repodata_revisions(self) -> Dict[str, RepodataRevisionMetadata]:
+        """Revisions advertised in ``info.repodata_revisions``, keyed by ``vN``.
+
+        Each value contains indexer-derived package statistics when available
+        and the optional publisher-supplied ``message``.
+        """
+        return _repodata_revisions_from_py(self._inner.repodata_revisions)
+
     def __repr__(self) -> str:
         return (
             f"ChannelInfo(subdir={self.subdir!r}, base_url={self.base_url!r}, "
@@ -131,6 +141,15 @@ class RepoData:
     def version(self) -> Optional[int]:
         """Returns the repodata format version, if any."""
         return self._repo_data.version
+
+    @property
+    def repodata_revisions(self) -> Dict[str, RepodataRevisionMetadata]:
+        """Revisions advertised by this repodata, keyed by ``vN``.
+
+        Each value includes the optional publisher-supplied ``message`` and
+        indexer-derived package statistics when available.
+        """
+        return _repodata_revisions_from_py(self._repo_data.repodata_revisions)
 
     def apply_patches(self, instructions: PatchInstructions) -> None:
         """
