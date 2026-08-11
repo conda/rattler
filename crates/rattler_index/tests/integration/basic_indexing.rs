@@ -3,17 +3,21 @@ use std::{
     fs,
     fs::File,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, Shard, ShardedRepodata,
-    compression_level::CompressionLevel,
+    Channel, ChannelNotice, ChannelNoticeLevel, ChannelRelations, PackageName, Platform,
+    RepoData as CondaRepoData, Shard, ShardedRepodata, compression_level::CompressionLevel,
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
     RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
+use rattler_repodata_gateway::{
+    DownloadReporter, Gateway, Reporter, UnsupportedRepodataRevision,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -1212,4 +1216,212 @@ async fn test_sharded_repodata_is_deterministic() {
         "sharded repodata is non-deterministic: {shard_files} shard files after \
          reindexing an unchanged channel (expected 1)"
     );
+}
+
+#[tokio::test]
+async fn test_cep_146_end_to_end_fixture() {
+    #[derive(Clone)]
+    struct RevisionReporter(Arc<Mutex<Vec<UnsupportedRepodataRevision>>>);
+
+    impl Reporter for RevisionReporter {
+        fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+            None
+        }
+
+        fn on_unsupported_repodata_revision(&self, report: &UnsupportedRepodataRevision) {
+            self.0.lock().unwrap().push(report.clone());
+        }
+    }
+
+    let channel = tempfile::tempdir().unwrap();
+    let subdir = channel.path().join("noarch");
+    fs::create_dir(&subdir).unwrap();
+
+    // Keep a v0 package alongside the v3 fixture to make sure the legacy maps
+    // remain available and do not inherit v3-only fields.
+    let legacy_filename = "empty-0.1.0-h4616a5c_0.conda";
+    fs::copy(
+        test_data_dir().join("packages").join(legacy_filename),
+        subdir.join(legacy_filename),
+    )
+    .unwrap();
+
+    let fixture_filename = "cep-fixture-1.0-0.tar.bz2";
+    let fixture_build = channel.path().join("fixture-build");
+    let fixture_info = fixture_build.join("info");
+    fs::create_dir_all(&fixture_info).unwrap();
+    let dependency = "python[version='>=3.10',build='*_cp*',channel='conda-forge',subdir='noarch']";
+    fs::write(
+        fixture_info.join("index.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "build": "0",
+            "build_number": 0,
+            "constrains": ["python <3.13"],
+            "depends": [dependency],
+            "extra_depends": { "test": ["pytest >=8"] },
+            "name": "cep-fixture",
+            "noarch": "generic",
+            "subdir": "noarch",
+            "timestamp": 1710000000000i64,
+            "version": "1.0"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    write_tar_bz2_package(
+        File::create(subdir.join(fixture_filename)).unwrap(),
+        &fixture_build,
+        &[fixture_info.join("index.json")],
+        CompressionLevel::Default,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let config = || IndexFsConfig {
+        channel: channel.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: vec![RepodataRevisionInfo {
+            revision: RepodataRevision::V3,
+            message: Some("v3 fixture with optional dependencies".to_string()),
+        }],
+        package_revision_assignment: PackageRevisionAssignment::FromIndexJson,
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    };
+    index_fs(config()).await.unwrap();
+
+    let repodata_path = subdir.join("repodata.json");
+    let mut repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    let fixture_identifier = "cep-fixture-1.0-0";
+    let canonical_dependency =
+        "python[version=\">=3.10\",build=\"*_cp*\",channel=\"https://conda.anaconda.org/conda-forge/\",subdir=\"noarch\"]";
+
+    assert_eq!(repodata["repodata_version"], 1);
+    assert_eq!(repodata["packages"], serde_json::json!({}));
+    assert!(repodata["packages.conda"].get(legacy_filename).is_some());
+    assert!(
+        repodata["packages.conda"][legacy_filename]
+            .get("extra_depends")
+            .is_none()
+    );
+    assert!(repodata["v3"].get("conda").is_none());
+    assert!(repodata["v3"].get("whl").is_none());
+    let v3_record = &repodata["v3"]["tar.bz2"][fixture_identifier];
+    assert_eq!(
+        v3_record["depends"],
+        serde_json::json!([canonical_dependency])
+    );
+    assert_eq!(
+        v3_record["constrains"],
+        serde_json::json!(["python[version=\"<3.13\"]"])
+    );
+    assert_eq!(
+        v3_record["extra_depends"],
+        serde_json::json!({ "test": ["pytest[version=\">=8\"]"] })
+    );
+    let revision = &repodata["info"]["repodata_revisions"]["v3"];
+    assert_eq!(revision["message"], "v3 fixture with optional dependencies");
+    assert_eq!(revision["n_packages"], 1);
+    assert_eq!(revision["oldest"], 1710000000000i64);
+    assert_eq!(revision["newest"], 1710000000000i64);
+    assert!(revision.get("indexed_timestamp").is_none());
+
+    let opaque_extension = serde_json::json!({
+        "fixture": ["preserve", { "nested": null }]
+    });
+    repodata["v3"]["future-layout"] = opaque_extension.clone();
+    fs::write(&repodata_path, serde_json::to_vec(&repodata).unwrap()).unwrap();
+
+    // Reindexing must retain unknown v3 extension data while rebuilding the
+    // typed records and their producer-owned statistics.
+    index_fs(config()).await.unwrap();
+    let mut repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert_eq!(repodata["v3"]["future-layout"], opaque_extension);
+    assert_eq!(
+        repodata["v3"]["tar.bz2"][fixture_identifier]["depends"],
+        serde_json::json!([canonical_dependency])
+    );
+
+    // Future advertised revisions are reader metadata, not producer maps. The
+    // permissive reader retains them and the gateway reports them while still
+    // returning records from the v0 and v3 layouts it understands.
+    repodata["info"]["repodata_revisions"]["v4"] = serde_json::json!({
+        "message": "a future layout is available",
+        "n_packages": 1
+    });
+    fs::write(&repodata_path, serde_json::to_vec(&repodata).unwrap()).unwrap();
+
+    let mut reader_fixture = repodata.clone();
+    reader_fixture["v3"]["conda"] = serde_json::json!({});
+    reader_fixture["v3"]["whl"] = serde_json::json!({});
+    let parsed: CondaRepoData = serde_json::from_value(reader_fixture).unwrap();
+    assert!(parsed.v3.conda.is_empty());
+    assert!(parsed.v3.whl.is_empty());
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap()["v3"]["future-layout"],
+        repodata["v3"]["future-layout"]
+    );
+    assert!(
+        serde_json::from_value::<RepodataRevisionInfo>(serde_json::json!({
+            "revision": 3,
+            "n_packages": 99
+        }))
+        .is_err()
+    );
+
+    let reports = Arc::new(Mutex::new(Vec::new()));
+    let records = Gateway::new()
+        .query(
+            vec![Channel::try_from_directory(channel.path()).unwrap()],
+            vec![Platform::NoArch],
+            vec![
+                PackageName::new_unchecked("empty"),
+                PackageName::new_unchecked("cep-fixture"),
+            ]
+            .into_iter(),
+        )
+        .with_reporter(RevisionReporter(reports.clone()))
+        .await
+        .unwrap();
+    let gateway_records: Vec<_> = records
+        .iter()
+        .flat_map(|repo_data| repo_data.iter())
+        .collect();
+    assert_eq!(gateway_records.len(), 2);
+
+    let legacy_record = gateway_records
+        .iter()
+        .find(|record| record.identifier.to_file_name() == legacy_filename)
+        .unwrap();
+    assert!(legacy_record.package_record.extra_depends.is_empty());
+
+    let v3_gateway_record = gateway_records
+        .iter()
+        .find(|record| record.identifier.to_file_name() == fixture_filename)
+        .unwrap();
+    assert_eq!(
+        v3_gateway_record.package_record.depends,
+        vec![canonical_dependency.to_string()]
+    );
+    assert_eq!(
+        v3_gateway_record.package_record.constrains,
+        vec!["python[version=\"<3.13\"]".to_string()]
+    );
+    assert_eq!(
+        v3_gateway_record.package_record.extra_depends.get("test"),
+        Some(&vec!["pytest[version=\">=8\"]".to_string()])
+    );
+
+    let reports = reports.lock().unwrap();
+    assert!(reports.iter().any(|report| {
+        report.subdir == "noarch"
+            && report.revision == RepodataRevision::from(4)
+            && report.supported_revision == RepodataRevision::V3
+            && report.metadata.message.as_deref() == Some("a future layout is available")
+    }));
 }
