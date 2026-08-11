@@ -248,7 +248,7 @@ pub fn binary_ranged_read(
     }
 
     // Binary replacement is length-preserving: the bytes freed by
-    // `old_prefix` → `new_prefix` are repaid as NUL padding. A `new_prefix`
+    // `old_prefix` → `new_prefix` are padded with NUL padding. A `new_prefix`
     // longer than `old_prefix` cannot be expressed without growing the file,
     // which would corrupt every offset downstream. This never happens for a
     // conda mount — placeholders are padded so any real prefix fits — but a
