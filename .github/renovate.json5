@@ -1,23 +1,21 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: ["config:recommended"],
+  extends: ["config:best-practices"],
   enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
   commitMessagePrefix: "chore(ci):",
-  separateMajorMinor: false,
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
   schedule: ["before 4am on Tuesday"],
   prHourlyLimit: 2,
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 4am on Tuesday"],
+  },
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
   },
   packageRules: [
-    {
-      description: "Pin GitHub Actions to immutable SHAs.",
-      matchDepTypes: ["action"],
-      pinDigests: true,
-    },
     {
       description: "Annotate GitHub Actions SHAs with a SemVer version.",
       extends: ["helpers:pinGitHubActionDigests"],
@@ -25,34 +23,15 @@
       versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
-      "groupName": "Pixi-Lock",
-      "matchManagers": ["pixi"],
-      "matchUpdateTypes": ["lockFileMaintenance"],
-      "automerge": true,
+      description: "Automerge non-major dependency updates after CI passes.",
+      matchUpdateTypes: ["digest", "pinDigest", "patch", "minor", "lockFileMaintenance"],
+      automerge: true,
     },
     {
       description: "We want to update Rust manually and keep it in sync with rust-toolchain",
       matchPackageNames: "rust",
       matchManagers: ["pixi"],
       enabled: false,
-    },
-    {
-      groupName: "Rust dev-dependencies",
-      matchManagers: ["cargo"],
-      matchDepTypes: ["devDependencies"],
-      description: "Weekly update of Rust development dependencies",
-    },
-    {
-      description: "Automerge Cargo patch bumps (only touches Cargo.lock via update-lockfile).",
-      matchManagers: ["cargo"],
-      matchUpdateTypes: ["patch"],
-      automerge: true,
-    },
-    {
-      "groupName": "Npm-Lock",
-      "matchManagers": ["npm"],
-      "matchUpdateTypes": ["lockFileMaintenance"],
-      "automerge": true,
     },
   ],
   vulnerabilityAlerts: {
