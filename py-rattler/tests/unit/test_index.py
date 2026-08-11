@@ -1,5 +1,4 @@
 # type: ignore
-import datetime
 import os
 import json
 import shutil

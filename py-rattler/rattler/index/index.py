@@ -101,8 +101,7 @@ def _repodata_revisions_to_dicts(
             continue
         if not isinstance(selection, Mapping):
             raise TypeError(
-                "each repodata revision must be a revision string or a mapping with "
-                "`revision` and optional `message`"
+                "each repodata revision must be a revision string or a mapping with `revision` and optional `message`"
             )
 
         obsolete_fields = {"n_packages", "oldest", "newest"}.intersection(selection)
