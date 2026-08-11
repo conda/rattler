@@ -2242,6 +2242,7 @@ dependencies = [
  "astral_async_zip",
  "async-compression",
  "async-spooled-tempfile",
+ "bytes",
  "bzip2",
  "filetime",
  "fs-err",

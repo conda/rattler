@@ -50,6 +50,54 @@ describe("Gateway", () => {
     });
     describe("names", () => {
         const gateway = new Gateway();
+
+        it("returns unsupported repodata revisions alongside names", async () => {
+            const gateway = new Gateway();
+            const native = gateway.native as unknown as {
+                names: () => Promise<unknown>;
+            };
+            native.names = async () => ({
+                names: ["demo"],
+                notices: [],
+                unsupportedRepodataRevisions: [
+                    {
+                        channel: "https://example.com/first/",
+                        subdir: "linux-64",
+                        supportedRevision: "v3",
+                        advertisedRevision: "v1",
+                        message: null,
+                    },
+                    {
+                        channel: "https://example.com/second/",
+                        subdir: "noarch",
+                        supportedRevision: "v3",
+                        advertisedRevision: "v4",
+                        message: "new layout",
+                    },
+                ],
+            });
+
+            const result = await gateway.names([], []);
+            expect(Array.from(result)).toEqual(["demo"]);
+            expect(result.names).toBe(result);
+            expect(result.unsupportedRepodataRevisions).toEqual([
+                {
+                    channel: "https://example.com/first/",
+                    subdir: "linux-64",
+                    supportedRevision: "v3",
+                    advertisedRevision: "v1",
+                    message: null,
+                },
+                {
+                    channel: "https://example.com/second/",
+                    subdir: "noarch",
+                    supportedRevision: "v3",
+                    advertisedRevision: "v4",
+                    message: "new layout",
+                },
+            ]);
+        });
+
         it("can query prefix.dev", () => {
             return gateway
                 .names(
@@ -58,6 +106,7 @@ describe("Gateway", () => {
                 )
                 .then((names) => {
                     expect(names.length).toBeGreaterThanOrEqual(177);
+                    expect(names.unsupportedRepodataRevisions).toEqual([]);
                 });
         });
     });

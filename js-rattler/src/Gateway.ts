@@ -50,11 +50,22 @@ export type GatewayQueryOptions = {
     channelNotices?: boolean;
 };
 
+/** A repodata revision advertised by a channel that this rattler version cannot read. */
+export type UnsupportedRepodataRevision = {
+    channel: string;
+    subdir: string;
+    supportedRevision: string;
+    advertisedRevision: string;
+    message: string | null;
+};
+
 export type GatewayNamesResult = NormalizedPackageName[] & {
     /** The package names. This aliases the result array for compatibility. */
     names: NormalizedPackageName[];
     /** CEP-6 notices published by queried and CEP-42-discovered channels. */
     notices: ChannelNotice[];
+    /** Unsupported repodata revisions advertised by queried channels. */
+    unsupportedRepodataRevisions: UnsupportedRepodataRevision[];
 };
 
 export type GatewayOptions = {
@@ -128,14 +139,20 @@ export class Gateway {
         // Accept the old native array shape as well, so the TypeScript wrapper
         // remains compatible when it is loaded with an older WASM artifact.
         const output = Array.isArray(rawOutput)
-            ? { names: rawOutput as NormalizedPackageName[], notices: [] }
+            ? {
+                  names: rawOutput as NormalizedPackageName[],
+                  notices: [],
+                  unsupportedRepodataRevisions: [],
+              }
             : (rawOutput as {
                   names: NormalizedPackageName[];
                   notices: ChannelNotice[];
+                  unsupportedRepodataRevisions?: UnsupportedRepodataRevision[];
               });
         const result = output.names as GatewayNamesResult;
         result.names = result;
         result.notices = output.notices;
+        result.unsupportedRepodataRevisions = output.unsupportedRepodataRevisions ?? [];
         return result;
     }
 }

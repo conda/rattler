@@ -11,7 +11,13 @@ from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
-from rattler.rattler import PyChannelNotice, PyGateway, PyMatchSpec, PySourceConfig
+from rattler.rattler import (
+    PyChannelNotice,
+    PyGateway,
+    PyMatchSpec,
+    PySourceConfig,
+    PyUnsupportedRepodataRevision,
+)
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.repo_data import ChannelRelations
 
@@ -152,28 +158,61 @@ class ChannelNotice:
         )
 
 
+@dataclass(frozen=True)
+class UnsupportedRepodataRevision:
+    """An unsupported repodata revision advertised by a queried channel."""
+
+    channel: str
+    subdir: str
+    supported_revision: str
+    advertised_revision: str
+    message: Optional[str]
+
+    @classmethod
+    def _from_py(cls, report: PyUnsupportedRepodataRevision) -> UnsupportedRepodataRevision:
+        return cls(
+            channel=report.channel,
+            subdir=report.subdir,
+            supported_revision=report.supported_revision,
+            advertised_revision=report.advertised_revision,
+            message=report.message,
+        )
+
+
 class GatewayQueryResult(list[List[RepoDataRecord]]):
-    """Repodata and CEP-6 notices returned by :meth:`Gateway.query`.
+    """Repodata and query metadata returned by :meth:`Gateway.query`.
 
     This remains a list for compatibility with earlier releases.
     """
 
-    def __init__(self, repodata: List[List[RepoDataRecord]], notices: List[ChannelNotice]) -> None:
+    def __init__(
+        self,
+        repodata: List[List[RepoDataRecord]],
+        notices: List[ChannelNotice],
+        unsupported_repodata_revisions: List[UnsupportedRepodataRevision],
+    ) -> None:
         super().__init__(repodata)
         self.repodata = self
         self.notices = notices
+        self.unsupported_repodata_revisions = unsupported_repodata_revisions
 
 
 class GatewayNamesResult(list[PackageName]):
-    """Package names and CEP-6 notices returned by :meth:`Gateway.names`.
+    """Package names and query metadata returned by :meth:`Gateway.names`.
 
     This remains a list for compatibility with earlier releases.
     """
 
-    def __init__(self, names: List[PackageName], notices: List[ChannelNotice]) -> None:
+    def __init__(
+        self,
+        names: List[PackageName],
+        notices: List[ChannelNotice],
+        unsupported_repodata_revisions: List[UnsupportedRepodataRevision],
+    ) -> None:
         super().__init__(names)
         self.names = self
         self.notices = notices
+        self.unsupported_repodata_revisions = unsupported_repodata_revisions
 
 
 class Gateway:
@@ -288,7 +327,8 @@ class Gateway:
             inserted next to the channel that referenced them, with a declared ``base``
             placed before it. Pass ``channel_relations="disabled"`` (or
             ``channel_relations_max_depth=0``) to guarantee a strict one-to-one,
-            positional correspondence with `sources`.
+            positional correspondence with `sources`. Unsupported repodata layouts are
+            available on the result's ``unsupported_repodata_revisions`` attribute.
 
         Examples
         --------
@@ -300,7 +340,7 @@ class Gateway:
         >>>
         ```
         """
-        py_records, py_notices = await self._gateway.query(
+        py_records, py_notices, py_unsupported_repodata_revisions = await self._gateway.query(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -316,10 +356,14 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the records and notices into Python objects.
+        # Convert the records and query metadata into Python objects.
         return GatewayQueryResult(
             [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records],
             [ChannelNotice._from_py(notice) for notice in py_notices],
+            [
+                UnsupportedRepodataRevision._from_py(report)
+                for report in py_unsupported_repodata_revisions
+            ],
         )
 
     async def names(
@@ -345,6 +389,8 @@ class Gateway:
 
         Returns:
             A list of package names that are present in the given subdirectories.
+            Unsupported repodata layouts are available on the result's
+            ``unsupported_repodata_revisions`` attribute.
 
         Examples
         --------
@@ -358,7 +404,7 @@ class Gateway:
         ```
         """
 
-        py_package_names, py_notices = await self._gateway.names(
+        py_package_names, py_notices, py_unsupported_repodata_revisions = await self._gateway.names(
             sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -369,10 +415,14 @@ class Gateway:
             channel_relations_max_depth=channel_relations_max_depth,
         )
 
-        # Convert the names and notices into Python objects.
+        # Convert the names and query metadata into Python objects.
         return GatewayNamesResult(
             [PackageName._from_py_package_name(package_name) for package_name in py_package_names],
             [ChannelNotice._from_py(notice) for notice in py_notices],
+            [
+                UnsupportedRepodataRevision._from_py(report)
+                for report in py_unsupported_repodata_revisions
+            ],
         )
 
     async def channel_notices(
