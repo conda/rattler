@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/conda/rattler/compare/rattler_config-v0.6.2...rattler_config-v0.7.0) - 2026-08-11
+
+### Added
+
+- add a shared config layer read by all rattler-based tools ([#2645](https://github.com/conda/rattler/pull/2645))
+- add CEP-6 channel notice support ([#2639](https://github.com/conda/rattler/pull/2639))
+
 ## [0.6.2](https://github.com/conda/rattler/compare/rattler_config-v0.6.1...rattler_config-v0.6.2) - 2026-07-24
 
 ### Other
