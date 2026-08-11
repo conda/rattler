@@ -36,8 +36,26 @@ pub struct SolvedPackage {
     pub sha256: Option<String>,
     pub version: String,
     pub depends: Option<Vec<String>>,
+    extra_depends: Option<BTreeMap<String, Vec<String>>>,
     pub subdir: Option<String>,
     pub flags: Option<Vec<String>>,
+}
+
+#[wasm_bindgen]
+impl SolvedPackage {
+    /// Conditional or optional dependencies keyed by extra name.
+    #[wasm_bindgen(
+        getter,
+        js_name = "extraDepends",
+        unchecked_return_type = "Record<string, string[]> | undefined"
+    )]
+    pub fn extra_depends(&self) -> Result<JsValue, JsError> {
+        let Some(extra_depends) = &self.extra_depends else {
+            return Ok(JsValue::UNDEFINED);
+        };
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        Ok(extra_depends.serialize(&serializer)?)
+    }
 }
 
 /// Solve a set of specs with the given channels and platforms.
@@ -104,7 +122,7 @@ pub async fn simple_solve(
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
                 subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
-                extra_depends: BTreeMap::new(),
+                extra_depends: pkg.extra_depends.unwrap_or_default(),
                 constrains: vec![],
                 track_features: vec![],
                 features: None,
@@ -167,30 +185,32 @@ pub async fn simple_solve(
     crate::gateway::emit_gateway_warnings(output.warnings);
     let repodata = output.repodata;
 
-    // We need this to find depends for locked packages
-    let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata
+    // Use matching repodata metadata when older locked packages omit dependencies.
+    // The URL identifies the exact artifact, avoiding metadata from an identically named
+    // package in another channel or subdirectory.
+    let repodata_metadata: HashMap<
+        &Url,
+        (&Vec<String>, &BTreeMap<String, Vec<String>>),
+    > = repodata
         .iter()
         .flat_map(|r| r.iter())
         .map(|rec| {
-            let name = rec.package_record.name.as_normalized().to_string();
-            let version = rec.package_record.version.to_string();
-            let build = &rec.package_record.build;
-            ((name, version, build), &rec.package_record.depends)
+            (
+                &rec.url,
+                (&rec.package_record.depends, &rec.package_record.extra_depends),
+            )
         })
         .collect();
 
-    // if a locked package does not include depends then depends will be taken from repodata
+    // If a locked package omits dependencies, restore them from repodata.
     for records in installed_packages.iter_mut() {
-        let key = (
-            records.package_record.name.as_normalized().to_string(),
-            records.package_record.version.to_string(),
-            &records.package_record.build,
-        );
-
-        if records.package_record.depends.is_empty()
-            && let Some(deps) = repodata_keys.get(&key)
-        {
-            records.package_record.depends = (*deps).clone();
+        if let Some((depends, extra_depends)) = repodata_metadata.get(&records.url) {
+            if records.package_record.depends.is_empty() {
+                records.package_record.depends = (*depends).clone();
+            }
+            if records.package_record.extra_depends.is_empty() {
+                records.package_record.extra_depends = (*extra_depends).clone();
+            }
         }
     }
 
@@ -217,6 +237,7 @@ pub async fn simple_solve(
             sha256: r.package_record.sha256.as_ref().map(hex::encode),
             size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
+            extra_depends: Some(r.package_record.extra_depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
             flags: Some(
                 r.package_record

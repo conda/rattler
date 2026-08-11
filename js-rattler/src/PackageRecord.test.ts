@@ -29,6 +29,7 @@ describe("PackageRecord", () => {
                 build: "py36h1af98f8_1",
                 build_number: 1,
                 depends: [],
+                extra_depends: { test: ["pytest >=8"] },
                 license: "MIT",
                 license_family: "MIT",
                 md5: "d65ab674acf3b7294ebacaec05fc5b54",
@@ -43,6 +44,7 @@ describe("PackageRecord", () => {
             build: "py36h1af98f8_1",
             build_number: 1,
             depends: [],
+            extra_depends: { test: ["pytest >=8"] },
             license: "MIT",
             license_family: "MIT",
             md5: "d65ab674acf3b7294ebacaec05fc5b54",
@@ -72,6 +74,7 @@ describe("PackageRecord", () => {
             build_number: 1,
             depends: ["bar"],
             constrains: ["baz"],
+            extra_depends: { test: ["pytest >=8"] },
             license: "MIT",
             license_family: "MIT",
             md5: "d65ab674acf3b7294ebacaec05fc5b54",
@@ -87,6 +90,7 @@ describe("PackageRecord", () => {
         expect(record.buildNumber).toBe(1);
         expect(record.depends).toEqual(["bar"]);
         expect(record.constrains).toEqual(["baz"]);
+        expect(record.extraDepends).toEqual({ test: ["pytest >=8"] });
         expect(record.license).toEqual("MIT");
         expect(record.licenseFamily).toEqual("MIT");
         expect(record.md5).toEqual("d65ab674acf3b7294ebacaec05fc5b54");
@@ -136,6 +140,13 @@ describe("PackageRecord", () => {
     it("constrains can be modified", () => {
         record.constrains = ["bar", "baz"];
         expect(record.constrains).toEqual(["bar", "baz"]);
+    });
+    it("extraDepends can be modified", () => {
+        record.extraDepends = { dev: ["ruff", "pytest >=8"] };
+        expect(record.extraDepends).toEqual({ dev: ["ruff", "pytest >=8"] });
+        expect(record.toJson().extra_depends).toEqual({
+            dev: ["ruff", "pytest >=8"],
+        });
     });
     it("license can be modified", () => {
         record.license = "BSD-3-Clause";
