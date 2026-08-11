@@ -67,21 +67,10 @@ async def test_index_specific_subdir_noarch(package_directory):
 
 @pytest.mark.asyncio
 async def test_index_repodata_revisions(package_directory):
-    # Timestamps round-trip through Unix milliseconds, so exercise millisecond
-    # precision and assert against the exact millisecond values.
-    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-    oldest_ms = 1710000000123
-    newest_ms = 1773851561010
     await index_fs(
         package_directory,
         Platform("noarch"),
-        repodata_revisions={
-            "v3": {
-                "n_packages": 123,
-                "oldest": epoch + datetime.timedelta(milliseconds=oldest_ms),
-                "newest": epoch + datetime.timedelta(milliseconds=newest_ms),
-            }
-        },
+        repodata_revisions=[{"revision": "v0"}, {"revision": "v3", "message": "v3 packages"}],
         package_revision_assignment="latest",
         force=True,
     )
@@ -90,13 +79,31 @@ async def test_index_repodata_revisions(package_directory):
         repodata = json.load(f)
 
     assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
-    assert repodata["info"]["repodata_revisions"] == {
-        "v3": {
-            "n_packages": 123,
-            "oldest": oldest_ms,
-            "newest": newest_ms,
-        }
-    }
+    assert repodata["info"]["repodata_revisions"]["v0"]["n_packages"] == 0
+    assert "message" not in repodata["info"]["repodata_revisions"]["v0"]
+    assert repodata["info"]["repodata_revisions"]["v3"]["n_packages"] == 1
+    assert repodata["info"]["repodata_revisions"]["v3"]["message"] == "v3 packages"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("obsolete_field", ["n_packages", "oldest", "newest"])
+async def test_index_repodata_revisions_reject_obsolete_statistics(package_directory, obsolete_field):
+    with pytest.raises(TypeError, match="no longer accepted.*derives package statistics"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions=[{"revision": "v3", obsolete_field: 1}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revisions_reject_legacy_mapping(package_directory):
+    with pytest.raises(TypeError, match="no longer accepts a vN-keyed metadata mapping"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions={"v3": {"n_packages": 1}},  # type: ignore[arg-type]
+        )
 
 
 # ---------------------------------------- S3 ---------------------------------------- #
