@@ -334,7 +334,7 @@ mod tests {
         collector.on_unsupported_repodata_revision(&report(
             "https://example.com/first/",
             "linux-64",
-            RepodataRevision::V1,
+            RepodataRevision::Unknown(1),
             None,
         ));
         collector.on_unsupported_repodata_revision(&report(
