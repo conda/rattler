@@ -104,7 +104,7 @@ async def test_index_repodata_revisions_reject_obsolete_statistics(package_direc
 
 
 @pytest.mark.asyncio
-async def test_index_repodata_revisions_reject_legacy_mapping(package_directory):
+async def test_index_repodata_revisions_reject_keyed_metadata_mapping(package_directory):
     with pytest.raises(TypeError, match="no longer accepts a vN-keyed metadata mapping"):
         await index_fs(
             package_directory,

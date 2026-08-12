@@ -78,6 +78,7 @@ retry-policies = { workspace = true }
 
 [dev-dependencies]
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
+  "gateway",
   "sparse",
 ] }
 tempfile = { workspace = true }
