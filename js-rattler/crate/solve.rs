@@ -188,28 +188,20 @@ pub async fn simple_solve(
     // Use matching repodata metadata when older locked packages omit dependencies.
     // The URL identifies the exact artifact, avoiding metadata from an identically named
     // package in another channel or subdirectory.
-    let repodata_metadata: HashMap<&Url, (&Vec<String>, &BTreeMap<String, Vec<String>>)> = repodata
+    let repodata_metadata: HashMap<&Url, &PackageRecord> = repodata
         .iter()
         .flat_map(|r| r.iter())
-        .map(|rec| {
-            (
-                &rec.url,
-                (
-                    &rec.package_record.depends,
-                    &rec.package_record.extra_depends,
-                ),
-            )
-        })
+        .map(|record| (&record.url, &record.package_record))
         .collect();
 
     // If a locked package omits dependencies, restore them from repodata.
     for records in installed_packages.iter_mut() {
-        if let Some((depends, extra_depends)) = repodata_metadata.get(&records.url) {
+        if let Some(metadata) = repodata_metadata.get(&records.url) {
             if records.package_record.depends.is_empty() {
-                records.package_record.depends = (*depends).clone();
+                records.package_record.depends = metadata.depends.clone();
             }
             if records.package_record.extra_depends.is_empty() {
-                records.package_record.extra_depends = (*extra_depends).clone();
+                records.package_record.extra_depends = metadata.extra_depends.clone();
             }
         }
     }
