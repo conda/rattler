@@ -178,6 +178,7 @@ pub struct RepodataRevisionInfo {
 /// Package counts and timestamps are derived from emitted records, so callers
 /// can only select a revision and optionally override its message.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RepodataRevisionSelection {
     /// The revision to publish.
     #[serde(default)]
@@ -1513,25 +1514,40 @@ mod test {
     }
 
     #[test]
-    fn test_repodata_revision_info_rejects_obsolete_or_oversized_caller_input() {
+    fn test_repodata_revision_info_preserves_published_statistics() {
+        let raw = serde_json::json!({
+            "revision": 3,
+            "message": "v3 packages",
+            "n_packages": 1,
+            "oldest": 1,
+            "newest": 2
+        });
+        let info = serde_json::from_value::<crate::RepodataRevisionInfo>(raw.clone()).unwrap();
+        assert_eq!(info.n_packages, Some(1));
+        assert_eq!(serde_json::to_value(info).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_repodata_revision_selection_rejects_statistics_or_oversized_message() {
         let obsolete = serde_json::json!({
             "revision": 3,
             "message": "v3 packages",
             "n_packages": 1
         });
-        assert!(serde_json::from_value::<crate::RepodataRevisionInfo>(obsolete).is_err());
+        assert!(serde_json::from_value::<crate::RepodataRevisionSelection>(obsolete).is_err());
 
         let at_limit = serde_json::json!({
             "revision": 3,
             "message": "a".repeat(crate::MAX_REPODATA_REVISION_MESSAGE_BYTES)
         });
-        assert!(serde_json::from_value::<crate::RepodataRevisionInfo>(at_limit).is_ok());
+        assert!(serde_json::from_value::<crate::RepodataRevisionSelection>(at_limit).is_ok());
 
         let oversized = serde_json::json!({
             "revision": 3,
             "message": "é".repeat(4097)
         });
-        let err = serde_json::from_value::<crate::RepodataRevisionInfo>(oversized).unwrap_err();
+        let err =
+            serde_json::from_value::<crate::RepodataRevisionSelection>(oversized).unwrap_err();
         assert!(err.to_string().contains("may not exceed 8192 bytes"));
     }
 
