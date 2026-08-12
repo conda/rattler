@@ -480,6 +480,7 @@ class PackageRecord:
         >>> record.flags = ["another-future-flag"]
         >>> record.flags
         ['another-future-flag']
+        >>>
         ```
         """
         return self._record.flags
