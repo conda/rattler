@@ -192,10 +192,9 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
     .await
     .unwrap_err();
 
-    assert!(
-        err.to_string()
-            .contains("repodata revision v4 is not supported by this indexer")
-    );
+    assert!(err.to_string().contains(
+        "repodata revision v4 cannot be configured; only v3 is selectable and the legacy layout is implicit"
+    ));
     assert!(!temp_dir.path().join("noarch/repodata.json").exists());
 }
 
