@@ -446,16 +446,10 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![
-            RepodataRevisionSelection {
-                revision: RepodataRevision::Legacy,
-                message: Some("configured legacy message".to_string()),
-            },
-            RepodataRevisionSelection {
-                revision: RepodataRevision::V3,
-                message: None,
-            },
-        ],
+        repodata_revisions: vec![RepodataRevisionSelection {
+            revision: RepodataRevision::V3,
+            message: Some("configured v3 message".to_string()),
+        }],
         package_revision_assignment: PackageRevisionAssignment::FromIndexJson,
         force: true,
         max_parallel: 1,
@@ -469,13 +463,13 @@ async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_prec
         repodata["info"]["repodata_revisions"],
         serde_json::json!({
             "v0": {
-                "message": "configured legacy message",
+                "message": "previous legacy message",
                 "n_packages": 1,
                 "oldest": 1710000000000i64,
                 "newest": 1710000000000i64
             },
             "v3": {
-                "message": "previous v3 message",
+                "message": "configured v3 message",
                 "n_packages": 1,
                 "oldest": 1720000000000i64,
                 "newest": 1720000000000i64
