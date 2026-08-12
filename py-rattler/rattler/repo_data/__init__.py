@@ -10,6 +10,7 @@ from rattler.repo_data.gateway import (
     GatewayNamesResult,
     GatewayQueryResult,
     SourceConfig,
+    UnsupportedRepodataRevision,
 )
 from rattler.repo_data.source import RepoDataSource
 from rattler.repo_data.revisions import RepodataRevisionMetadata
@@ -28,6 +29,7 @@ __all__ = [
     "GatewayNamesResult",
     "GatewayQueryResult",
     "SourceConfig",
+    "UnsupportedRepodataRevision",
     "PackageFormatSelection",
     "RepoDataSource",
     "RepodataRevisionMetadata",
