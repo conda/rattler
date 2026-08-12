@@ -186,7 +186,8 @@ mod tests {
         assert!(options.allow_conditionals());
         assert!(options.allow_flags());
 
-        let options = ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V0);
+        let options =
+            ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::Legacy);
         assert_eq!(options.strictness(), ParseStrictness::Lenient);
         assert!(!options.allow_extras());
         assert!(!options.allow_conditionals());

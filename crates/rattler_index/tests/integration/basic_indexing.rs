@@ -443,7 +443,7 @@ async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_preceden
         write_shards: false,
         repodata_revisions: vec![
             RepodataRevisionInfo {
-                revision: RepodataRevision::V0,
+                revision: RepodataRevision::Legacy,
                 message: Some("configured v0 message".to_string()),
             },
             RepodataRevisionInfo {

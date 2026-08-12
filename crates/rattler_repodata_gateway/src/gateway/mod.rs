@@ -615,7 +615,7 @@ mod test {
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].subdir, "noarch");
         assert_eq!(messages[0].supported_revision, RepodataRevision::V3);
-        assert_eq!(messages[0].revision, RepodataRevision::V1);
+        assert_eq!(messages[0].revision, RepodataRevision::Unknown(1));
         assert_eq!(messages[0].metadata.n_packages, Some(1));
         assert_eq!(messages[1].revision, RepodataRevision::from(4));
         assert_eq!(

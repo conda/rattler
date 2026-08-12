@@ -148,7 +148,7 @@ impl IndexJson {
         {
             RepodataRevision::V3
         } else {
-            RepodataRevision::V0
+            RepodataRevision::Legacy
         }
     }
 

@@ -1004,7 +1004,7 @@ fn latest_repodata_revision(revisions: &[RepodataRevisionInfo]) -> RepodataRevis
         .iter()
         .map(|revision| revision.revision)
         .max()
-        .unwrap_or(RepodataRevision::V0)
+        .unwrap_or(RepodataRevision::Legacy)
 }
 
 #[derive(Default)]
@@ -1092,7 +1092,7 @@ fn package_records_from_repodata(repodata: RepoData) -> ExistingRepodata {
                     identifier,
                     IndexedPackageRecord {
                         record,
-                        repodata_revision: RepodataRevision::V0,
+                        repodata_revision: RepodataRevision::Legacy,
                         wheel_url: None,
                     },
                 )
@@ -1239,7 +1239,10 @@ fn repodata_revisions_for_packages(
         .values()
         .chain(legacy_conda_packages.values())
     {
-        stats.entry(RepodataRevision::V0).or_default().add(record);
+        stats
+            .entry(RepodataRevision::Legacy)
+            .or_default()
+            .add(record);
     }
     for (_, record) in v3.records() {
         stats.entry(RepodataRevision::V3).or_default().add(record);
@@ -2081,7 +2084,7 @@ mod tests {
         );
 
         let existing = RepodataRevisions::from([(
-            RepodataRevision::V0,
+            RepodataRevision::Legacy,
             RepodataRevisionMetadata {
                 message: Some("stale message".to_string()),
                 n_packages: Some(99),
@@ -2091,7 +2094,7 @@ mod tests {
         )]);
         let revisions = repodata_revisions_for_packages(
             &[RepodataRevisionInfo {
-                revision: RepodataRevision::V0,
+                revision: RepodataRevision::Legacy,
                 message: Some("legacy packages".to_string()),
             }],
             &existing,
@@ -2101,7 +2104,7 @@ mod tests {
         );
 
         assert_eq!(revisions.len(), 1);
-        let metadata = &revisions[&RepodataRevision::V0];
+        let metadata = &revisions[&RepodataRevision::Legacy];
         assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
         assert_eq!(metadata.n_packages, Some(2));
         assert_eq!(metadata.oldest, Some(oldest));
@@ -2228,16 +2231,16 @@ mod tests {
             &mut conda_packages,
             &mut v3,
             filename.clone(),
-            indexed_record(RepodataRevision::V0),
-            RepodataRevision::V0,
+            indexed_record(RepodataRevision::Legacy),
+            RepodataRevision::Legacy,
         )
         .unwrap();
         assert!(packages.contains_key(&filename));
 
         for revision in [
-            RepodataRevision::V1,
-            RepodataRevision::V2,
-            RepodataRevision::from(4),
+            RepodataRevision::Unknown(1),
+            RepodataRevision::Unknown(2),
+            RepodataRevision::Unknown(4),
         ] {
             let err = insert_package_record_by_revision(
                 &mut IndexMap::default(),

@@ -154,36 +154,43 @@ pub struct RepodataRevisionInfo {
 
 /// A repodata revision.
 ///
-/// The serialized CEP wire format is an integer. This opaque numeric
-/// representation keeps every `vN` map key distinct, including revisions not
-/// yet modeled by rattler. Known revisions are exposed as associated constants.
+/// Legacy repodata predates numbered layouts and uses the `packages` and
+/// `packages.conda` maps. CEP 146 adds the v3 layout. Other numeric values are
+/// preserved so readers can report future revisions without interpreting them.
 #[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
-pub struct RepodataRevision(u64);
+pub enum RepodataRevision {
+    /// Repodata using the legacy `packages` and `packages.conda` maps.
+    #[default]
+    Legacy,
+    /// Repodata records stored under the top-level `v3` map.
+    V3,
+    /// A revision not modeled by rattler.
+    Unknown(u64),
+}
 
 impl RepodataRevision {
-    /// The revision using legacy `packages` and `packages.conda` maps.
-    pub const V0: Self = Self(0);
-    /// A revision with a package-record layout not yet modeled by rattler.
-    pub const V1: Self = Self(1);
-    /// A revision with a package-record layout not yet modeled by rattler.
-    pub const V2: Self = Self(2);
-    /// The revision storing records under the top-level `v3` map.
-    pub const V3: Self = Self(3);
-
     /// Returns the integer representation used in repodata JSON.
     pub fn as_u64(self) -> u64 {
-        self.0
+        match self {
+            Self::Legacy => 0,
+            Self::V3 => 3,
+            Self::Unknown(value) => value,
+        }
     }
 
     /// Returns whether this revision uses the legacy package-map layout.
     pub fn uses_legacy_package_layout(self) -> bool {
-        self == Self::V0
+        self == Self::Legacy
     }
 }
 
 impl From<u64> for RepodataRevision {
     fn from(value: u64) -> Self {
-        Self(value)
+        match value {
+            0 => Self::Legacy,
+            3 => Self::V3,
+            value => Self::Unknown(value),
+        }
     }
 }
 
@@ -198,7 +205,7 @@ impl FromStr for RepodataRevision {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.eq_ignore_ascii_case("legacy") {
-            return Ok(Self::V0);
+            return Ok(Self::Legacy);
         }
 
         value
@@ -1365,7 +1372,7 @@ mod test {
     }
 
     #[test]
-    fn test_repodata_revisions_preserve_legacy_numeric_keys() {
+    fn test_repodata_revisions_preserve_unknown_numeric_keys() {
         let raw = serde_json::json!({
             "info": {
                 "subdir": null,
@@ -1384,11 +1391,11 @@ mod test {
         let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
         assert_eq!(revisions.len(), 3);
         assert_eq!(
-            revisions[&RepodataRevision::V0].message.as_deref(),
+            revisions[&RepodataRevision::Legacy].message.as_deref(),
             Some("legacy package maps")
         );
-        assert_eq!(revisions[&RepodataRevision::V1].n_packages, Some(1));
-        assert_eq!(revisions[&RepodataRevision::V2].n_packages, Some(2));
+        assert_eq!(revisions[&RepodataRevision::Unknown(1)].n_packages, Some(1));
+        assert_eq!(revisions[&RepodataRevision::Unknown(2)].n_packages, Some(2));
         assert_eq!(serde_json::to_value(&repodata).unwrap(), raw);
     }
 
@@ -1407,11 +1414,11 @@ mod test {
     #[test]
     fn test_repodata_revision_keys_always_use_vn_format() {
         for (revision, key) in [
-            (RepodataRevision::V0, "v0"),
-            (RepodataRevision::V1, "v1"),
-            (RepodataRevision::V2, "v2"),
+            (RepodataRevision::Legacy, "v0"),
+            (RepodataRevision::Unknown(1), "v1"),
+            (RepodataRevision::Unknown(2), "v2"),
             (RepodataRevision::V3, "v3"),
-            (RepodataRevision::from(4), "v4"),
+            (RepodataRevision::Unknown(4), "v4"),
         ] {
             assert_eq!(revision.to_string(), key);
         }
@@ -1420,7 +1427,7 @@ mod test {
         // but always write the CEP `vN` spelling.
         assert_eq!(
             "legacy".parse::<RepodataRevision>().unwrap(),
-            RepodataRevision::V0
+            RepodataRevision::Legacy
         );
     }
 

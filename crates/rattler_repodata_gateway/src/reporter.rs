@@ -123,7 +123,7 @@ pub(crate) fn report_unsupported_repodata_revisions(
 
     let channel = channel.base_url.url().clone().redact().to_string();
     for (&revision, metadata) in revisions {
-        if !matches!(revision, RepodataRevision::V0 | RepodataRevision::V3) {
+        if !matches!(revision, RepodataRevision::Legacy | RepodataRevision::V3) {
             reporter.on_unsupported_repodata_revision(&UnsupportedRepodataRevision {
                 channel: channel.clone(),
                 subdir: subdir.to_string(),
