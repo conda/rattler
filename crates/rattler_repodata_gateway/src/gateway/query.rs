@@ -537,21 +537,28 @@ impl QueryExecutor {
                         });
                         (SubdirKind::Custom, fut)
                     }
-                    Source::SparseRepoData(sparse) => {
-                        let kind = SubdirKind::Channel {
-                            url: sparse.channel.base_url.clone(),
-                            platform,
+                    Source::SparseRepoData(sparse_list) => {
+                        // Each entry represents a different subdir, so find the one
+                        // matching the requested platform; if none matches, treat it
+                        // as having no records, same as a channel that doesn't
+                        // publish a given subdir.
+                        let matching = sparse_list
+                            .iter()
+                            .find(|sparse| platform.as_str() == sparse.subdir())
+                            .cloned();
+                        let url = matching
+                            .as_ref()
+                            .or_else(|| sparse_list.first())
+                            .map(|sparse| sparse.channel.base_url.clone());
+                        let kind = match url {
+                            Some(url) => SubdirKind::Channel { url, platform },
+                            None => SubdirKind::Custom,
                         };
-                        // A single `SparseRepoData` only ever represents one
-                        // channel/subdir pair, so every other platform is
-                        // treated as having no records, same as a channel
-                        // that doesn't publish a given subdir.
-                        let subdir = if platform.as_str() == sparse.subdir() {
-                            Arc::new(Subdir::Found(SubdirData::from_client(
+                        let subdir = match matching {
+                            Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
                                 LocalSubdirClient::new(sparse),
-                            )))
-                        } else {
-                            Arc::new(Subdir::NotFound)
+                            ))),
+                            None => Arc::new(Subdir::NotFound),
                         };
                         let b = barrier.clone();
                         let fut = box_future(async move {

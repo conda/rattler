@@ -376,7 +376,7 @@ impl PyGateway {
             match source {
                 Source::Channel(channel) => channels.push(channel),
                 Source::Custom(custom) => custom_sources.push(custom),
-                Source::SparseRepoData(sparse) => sparse_sources.push(sparse),
+                Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
             }
         }
 

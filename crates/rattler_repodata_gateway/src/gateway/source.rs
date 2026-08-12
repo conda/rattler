@@ -48,8 +48,9 @@ pub enum Source {
     /// A custom repodata source (provides records for requested platforms).
     Custom(Arc<dyn RepoDataSource>),
 
-    /// A sparse repodata source (provides records for requested platforms from sparse repodata).
-    SparseRepoData(Arc<SparseRepoData>),
+    /// A sparse repodata source (provides records for requested platforms from sparse
+    /// repodata). Each entry represents a different subdir.
+    SparseRepoData(Vec<Arc<SparseRepoData>>),
 }
 
 impl From<Channel> for Source {
@@ -66,7 +67,13 @@ impl From<Arc<dyn RepoDataSource>> for Source {
 
 impl From<Arc<SparseRepoData>> for Source {
     fn from(source: Arc<SparseRepoData>) -> Self {
-        Source::SparseRepoData(source)
+        Source::SparseRepoData(vec![source])
+    }
+}
+
+impl From<Vec<Arc<SparseRepoData>>> for Source {
+    fn from(sources: Vec<Arc<SparseRepoData>>) -> Self {
+        Source::SparseRepoData(sources)
     }
 }
 

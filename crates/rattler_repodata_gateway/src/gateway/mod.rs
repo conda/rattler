@@ -1894,7 +1894,7 @@ mod test {
         // Query the sparse repodata directly for `foobar`.
         let records = gateway
             .query(
-                vec![super::Source::SparseRepoData(source.clone())],
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
                 vec![Platform::Linux64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
@@ -1914,7 +1914,7 @@ mod test {
         // A recursive query should also pull in `bors`, `foobar`'s dependency.
         let records = gateway
             .query(
-                vec![super::Source::SparseRepoData(source.clone())],
+                vec![super::Source::SparseRepoData(vec![source.clone()])],
                 vec![Platform::Linux64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
@@ -1934,7 +1934,7 @@ mod test {
         // loaded from; other platforms should yield no records.
         let records = gateway
             .query(
-                vec![super::Source::SparseRepoData(source)],
+                vec![super::Source::SparseRepoData(vec![source])],
                 vec![Platform::Win64],
                 vec![PackageName::from_str("foobar").unwrap()].into_iter(),
             )
