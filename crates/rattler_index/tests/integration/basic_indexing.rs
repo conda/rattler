@@ -5,7 +5,7 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, ShardedRepodata,
+    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, Shard, ShardedRepodata,
     compression_level::CompressionLevel,
 };
 use rattler_index::{
@@ -13,6 +13,7 @@ use rattler_index::{
     RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
+use serde::Deserialize;
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
@@ -349,12 +350,17 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
         serde_json::from_slice(&zstd::decode_all(compressed_repodata.as_slice()).unwrap()).unwrap();
     assert_eq!(compressed_repodata["v3"], extensions);
 
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ShardedIndexShape {
+        info: serde::de::IgnoredAny,
+        shards: serde::de::IgnoredAny,
+    }
+
     let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
     let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
-    let shard_index: ShardedRepodata = rmp_serde::from_slice(&shard_index_bytes).unwrap();
-    for (extension, bucket) in extensions.as_object().unwrap() {
-        assert_eq!(shard_index.v3.extensions.get(extension), Some(bucket));
-    }
+    let shape: ShardedIndexShape = rmp_serde::from_slice(&shard_index_bytes).unwrap();
+    let _ = (shape.info, shape.shards);
 }
 
 #[tokio::test]
@@ -815,6 +821,22 @@ async fn test_index_latest_repodata_revision() {
     assert_eq!(
         shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
         Some(1)
+    );
+
+    let shard_digest = shard_index.shards["empty"];
+    let shard_bytes = fs::read(
+        subdir_path
+            .join("shards")
+            .join(format!("{}.msgpack.zst", hex::encode(shard_digest))),
+    )
+    .unwrap();
+    let shard_bytes = zstd::decode_all(shard_bytes.as_slice()).unwrap();
+    let shard: Shard = rmp_serde::from_slice(&shard_bytes).unwrap();
+    assert!(
+        shard
+            .v3
+            .conda
+            .contains_key(&"empty-0.1.0-h4616a5c_0".parse().unwrap())
     );
 }
 

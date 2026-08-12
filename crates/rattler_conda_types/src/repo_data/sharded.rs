@@ -22,11 +22,6 @@ pub struct ShardedRepodata {
     /// The individual shards indexed by package name.
     #[serde_as(as = "ahash::HashMap<_, SerializableHash<Sha256>>")]
     pub shards: ahash::HashMap<String, Sha256Hash>,
-    /// Opaque v3 extension buckets that apply to the whole sharded index.
-    ///
-    /// Known v3 package records remain in individual [`Shard`] values.
-    #[serde(default, skip_serializing_if = "V3Packages::is_empty")]
-    pub v3: V3Packages,
 }
 
 /// Information about a sharded subdirectory that is stored inside the index
@@ -121,46 +116,21 @@ mod tests {
                 channel_relations: None,
             },
             shards: ahash::HashMap::default(),
-            v3: V3Packages::default(),
         };
 
-        // The index writer uses named MessagePack maps, so an omitted empty
-        // field remains readable by clients that deserialize the index.
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ShardedIndexShape {
+            info: serde::de::IgnoredAny,
+            shards: serde::de::IgnoredAny,
+        }
+
         let encoded = rmp_serde::to_vec_named(&sharded_repodata).unwrap();
+        let shape: ShardedIndexShape = rmp_serde::from_slice(&encoded).unwrap();
+        let _ = (shape.info, shape.shards);
+
         let decoded: ShardedRepodata = rmp_serde::from_slice(&encoded).unwrap();
-        assert!(decoded.v3.is_empty());
         assert_eq!(decoded.info.subdir, "linux-64");
-    }
-
-    #[test]
-    fn test_sharded_repodata_v3_extensions_roundtrip_through_named_msgpack() {
-        let extension = serde_json::json!({
-            "demo-1.0-0": {
-                "future_metadata": ["preserve", true]
-            }
-        });
-        let mut v3 = V3Packages::default();
-        v3.extensions.insert("zip", extension.clone()).unwrap();
-        let sharded_repodata = ShardedRepodata {
-            info: ShardedSubdirInfo {
-                subdir: "linux-64".to_string(),
-                base_url: "./".to_string(),
-                shards_base_url: "./shards/".to_string(),
-                created_at: None,
-                repodata_revisions: IndexMap::default(),
-                channel_relations: None,
-            },
-            shards: ahash::HashMap::default(),
-            v3,
-        };
-
-        let encoded = rmp_serde::to_vec_named(&sharded_repodata).unwrap();
-        let decoded: ShardedRepodata = rmp_serde::from_slice(&encoded).unwrap();
-
-        assert_eq!(decoded.v3.extensions.get("zip"), Some(&extension));
-        assert!(decoded.v3.conda.is_empty());
-        assert!(decoded.v3.tar_bz2.is_empty());
-        assert!(decoded.v3.whl.is_empty());
     }
 
     // See https://github.com/conda/ceps/blob/main/cep-0042.md

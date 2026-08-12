@@ -1411,12 +1411,6 @@ pub async fn write_repodata(
                 repodata_revisions: sharded_repodata_revisions,
                 channel_relations: sharded_channel_relations,
             },
-            // Known v3 buckets are distributed into individual shards. Keep
-            // opaque buckets on the sharded index so they are not lost.
-            v3: V3Packages {
-                extensions: repodata.v3.extensions,
-                ..V3Packages::default()
-            },
             shards: shards
                 .iter()
                 .map(|(&k, (digest, _))| (k.clone(), *digest))

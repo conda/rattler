@@ -182,9 +182,7 @@ mod tests {
         http::{Response, StatusCode},
         routing::get,
     };
-    use rattler_conda_types::{
-        Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo, V3Packages,
-    };
+    use rattler_conda_types::{Channel, RepodataRevisions, ShardedRepodata, ShardedSubdirInfo};
     use rattler_digest::{Sha256, parse_digest_from_hex};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
@@ -226,7 +224,6 @@ mod tests {
                     repodata_revisions: RepodataRevisions::default(),
                     channel_relations: None,
                 },
-                v3: V3Packages::default(),
                 shards,
             };
 
