@@ -364,7 +364,7 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
 }
 
 #[tokio::test]
-async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_precedence() {
+async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_precedence() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = temp_dir.path().join("noarch");
     fs::create_dir(&subdir_path).unwrap();
@@ -420,7 +420,7 @@ async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_preceden
                 "subdir": "noarch",
                 "repodata_revisions": {
                     "v0": {
-                        "message": "previous v0 message",
+                        "message": "previous legacy message",
                         "n_packages": 99,
                         "oldest": 1,
                         "newest": 2
@@ -450,7 +450,7 @@ async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_preceden
         repodata_revisions: vec![
             RepodataRevisionSelection {
                 revision: RepodataRevision::Legacy,
-                message: Some("configured v0 message".to_string()),
+                message: Some("configured legacy message".to_string()),
             },
             RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
@@ -470,7 +470,7 @@ async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_preceden
         repodata["info"]["repodata_revisions"],
         serde_json::json!({
             "v0": {
-                "message": "configured v0 message",
+                "message": "configured legacy message",
                 "n_packages": 1,
                 "oldest": 1710000000000i64,
                 "newest": 1710000000000i64

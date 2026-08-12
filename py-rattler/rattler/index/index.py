@@ -39,7 +39,7 @@ class S3Credentials:
     addressing_style: Literal["path", "virtual-host"] = "virtual-host"
 
 
-RepodataRevisionSelection: TypeAlias = Literal["v0", "v3"]
+RepodataRevisionSelection: TypeAlias = Literal["v3"]
 """A repodata layout revision supported by the indexer."""
 
 
@@ -65,17 +65,16 @@ RepodataRevisionInput: TypeAlias = (
 RepodataRevisions: TypeAlias = Sequence[RepodataRevisionInput]
 """Revisions to advertise when indexing a channel.
 
-For example: ``["v0", {"revision": "v3", "message": "v3 packages"}]``.
-Package counts and timestamps are derived by the indexer and cannot be supplied.
+For example: ``[{"revision": "v3", "message": "v3 packages"}]``.
+The legacy layout is implicit and cannot be selected. Package counts and timestamps
+are derived by the indexer and cannot be supplied.
 """
 
 
 def _revision_to_wire(revision: str) -> int:
-    if revision == "v0":
-        return 0
     if revision == "v3":
         return 3
-    raise ValueError(f"unsupported repodata revision {revision!r}, expected 'v0' or 'v3'")
+    raise ValueError(f"unsupported repodata revision {revision!r}, expected 'v3'")
 
 
 def _repodata_revisions_to_dicts(
@@ -91,7 +90,7 @@ def _repodata_revisions_to_dicts(
     if isinstance(revisions, (str, bytes)) or not isinstance(revisions, Sequence):
         raise TypeError(
             "repodata_revisions must be a sequence of revision selections, "
-            'for example ["v3", {"revision": "v0", "message": "legacy packages"}]'
+            'for example ["v3"] or [{"revision": "v3", "message": "v3 packages"}]'
         )
 
     result: list[dict[str, Any]] = []
@@ -157,7 +156,7 @@ async def index_fs(
         write_shards: Whether to write sharded repodata.
         repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
                             `revision` and optional `message`, for example
-                            `["v0", {"revision": "v3", "message": "v3 packages"}]`.
+                            `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.
@@ -214,7 +213,7 @@ async def index_s3(
         write_shards: Whether to write sharded repodata.
         repodata_revisions: Revisions to advertise. Pass revision strings or mappings with
                             `revision` and optional `message`, for example
-                            `["v0", {"revision": "v3", "message": "v3 packages"}]`.
+                            `[{"revision": "v3", "message": "v3 packages"}]`. The legacy layout is implicit.
                             Package counts and timestamps are computed by the indexer.
         package_revision_assignment: Whether to assign packages to the revision required by their `index.json`, or to the latest advertised revision.
         force: Whether to forcefully re-index all subdirs.

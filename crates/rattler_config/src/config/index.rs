@@ -51,7 +51,7 @@ pub enum PackageRevisionAssignment {
     #[default]
     FromIndexJson,
     /// Assign every package to the newest revision configured for the index.
-    /// If no revisions are configured, packages use the v0 legacy layout.
+    /// If no revisions are configured, packages use the legacy layout.
     Latest,
 }
 
@@ -85,7 +85,8 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_shards: Option<bool>,
 
-    /// Repodata revisions to advertise in generated repodata.
+    /// Additional repodata revisions to advertise in generated repodata.
+    /// The legacy layout is implicit; currently only v3 can be selected.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -265,12 +266,16 @@ where
         .map(|revs| {
             revs.into_iter()
                 .map(|s| {
-                    RepodataRevision::from_str(&s)
-                        .map(|revision| RepodataRevisionSelection {
-                            revision,
-                            message: None,
-                        })
-                        .map_err(D::Error::custom)
+                    let revision = RepodataRevision::from_str(&s).map_err(D::Error::custom)?;
+                    if revision != RepodataRevision::V3 {
+                        return Err(D::Error::custom(
+                            "only v3 can be configured; the legacy layout is implicit",
+                        ));
+                    }
+                    Ok(RepodataRevisionSelection {
+                        revision,
+                        message: None,
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -427,6 +432,12 @@ base-url = "../packages/"
         );
         let resolved = cfg.resolve("s3://my-bucket-other/channel");
         assert!(resolved.base_url.is_none());
+    }
+
+    #[test]
+    fn rejects_legacy_repodata_revision_selection() {
+        let err = toml::from_str::<IndexConfig>("repodata-revisions = [\"legacy\"]\n").unwrap_err();
+        assert!(err.to_string().contains("the legacy layout is implicit"));
     }
 
     #[test]

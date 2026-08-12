@@ -69,7 +69,7 @@ async def test_index_repodata_revisions(package_directory):
     await index_fs(
         package_directory,
         Platform("noarch"),
-        repodata_revisions=[{"revision": "v0"}, {"revision": "v3", "message": "v3 packages"}],
+        repodata_revisions=[{"revision": "v3", "message": "v3 packages"}],
         package_revision_assignment="latest",
         force=True,
     )
@@ -78,10 +78,18 @@ async def test_index_repodata_revisions(package_directory):
         repodata = json.load(f)
 
     assert "pytweening-1.0.4-pyhd8ed1ab_0" in repodata["v3"]["tar.bz2"]
-    assert repodata["info"]["repodata_revisions"]["v0"]["n_packages"] == 0
-    assert "message" not in repodata["info"]["repodata_revisions"]["v0"]
     assert repodata["info"]["repodata_revisions"]["v3"]["n_packages"] == 1
     assert repodata["info"]["repodata_revisions"]["v3"]["message"] == "v3 packages"
+
+
+@pytest.mark.asyncio
+async def test_index_repodata_revisions_reject_legacy_selection(package_directory):
+    with pytest.raises(ValueError, match="expected 'v3'"):
+        await index_fs(
+            package_directory,
+            Platform("noarch"),
+            repodata_revisions=["legacy"],
+        )
 
 
 @pytest.mark.asyncio

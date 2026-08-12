@@ -987,11 +987,9 @@ fn validate_configured_repodata_revisions(
     revisions: &[RepodataRevisionSelection],
 ) -> Result<(), RepodataError> {
     for revision in revisions {
-        if !revision.revision.uses_legacy_package_layout()
-            && revision.revision != RepodataRevision::V3
-        {
+        if revision.revision != RepodataRevision::V3 {
             return Err(RepodataError::Other(anyhow::anyhow!(
-                "repodata revision {} is not supported by this indexer",
+                "repodata revision {} cannot be configured; only v3 is selectable and the legacy layout is implicit",
                 revision.revision
             )));
         }
@@ -2144,8 +2142,22 @@ mod tests {
         }])
         .unwrap_err();
         assert!(
+            err.to_string().contains(
+                "repodata revision v4 cannot be configured; only v3 is selectable and the legacy layout is implicit"
+            )
+        );
+    }
+
+    #[test]
+    fn indexer_rejects_configured_legacy_revision() {
+        let err = validate_configured_repodata_revisions(&[RepodataRevisionSelection {
+            revision: RepodataRevision::Legacy,
+            message: None,
+        }])
+        .unwrap_err();
+        assert!(
             err.to_string()
-                .contains("repodata revision v4 is not supported by this indexer")
+                .contains("only v3 is selectable and the legacy layout is implicit")
         );
     }
 
@@ -2205,7 +2217,7 @@ mod tests {
     }
 
     #[test]
-    fn indexer_only_produces_v0_and_v3_package_layouts() {
+    fn indexer_only_produces_legacy_and_v3_package_layouts() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
         let indexed_record = |revision| IndexedPackageRecord {
             record: PackageRecord::new(

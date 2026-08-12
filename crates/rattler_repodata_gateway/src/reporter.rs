@@ -15,7 +15,7 @@ use crate::utils::BodyStreamExt;
 /// The newest repodata revision understood by this version of rattler.
 ///
 /// Revision `3` is the current top-level `v3` map implemented by rattler.
-/// Revisions other than the legacy `v0` and current `v3` layouts are
+/// Revisions other than the legacy and current `v3` layouts are
 /// intentionally ignored, but we still surface their metadata for warnings.
 #[cfg(feature = "sparse")]
 pub const SUPPORTED_REPODATA_REVISION: RepodataRevision = RepodataRevision::V3;
