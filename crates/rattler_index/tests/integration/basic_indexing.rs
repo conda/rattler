@@ -8,16 +8,15 @@ use std::{
 
 use rattler_conda_types::{
     Channel, ChannelNotice, ChannelNoticeLevel, ChannelRelations, PackageName, Platform,
-    RepoData as CondaRepoData, Shard, ShardedRepodata, compression_level::CompressionLevel,
+    RepoData as CondaRepoData, RepodataRevisionInfo, Shard, ShardedRepodata,
+    compression_level::CompressionLevel,
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
     RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
-use rattler_repodata_gateway::{
-    DownloadReporter, Gateway, Reporter, UnsupportedRepodataRevision,
-};
+use rattler_repodata_gateway::{DownloadReporter, Gateway, Reporter, UnsupportedRepodataRevision};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -1237,7 +1236,7 @@ async fn test_cep_146_end_to_end_fixture() {
     let subdir = channel.path().join("noarch");
     fs::create_dir(&subdir).unwrap();
 
-    // Keep a v0 package alongside the v3 fixture to make sure the legacy maps
+    // Keep a legacy package alongside the v3 fixture to make sure the legacy maps
     // remain available and do not inherit v3-only fields.
     let legacy_filename = "empty-0.1.0-h4616a5c_0.conda";
     fs::copy(
@@ -1284,7 +1283,7 @@ async fn test_cep_146_end_to_end_fixture() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
             message: Some("v3 fixture with optional dependencies".to_string()),
         }],
@@ -1298,8 +1297,7 @@ async fn test_cep_146_end_to_end_fixture() {
     let repodata_path = subdir.join("repodata.json");
     let mut repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
     let fixture_identifier = "cep-fixture-1.0-0";
-    let canonical_dependency =
-        "python[version=\">=3.10\",build=\"*_cp*\",channel=\"https://conda.anaconda.org/conda-forge/\",subdir=\"noarch\"]";
+    let canonical_dependency = "python[version=\">=3.10\",build=\"*_cp*\",channel=\"https://conda.anaconda.org/conda-forge/\",subdir=\"noarch\"]";
 
     assert_eq!(repodata["repodata_version"], 1);
     assert_eq!(repodata["packages"], serde_json::json!({}));
@@ -1349,7 +1347,7 @@ async fn test_cep_146_end_to_end_fixture() {
 
     // Future advertised revisions are reader metadata, not producer maps. The
     // permissive reader retains them and the gateway reports them while still
-    // returning records from the v0 and v3 layouts it understands.
+    // returning records from the legacy and v3 layouts it understands.
     repodata["info"]["repodata_revisions"]["v4"] = serde_json::json!({
         "message": "a future layout is available",
         "n_packages": 1
@@ -1366,13 +1364,12 @@ async fn test_cep_146_end_to_end_fixture() {
         serde_json::to_value(&parsed).unwrap()["v3"]["future-layout"],
         repodata["v3"]["future-layout"]
     );
-    assert!(
-        serde_json::from_value::<RepodataRevisionInfo>(serde_json::json!({
-            "revision": 3,
-            "n_packages": 99
-        }))
-        .is_err()
-    );
+    let published_revision = serde_json::from_value::<RepodataRevisionInfo>(serde_json::json!({
+        "revision": 3,
+        "n_packages": 99
+    }))
+    .unwrap();
+    assert_eq!(published_revision.n_packages, Some(99));
 
     let reports = Arc::new(Mutex::new(Vec::new()));
     let records = Gateway::new()
