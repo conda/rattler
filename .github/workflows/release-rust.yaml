@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Release unpublished packages.
   release-plz-release:
@@ -62,9 +66,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    concurrency:
-      group: release-plz-${{ github.ref }}
-      cancel-in-progress: false
     steps:
       - name: Obtain GitHub app token
         id: octo-sts
