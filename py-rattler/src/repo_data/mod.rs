@@ -8,12 +8,8 @@ use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};
 use patch_instructions::PyPatchInstructions;
 
 /// The Python representation of metadata for one advertised repodata revision.
-pub(crate) type PyRepodataRevisionMetadata = (
-    Option<String>,
-    Option<u64>,
-    Option<i64>,
-    Option<i64>,
-);
+pub(crate) type PyRepodataRevisionMetadata =
+    (Option<String>, Option<u64>, Option<i64>, Option<i64>);
 
 /// Convert revision metadata to a Python-friendly, `vN`-keyed mapping.
 pub(crate) fn repodata_revisions_to_python(
@@ -27,8 +23,12 @@ pub(crate) fn repodata_revisions_to_python(
                 (
                     metadata.message.clone(),
                     metadata.n_packages,
-                    metadata.oldest.map(|timestamp| timestamp.timestamp_millis()),
-                    metadata.newest.map(|timestamp| timestamp.timestamp_millis()),
+                    metadata
+                        .oldest
+                        .map(|timestamp| timestamp.timestamp_millis()),
+                    metadata
+                        .newest
+                        .map(|timestamp| timestamp.timestamp_millis()),
                 ),
             )
         })
