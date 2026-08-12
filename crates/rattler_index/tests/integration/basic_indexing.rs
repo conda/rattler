@@ -10,7 +10,7 @@ use rattler_conda_types::{
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
-    RepodataRevisionInfo, index_fs, index_fs_with_channel_metadata,
+    RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use serde_json::Value;
@@ -172,7 +172,7 @@ async fn test_empty_channel_rejects_unsupported_configured_revision() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::from(4),
             message: None,
         }],
@@ -442,11 +442,11 @@ async fn test_reindex_derives_authoritative_v0_and_v3_stats_and_message_preceden
         write_zst: false,
         write_shards: false,
         repodata_revisions: vec![
-            RepodataRevisionInfo {
+            RepodataRevisionSelection {
                 revision: RepodataRevision::Legacy,
                 message: Some("configured v0 message".to_string()),
             },
-            RepodataRevisionInfo {
+            RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
                 message: None,
             },
@@ -742,7 +742,7 @@ async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
             message: Some("caller".to_string()),
         }],
@@ -777,7 +777,7 @@ async fn test_index_latest_repodata_revision() {
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
             message: None,
         }],
@@ -872,7 +872,7 @@ async fn test_index_repodata_revision_from_index_json() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
             message: None,
         }],
@@ -935,7 +935,7 @@ async fn test_index_writes_channel_metadata() {
             repodata_patch: None,
             write_zst: true,
             write_shards: true,
-            repodata_revisions: vec![RepodataRevisionInfo {
+            repodata_revisions: vec![RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
                 message: None,
             }],

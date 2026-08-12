@@ -35,7 +35,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionInfo,
+    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
 };
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
@@ -91,7 +91,7 @@ pub struct IndexChannelConfig {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_optional_repodata_revisions"
     )]
-    pub repodata_revisions: Option<Vec<RepodataRevisionInfo>>,
+    pub repodata_revisions: Option<Vec<RepodataRevisionSelection>>,
 
     /// How packages are assigned to repodata revisions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -256,7 +256,7 @@ fn validate_channel_relations(
 
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<RepodataRevisionInfo>>, D::Error>
+) -> Result<Option<Vec<RepodataRevisionSelection>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -266,7 +266,7 @@ where
             revs.into_iter()
                 .map(|s| {
                     RepodataRevision::from_str(&s)
-                        .map(|revision| RepodataRevisionInfo {
+                        .map(|revision| RepodataRevisionSelection {
                             revision,
                             message: None,
                         })

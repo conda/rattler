@@ -137,10 +137,11 @@ pub struct RepodataRevisionMetadata {
     pub newest: Option<TimestampMs>,
 }
 
-/// Indexer configuration for a repodata revision.
+/// Published metadata for a repodata revision.
 ///
-/// The indexer derives package counts and timestamps from the records it
-/// writes. Callers may only choose a revision and optionally attach a message.
+/// In `info.repodata_revisions`, the revision is represented by the enclosing
+/// `vN` map key. This flattened form is useful when revision metadata is
+/// handled as an individual value.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct RepodataRevisionInfo {
     /// The integer identifying the revision.
@@ -148,6 +149,33 @@ pub struct RepodataRevisionInfo {
     pub revision: RepodataRevision,
 
     /// An optional message describing this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+
+    /// The number of packages available in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_packages: Option<u64>,
+
+    /// The oldest package timestamp in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<TimestampMs>,
+
+    /// The newest package timestamp in this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newest: Option<TimestampMs>,
+}
+
+/// Indexer configuration selecting a repodata revision to publish.
+///
+/// Package counts and timestamps are derived from emitted records, so callers
+/// can only select a revision and optionally override its message.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct RepodataRevisionSelection {
+    /// The revision to publish.
+    #[serde(default)]
+    pub revision: RepodataRevision,
+
+    /// An optional publisher message for this revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
@@ -1360,11 +1388,20 @@ mod test {
         let info = crate::RepodataRevisionInfo {
             revision: RepodataRevision::from(4),
             message: metadata.message.clone(),
+            n_packages: metadata.n_packages,
+            oldest: metadata.oldest,
+            newest: metadata.newest,
         };
         assert_eq!(info.message, metadata.message);
+        assert_eq!(info.n_packages, Some(2));
+        assert_eq!(info.oldest, metadata.oldest);
+        assert_eq!(info.newest, metadata.newest);
         let flattened = serde_json::to_value(&info).unwrap();
         assert_eq!(flattened["revision"], 4);
         assert_eq!(flattened["message"], "new artifact types available");
+        assert_eq!(flattened["n_packages"], 2);
+        assert_eq!(flattened["oldest"], 1768249989851i64);
+        assert_eq!(flattened["newest"], 1773851561010i64);
         assert_eq!(
             serde_json::from_value::<crate::RepodataRevisionInfo>(flattened).unwrap(),
             info

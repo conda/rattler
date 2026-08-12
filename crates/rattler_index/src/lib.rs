@@ -38,7 +38,7 @@ use rattler_conda_types::{
     },
 };
 pub use rattler_conda_types::{
-    RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisions,
+    RepodataRevision, RepodataRevisionMetadata, RepodataRevisionSelection, RepodataRevisions,
 };
 pub use rattler_config::config::index::{
     IndexChannelConfig, IndexConfig, PackageRevisionAssignment,
@@ -623,7 +623,7 @@ async fn index_subdir(
     force: bool,
     write_zst: bool,
     write_shards: bool,
-    repodata_revisions: Vec<RepodataRevisionInfo>,
+    repodata_revisions: Vec<RepodataRevisionSelection>,
     package_revision_assignment: PackageRevisionAssignment,
     channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
@@ -721,7 +721,7 @@ async fn index_subdir_inner(
     force: bool,
     write_zst: bool,
     write_shards: bool,
-    repodata_revisions: Vec<RepodataRevisionInfo>,
+    repodata_revisions: Vec<RepodataRevisionSelection>,
     package_revision_assignment: PackageRevisionAssignment,
     channel_metadata: ChannelMetadata,
     repodata_patch: Option<PatchInstructions>,
@@ -984,7 +984,7 @@ where
 }
 
 fn validate_configured_repodata_revisions(
-    revisions: &[RepodataRevisionInfo],
+    revisions: &[RepodataRevisionSelection],
 ) -> Result<(), RepodataError> {
     for revision in revisions {
         if !revision.revision.uses_legacy_package_layout()
@@ -999,7 +999,7 @@ fn validate_configured_repodata_revisions(
     Ok(())
 }
 
-fn latest_repodata_revision(revisions: &[RepodataRevisionInfo]) -> RepodataRevision {
+fn latest_repodata_revision(revisions: &[RepodataRevisionSelection]) -> RepodataRevision {
     revisions
         .iter()
         .map(|revision| revision.revision)
@@ -1202,7 +1202,7 @@ impl RevisionStats {
 }
 
 fn repodata_revisions_for_packages(
-    configured: &[RepodataRevisionInfo],
+    configured: &[RepodataRevisionSelection],
     existing: &RepodataRevisions,
     legacy_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     legacy_conda_packages: &IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
@@ -1485,7 +1485,7 @@ pub struct IndexFsConfig {
     /// Whether to write the repodata shards.
     pub write_shards: bool,
     /// Repodata revisions to advertise in generated repodata.
-    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    pub repodata_revisions: Vec<RepodataRevisionSelection>,
     /// How packages are assigned to repodata revisions.
     pub package_revision_assignment: PackageRevisionAssignment,
     /// Whether to force the index to be written.
@@ -1563,7 +1563,7 @@ pub struct IndexS3Config {
     /// Whether to write the repodata shards.
     pub write_shards: bool,
     /// Repodata revisions to advertise in generated repodata.
-    pub repodata_revisions: Vec<RepodataRevisionInfo>,
+    pub repodata_revisions: Vec<RepodataRevisionSelection>,
     /// How packages are assigned to repodata revisions.
     pub package_revision_assignment: PackageRevisionAssignment,
     /// Whether to force the index to be written.
@@ -1671,7 +1671,7 @@ pub async fn index(
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
-    repodata_revisions: Vec<RepodataRevisionInfo>,
+    repodata_revisions: Vec<RepodataRevisionSelection>,
     package_revision_assignment: PackageRevisionAssignment,
     force: bool,
     max_parallel: usize,
@@ -1704,7 +1704,7 @@ pub async fn index_with_channel_metadata(
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
-    repodata_revisions: Vec<RepodataRevisionInfo>,
+    repodata_revisions: Vec<RepodataRevisionSelection>,
     package_revision_assignment: PackageRevisionAssignment,
     force: bool,
     max_parallel: usize,
@@ -2093,7 +2093,7 @@ mod tests {
             },
         )]);
         let revisions = repodata_revisions_for_packages(
-            &[RepodataRevisionInfo {
+            &[RepodataRevisionSelection {
                 revision: RepodataRevision::Legacy,
                 message: Some("legacy packages".to_string()),
             }],
@@ -2144,7 +2144,7 @@ mod tests {
 
     #[test]
     fn indexer_rejects_unsupported_configured_revisions() {
-        let err = validate_configured_repodata_revisions(&[RepodataRevisionInfo {
+        let err = validate_configured_repodata_revisions(&[RepodataRevisionSelection {
             revision: RepodataRevision::from(4),
             message: None,
         }])
@@ -2195,7 +2195,7 @@ mod tests {
         assert_eq!(preserved[&RepodataRevision::V3].n_packages, Some(0));
 
         let overridden = repodata_revisions_for_packages(
-            &[RepodataRevisionInfo {
+            &[RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
                 message: Some("caller message".to_string()),
             }],
