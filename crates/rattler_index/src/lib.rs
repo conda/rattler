@@ -29,9 +29,10 @@ use opendal::layers::RetryLayer;
 use opendal::services::S3Config;
 use opendal::{Configurator, Operator, services::FsConfig};
 use rattler_conda_types::{
-    ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations, PackageRecord, PatchInstructions,
-    Platform, RepoData, Shard, ShardedRepodata, ShardedSubdirInfo, UrlOrPath, V3Extensions,
-    V3Packages, WhlPackageRecord,
+    ChannelInfo, ChannelNotice, ChannelNotices, ChannelRelations,
+    MAX_REPODATA_REVISION_MESSAGE_BYTES, MatchSpec, PackageRecord, PackageRecordPatch,
+    ParseMatchSpecOptions, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
+    ShardedSubdirInfo, UrlOrPath, V3Extensions, V3Packages, WhlPackageRecord,
     package::{
         CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
@@ -938,6 +939,11 @@ async fn index_subdir_inner(
     }
 
     // TODO: don't serialize run_exports and purls but in their own files
+    let repodata_version = if channel_metadata.base_url.is_some() {
+        2
+    } else {
+        1
+    };
     let repodata_before_patches = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
@@ -955,7 +961,7 @@ async fn index_subdir_inner(
         conda_packages,
         v3,
         removed: HashSet::default(),
-        version: Some(2),
+        version: Some(repodata_version),
     };
 
     write_repodata(
@@ -991,6 +997,15 @@ fn validate_configured_repodata_revisions(
             return Err(RepodataError::Other(anyhow::anyhow!(
                 "repodata revision {} cannot be configured; only v3 is selectable and the legacy layout is implicit",
                 revision.revision
+            )));
+        }
+        if revision
+            .message
+            .as_ref()
+            .is_some_and(|message| message.len() > MAX_REPODATA_REVISION_MESSAGE_BYTES)
+        {
+            return Err(RepodataError::Other(anyhow::anyhow!(
+                "repodata revision messages may not exceed {MAX_REPODATA_REVISION_MESSAGE_BYTES} bytes"
             )));
         }
     }
@@ -1186,7 +1201,7 @@ struct RevisionStats {
 impl RevisionStats {
     fn add(&mut self, record: &PackageRecord) {
         self.n_packages += 1;
-        if let Some(timestamp) = record.timestamp {
+        if let Some(timestamp) = record.timestamp_for_indexing() {
             self.oldest = Some(
                 self.oldest
                     .map_or(timestamp, |oldest| oldest.min(timestamp)),
@@ -1264,20 +1279,152 @@ fn repodata_revisions_for_packages(
     revisions.into_iter().collect()
 }
 
+fn canonicalize_v3_match_spec(field: &str, spec: &str) -> Result<String, RepodataError> {
+    let parsed = MatchSpec::from_str(
+        spec,
+        ParseMatchSpecOptions::lenient().with_repodata_revision(RepodataRevision::V3),
+    )
+    .with_context(|| format!("failed to parse {field} MatchSpec '{spec}' for v3 repodata"))?;
+    Ok(parsed.to_canonical_string().with_context(|| {
+        format!("failed to canonicalize {field} MatchSpec '{spec}' for v3 repodata")
+    })?)
+}
+
+fn canonicalize_v3_match_specs(field: &str, specs: &mut [String]) -> Result<(), RepodataError> {
+    for spec in specs {
+        *spec = canonicalize_v3_match_spec(field, spec)?;
+    }
+    Ok(())
+}
+
+fn canonicalize_v3_package_record(record: &mut PackageRecord) -> Result<(), RepodataError> {
+    canonicalize_v3_match_specs("depends", &mut record.depends)?;
+    canonicalize_v3_match_specs("constrains", &mut record.constrains)?;
+    for (extra, specs) in &mut record.extra_depends {
+        canonicalize_v3_match_specs(&format!("extra_depends.{extra}"), specs)?;
+    }
+    Ok(())
+}
+
+fn validate_v3_package_patch(patch: &PackageRecordPatch) -> Result<(), RepodataError> {
+    if let Some(specs) = &patch.depends {
+        for spec in specs {
+            canonicalize_v3_match_spec("depends", spec)?;
+        }
+    }
+    if let Some(specs) = &patch.constrains {
+        for spec in specs {
+            canonicalize_v3_match_spec("constrains", spec)?;
+        }
+    }
+    if let Some(extra_depends) = &patch.extra_depends {
+        for (extra, specs) in extra_depends {
+            for spec in specs {
+                canonicalize_v3_match_spec(&format!("extra_depends.{extra}"), spec)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_indexer_patch(instructions: &PatchInstructions) -> Result<(), RepodataError> {
+    let legacy_extra_depends = instructions
+        .packages
+        .values()
+        .chain(instructions.conda_packages.values())
+        .any(|patch| {
+            patch
+                .extra_depends
+                .as_ref()
+                .is_some_and(|extra_depends| !extra_depends.is_empty())
+        });
+    if legacy_extra_depends {
+        return Err(RepodataError::Patch(
+            "legacy repodata patches cannot set extra_depends; use a v3 patch bucket".to_string(),
+        ));
+    }
+
+    for patch in instructions
+        .v3
+        .tar_bz2
+        .values()
+        .chain(instructions.v3.conda.values())
+        .chain(instructions.v3.whl.values())
+    {
+        validate_v3_package_patch(patch)?;
+    }
+    Ok(())
+}
+
+/// Canonicalizes only indexer-produced v3 package metadata after all source and
+/// patch inputs have been applied. General repodata serialization remains
+/// permissive so consumers can round-trip legacy or third-party v3 data.
+fn canonicalize_indexer_v3(repodata: &mut RepoData) -> Result<(), RepodataError> {
+    for record in repodata.v3.tar_bz2.values_mut() {
+        canonicalize_v3_package_record(record)?;
+    }
+    for record in repodata.v3.conda.values_mut() {
+        canonicalize_v3_package_record(record)?;
+    }
+    for record in repodata.v3.whl.values_mut() {
+        canonicalize_v3_package_record(&mut record.package_record)?;
+    }
+    Ok(())
+}
+
+/// Serialize repodata emitted by this indexer.
+///
+/// Producer output always advertises all supported package layouts, including
+/// an empty `v3` map. `RepoData` itself intentionally remains permissive when
+/// round-tripping older producer output that omitted this map.
+fn serialize_indexer_repodata(repodata: &RepoData) -> Result<Vec<u8>, RepodataError> {
+    if repodata.v3.is_empty() {
+        #[derive(Serialize)]
+        struct WithEmptyV3<'a> {
+            #[serde(flatten)]
+            repodata: &'a RepoData,
+            v3: &'a V3Packages,
+        }
+
+        Ok(serde_json::to_vec(&WithEmptyV3 {
+            repodata,
+            v3: &repodata.v3,
+        })?)
+    } else {
+        Ok(serde_json::to_vec(repodata)?)
+    }
+}
+
 /// Write a `repodata.json` for all packages in the given configurator's root.
 /// Uses conditional writes based on the provided metadata to prevent concurrent
 /// modification issues.
 pub async fn write_repodata(
-    repodata: RepoData,
+    mut repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
     subdir: Platform,
     op: Operator,
     metadata: &RepodataMetadataCollection,
 ) -> Result<(), RepodataError> {
+    if let Some(instructions) = repodata_patch.as_ref() {
+        validate_indexer_patch(instructions)?;
+    }
+    canonicalize_indexer_v3(&mut repodata)?;
+    let patched_repodata = if let Some(instructions) = repodata_patch {
+        tracing::info!("Patching repodata");
+        let mut patched_repodata = repodata.clone();
+        patched_repodata.apply_patches(&instructions);
+        canonicalize_indexer_v3(&mut patched_repodata)?;
+        Some(patched_repodata)
+    } else {
+        None
+    };
+
+    // Finish all fallible transformation and canonicalization before publishing
+    // either artifact, so invalid patch output cannot leave a partial update.
     if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
-        let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
+        let unpatched_repodata_bytes = serialize_indexer_repodata(&repodata)?;
         crate::utils::write_with_metadata_check(
             &op,
             &unpatched_repodata_path,
@@ -1288,16 +1435,8 @@ pub async fn write_repodata(
         .await?;
     }
 
-    let repodata = if let Some(instructions) = repodata_patch {
-        tracing::info!("Patching repodata");
-        let mut patched_repodata = repodata.clone();
-        patched_repodata.apply_patches(&instructions);
-        patched_repodata
-    } else {
-        repodata
-    };
-
-    let repodata_bytes = serde_json::to_vec(&repodata)?;
+    let repodata = patched_repodata.unwrap_or(repodata);
+    let repodata_bytes = serialize_indexer_repodata(&repodata)?;
 
     // Write compressed version if requested
     if let Some(repodata_zst_metadata) = &metadata.repodata_zst {
@@ -1765,6 +1904,11 @@ pub async fn index_with_channel_metadata(
         let repodata_patch_bytes = op.read(&repodata_patch_path).await?.to_bytes();
         let reader = Cursor::new(repodata_patch_bytes);
         let repodata_patch = repodata_patch_from_conda_package_stream(reader)?;
+        for (subdir, instructions) in &repodata_patch.subdirs {
+            validate_indexer_patch(instructions).map_err(|error| {
+                anyhow::anyhow!("invalid repodata patch for subdir {subdir}: {error}")
+            })?;
+        }
         Some(repodata_patch)
     } else {
         None
@@ -1885,6 +2029,11 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
         op.create_dir(&noarch_path).await?;
     }
 
+    let repodata_version = if channel_metadata.base_url.is_some() {
+        2
+    } else {
+        1
+    };
     let empty_repodata = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(Platform::NoArch.to_string()),
@@ -1896,10 +2045,10 @@ pub async fn ensure_channel_initialized_with_channel_metadata(
         conda_packages: IndexMap::default(),
         v3: V3Packages::default(),
         removed: HashSet::default(),
-        version: Some(2),
+        version: Some(repodata_version),
     };
 
-    let repodata_bytes = serde_json::to_vec(&empty_repodata)?;
+    let repodata_bytes = serialize_indexer_repodata(&empty_repodata)?;
     match op
         .write_with(&noarch_repodata_path, repodata_bytes)
         .if_not_exists(true)
@@ -1976,7 +2125,7 @@ pub async fn ensure_channel_initialized_s3_with_channel_metadata(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::BTreeMap, str::FromStr};
 
     use indexmap::IndexMap;
     use rattler_conda_types::Version;
@@ -2085,10 +2234,7 @@ mod tests {
             },
         )]);
         let revisions = repodata_revisions_for_packages(
-            &[RepodataRevisionSelection {
-                revision: RepodataRevision::Legacy,
-                message: Some("legacy packages".to_string()),
-            }],
+            &[],
             &existing,
             &legacy_packages,
             &legacy_conda_packages,
@@ -2097,7 +2243,7 @@ mod tests {
 
         assert_eq!(revisions.len(), 1);
         let metadata = &revisions[&RepodataRevision::Legacy];
-        assert_eq!(metadata.message.as_deref(), Some("legacy packages"));
+        assert_eq!(metadata.message.as_deref(), Some("stale message"));
         assert_eq!(metadata.n_packages, Some(2));
         assert_eq!(metadata.oldest, Some(oldest));
         assert_eq!(metadata.newest, Some(newest));
@@ -2162,6 +2308,19 @@ mod tests {
     }
 
     #[test]
+    fn indexer_rejects_oversized_revision_messages() {
+        let err = validate_configured_repodata_revisions(&[RepodataRevisionSelection {
+            revision: RepodataRevision::V3,
+            message: Some("é".repeat(4097)),
+        }])
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("repodata revision messages may not exceed 8192 bytes")
+        );
+    }
+
+    #[test]
     fn indexer_rejects_unsupported_producer_maps() {
         for key in ["v4", "V3", "v03", "v18446744073709551616"] {
             let repodata =
@@ -2216,6 +2375,266 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn indexer_canonicalizes_original_and_patched_v3_dependencies() {
+        let channel = tempfile::tempdir().unwrap();
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        op.create_dir("noarch/").await.unwrap();
+
+        let identifier = ArchiveIdentifier::from_str("v3-demo-1.0-0").unwrap();
+        let mut v3_record = PackageRecord::new(
+            PackageName::new_unchecked("v3-demo"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        v3_record.depends = vec!["python >=3.10".to_string()];
+        v3_record.constrains = vec!["python <3.13".to_string()];
+        v3_record.extra_depends =
+            BTreeMap::from([("test".to_string(), vec!["pytest >=8".to_string()])]);
+
+        let legacy_filename = "legacy-1.0-0.tar.bz2";
+        let mut legacy_record = PackageRecord::new(
+            PackageName::new_unchecked("legacy"),
+            Version::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        legacy_record.depends = vec!["python >=3.10".to_string()];
+        legacy_record.constrains = vec!["python <3.13".to_string()];
+        legacy_record.extra_depends =
+            BTreeMap::from([("test".to_string(), vec!["pytest >=8".to_string()])]);
+
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        repodata.packages.insert(
+            DistArchiveIdentifier::try_from_filename(legacy_filename).unwrap(),
+            legacy_record,
+        );
+        repodata.v3.conda.insert(identifier.clone(), v3_record);
+
+        let mut patched_conda = serde_json::Map::new();
+        patched_conda.insert(
+            identifier.to_string(),
+            serde_json::json!({
+                "depends": ["python >=3.11"],
+                "constrains": ["python <3.14"],
+                "extra_depends": { "test": ["pytest >=9"] }
+            }),
+        );
+        let patched = serde_json::from_value::<PatchInstructions>(serde_json::json!({
+            "v3": { "conda": patched_conda }
+        }))
+        .unwrap();
+        let metadata = RepodataMetadataCollection::new(
+            &op,
+            Platform::NoArch,
+            true,
+            false,
+            false,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+        write_repodata(repodata, Some(patched), Platform::NoArch, op, &metadata)
+            .await
+            .unwrap();
+
+        let source: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(channel.path().join("noarch/repodata_from_packages.json")).unwrap(),
+        )
+        .unwrap();
+        let published: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(channel.path().join("noarch/repodata.json")).unwrap(),
+        )
+        .unwrap();
+        let identifier = identifier.to_string();
+
+        for (repodata, expected) in [
+            (
+                &source,
+                serde_json::json!({
+                    "depends": ["python[version=\">=3.10\"]"],
+                    "constrains": ["python[version=\"<3.13\"]"],
+                    "extra_depends": { "test": ["pytest[version=\">=8\"]"] }
+                }),
+            ),
+            (
+                &published,
+                serde_json::json!({
+                    "depends": ["python[version=\">=3.11\"]"],
+                    "constrains": ["python[version=\"<3.14\"]"],
+                    "extra_depends": { "test": ["pytest[version=\">=9\"]"] }
+                }),
+            ),
+        ] {
+            let record = &repodata["v3"]["conda"][identifier.as_str()];
+            assert_eq!(record["depends"], expected["depends"]);
+            assert_eq!(record["constrains"], expected["constrains"]);
+            assert_eq!(record["extra_depends"], expected["extra_depends"]);
+            assert_eq!(
+                repodata["packages"][legacy_filename]["depends"],
+                serde_json::json!(["python >=3.10"])
+            );
+            assert_eq!(
+                repodata["packages"][legacy_filename]["constrains"],
+                serde_json::json!(["python <3.13"])
+            );
+            assert_eq!(
+                repodata["packages"][legacy_filename]["extra_depends"],
+                serde_json::json!({ "test": ["pytest >=8"] })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_patched_v3_dependency_is_rejected_before_any_repodata_write() {
+        let channel = tempfile::tempdir().unwrap();
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        op.create_dir("noarch/").await.unwrap();
+        op.write("noarch/repodata_from_packages.json", "source sentinel")
+            .await
+            .unwrap();
+        op.write("noarch/repodata.json", "published sentinel")
+            .await
+            .unwrap();
+
+        let identifier = ArchiveIdentifier::from_str("v3-demo-1.0-0").unwrap();
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        repodata.v3.conda.insert(
+            identifier.clone(),
+            PackageRecord::new(
+                PackageName::new_unchecked("v3-demo"),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            ),
+        );
+        let patch = serde_json::from_value::<PatchInstructions>(serde_json::json!({
+            "v3": {
+                "conda": {
+                    (identifier.to_string()): { "depends": ["python[version="] }
+                }
+            }
+        }))
+        .unwrap();
+        let metadata = RepodataMetadataCollection::new(
+            &op,
+            Platform::NoArch,
+            true,
+            false,
+            false,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+
+        let error = write_repodata(repodata, Some(patch), Platform::NoArch, op, &metadata)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse depends MatchSpec")
+        );
+        assert_eq!(
+            std::fs::read_to_string(channel.path().join("noarch/repodata_from_packages.json"))
+                .unwrap(),
+            "source sentinel"
+        );
+        assert_eq!(
+            std::fs::read_to_string(channel.path().join("noarch/repodata.json")).unwrap(),
+            "published sentinel"
+        );
+    }
+
+    async fn index_empty_channel(base_url: Option<String>) -> serde_json::Value {
+        let channel = tempfile::tempdir().unwrap();
+        index_fs_with_channel_metadata(
+            IndexFsConfig {
+                channel: channel.path().to_path_buf(),
+                target_platform: Some(Platform::NoArch),
+                repodata_patch: None,
+                write_zst: false,
+                write_shards: false,
+                repodata_revisions: Vec::new(),
+                package_revision_assignment: PackageRevisionAssignment::default(),
+                force: false,
+                max_parallel: 1,
+                multi_progress: None,
+            },
+            ChannelMetadata {
+                base_url,
+                ..ChannelMetadata::default()
+            },
+        )
+        .await
+        .unwrap();
+        serde_json::from_slice(&std::fs::read(channel.path().join("noarch/repodata.json")).unwrap())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn indexer_writes_empty_v3_and_base_url_appropriate_repodata_version() {
+        let without_base_url = index_empty_channel(None).await;
+        let with_base_url = index_empty_channel(Some("../packages/".to_string())).await;
+
+        for repodata in [&without_base_url, &with_base_url] {
+            for map in ["packages", "packages.conda", "v3"] {
+                assert_eq!(repodata[map], serde_json::json!({}), "missing {map}");
+            }
+        }
+        assert_eq!(without_base_url["repodata_version"], 1);
+        assert_eq!(with_base_url["repodata_version"], 2);
+        assert_eq!(with_base_url["info"]["base_url"], "../packages/");
+    }
+
+    #[tokio::test]
+    async fn indexer_preflights_unsupported_revisions_before_writing() {
+        let channel = tempfile::tempdir().unwrap();
+        let error = index_fs_with_channel_metadata(
+            IndexFsConfig {
+                channel: channel.path().to_path_buf(),
+                target_platform: None,
+                repodata_patch: None,
+                write_zst: false,
+                write_shards: false,
+                repodata_revisions: vec![RepodataRevisionSelection {
+                    revision: RepodataRevision::from(4),
+                    message: None,
+                }],
+                package_revision_assignment: PackageRevisionAssignment::default(),
+                force: false,
+                max_parallel: 1,
+                multi_progress: None,
+            },
+            ChannelMetadata::default(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains(
+                "repodata revision v4 cannot be configured; only v3 is selectable and the legacy layout is implicit"
+            )
+        );
+        assert!(!channel.path().join("noarch/repodata.json").exists());
+    }
+
     #[test]
     fn indexer_only_produces_legacy_and_v3_package_layouts() {
         let filename = DistArchiveIdentifier::try_from_filename("demo-1.0-0.tar.bz2").unwrap();
@@ -2259,5 +2678,416 @@ mod tests {
             .unwrap_err();
             assert!(err.to_string().contains(&revision.to_string()));
         }
+    }
+
+    #[tokio::test]
+    async fn indexer_canonicalizes_all_v3_buckets_in_zstd_and_shards_after_patching() {
+        fn record(name: &str, dependency: &str) -> PackageRecord {
+            let mut record = PackageRecord::new(
+                PackageName::new_unchecked(name),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            );
+            record.depends = vec![dependency.to_string()];
+            record.constrains = vec!["python <3.13".to_string()];
+            record.extra_depends =
+                BTreeMap::from([("test".to_string(), vec!["pytest >=8".to_string()])]);
+            record
+        }
+
+        fn assert_canonical_dependencies(
+            record: &serde_json::Value,
+            python_version: &str,
+            python_constraint: &str,
+            pytest_version: &str,
+        ) {
+            assert_eq!(
+                record["depends"],
+                serde_json::json!([format!("python[version=\"{python_version}\"]")])
+            );
+            assert_eq!(
+                record["constrains"],
+                serde_json::json!([format!("python[version=\"{python_constraint}\"]")])
+            );
+            assert_eq!(
+                record["extra_depends"],
+                serde_json::json!({
+                    "test": [format!("pytest[version=\"{pytest_version}\"]")]
+                })
+            );
+        }
+
+        let channel = tempfile::tempdir().unwrap();
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        op.create_dir("noarch/").await.unwrap();
+
+        let tar_identifier = ArchiveIdentifier::from_str("tar-demo-1.0-0").unwrap();
+        let conda_identifier = ArchiveIdentifier::from_str("conda-demo-1.0-0").unwrap();
+        let wheel_identifier = ArchiveIdentifier::from_str("wheel-demo-1.0-py_0").unwrap();
+        let legacy_filename = "legacy-demo-1.0-0.tar.bz2";
+
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        repodata.packages.insert(
+            DistArchiveIdentifier::try_from_filename(legacy_filename).unwrap(),
+            record("legacy-demo", "python >=3.10"),
+        );
+        repodata
+            .v3
+            .tar_bz2
+            .insert(tar_identifier.clone(), record("tar-demo", "python >=3.10"));
+        repodata.v3.conda.insert(
+            conda_identifier.clone(),
+            record("conda-demo", "python >=3.10"),
+        );
+        repodata.v3.whl.insert(
+            wheel_identifier.clone(),
+            WhlPackageRecord {
+                package_record: record("wheel-demo", "python >=3.10"),
+                url: UrlOrPath::Path("wheel-demo-1.0-py_0.whl".to_string()),
+            },
+        );
+        repodata
+            .v3
+            .extensions
+            .insert(
+                "zip",
+                serde_json::json!({
+                    "metadata": { "keep": true, "remove": true }
+                }),
+            )
+            .unwrap();
+
+        let package_patch = serde_json::json!({
+            "depends": ["python >=3.11"],
+            "constrains": ["python <3.14"],
+            "extra_depends": { "test": ["pytest >=9"] }
+        });
+        let mut tar_patches = serde_json::Map::new();
+        tar_patches.insert(tar_identifier.to_string(), package_patch.clone());
+        let mut conda_patches = serde_json::Map::new();
+        conda_patches.insert(conda_identifier.to_string(), package_patch.clone());
+        let mut wheel_patches = serde_json::Map::new();
+        wheel_patches.insert(wheel_identifier.to_string(), package_patch);
+        let patch: PatchInstructions = serde_json::from_value(serde_json::json!({
+            "v3": {
+                "tar.bz2": tar_patches,
+                "conda": conda_patches,
+                "whl": wheel_patches,
+                "zip": {
+                    "metadata": { "remove": null, "patched": true }
+                }
+            }
+        }))
+        .unwrap();
+
+        let metadata = RepodataMetadataCollection::new(
+            &op,
+            Platform::NoArch,
+            true,
+            true,
+            true,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+        write_repodata(repodata, Some(patch), Platform::NoArch, op, &metadata)
+            .await
+            .unwrap();
+
+        let source: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(channel.path().join("noarch/repodata_from_packages.json")).unwrap(),
+        )
+        .unwrap();
+        let published: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(channel.path().join("noarch/repodata.json")).unwrap(),
+        )
+        .unwrap();
+
+        for (bucket, identifier) in [
+            ("tar.bz2", tar_identifier.to_string()),
+            ("conda", conda_identifier.to_string()),
+            ("whl", wheel_identifier.to_string()),
+        ] {
+            assert_canonical_dependencies(
+                &source["v3"][bucket][identifier.as_str()],
+                ">=3.10",
+                "<3.13",
+                ">=8",
+            );
+            assert_canonical_dependencies(
+                &published["v3"][bucket][identifier.as_str()],
+                ">=3.11",
+                "<3.14",
+                ">=9",
+            );
+        }
+        assert_eq!(
+            source["packages"][legacy_filename]["depends"],
+            serde_json::json!(["python >=3.10"])
+        );
+        assert_eq!(
+            published["packages"][legacy_filename]["depends"],
+            serde_json::json!(["python >=3.10"])
+        );
+        assert_eq!(
+            published["v3"]["zip"],
+            serde_json::json!({ "metadata": { "keep": true, "patched": true } })
+        );
+
+        let compressed: serde_json::Value = serde_json::from_slice(
+            &zstd::stream::decode_all(
+                std::fs::File::open(channel.path().join("noarch/repodata.json.zst")).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(compressed, published);
+
+        let sharded: ShardedRepodata = rmp_serde::from_slice(
+            &zstd::stream::decode_all(
+                std::fs::File::open(channel.path().join("noarch/repodata_shards.msgpack.zst"))
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        for (package_name, bucket, identifier) in [
+            ("tar-demo", "tar.bz2", tar_identifier.to_string()),
+            ("conda-demo", "conda", conda_identifier.to_string()),
+            ("wheel-demo", "whl", wheel_identifier.to_string()),
+        ] {
+            let digest = sharded.shards.get(package_name).unwrap();
+            let shard: Shard = rmp_serde::from_slice(
+                &zstd::stream::decode_all(
+                    std::fs::File::open(
+                        channel
+                            .path()
+                            .join("noarch/shards")
+                            .join(format!("{}.msgpack.zst", hex::encode(digest))),
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let identifier = ArchiveIdentifier::from_str(&identifier).unwrap();
+            let record = match bucket {
+                "tar.bz2" => shard.v3.tar_bz2.get(&identifier).unwrap(),
+                "conda" => shard.v3.conda.get(&identifier).unwrap(),
+                "whl" => &shard.v3.whl.get(&identifier).unwrap().package_record,
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                record.depends,
+                vec!["python[version=\">=3.11\"]".to_string()]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn indexer_rejects_invalid_patched_v3_dependencies_before_writing() {
+        let channel = tempfile::tempdir().unwrap();
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        op.create_dir("noarch/").await.unwrap();
+
+        let identifier = ArchiveIdentifier::from_str("demo-1.0-0").unwrap();
+        let mut repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        repodata.v3.conda.insert(
+            identifier.clone(),
+            PackageRecord::new(
+                PackageName::new_unchecked("demo"),
+                Version::from_str("1.0").unwrap(),
+                "0".to_string(),
+            ),
+        );
+        let mut conda_patches = serde_json::Map::new();
+        conda_patches.insert(
+            identifier.to_string(),
+            serde_json::json!({ "depends": ["python[extras=[Invalid]]"] }),
+        );
+        let patch: PatchInstructions = serde_json::from_value(serde_json::json!({
+            "v3": { "conda": conda_patches }
+        }))
+        .unwrap();
+        let metadata = RepodataMetadataCollection::new(
+            &op,
+            Platform::NoArch,
+            true,
+            true,
+            true,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+
+        let error = write_repodata(repodata, Some(patch), Platform::NoArch, op, &metadata)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse depends MatchSpec 'python[extras=[Invalid]]'")
+        );
+        for path in [
+            "noarch/repodata_from_packages.json",
+            "noarch/repodata.json",
+            "noarch/repodata.json.zst",
+            "noarch/repodata_shards.msgpack.zst",
+        ] {
+            assert!(
+                !channel.path().join(path).exists(),
+                "unexpected write to {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn indexer_rejects_legacy_extra_depends_patches_before_writing() {
+        let channel = tempfile::tempdir().unwrap();
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        op.create_dir("noarch/").await.unwrap();
+
+        let patch: PatchInstructions = serde_json::from_value(serde_json::json!({
+            "packages": {
+                "demo-1.0-0.tar.bz2": {
+                    "extra_depends": { "test": ["pytest >=8"] }
+                }
+            }
+        }))
+        .unwrap();
+        let repodata = RepoData {
+            info: None,
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: HashSet::default(),
+            version: Some(1),
+        };
+        let metadata = RepodataMetadataCollection::new(
+            &op,
+            Platform::NoArch,
+            true,
+            true,
+            true,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+
+        let error = write_repodata(repodata, Some(patch), Platform::NoArch, op, &metadata)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("legacy repodata patches cannot set extra_depends")
+        );
+        for path in [
+            "noarch/repodata_from_packages.json",
+            "noarch/repodata.json",
+            "noarch/repodata.json.zst",
+            "noarch/repodata_shards.msgpack.zst",
+        ] {
+            assert!(
+                !channel.path().join(path).exists(),
+                "unexpected write to {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn force_reindex_preserves_v3_extensions_and_recalculates_empty_stats() {
+        let channel = tempfile::tempdir().unwrap();
+        let noarch = channel.path().join("noarch");
+        std::fs::create_dir(&noarch).unwrap();
+        std::fs::write(
+            noarch.join("repodata.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "info": {
+                    "subdir": "noarch",
+                    "repodata_revisions": {
+                        "v3": {
+                            "message": "keep this message",
+                            "n_packages": 99,
+                            "oldest": 1,
+                            "newest": 2
+                        }
+                    }
+                },
+                "packages": {},
+                "packages.conda": {},
+                "v3": { "zip": { "future": true } },
+                "repodata_version": 1
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut config = FsConfig::default();
+        config.root = Some(channel.path().to_string_lossy().to_string());
+        let op = Operator::new(config.into_builder()).unwrap().finish();
+        let stats = index(
+            Some(Platform::NoArch),
+            op,
+            None,
+            false,
+            false,
+            Vec::new(),
+            PackageRevisionAssignment::default(),
+            true,
+            1,
+            None,
+            PreconditionChecks::Disabled,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(stats.subdirs[&Platform::NoArch].packages_added, 0);
+        assert_eq!(stats.subdirs[&Platform::NoArch].packages_removed, 0);
+
+        let repodata: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(noarch.join("repodata.json")).unwrap()).unwrap();
+        for map in ["packages", "packages.conda"] {
+            assert_eq!(repodata[map], serde_json::json!({}), "missing {map}");
+        }
+        assert_eq!(repodata["v3"]["zip"], serde_json::json!({ "future": true }));
+        assert_eq!(
+            repodata["info"]["repodata_revisions"]["v3"]["message"],
+            "keep this message"
+        );
+        assert_eq!(
+            repodata["info"]["repodata_revisions"]["v3"]["n_packages"],
+            0
+        );
+        assert!(
+            repodata["info"]["repodata_revisions"]["v3"]
+                .get("oldest")
+                .is_none()
+        );
+        assert!(
+            repodata["info"]["repodata_revisions"]["v3"]
+                .get("newest")
+                .is_none()
+        );
     }
 }

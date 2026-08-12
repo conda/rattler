@@ -137,19 +137,27 @@ pub struct RepodataRevisionMetadata {
     pub newest: Option<TimestampMs>,
 }
 
+/// The maximum byte length of an indexer-supplied repodata revision message.
+pub const MAX_REPODATA_REVISION_MESSAGE_BYTES: usize = 8192;
+
 /// Published metadata for a repodata revision.
 ///
 /// In `info.repodata_revisions`, the revision is represented by the enclosing
 /// `vN` map key. This flattened form is useful when revision metadata is
 /// handled as an individual value.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RepodataRevisionInfo {
     /// The integer identifying the revision.
     #[serde(default)]
     pub revision: RepodataRevision,
 
     /// An optional message describing this revision.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_repodata_revision_message"
+    )]
     pub message: Option<String>,
 
     /// The number of packages available in this revision.
@@ -170,14 +178,37 @@ pub struct RepodataRevisionInfo {
 /// Package counts and timestamps are derived from emitted records, so callers
 /// can only select a revision and optionally override its message.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RepodataRevisionSelection {
     /// The revision to publish.
     #[serde(default)]
     pub revision: RepodataRevision,
 
     /// An optional publisher message for this revision.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_repodata_revision_message"
+    )]
     pub message: Option<String>,
+}
+
+fn deserialize_repodata_revision_message<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let message = Option::<String>::deserialize(deserializer)?;
+    if message
+        .as_ref()
+        .is_some_and(|message| message.len() > MAX_REPODATA_REVISION_MESSAGE_BYTES)
+    {
+        return Err(D::Error::custom(format!(
+            "repodata revision messages may not exceed {MAX_REPODATA_REVISION_MESSAGE_BYTES} bytes"
+        )));
+    }
+    Ok(message)
 }
 
 /// A repodata revision.
@@ -1480,6 +1511,44 @@ mod test {
             Some(raw["message"].as_str().unwrap())
         );
         assert_eq!(serde_json::to_value(metadata).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_repodata_revision_info_preserves_published_statistics() {
+        let raw = serde_json::json!({
+            "revision": 3,
+            "message": "v3 packages",
+            "n_packages": 1,
+            "oldest": 1,
+            "newest": 2
+        });
+        let info = serde_json::from_value::<crate::RepodataRevisionInfo>(raw.clone()).unwrap();
+        assert_eq!(info.n_packages, Some(1));
+        assert_eq!(serde_json::to_value(info).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_repodata_revision_selection_rejects_statistics_or_oversized_message() {
+        let obsolete = serde_json::json!({
+            "revision": 3,
+            "message": "v3 packages",
+            "n_packages": 1
+        });
+        assert!(serde_json::from_value::<crate::RepodataRevisionSelection>(obsolete).is_err());
+
+        let at_limit = serde_json::json!({
+            "revision": 3,
+            "message": "a".repeat(crate::MAX_REPODATA_REVISION_MESSAGE_BYTES)
+        });
+        assert!(serde_json::from_value::<crate::RepodataRevisionSelection>(at_limit).is_ok());
+
+        let oversized = serde_json::json!({
+            "revision": 3,
+            "message": "é".repeat(4097)
+        });
+        let err =
+            serde_json::from_value::<crate::RepodataRevisionSelection>(oversized).unwrap_err();
+        assert!(err.to_string().contains("may not exceed 8192 bytes"));
     }
 
     #[test]
