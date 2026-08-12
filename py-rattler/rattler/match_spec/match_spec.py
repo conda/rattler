@@ -28,15 +28,15 @@ class MatchSpec:
     provided in the positional argument. Conda has historically had several string
     representations for equivalent MatchSpecs.
 
-    A series of rules are now followed for creating the canonical string
-    representation of a MatchSpec instance. The canonical string representation can
-    generically be represented by:
+    The following historic syntax describes forms accepted by the parser and the
+    legacy positional representation. It is not the canonical formatter output,
+    which is provided by the Rust API.
 
     `(channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]`
 
     where `()` indicate optional fields.
 
-    The rules for constructing a canonical string representation are:
+    Historical MatchSpec syntax includes:
 
     1. `name` (i.e. "package name") is required. Its position is always outside the
     key-value brackets. It can also be a glob pattern or a regex if `exact_names_only`
@@ -52,15 +52,13 @@ class MatchSpec:
     ignored.
     5. If `channel` is included and is an exact value, a `::` separator is used between
     `channel` and `name`.  `channel` can either be a canonical channel name or a
-    channel url. In the canonical string representation, the canonical channel name
-    will always be used.
+    channel URL. The legacy display representation uses the channel name.
     6. If `channel` is an exact value and `subdir` is an exact value, `subdir` is
     appended to `channel` with a `/` separator.  Otherwise, `subdir` is included in
     the key-value brackets.
     7. Key-value brackets can be delimited by comma, space, or comma+space. Value can
     optionally be wrapped in single or double quotes, but must be wrapped if `value`
-    contains a comma, space, or equal sign.  The canonical format uses comma delimiters
-    and single quotes.
+    contains a comma, space, or equal sign.
     8. When constructing a `MatchSpec` instance from a string, any key-value pair given
     inside the key-value brackets overrides any matching parameter given outside the
     brackets.

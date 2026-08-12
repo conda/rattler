@@ -4,7 +4,7 @@ use nom::{
     Finish, IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
-    character::complete::{char, multispace0, multispace1, one_of, space0},
+    character::complete::{char, multispace0, one_of, space0},
     combinator::{opt, recognize},
     error::{ContextError, ParseError, context},
     multi::{separated_list0, separated_list1},
@@ -20,7 +20,7 @@ use super::{
     MatchSpec,
     matcher::{StringMatcher, StringMatcherParseError},
 };
-use crate::match_spec::condition::parse_condition;
+use crate::match_spec::condition::parse_condition_with_options;
 use crate::{
     Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
     ParseStrictness, ParseVersionError, Platform, VersionSpec,
@@ -159,54 +159,117 @@ impl MatchSpec {
     }
 }
 
-/// Strips a comment from a match spec. A comment is preceded by a '#' followed
-/// by the comment itself. This functions splits the matchspec into the
-/// matchspec and comment part.
-fn strip_comment(input: &str) -> (&str, Option<&str>) {
-    input
-        .split_once('#')
-        .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
+/// Returns whether `input` starts a bracket section with a known `MatchSpec` key.
+fn starts_bracket_fields(input: &str) -> bool {
+    let Some(contents) = input.strip_prefix('[') else {
+        return false;
+    };
+    let contents = contents.trim_start();
+    let key_end = contents
+        .char_indices()
+        .take_while(|(_, character)| character.is_alphanumeric() || matches!(character, '_' | '-'))
+        .map(|(position, character)| position + character.len_utf8())
+        .last()
+        .unwrap_or(0);
+    let key = &contents[..key_end];
+    matches!(
+        key,
+        "version"
+            | "build"
+            | "build_number"
+            | "extras"
+            | "flags"
+            | "sha256"
+            | "md5"
+            | "fn"
+            | "url"
+            | "subdir"
+            | "channel"
+            | "license"
+            | "track_features"
+            | "when"
+            | "license_family"
+            | "namespace"
+    ) && contents[key_end..].trim_start().starts_with('=')
 }
 
-/// Rejects the deprecated `; if` syntax and returns an error if found.
-/// Users should migrate to the new `[when="..."]` bracket syntax.
-/// Also returns an error for bare semicolons (more than one).
-fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
-    // Fast path: no semicolons at all (99%+ of match specs)
-    if input.find(';').is_none() {
-        return Ok(input.trim());
+/// Returns up to `limit` occurrences of `needle` outside quoted bracket fields.
+fn unquoted_positions(input: &str, needle: char, limit: usize) -> SmallVec<[usize; 2]> {
+    let mut positions = SmallVec::new();
+    let mut characters = input.char_indices().peekable();
+    let mut quote = None;
+    let mut field_depth = 0_u32;
+
+    while let Some((position, character)) = characters.next() {
+        if let Some(quote_character) = quote {
+            match character {
+                '\\' => {
+                    characters.next();
+                }
+                character if character == quote_character => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+
+        match character {
+            '[' if field_depth > 0 => field_depth += 1,
+            '[' if starts_bracket_fields(&input[position..]) => field_depth = 1,
+            ']' if field_depth > 0 => field_depth -= 1,
+            '\'' | '"'
+                if field_depth > 0
+                    && input[..position]
+                        .trim_end()
+                        .chars()
+                        .next_back()
+                        .is_some_and(|previous| matches!(previous, '=' | '[' | ',')) =>
+            {
+                quote = Some(character);
+            }
+            character if character == needle => {
+                positions.push(position);
+                if positions.len() == limit {
+                    break;
+                }
+            }
+            _ => {}
+        }
     }
 
-    // Check for deprecated "; if" syntax first (more helpful error)
-    if has_if_statement(input) {
+    positions
+}
+
+/// Splits an unquoted comment from a `MatchSpec` while retaining URL fragments
+/// and other `#` characters inside bracket scalar values.
+fn strip_comment(input: &str) -> (&str, Option<&str>) {
+    unquoted_positions(input, '#', 1)
+        .first()
+        .copied()
+        .map_or_else(
+            || (input, None),
+            |position| (&input[..position], Some(&input[position + 1..])),
+        )
+}
+
+/// Rejects the deprecated `; if` syntax and multiple unquoted semicolons.
+fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
+    let semicolons = unquoted_positions(input, ';', 2);
+    let Some(&first) = semicolons.first() else {
+        return Ok(input.trim());
+    };
+
+    let after = input[first + 1..].trim_start();
+    if after
+        .strip_prefix("if")
+        .is_some_and(|remainder| remainder.starts_with(char::is_whitespace))
+    {
         return Err(ParseMatchSpecError::DeprecatedIfSyntax);
     }
-
-    // Check that we only have a single semicolon (if any)
-    if input.matches(';').count() > 1 {
+    if semicolons.len() > 1 {
         return Err(ParseMatchSpecError::MoreThanOneSemicolon);
     }
 
-    // No deprecated syntax found, return the input as is
     Ok(input.trim())
-}
-
-/// Check if the input contains the deprecated `; if` syntax
-fn has_if_statement(input: &str) -> bool {
-    let mut parser = (
-        // Take everything up to "; if"
-        nom::bytes::complete::take_until::<_, _, nom::error::Error<&str>>(";"),
-        // Match "; if " with flexible whitespace
-        (
-            multispace0::<_, nom::error::Error<&str>>,
-            char(';'),
-            multispace0,
-            tag("if"),
-            multispace1, // At least one whitespace after "if"
-        ),
-    );
-
-    parser.parse(input).is_ok()
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -421,7 +484,7 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 /// name grammar: the regex `[a-z0-9_.+-]{1,64}`. This is enforced when parsing
 /// `extras` so we never accept (and later serialize) group names that would be
 /// invalid metadata per the spec.
-fn is_valid_extra_group_name(name: &str) -> bool {
+pub(crate) fn is_valid_extra_group_name(name: &str) -> bool {
     let mut len = 0usize;
     for c in name.chars() {
         if !(c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | '+')) {
@@ -610,7 +673,7 @@ fn parse_bracket_vec_into_components(
                     // Unescape the value in case it contains escaped quotes
                     let unescaped_value = unescape_string(value);
                     let (remainder, condition) =
-                        parse_condition(&unescaped_value).map_err(|e| {
+                        parse_condition_with_options(&unescaped_value, options).map_err(|e| {
                             ParseMatchSpecError::InvalidCondition(value.to_string(), e.to_string())
                         })?;
 

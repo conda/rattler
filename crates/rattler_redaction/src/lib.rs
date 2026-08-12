@@ -52,6 +52,42 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
     }
 }
 
+/// Returns a URL safe to serialize by removing userinfo, redacting known path
+/// tokens, and treating all query and non-digest fragment contents as secret.
+///
+/// Query strings are intentionally replaced wholesale: arbitrary services can
+/// use arbitrary parameter names for credentials, so a key allowlist or denylist
+/// cannot provide a meaningful safety guarantee. Conda artifact fragments of the
+/// form `md5:<hex>` or `sha256:<hex>` are retained.
+pub fn redact_credentials_from_url(url: &Url) -> Url {
+    fn is_artifact_digest(fragment: &str) -> bool {
+        let Some((algorithm, digest)) = fragment.split_once(':') else {
+            return false;
+        };
+        matches!(algorithm, "md5" | "sha256")
+            && !digest.is_empty()
+            && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    }
+
+    let mut url =
+        redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
+    if !url.username().is_empty() || url.password().is_some() {
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+    }
+    if url.query().is_some() {
+        url.set_query(Some(DEFAULT_REDACTION_STR));
+    }
+    if url
+        .fragment()
+        .is_some_and(|fragment| !is_artifact_digest(fragment))
+    {
+        url.set_fragment(Some(DEFAULT_REDACTION_STR));
+    }
+
+    url
+}
+
 /// A trait to redact known secrets from a type.
 pub trait Redact {
     /// Redacts any secrets from this instance.
@@ -145,5 +181,21 @@ mod test {
             redacted.to_string(),
             format!("https://user:{DEFAULT_REDACTION_STR}@prefix.dev/conda-forge/")
         );
+    }
+
+    #[test]
+    fn test_redact_credentials_from_url() {
+        let url = Url::parse(
+            "https://user:password@prefix.dev/t/path-token/channel?auth=session&keep=value#ticket=fragment-token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            redact_credentials_from_url(&url).as_str(),
+            "https://prefix.dev/t/********/channel?********#********"
+        );
+
+        let digest_url = Url::parse("https://prefix.dev/pkg.conda#sha256:deadbeef").unwrap();
+        assert_eq!(redact_credentials_from_url(&digest_url), digest_url);
     }
 }
