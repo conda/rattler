@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
 
 use jiff::Timestamp;
 use pyo3::{
@@ -6,7 +9,7 @@ use pyo3::{
     pybacked::PyBackedStr, pyfunction,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{PackageRecord, ParseStrictness, RepoDataRecord, VersionSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
@@ -58,6 +61,17 @@ fn parse_exclude_newer(
             std::time::Duration::from_secs(seconds),
         ))),
         (None, None) => Ok(None),
+    }
+}
+
+fn add_pip_to_python(record: &mut PackageRecord) {
+    static PYTHON_VERSION: LazyLock<VersionSpec> = LazyLock::new(|| {
+        VersionSpec::from_str("2.*|3.*", ParseStrictness::Strict)
+            .expect("the Python version spec is valid")
+    });
+
+    if record.name.as_normalized() == "python" && PYTHON_VERSION.matches(&record.version) {
+        record.depends.push("pip".to_owned());
     }
 }
 
@@ -167,7 +181,7 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false)
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
@@ -183,6 +197,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
     exclude_newer_timestamp_ms: Option<i64>,
     exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
+    add_pip_as_python_dependency: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
     // object in another thread.
@@ -212,7 +227,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
                 package_names,
-                None,
+                add_pip_as_python_dependency.then_some(add_pip_to_python),
                 package_format_selection.into(),
             )?;
 
