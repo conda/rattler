@@ -67,6 +67,13 @@ mod tests {
     use super::*;
     use crate::{PackageName, Version};
 
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ShardedIndexShape {
+        info: serde::de::IgnoredAny,
+        shards: serde::de::IgnoredAny,
+    }
+
     /// Shards are content-addressed (stored under the hash of their bytes), so
     /// serialization must not depend on the insertion order of the underlying
     /// maps and sets — otherwise every producer run writes a fresh shard file
@@ -117,13 +124,6 @@ mod tests {
             },
             shards: ahash::HashMap::default(),
         };
-
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct ShardedIndexShape {
-            info: serde::de::IgnoredAny,
-            shards: serde::de::IgnoredAny,
-        }
 
         let encoded = rmp_serde::to_vec_named(&sharded_repodata).unwrap();
         let shape: ShardedIndexShape = rmp_serde::from_slice(&encoded).unwrap();

@@ -16,6 +16,13 @@ use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_packag
 use serde::Deserialize;
 use serde_json::Value;
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShardedIndexShape {
+    info: serde::de::IgnoredAny,
+    shards: serde::de::IgnoredAny,
+}
+
 fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }
@@ -349,13 +356,6 @@ async fn test_normal_and_force_reindex_preserve_v3_extensions() {
     let compressed_repodata: Value =
         serde_json::from_slice(&zstd::decode_all(compressed_repodata.as_slice()).unwrap()).unwrap();
     assert_eq!(compressed_repodata["v3"], extensions);
-
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
-    struct ShardedIndexShape {
-        info: serde::de::IgnoredAny,
-        shards: serde::de::IgnoredAny,
-    }
 
     let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
     let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
