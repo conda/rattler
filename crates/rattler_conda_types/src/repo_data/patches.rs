@@ -462,10 +462,7 @@ mod test {
             instructions.v3.extensions.get("zip"),
             Some(&patch["v3"]["zip"])
         );
-        assert_eq!(
-            serde_json::to_string(&instructions).unwrap(),
-            serde_json::to_string(&patch).unwrap()
-        );
+        assert_eq!(serde_json::to_value(&instructions).unwrap(), patch);
 
         repodata.apply_patches(&instructions);
         assert_eq!(
