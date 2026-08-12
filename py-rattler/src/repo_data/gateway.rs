@@ -102,10 +102,8 @@ impl UnsupportedRepodataRevisionCollector {
     fn new(show_progress: bool) -> Self {
         Self {
             reports: Arc::new(Mutex::new(Vec::new())),
-            progress: show_progress.then(|| {
-                rattler_repodata_gateway::IndicatifReporter::builder()
-                    .finish()
-            }),
+            progress: show_progress
+                .then(|| rattler_repodata_gateway::IndicatifReporter::builder().finish()),
         }
     }
 
