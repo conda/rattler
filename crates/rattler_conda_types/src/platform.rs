@@ -397,8 +397,7 @@ impl Platform {
             | Platform::Android64
             | Platform::Android32 => Some("android"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
-            Platform::EmscriptenWasm32 
-            | Platform::EmscriptenWasm64 => Some("emscripten"),
+            Platform::EmscriptenWasm32 | Platform::EmscriptenWasm64 => Some("emscripten"),
             Platform::WasiWasm32 => Some("wasi"),
             Platform::ZosZ => Some("zos"),
         }
@@ -645,7 +644,7 @@ impl From<Arch> for &'static str {
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
             Arch::Wasm32 => "wasm32",
-            Arch::Wasm64 => "wasm64", 
+            Arch::Wasm64 => "wasm64",
             Arch::Z => "z",
         }
     }
