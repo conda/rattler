@@ -71,6 +71,7 @@ pub enum Platform {
     WinArm64,
 
     EmscriptenWasm32,
+    EmscriptenWasm64,
     WasiWasm32,
 
     ZosZ,
@@ -115,6 +116,7 @@ pub enum Arch {
     Riscv32,
     Riscv64,
     Wasm32,
+    Wasm64,
     Z,
 }
 
@@ -267,6 +269,9 @@ impl Platform {
         {
             #[cfg(target_arch = "wasm32")]
             return Platform::EmscriptenWasm32;
+
+            #[cfg(target_arch = "wasm64")]
+            return Platform::EmscriptenWasm64;
         }
 
         #[cfg(target_os = "wasi")]
@@ -314,6 +319,7 @@ impl Platform {
             || matches!(
                 self,
                 Platform::EmscriptenWasm32
+                    | Platform::EmscriptenWasm64
                     | Platform::FreeBsd32
                     | Platform::FreeBsd64
                     | Platform::FreeBsdArm64
@@ -391,7 +397,7 @@ impl Platform {
             | Platform::Android64
             | Platform::Android32 => Some("android"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
-            Platform::EmscriptenWasm32 => Some("emscripten"),
+            Platform::EmscriptenWasm32 | Platform::EmscriptenWasm64 => Some("emscripten"),
             Platform::WasiWasm32 => Some("wasi"),
             Platform::ZosZ => Some("zos"),
         }
@@ -450,6 +456,7 @@ impl FromStr for Platform {
             "win-64" => Platform::Win64,
             "win-arm64" => Platform::WinArm64,
             "emscripten-wasm32" => Platform::EmscriptenWasm32,
+            "emscripten-wasm64" => Platform::EmscriptenWasm64,
             "wasi-wasm32" => Platform::WasiWasm32,
             "zos-z" => Platform::ZosZ,
             string => {
@@ -493,6 +500,7 @@ impl From<Platform> for &'static str {
             Platform::Win64 => "win-64",
             Platform::WinArm64 => "win-arm64",
             Platform::EmscriptenWasm32 => "emscripten-wasm32",
+            Platform::EmscriptenWasm64 => "emscripten-wasm64",
             Platform::WasiWasm32 => "wasi-wasm32",
             Platform::ZosZ => "zos-z",
             Platform::Unknown => "unknown",
@@ -534,6 +542,7 @@ impl Platform {
             | Platform::IosSimulatorArm64 => Some(Arch::Arm64),
             Platform::AndroidArmV7a => Some(Arch::ArmV7a),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
+            Platform::EmscriptenWasm64 => Some(Arch::Wasm64),
             Platform::ZosZ => Some(Arch::Z),
         }
     }
@@ -606,6 +615,7 @@ impl FromStr for Arch {
             "riscv32" => Arch::Riscv32,
             "riscv64" => Arch::Riscv64,
             "wasm32" => Arch::Wasm32,
+            "wasm64" => Arch::Wasm64,
             "z" => Arch::Z,
             string => {
                 return Err(ParseArchError {
@@ -634,6 +644,7 @@ impl From<Arch> for &'static str {
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
             Arch::Wasm32 => "wasm32",
+            Arch::Wasm64 => "wasm64",
             Arch::Z => "z",
         }
     }
@@ -697,6 +708,10 @@ mod tests {
         assert_eq!(
             "emscripten-wasm32".parse::<Platform>().unwrap(),
             Platform::EmscriptenWasm32
+        );
+        assert_eq!(
+            "emscripten-wasm64".parse::<Platform>().unwrap(),
+            Platform::EmscriptenWasm64
         );
         assert_eq!(
             "wasi-wasm32".parse::<Platform>().unwrap(),
@@ -815,6 +830,7 @@ mod tests {
         assert_eq!(Platform::Win64.arch(), Some(Arch::X86_64));
         assert_eq!(Platform::WinArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::EmscriptenWasm32.arch(), Some(Arch::Wasm32));
+        assert_eq!(Platform::EmscriptenWasm64.arch(), Some(Arch::Wasm64));
         assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
         assert_eq!(Platform::ZosZ.arch(), Some(Arch::Z));

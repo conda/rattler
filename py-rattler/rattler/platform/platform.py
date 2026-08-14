@@ -36,6 +36,7 @@ PlatformLiteral = Literal[
     "win-64",
     "win-arm64",
     "emscripten-wasm32",
+    "emscripten-wasm64",
     "wasi-wasm32",
     "zos-z",
 ]
@@ -119,7 +120,7 @@ class Platform(metaclass=PlatformSingleton):
         >>> next(Platform.all())
         Platform(noarch)
         >>> len(list(Platform.all()))
-        32
+        33
         >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())

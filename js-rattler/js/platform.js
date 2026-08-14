@@ -22,6 +22,7 @@ export const platformNames = [
     "win-64",
     "win-arm64",
     "emscripten-wasm32",
++   "emscripten-wasm64",
     "wasi-wasm32",
     "zos-z",
 ];
@@ -41,5 +42,6 @@ export const archNames = [
     "riscv32",
     "riscv64",
     "wasm32",
+    "wasm64",
     "z",
 ];
