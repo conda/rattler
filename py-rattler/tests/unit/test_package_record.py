@@ -1,8 +1,9 @@
 import json
 import random
 import datetime
+from pathlib import Path
 
-from rattler import NoArchType, PackageRecord, PackageName, VersionWithSource
+from rattler import Channel, NoArchType, PackageRecord, PackageName, RepoData, VersionWithSource
 
 
 def test_platform_arch() -> None:
@@ -112,6 +113,38 @@ def test_package_record_setters_and_serialization() -> None:
     assert record.md5 == b"1234" * 4
     assert record.sha256 == b"5678" * 8
     assert record.legacy_bz2_md5 == b"1234" * 4
+
+
+def test_flags_roundtrip_preserves_unknown_strings(tmp_path: Path) -> None:
+    flags = ["optional", "future-flag"]
+    constructed = PackageRecord("demo", "1.0", "0", 0, "noarch", flags=flags)
+    assert constructed.flags == flags
+
+    repodata_path = tmp_path / "repodata.json"
+    repodata_path.write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "demo-1.0-0.tar.bz2": {
+                        "name": "demo",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "flags": flags,
+                        "subdir": "noarch",
+                    }
+                }
+            }
+        )
+    )
+
+    record = RepoData.from_path(repodata_path).into_repo_data(Channel(str(tmp_path)))[0]
+    assert record.flags == flags
+    assert json.loads(record.to_json())["flags"] == flags
+
+    record.flags = ["another-future-flag"]
+    assert record.flags == ["another-future-flag"]
 
 
 def test_extra_depends_default_empty() -> None:
