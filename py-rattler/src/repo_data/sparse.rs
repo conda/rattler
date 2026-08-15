@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use pyo3::{Bound, PyRef, PyResult, Python, pyclass, pymethods};
 
@@ -8,6 +8,7 @@ use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
+use crate::repo_data::{PyRepodataRevisionMetadata, repodata_revisions_to_python};
 use parking_lot::RwLock;
 use pyo3::exceptions::PyValueError;
 
@@ -218,6 +219,16 @@ impl PySparseRepoData {
     #[getter]
     pub fn subdir(&self) -> String {
         self.subdir.clone()
+    }
+
+    /// Returns the revisions advertised by the repodata, keyed by `vN`.
+    #[getter]
+    pub fn repodata_revisions(&self) -> PyResult<BTreeMap<String, PyRepodataRevisionMetadata>> {
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Err(PyValueError::new_err("I/O operation on closed file."));
+        };
+        Ok(repodata_revisions_to_python(sparse.repodata_revisions()))
     }
 
     pub fn close(&self) {
