@@ -2,7 +2,11 @@
 
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::repo_data::VirtualPackagePlugins;
 use crate::repo_data::{ChannelRelations, RepodataRevisions, V3Packages};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::utils::serde::DeserializeFromStrUnchecked;
 use crate::utils::serde::{sort_index_map_alphabetically, sort_set_alphabetically};
 use indexmap::IndexMap;
 use jiff::Timestamp;
@@ -60,6 +64,14 @@ pub struct ShardedSubdirInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// Virtual package detection plugins registered by the channel.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[serde_as(
+        deserialize_as = "IndexMap<DeserializeFromStrUnchecked, Vec<DeserializeFromStrUnchecked>>"
+    )]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub virtual_package_plugins: VirtualPackagePlugins,
 }
 
 #[cfg(test)]
@@ -121,6 +133,8 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations: None,
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             },
             shards: ahash::HashMap::default(),
         };
@@ -160,10 +174,47 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations,
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             };
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_virtual_package_plugins() {
+        let raw = r#"{
+            "subdir": "linux-64",
+            "base_url": "./",
+            "shards_base_url": "./shards/",
+            "virtual_package_plugins": {
+                "cuda-detect": ["__cuda", "__cuda_arch"]
+            }
+        }"#;
+        let info: ShardedSubdirInfo = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            info.virtual_package_plugins[&PackageName::new_unchecked("cuda-detect")]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda", "__cuda_arch"]
+        );
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"virtual_package_plugins\""));
+
+        // Omitted entirely when no plugins are registered.
+        let info = ShardedSubdirInfo {
+            virtual_package_plugins: VirtualPackagePlugins::default(),
+            ..info
+        };
+        assert!(
+            !serde_json::to_string(&info)
+                .unwrap()
+                .contains("virtual_package_plugins")
+        );
     }
 }
 
