@@ -128,7 +128,7 @@
 <a href=#126 id=126 data-nosnippet>126</a>    /// whether they want strict or lenient parsing independently from the
 <a href=#127 id=127 data-nosnippet>127</a>    /// repodata revision syntax surface.
 <a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">pub fn </span>with_repodata_revision(<span class="kw-2">mut </span><span class="self">self</span>, revision: RepodataRevision) -&gt; <span class="self">Self </span>{
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>allow_v3_syntax = !<span class="macro">matches!</span>(revision, RepodataRevision::Legacy);
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>allow_v3_syntax = !revision.uses_legacy_package_layout();
 <a href=#130 id=130 data-nosnippet>130</a>        <span class="self">self</span>.allow_extras = allow_v3_syntax;
 <a href=#131 id=131 data-nosnippet>131</a>        <span class="self">self</span>.allow_conditionals = allow_v3_syntax;
 <a href=#132 id=132 data-nosnippet>132</a>        <span class="self">self</span>.allow_flags = allow_v3_syntax;

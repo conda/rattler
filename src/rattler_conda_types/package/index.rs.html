@@ -158,11 +158,11 @@
 <a href=#156 id=156 data-nosnippet>156</a>    /// required repodata revision.
 <a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ValidateIndexJsonError&gt; {
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>required_revision = <span class="self">self</span>.required_repodata_revision();
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">if </span><span class="macro">matches!</span>(required_revision, RepodataRevision::Legacy) &amp;&amp; !<span class="self">self</span>.extra_depends.is_empty() {
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">if </span>required_revision.uses_legacy_package_layout() &amp;&amp; !<span class="self">self</span>.extra_depends.is_empty() {
 <a href=#160 id=160 data-nosnippet>160</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ValidateIndexJsonError::LegacyExtraDepends);
 <a href=#161 id=161 data-nosnippet>161</a>        }
 <a href=#162 id=162 data-nosnippet>162</a>
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">if </span><span class="macro">matches!</span>(required_revision, RepodataRevision::Legacy) &amp;&amp; !<span class="self">self</span>.flags.is_empty() {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">if </span>required_revision.uses_legacy_package_layout() &amp;&amp; !<span class="self">self</span>.flags.is_empty() {
 <a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ValidateIndexJsonError::LegacyFlags);
 <a href=#165 id=165 data-nosnippet>165</a>        }
 <a href=#166 id=166 data-nosnippet>166</a>
@@ -214,7 +214,7 @@
 <a href=#212 id=212 data-nosnippet>212</a>            }
 <a href=#213 id=213 data-nosnippet>213</a>        })<span class="question-mark">?</span>;
 <a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">if </span><span class="macro">matches!</span>(required_revision, RepodataRevision::Legacy) {
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">if </span>required_revision.uses_legacy_package_layout() {
 <a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">if </span>matchspec.extras.is_some() {
 <a href=#217 id=217 data-nosnippet>217</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ValidateIndexJsonError::LegacyMatchSpecExtras {
 <a href=#218 id=218 data-nosnippet>218</a>                    field,

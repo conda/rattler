@@ -230,7 +230,7 @@
 <a href=#228 id=228 data-nosnippet>228</a>            };
 <a href=#229 id=229 data-nosnippet>229</a>
 <a href=#230 id=230 data-nosnippet>230</a>            <span class="comment">// Encode the index as msgpack and compress with zstd
-<a href=#231 id=231 data-nosnippet>231</a>            </span><span class="kw">let </span>index_bytes = rmp_serde::to_vec(<span class="kw-2">&amp;</span>sharded_index).unwrap();
+<a href=#231 id=231 data-nosnippet>231</a>            </span><span class="kw">let </span>index_bytes = rmp_serde::to_vec_named(<span class="kw-2">&amp;</span>sharded_index).unwrap();
 <a href=#232 id=232 data-nosnippet>232</a>            <span class="kw">let </span>compressed_index = zstd::encode_all(index_bytes.as_slice(), <span class="number">3</span>).unwrap();
 <a href=#233 id=233 data-nosnippet>233</a>
 <a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">let </span>shard_requests = Arc::new(AtomicUsize::new(<span class="number">0</span>));
