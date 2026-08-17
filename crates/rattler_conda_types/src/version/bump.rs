@@ -217,25 +217,27 @@ impl Version {
                     }
                 }
                 _ => {
-                    // For Last and Segment types, keep original behavior
                     if segment_to_bump == idx {
-                        let last_numeral_component = segment_components
-                            .iter_mut()
-                            .filter_map(Component::as_number_mut)
-                            .next_back()
-                            .expect(
-                                "every segment must at least contain a single numeric component",
-                            );
-                        *last_numeral_component += 1;
+                        // Find the position of the last numeral so we only
+                        // reset idens that appear after it.
+                        let last_num_idx = segment_components
+                            .iter()
+                            .rposition(|c| c.as_number().is_some())
+                            .expect("every segment must contain a numeric component");
 
-                        // If the segment ends with an ascii character, make it `a` instead of whatever it says
-                        let last_iden_component = segment_components
-                            .iter_mut()
-                            .filter_map(Component::as_iden_mut)
-                            .next_back();
+                        // Bump the last numeral.
+                        if let Some(n) = segment_components[last_num_idx].as_number_mut() {
+                            *n += 1;
+                        }
 
-                        if let Some(last_iden_component) = last_iden_component {
-                            *last_iden_component = "a".into();
+                        // Only reset idens that appear AFTER the last numeral
+                        // to 'a'. Idens before the bumped numeral must be
+                        // preserved, otherwise we produce a smaller version
+                        // (e.g. 0.60b1 -> 0.60a2 instead of correct 0.60b2).
+                        for c in segment_components[last_num_idx + 1..].iter_mut() {
+                            if let Some(id) = c.as_iden_mut() {
+                                *id = "a".into();
+                            }
                         }
                     }
                 }
@@ -406,6 +408,30 @@ mod test {
                 .remove_local()
                 .into_owned(),
             Version::from_str(expected).unwrap()
+        );
+    }
+
+    /// Regression test for https://github.com/conda/rattler/issues/2041
+    /// Bumping a version like 0.60b1 should produce 0.60b2, not 0.60a2.
+    /// The iden 'b' (beta) must not be reset to 'a' (alpha) when it
+    /// appears before the bumped numeral.
+    #[rstest]
+    #[case("0.60b1", VersionBumpType::Last, "0.60b2")]
+    #[case("0.60b1", VersionBumpType::Segment(1), "0.60b2")]
+    #[case("1.2a3", VersionBumpType::Last, "1.2a4")]
+    #[case("1.2a3b", VersionBumpType::Last, "1.2a4a")]
+    fn bump_preserves_iden_before_last_numeral(
+        #[case] input: &str,
+        #[case] bump_type: VersionBumpType,
+        #[case] expected: &str,
+    ) {
+        let bumped = Version::from_str(input).unwrap().bump(bump_type).unwrap();
+        let expected = Version::from_str(expected).unwrap();
+        assert_eq!(bumped, expected);
+        // The bumped version must always be strictly greater.
+        assert!(
+            bumped > Version::from_str(input).unwrap(),
+            "bumped version {bumped} must be greater than input {input}"
         );
     }
 }
