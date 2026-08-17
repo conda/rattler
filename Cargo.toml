@@ -104,6 +104,7 @@ indexmap = "2"
 indicatif = "0.18"
 insta = { version = "1" }
 itertools = "0.15"
+js-sys = "0.3"
 json-patch = "4"
 keyring-core = "1"
 lazy-regex = "3"
@@ -150,6 +151,7 @@ rustix = { version = "1.1", default-features = false }
 simd-json = { version = "0.17", features = ["serde_impl"] }
 self_cell = "1"
 semver = "1"
+send_wrapper = "0.6"
 serde = { version = "1" }
 serde_bytes = { version = "0.11" }
 serde_ignored = "0.1"
@@ -198,7 +200,10 @@ urlencoding = "2"
 unicode-normalization = "0.1"
 uuid = { version = "1", default-features = false }
 walkdir = "2"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 wasmtimer = "0.4"
+web-sys = "0.3"
 which = "8"
 windows-sys = { version = "0.61", default-features = false }
 windows-native-keyring-store = "1"

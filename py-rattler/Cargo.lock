@@ -4349,6 +4349,7 @@ dependencies = [
  "indicatif",
  "itertools 0.15.0",
  "jiff",
+ "js-sys",
  "json-patch",
  "libc",
  "memmap2",
@@ -4364,6 +4365,7 @@ dependencies = [
  "retry-policies",
  "rmp-serde",
  "self_cell",
+ "send_wrapper",
  "serde",
  "serde_json",
  "serde_with",
@@ -4376,7 +4378,10 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasmtimer",
+ "web-sys",
  "windows-sys 0.61.2",
  "zstd",
 ]
@@ -4988,6 +4993,12 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
+name = "send_wrapper"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"

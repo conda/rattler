@@ -77,7 +77,12 @@ tokio = { workspace = true, features = ["rt", "io-util"] }
 rattler_package_streaming = { workspace = true, default-features = false, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { workspace = true }
+send_wrapper = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 wasmtimer = { workspace = true }
+web-sys = { workspace = true, features = ["Request", "RequestInit", "Response"] }
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2 = { workspace = true, optional = true }

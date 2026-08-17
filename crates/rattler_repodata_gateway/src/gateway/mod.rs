@@ -338,6 +338,11 @@ struct GatewayInner {
     /// The client to use to fetch repodata.
     client: LazyClient,
 
+    /// A fetch implementation provided by the host JavaScript environment.
+    /// When set, it is used for all requests instead of the client.
+    #[cfg(target_arch = "wasm32")]
+    js_fetch: Option<crate::utils::js_fetch::JsFetcher>,
+
     /// The channel configuration
     channel_config: ChannelConfig,
 

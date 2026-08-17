@@ -69,6 +69,8 @@ mod utils;
 pub use reporter::{DownloadReporter, Reporter};
 #[cfg(feature = "sparse")]
 pub use reporter::{SUPPORTED_REPODATA_REVISION, UnsupportedRepodataRevision};
+#[cfg(target_arch = "wasm32")]
+pub use utils::js_fetch::{JsFetchError, JsFetchResponse, JsFetcher};
 
 #[cfg(feature = "gateway")]
 mod gateway;

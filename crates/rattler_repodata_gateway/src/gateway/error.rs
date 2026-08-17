@@ -61,6 +61,10 @@ pub enum GatewayError {
     #[error("{0}")]
     CacheError(String),
 
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetchError(#[from] crate::utils::js_fetch::JsFetchError),
+
     /// No usable sharded index for a subdir while the gateway may only read
     /// from the cache. Callers fall back to `repodata.json` for the subdir
     /// rather than failing: the sharded index is one way to read a channel,
@@ -116,6 +120,10 @@ pub enum HttpOrFilesystemError {
 
     #[error(transparent)]
     Filesystem(#[from] io::Error),
+
+    #[cfg(target_arch = "wasm32")]
+    #[error(transparent)]
+    JsFetch(#[from] crate::utils::js_fetch::JsFetchError),
 }
 
 impl From<fetch::RepoDataNotFoundError> for HttpOrFilesystemError {
@@ -123,6 +131,8 @@ impl From<fetch::RepoDataNotFoundError> for HttpOrFilesystemError {
         match value {
             RepoDataNotFoundError::HttpError(err) => HttpOrFilesystemError::Http(err),
             RepoDataNotFoundError::FileSystemError(err) => HttpOrFilesystemError::Filesystem(err),
+            #[cfg(target_arch = "wasm32")]
+            RepoDataNotFoundError::JsFetchError(err) => HttpOrFilesystemError::JsFetch(err),
         }
     }
 }
