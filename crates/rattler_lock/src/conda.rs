@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::{SourceData, UrlOrPath, source::SourceLocation};
+use crate::{SourceData, UrlOrPath, Verbatim, source::SourceLocation};
 
 /// Represents a conda-build variant value.
 ///
@@ -90,7 +90,7 @@ impl CondaPackageData {
     /// Returns the location of the package.
     pub fn location(&self) -> &UrlOrPath {
         match self {
-            Self::Binary(data) => &data.location,
+            Self::Binary(data) => data.location.inner(),
             Self::Source(data) => &data.location,
         }
     }
@@ -168,7 +168,12 @@ pub struct CondaBinaryData {
     pub package_record: PackageRecord,
 
     /// The location of the package. This can be a URL or a local path.
-    pub location: UrlOrPath,
+    ///
+    /// Stored verbatim so a relative path round-trips through the lock file:
+    /// the `given` string is what was written on disk, while the inner value
+    /// is left relative for the consumer to resolve against the lock file's
+    /// base directory.
+    pub location: Verbatim<UrlOrPath>,
 
     /// The filename of the package.
     pub file_name: DistArchiveIdentifier,
@@ -589,8 +594,14 @@ impl From<RepoDataRecord> for CondaPackageData {
                 .channel
                 .and_then(|channel| Url::parse(&channel).ok())
                 .map(Into::into),
-            location,
+            location: Verbatim::new(location),
         }))
+    }
+}
+
+impl From<Url> for Verbatim<UrlOrPath> {
+    fn from(url: Url) -> Self {
+        Verbatim::new(UrlOrPath::from(url))
     }
 }
 
