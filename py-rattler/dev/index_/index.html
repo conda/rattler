@@ -561,10 +561,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
+  <a href="#rattler.index.RepodataRevisions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RepodataRevisionMetadata
+        RepodataRevisions
       
     </span>
   </a>
@@ -3031,10 +3031,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rattler.index.RepodataRevisionMetadata" class="md-nav__link">
+  <a href="#rattler.index.RepodataRevisions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RepodataRevisionMetadata
+        RepodataRevisions
       
     </span>
   </a>
@@ -3126,56 +3126,34 @@
 
 
 
-
-
-<div class="doc doc-object doc-class">
+<div class="doc doc-object doc-attribute">
 
 
 
-<h2 id="rattler.index.RepodataRevisionMetadata" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">RepodataRevisionMetadata</span>
+<h2 id="rattler.index.RepodataRevisions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">RepodataRevisions</span>
 
 
-<a href="#rattler.index.RepodataRevisionMetadata" class="headerlink" title="Permanent link">#</a></h2>
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
 
+<a href="#rattler.index.RepodataRevisions" class="headerlink" title="Permanent link">#</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RepodataRevisions</span> <span class="o">=</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">RepodataRevisionInput</span><span class="p">]</span>
+</span></code></pre></div>
 
     <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
 
-
-
-        <p>Metadata for a single revision in the <code>vN</code>-keyed dictionary form of
-<code>repodata_revisions</code>. The revision itself is the dictionary key.</p>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
+        <p>Revisions to advertise when indexing a channel.</p>
+<p>For example: <code>[{"revision": "v3", "message": "v3 packages"}]</code>.
+The legacy layout is implicit and cannot be selected. Package counts and timestamps
+are derived by the indexer and cannot be supplied.</p>
 
     </div>
 
 </div>
+
+
 
 <div class="doc doc-object doc-class">
 
@@ -3359,12 +3337,19 @@ conda channels at a minimum must include this subdirectory.</p>
                 <code>repodata_revisions</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="rattler.index.index.RepodataRevisions">RepodataRevisions</span>]</code>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="RepodataRevisions
+
+
+  
+      module-attribute
+   (rattler.index.index.RepodataRevisions)" href="#rattler.index.RepodataRevisions">RepodataRevisions</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Repodata revisions to advertise, with optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.
-                Either a sequence of revisions or a <code>vN</code>-keyed dictionary, e.g. <code>{"v3": {"n_packages": 1}}</code>.</p>
+                <p>Revisions to advertise. Pass revision strings or mappings with
+                <code>revision</code> and optional <code>message</code>, for example
+                <code>[{"revision": "v3", "message": "v3 packages"}]</code>. The legacy layout is implicit.
+                Package counts and timestamps are computed by the indexer.</p>
               </div>
             </td>
             <td>
@@ -3421,6 +3406,10 @@ conda channels at a minimum must include this subdirectory.</p>
           </tr>
       </tbody>
     </table>
+        <h4 id="rattler.index.index_fs--examples">Examples<a class="headerlink" href="#rattler.index.index_fs--examples" title="Permanent link">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_fs</span><span class="p">(</span><span class="n">channel_directory</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;revision&quot;</span><span class="p">:</span> <span class="s2">&quot;v3&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;v3 packages&quot;</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
+</span></code></pre></div>
 
 
     </div>
@@ -3582,12 +3571,19 @@ conda channels at a minimum must include this subdirectory.</p>
                 <code>repodata_revisions</code>
             </td>
             <td>
-                  <code><span title="typing.Optional">Optional</span>[<span title="rattler.index.index.RepodataRevisions">RepodataRevisions</span>]</code>
+                  <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="RepodataRevisions
+
+
+  
+      module-attribute
+   (rattler.index.index.RepodataRevisions)" href="#rattler.index.RepodataRevisions">RepodataRevisions</a>]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Repodata revisions to advertise, with optional <code>n_packages</code>, <code>oldest</code>, and <code>newest</code> metadata.
-                Either a sequence of revisions or a <code>vN</code>-keyed dictionary, e.g. <code>{"v3": {"n_packages": 1}}</code>.</p>
+                <p>Revisions to advertise. Pass revision strings or mappings with
+                <code>revision</code> and optional <code>message</code>, for example
+                <code>[{"revision": "v3", "message": "v3 packages"}]</code>. The legacy layout is implicit.
+                Package counts and timestamps are computed by the indexer.</p>
               </div>
             </td>
             <td>
@@ -3660,6 +3656,10 @@ conda channels at a minimum must include this subdirectory.</p>
           </tr>
       </tbody>
     </table>
+        <h4 id="rattler.index.index_s3--examples">Examples<a class="headerlink" href="#rattler.index.index_s3--examples" title="Permanent link">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="o">&gt;&gt;&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">index_s3</span><span class="p">(</span><span class="n">channel_url</span><span class="p">,</span> <span class="n">repodata_revisions</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;revision&quot;</span><span class="p">:</span> <span class="s2">&quot;v3&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;v3 packages&quot;</span><span class="p">}]))</span>  <span class="c1"># doctest: +SKIP</span>
+</span></code></pre></div>
 
 
     </div>
