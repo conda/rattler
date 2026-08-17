@@ -78,6 +78,10 @@ pub mod overlay_fs;
 pub mod prefix_replacement;
 #[cfg(target_os = "windows")]
 pub mod projfs_adapter;
+// Not gated on Windows: it is a pure-Rust comparator (no ProjFS/`windows`
+// dependency) so its unit tests can run on non-Windows CI, which cannot compile
+// the ProjFS adapter itself. See the module docs and issue #2581.
+pub mod projfs_name_compare;
 pub mod vfs_ops;
 pub mod virtual_fs;
 
