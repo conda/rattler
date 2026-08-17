@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.1...rattler_conda_types-v0.50.0) - 2026-08-15
+
+### Added
+
+- adding emscripten-wasm64 platform ([#2680](https://github.com/conda/rattler/pull/2680))
+
 ## [0.49.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.49.0...rattler_conda_types-v0.49.1) - 2026-08-11
 
 ### Added

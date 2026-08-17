@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.5](https://github.com/conda/rattler/compare/rattler_networking-v0.30.4...rattler_networking-v0.30.5) - 2026-08-15
+
+### Fixed
+
+- *(rattler_networking)* retry a digest-addressed OCI blob 404 through the manifest ([#2653](https://github.com/conda/rattler/pull/2653))
+
 ## [0.30.4](https://github.com/conda/rattler/compare/rattler_networking-v0.30.3...rattler_networking-v0.30.4) - 2026-08-11
 
 ### Fixed
