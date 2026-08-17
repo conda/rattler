@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use ahash::HashMap;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{ChannelRelations, PackageName, RepoDataRecord, RepodataRevisions};
 
 use super::GatewayError;
 use crate::Reporter;
 use crate::sparse::empty_repodata_revisions;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::sparse::empty_virtual_package_plugins;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 /// Records for a single package, with precomputed unique dependency strings
@@ -114,6 +118,16 @@ impl Subdir {
             Subdir::NotFound => None,
         }
     }
+
+    /// Virtual package detection plugins registered by this subdir, or empty
+    /// if none are registered / the subdir was not found.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        match self {
+            Subdir::Found(subdir) => subdir.virtual_package_plugins(),
+            Subdir::NotFound => empty_virtual_package_plugins(),
+        }
+    }
 }
 
 /// Fetches and caches repodata records by package name for a specific
@@ -172,6 +186,12 @@ impl SubdirData {
     pub fn channel_relations(&self) -> Option<&ChannelRelations> {
         self.client.channel_relations()
     }
+
+    /// Virtual package detection plugins registered by this subdir.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        self.client.virtual_package_plugins()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -200,6 +220,13 @@ pub trait SubdirClient: Send + Sync {
     /// [CEP-42]: https://github.com/conda/ceps/blob/main/cep-0042.md
     fn channel_relations(&self) -> Option<&ChannelRelations> {
         None
+    }
+
+    /// Virtual package detection plugins registered by this subdir. Sources
+    /// that cannot carry the metadata (e.g. custom) keep the empty default.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        empty_virtual_package_plugins()
     }
 }
 

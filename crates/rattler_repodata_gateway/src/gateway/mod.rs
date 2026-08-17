@@ -35,9 +35,13 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use query::SubdirVirtualPackagePlugins;
 pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
@@ -227,6 +231,35 @@ impl Gateway {
             // for every platform except noarch; catch the noarch
             // error so `None` holds for all platforms.
             Err(GatewayError::SubdirNotFoundError(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns the virtual package detection plugins registered by the
+    /// given `(channel, platform)` subdirectory, keyed by the name of the
+    /// package providing the plugin. Empty if the subdirectory registers
+    /// none or doesn't exist.
+    ///
+    /// Needs no specs, unlike [`Gateway::query`], because the plugin
+    /// packages cannot be named until this metadata has been read.
+    ///
+    /// Reuses the internal subdir cache: if the pair has already been
+    /// fetched by a [`Gateway::query`] this is free.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub async fn virtual_package_plugins(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<VirtualPackagePlugins, GatewayError> {
+        match self
+            .inner
+            .get_or_create_subdir(channel, platform, None)
+            .await
+        {
+            Ok(subdir) => Ok(subdir.virtual_package_plugins().clone()),
+            // As above: noarch reports its absence as an error rather
+            // than `NotFound`, so an empty map holds for all platforms.
+            Err(GatewayError::SubdirNotFoundError(_)) => Ok(VirtualPackagePlugins::default()),
             Err(err) => Err(err),
         }
     }
@@ -2891,6 +2924,238 @@ mod test {
         );
     }
 
+    /// Writes a linux-64 subdir whose `info.virtual_package_plugins` is the
+    /// given JSON object body, e.g. `"cuda-detect": ["__cuda"]`.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn write_test_subdir_with_plugins(root: &std::path::Path, pkg: &str, plugins: &str) {
+        let subdir = root.join("linux-64");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let json = format!(
+            r#"{{
+    "info": {{
+        "subdir": "linux-64",
+        "virtual_package_plugins": {{{plugins}}}
+    }},
+    "packages.conda": {{
+        "{pkg}-1.0.0-0.conda": {{
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "md5": "00000000000000000000000000000000",
+            "name": "{pkg}",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 1000,
+            "subdir": "linux-64",
+            "timestamp": 1700000000000,
+            "version": "1.0.0"
+        }}
+    }}
+}}"#
+        );
+        std::fs::write(subdir.join("repodata.json"), json).unwrap();
+    }
+
+    /// One reported registration as
+    /// `(channel_suffix, platform, [(plugin, [virtual packages])])`.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    type FlatPlugins = Vec<(String, Platform, Vec<(String, Vec<String>)>)>;
+
+    /// Flattens the reported registrations for order-sensitive comparison.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn flatten_plugins(output: &crate::RepoDataQueryOutput) -> FlatPlugins {
+        output
+            .virtual_package_plugins
+            .iter()
+            .map(|entry| {
+                (
+                    entry.channel.url().path().trim_matches('/').to_string(),
+                    entry.platform,
+                    entry
+                        .plugins
+                        .iter()
+                        .map(|(plugin, provided)| {
+                            (
+                                plugin.as_source().to_string(),
+                                provided.iter().map(|v| v.as_source().to_string()).collect(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// A channel registering one plugin that provides several virtual packages
+    /// is reported with its channel and subdir.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_reported_per_subdir() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        write_test_subdir_with_plugins(&a, "shared", r#""cuda-detect": ["__cuda", "__cuda_arch"]"#);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            flatten_plugins(&output),
+            vec![(
+                "a".to_string(),
+                Platform::Linux64,
+                vec![(
+                    "cuda-detect".to_string(),
+                    vec!["__cuda".to_string(), "__cuda_arch".to_string()],
+                )],
+            )]
+        );
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    }
+
+    /// Two channels claiming the same virtual package are both reported, in
+    /// channel-priority order. Resolving the conflict is the caller's job, so
+    /// the gateway must not drop either one or warn about it.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_conflicting_channels_both_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""a-detect": ["__rocm"]"#,
+        );
+        write_test_subdir_with_plugins(
+            &dir.path().join("b"),
+            "shared",
+            r#""b-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a = Channel::from_url(server.url().join("a/").unwrap());
+        let b = Channel::from_url(server.url().join("b/").unwrap());
+
+        let output = Gateway::new()
+            .query(
+                vec![a, b],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        let reported: Vec<String> = flatten_plugins(&output)
+            .into_iter()
+            .map(|(channel, _, plugins)| format!("{channel}:{}", plugins[0].0))
+            .collect();
+        assert_eq!(reported, vec!["a:a-detect", "b:b-detect"]);
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    }
+
+    /// Two plugins in one channel may claim the same virtual package; both
+    /// survive because inverting the mapping is the caller's job.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_duplicate_claim_within_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""first-detect": ["__rocm"], "second-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        let plugins = flatten_plugins(&output);
+        assert_eq!(
+            plugins[0].2,
+            vec![
+                ("first-detect".to_string(), vec!["__rocm".to_string()]),
+                ("second-detect".to_string(), vec!["__rocm".to_string()]),
+            ]
+        );
+    }
+
+    /// Registrations are read off the subdir itself, so a spec that matches no
+    /// record still reports them. Callers cannot query for the plugin packages
+    /// by name: the registration is the only place those names come from.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_reported_for_unmatched_spec() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""cuda-detect": ["__cuda"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("no-such-package", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert!(
+            output.iter().all(RepoData::is_empty),
+            "the spec must not match any record"
+        );
+        assert_eq!(
+            flatten_plugins(&output),
+            vec![(
+                "a".to_string(),
+                Platform::Linux64,
+                vec![("cuda-detect".to_string(), vec!["__cuda".to_string()])],
+            )]
+        );
+    }
+
+    /// A channel without the metadata reports nothing.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert!(output.virtual_package_plugins.is_empty());
+    }
+
     /// Repodata with CEP-42 `channel_relations` in `info`.
     fn make_repodata_with_relations(
         name: &str,
@@ -3011,6 +3276,88 @@ mod test {
                 .await
                 .unwrap_or_else(|e| panic!("{platform} must return None, not error: {e}"));
             assert!(relations.is_none());
+        }
+    }
+
+    /// `Gateway::virtual_package_plugins` round-trips the registration
+    /// without any spec, which is the point: the plugin package names only
+    /// exist inside the metadata being fetched.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_roundtrip() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            channel_dir.path(),
+            "testpkg",
+            r#""cuda-detect": ["__cuda", "__cuda_arch"], "rocm-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let plugins = Gateway::new()
+            .virtual_package_plugins(&server.channel(), Platform::Linux64)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            plugins
+                .iter()
+                .map(|(plugin, provided)| (
+                    plugin.as_source(),
+                    provided
+                        .iter()
+                        .map(PackageName::as_source)
+                        .collect::<Vec<_>>()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("cuda-detect", vec!["__cuda", "__cuda_arch"]),
+                ("rocm-detect", vec!["__rocm"]),
+            ]
+        );
+    }
+
+    /// A channel registering no plugins yields an empty map, not an error.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_absent() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        std::fs::write(
+            subdir_path.join("repodata.json"),
+            make_repodata("testpkg", "1.0.0"),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let plugins = Gateway::new()
+            .virtual_package_plugins(&server.channel(), Platform::Linux64)
+            .await
+            .unwrap();
+        assert!(plugins.is_empty());
+    }
+
+    /// A subdir the channel doesn't publish yields an empty map, not an
+    /// error. noarch matters: the subdir builder propagates its absence as
+    /// an error instead of `NotFound`.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_missing_subdir() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            channel_dir.path(),
+            "testpkg",
+            r#""cuda-detect": ["__cuda"]"#,
+        );
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let gateway = Gateway::new();
+        for platform in [Platform::Osx64, Platform::NoArch] {
+            let plugins = gateway
+                .virtual_package_plugins(&server.channel(), platform)
+                .await
+                .unwrap_or_else(|e| panic!("{platform} must return empty, not error: {e}"));
+            assert!(plugins.is_empty(), "{platform} declared none");
         }
     }
 

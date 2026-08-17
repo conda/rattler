@@ -5,6 +5,8 @@ use std::{
 };
 
 use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -37,6 +39,29 @@ pub struct RepoDataQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+    /// Virtual package detection plugins declared by the queried channel
+    /// subdirs, in resolved channel-priority order.
+    ///
+    /// Reported exactly as declared: duplicate claims on the same virtual
+    /// package are not resolved, and no plugin is fetched or executed.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub virtual_package_plugins: Vec<SubdirVirtualPackagePlugins>,
+}
+
+/// Plugin registrations declared by a single channel subdir.
+///
+/// Kept per subdir rather than per channel because different subdirs of one
+/// channel may declare different metadata; collapsing them would silently drop
+/// registrations.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+#[derive(Debug, Clone)]
+pub struct SubdirVirtualPackagePlugins {
+    /// The channel that declared these plugins.
+    pub channel: ChannelUrl,
+    /// The subdir the declaration was read from.
+    pub platform: Platform,
+    /// Plugin package name mapped to the virtual packages it provides.
+    pub plugins: VirtualPackagePlugins,
 }
 
 impl std::ops::Deref for RepoDataQueryOutput {
@@ -354,6 +379,11 @@ struct QueryExecutor {
 
     /// CEP-6 notice collection state.
     notices: NoticeCollector,
+
+    /// Plugin registrations collected from each resolved channel subdir.
+    /// Emitted in channel-priority order once the final order is known.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    virtual_package_plugins: ahash::HashMap<(ChannelUrl, Platform), VirtualPackagePlugins>,
 }
 
 /// Collects CEP-6 notices while a query runs. Fetches are queued as channels
@@ -566,6 +596,8 @@ impl QueryExecutor {
             pending_records: FuturesUnordered::new(),
             expander,
             notices,
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins: ahash::HashMap::default(),
         })
     }
 
@@ -905,6 +937,14 @@ impl QueryExecutor {
                     }
                     self.expand_pattern_specs_for_subdir(subdir.as_ref());
                     if let Some((url, platform)) = kind_url_and_platform {
+                        #[cfg(feature = "experimental-virtual-package-plugins")]
+                        {
+                            let plugins = subdir.virtual_package_plugins();
+                            if !plugins.is_empty() {
+                                self.virtual_package_plugins
+                                    .insert((url.clone(), platform), plugins.clone());
+                            }
+                        }
                         self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
                     }
                     if self.pending_subdirs.is_empty() {
@@ -1087,6 +1127,27 @@ impl QueryExecutor {
             handles = tagged.into_iter().map(|(_, h)| h).collect();
         }
 
+        // `handles` is already in channel-priority order, so walking it yields
+        // the registrations in that order too. Custom sources have no channel.
+        #[cfg(feature = "experimental-virtual-package-plugins")]
+        let virtual_package_plugins = handles
+            .iter()
+            .filter_map(|h| match &h.kind {
+                SubdirKind::Channel { url, platform } => {
+                    let key = (url.clone(), *platform);
+                    self.virtual_package_plugins.remove(&key).map(|plugins| {
+                        let (channel, platform) = key;
+                        SubdirVirtualPackagePlugins {
+                            channel,
+                            platform,
+                            plugins,
+                        }
+                    })
+                }
+                SubdirKind::Custom => None,
+            })
+            .collect();
+
         let mut repodata: Vec<RepoData> =
             Vec::with_capacity(handles.len() + usize::from(direct.is_some()));
         if let Some(d) = direct {
@@ -1102,6 +1163,8 @@ impl QueryExecutor {
                 .into_iter()
                 .map(GatewayWarning::from)
                 .collect(),
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins,
         })
     }
 }
