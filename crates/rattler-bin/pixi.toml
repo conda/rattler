@@ -3,11 +3,7 @@ name = "rattler"
 
 [package.build.backend]
 name = "pixi-build-rust"
-version = "0.5.*"
-channels = [
-    "https://prefix.dev/pixi-build-backends",
-    "https://prefix.dev/conda-forge"
-]
+channels = ["https://prefix.dev/conda-forge"]
 
 # Use cmake to build aws-lc-sys, because conda's CFLAGS inject -O2 which
 # overrides the -O0 required by jitterentropy-base.c, causing a build failure.
