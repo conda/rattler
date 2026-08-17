@@ -67,6 +67,13 @@ mod tests {
     use super::*;
     use crate::{PackageName, Version};
 
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ShardedIndexShape {
+        info: serde::de::IgnoredAny,
+        shards: serde::de::IgnoredAny,
+    }
+
     /// Shards are content-addressed (stored under the hash of their bytes), so
     /// serialization must not depend on the insertion order of the underlying
     /// maps and sets — otherwise every producer run writes a fresh shard file
@@ -102,6 +109,28 @@ mod tests {
             ascending, descending,
             "shard bytes must be independent of insertion order"
         );
+    }
+
+    #[test]
+    fn test_sharded_repodata_without_v3_roundtrips_through_named_msgpack() {
+        let sharded_repodata = ShardedRepodata {
+            info: ShardedSubdirInfo {
+                subdir: "linux-64".to_string(),
+                base_url: "./".to_string(),
+                shards_base_url: "./shards/".to_string(),
+                created_at: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: None,
+            },
+            shards: ahash::HashMap::default(),
+        };
+
+        let encoded = rmp_serde::to_vec_named(&sharded_repodata).unwrap();
+        let shape: ShardedIndexShape = rmp_serde::from_slice(&encoded).unwrap();
+        let _ = (shape.info, shape.shards);
+
+        let decoded: ShardedRepodata = rmp_serde::from_slice(&encoded).unwrap();
+        assert_eq!(decoded.info.subdir, "linux-64");
     }
 
     // See https://github.com/conda/ceps/blob/main/cep-0042.md

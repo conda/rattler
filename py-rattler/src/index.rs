@@ -3,7 +3,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{
-    IndexFsConfig, IndexS3Config, PackageRevisionAssignment, RepodataRevisionInfo, index_fs,
+    IndexFsConfig, IndexS3Config, PackageRevisionAssignment, RepodataRevisionSelection, index_fs,
     index_s3,
 };
 use url::Url;
@@ -46,7 +46,7 @@ pub fn py_index_fs<'py>(
             .unwrap_or("from-index-json"),
     )?;
     let repodata_revisions = match repodata_revisions {
-        Some(value) => depythonize::<Vec<RepodataRevisionInfo>>(&value)?,
+        Some(value) => depythonize::<Vec<RepodataRevisionSelection>>(&value)?,
         None => Vec::new(),
     };
     future_into_py(py, async move {
@@ -91,7 +91,7 @@ pub fn py_index_s3<'py>(
             .unwrap_or("from-index-json"),
     )?;
     let repodata_revisions = match repodata_revisions {
-        Some(value) => depythonize::<Vec<RepodataRevisionInfo>>(&value)?,
+        Some(value) => depythonize::<Vec<RepodataRevisionSelection>>(&value)?,
         None => Vec::new(),
     };
     let channel_url = Url::parse(&channel_url).map_err(PyRattlerError::from)?;

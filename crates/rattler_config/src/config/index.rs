@@ -35,7 +35,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionInfo,
+    ChannelNotice, ChannelRelations, RepodataRevision, RepodataRevisionSelection,
 };
 use serde::{Deserialize, Deserializer, Serialize, de::Error as DeError};
 
@@ -51,7 +51,7 @@ pub enum PackageRevisionAssignment {
     #[default]
     FromIndexJson,
     /// Assign every package to the newest revision configured for the index.
-    /// If no revisions are configured, packages are assigned to `Legacy`.
+    /// If no revisions are configured, packages use the legacy layout.
     Latest,
 }
 
@@ -85,13 +85,14 @@ pub struct IndexChannelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_shards: Option<bool>,
 
-    /// Repodata revisions to advertise in generated repodata.
+    /// Additional repodata revisions to advertise in generated repodata.
+    /// The legacy layout is implicit; currently only v3 can be selected.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_optional_repodata_revisions"
     )]
-    pub repodata_revisions: Option<Vec<RepodataRevisionInfo>>,
+    pub repodata_revisions: Option<Vec<RepodataRevisionSelection>>,
 
     /// How packages are assigned to repodata revisions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -256,7 +257,7 @@ fn validate_channel_relations(
 
 fn deserialize_optional_repodata_revisions<'de, D>(
     deserializer: D,
-) -> Result<Option<Vec<RepodataRevisionInfo>>, D::Error>
+) -> Result<Option<Vec<RepodataRevisionSelection>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -265,14 +266,16 @@ where
         .map(|revs| {
             revs.into_iter()
                 .map(|s| {
-                    RepodataRevision::from_str(&s)
-                        .map(|revision| RepodataRevisionInfo {
-                            revision,
-                            n_packages: None,
-                            oldest: None,
-                            newest: None,
-                        })
-                        .map_err(D::Error::custom)
+                    let revision = RepodataRevision::from_str(&s).map_err(D::Error::custom)?;
+                    if revision != RepodataRevision::V3 {
+                        return Err(D::Error::custom(
+                            "only v3 can be configured; the legacy layout is implicit",
+                        ));
+                    }
+                    Ok(RepodataRevisionSelection {
+                        revision,
+                        message: None,
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
         })
@@ -429,6 +432,12 @@ base-url = "../packages/"
         );
         let resolved = cfg.resolve("s3://my-bucket-other/channel");
         assert!(resolved.base_url.is_none());
+    }
+
+    #[test]
+    fn rejects_legacy_repodata_revision_selection() {
+        let err = toml::from_str::<IndexConfig>("repodata-revisions = [\"legacy\"]\n").unwrap_err();
+        assert!(err.to_string().contains("the legacy layout is implicit"));
     }
 
     #[test]

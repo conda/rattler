@@ -228,7 +228,7 @@ mod tests {
             };
 
             // Encode the index as msgpack and compress with zstd
-            let index_bytes = rmp_serde::to_vec(&sharded_index).unwrap();
+            let index_bytes = rmp_serde::to_vec_named(&sharded_index).unwrap();
             let compressed_index = zstd::encode_all(index_bytes.as_slice(), 3).unwrap();
 
             let shard_requests = Arc::new(AtomicUsize::new(0));

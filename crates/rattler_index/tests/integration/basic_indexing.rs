@@ -5,15 +5,23 @@ use std::{
 };
 
 use rattler_conda_types::{
-    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, ShardedRepodata,
+    ChannelNotice, ChannelNoticeLevel, ChannelRelations, Platform, Shard, ShardedRepodata,
     compression_level::CompressionLevel,
 };
 use rattler_index::{
     ChannelMetadata, IndexFsConfig, PackageRevisionAssignment, RepodataRevision,
-    RepodataRevisionInfo, index_fs, index_fs_with_channel_metadata,
+    RepodataRevisionSelection, index_fs, index_fs_with_channel_metadata,
 };
-use rattler_package_streaming::write::write_tar_bz2_package;
+use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
+use serde::Deserialize;
 use serde_json::Value;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShardedIndexShape {
+    info: serde::de::IgnoredAny,
+    shards: serde::de::IgnoredAny,
+}
 
 fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -161,8 +169,35 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     assert!(repodata_msgpack_path.is_file());
 }
 
-/// Validates that reindexing removes stale package entries from repodata when
-/// the package file is deleted from disk.
+/// Rejects unsupported configured revisions before creating output for an empty channel.
+#[tokio::test]
+async fn test_empty_channel_rejects_unsupported_configured_revision() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let err = index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: vec![RepodataRevisionSelection {
+            revision: RepodataRevision::from(4),
+            message: None,
+        }],
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap_err();
+
+    assert!(err.to_string().contains(
+        "repodata revision v4 cannot be configured; only v3 is selectable and the legacy layout is implicit"
+    ));
+    assert!(!temp_dir.path().join("noarch/repodata.json").exists());
+}
+
 #[tokio::test]
 async fn test_reindex_removes_deleted_conda_package() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -228,6 +263,503 @@ async fn test_reindex_removes_deleted_conda_package() {
 }
 
 #[tokio::test]
+async fn test_normal_and_force_reindex_preserve_v3_extensions() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: true,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let mut repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    let extensions = serde_json::json!({
+        "zip": {
+            "empty-0.1.0-h4616a5c_0": { "future_metadata": ["preserve", true] }
+        },
+        "future-array": ["opaque", { "nested-null": null }],
+        "future-scalar": "opaque",
+        "future-null": null
+    });
+    repodata
+        .as_object_mut()
+        .unwrap()
+        .insert("v3".to_string(), extensions.clone());
+    // A forced reindex must not reuse package records from this source file.
+    repodata["packages.conda"][package_name]["build"] = Value::String("stale".to_string());
+    fs::write(&repodata_path, serde_json::to_vec(&repodata).unwrap()).unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+    let normally_reindexed: Value =
+        serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        normally_reindexed["packages.conda"][package_name]["build"].as_str(),
+        Some("stale")
+    );
+    assert_eq!(normally_reindexed["v3"], extensions);
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: true,
+        write_shards: true,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let reindexed: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    assert_ne!(
+        reindexed["packages.conda"][package_name]["build"].as_str(),
+        Some("stale")
+    );
+    assert_eq!(reindexed["v3"], extensions);
+
+    let compressed_repodata = fs::read(subdir_path.join("repodata.json.zst")).unwrap();
+    let compressed_repodata: Value =
+        serde_json::from_slice(&zstd::decode_all(compressed_repodata.as_slice()).unwrap()).unwrap();
+    assert_eq!(compressed_repodata["v3"], extensions);
+
+    let shard_index_bytes = fs::read(subdir_path.join("repodata_shards.msgpack.zst")).unwrap();
+    let shard_index_bytes = zstd::decode_all(shard_index_bytes.as_slice()).unwrap();
+    let shape: ShardedIndexShape = rmp_serde::from_slice(&shard_index_bytes).unwrap();
+    let _ = (shape.info, shape.shards);
+}
+
+#[tokio::test]
+async fn test_reindex_derives_authoritative_legacy_and_v3_stats_and_message_precedence() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+
+    let package_build_dir = temp_dir.path().join("package-build");
+    for (filename, index_json) in [
+        (
+            "legacy-stats-1.0-0.tar.bz2",
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "name": "legacy-stats",
+                "noarch": "generic",
+                "subdir": "noarch",
+                "timestamp": 1710000000000,
+                "version": "1.0"
+            }"#,
+        ),
+        (
+            "v3-stats-1.0-0.tar.bz2",
+            r#"{
+                "build": "0",
+                "build_number": 0,
+                "extra_depends": { "docs": ["sphinx"] },
+                "name": "v3-stats",
+                "noarch": "generic",
+                "subdir": "noarch",
+                "timestamp": 1720000000000,
+                "version": "1.0"
+            }"#,
+        ),
+    ] {
+        let info_dir = package_build_dir.join("info");
+        fs::create_dir_all(&info_dir).unwrap();
+        fs::write(info_dir.join("index.json"), index_json).unwrap();
+        write_tar_bz2_package(
+            File::create(subdir_path.join(filename)).unwrap(),
+            &package_build_dir,
+            &[info_dir.join("index.json")],
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
+        fs::remove_dir_all(&package_build_dir).unwrap();
+    }
+
+    let repodata_path = subdir_path.join("repodata.json");
+    fs::write(
+        &repodata_path,
+        serde_json::to_vec(&serde_json::json!({
+            "info": {
+                "subdir": "noarch",
+                "repodata_revisions": {
+                    "v0": {
+                        "message": "previous legacy message",
+                        "n_packages": 99,
+                        "oldest": 1,
+                        "newest": 2
+                    },
+                    "v3": {
+                        "message": "previous v3 message",
+                        "n_packages": 99,
+                        "oldest": 1,
+                        "newest": 2
+                    }
+                }
+            },
+            "packages": {},
+            "packages.conda": {},
+            "repodata_version": 2
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: vec![RepodataRevisionSelection {
+            revision: RepodataRevision::V3,
+            message: Some("configured v3 message".to_string()),
+        }],
+        package_revision_assignment: PackageRevisionAssignment::FromIndexJson,
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        repodata["info"]["repodata_revisions"],
+        serde_json::json!({
+            "v0": {
+                "message": "previous legacy message",
+                "n_packages": 1,
+                "oldest": 1710000000000i64,
+                "newest": 1710000000000i64
+            },
+            "v3": {
+                "message": "configured v3 message",
+                "n_packages": 1,
+                "oldest": 1720000000000i64,
+                "newest": 1720000000000i64
+            }
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_force_reindex_with_patch_preserves_and_merge_patches_v3_extensions() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    let package_name = "empty-0.1.0-h4616a5c_0.conda";
+    fs::create_dir(&subdir_path).unwrap();
+    fs::copy(
+        test_data_dir().join("packages").join(package_name),
+        subdir_path.join(package_name),
+    )
+    .unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata_path = subdir_path.join("repodata.json");
+    let mut repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+    repodata.as_object_mut().unwrap().insert(
+        "v3".to_string(),
+        serde_json::json!({
+            "zip": {
+                "unchanged": { "keep": true },
+                "patched": {
+                    "nested": { "keep": true, "remove": true },
+                    "remove_me": true
+                }
+            },
+            "future-null": null,
+            "future-scalar": "original",
+            "future-array": ["original"],
+            "unchanged-null": null,
+            "unchanged-scalar": "opaque",
+            "unchanged-array": ["opaque", { "nested-null": null }]
+        }),
+    );
+    fs::write(&repodata_path, serde_json::to_vec(&repodata).unwrap()).unwrap();
+
+    let patch_source = temp_dir.path().join("patch-source");
+    let patch_info_dir = patch_source.join("info");
+    let patch_subdir = patch_source.join("noarch");
+    fs::create_dir_all(&patch_info_dir).unwrap();
+    fs::create_dir_all(&patch_subdir).unwrap();
+    fs::write(
+        patch_info_dir.join("index.json"),
+        r#"{
+            "build": "0",
+            "build_number": 0,
+            "name": "repodata-patches",
+            "noarch": "generic",
+            "subdir": "noarch",
+            "version": "1.0"
+        }"#,
+    )
+    .unwrap();
+    fs::write(
+        patch_subdir.join("patch_instructions.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "v3": {
+                "zip": {
+                    "patched": {
+                        "nested": { "added": true, "remove": null },
+                        "remove_me": null
+                    },
+                    "added": { "fresh": true }
+                },
+                "future-null": { "from-null": true },
+                "future-scalar": { "from-scalar": true },
+                "future-array": ["replaced"]
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let patch_name = "repodata-patches-1.0-0.conda";
+    write_conda_package(
+        File::create(subdir_path.join(patch_name)).unwrap(),
+        &patch_source,
+        &[
+            patch_info_dir.join("index.json"),
+            patch_subdir.join("patch_instructions.json"),
+        ],
+        CompressionLevel::Default,
+        None,
+        "repodata-patches-1.0-0",
+        None,
+        None,
+    )
+    .unwrap();
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: Some(patch_name.to_string()),
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+
+    let repodata: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        repodata["v3"],
+        serde_json::json!({
+            "zip": {
+                "unchanged": { "keep": true },
+                "patched": { "nested": { "keep": true, "added": true } },
+                "added": { "fresh": true }
+            },
+            "future-null": { "from-null": true },
+            "future-scalar": { "from-scalar": true },
+            "future-array": ["replaced"],
+            "unchanged-null": null,
+            "unchanged-scalar": "opaque",
+            "unchanged-array": ["opaque", { "nested-null": null }]
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_reindex_rejects_unsupported_producer_map_without_rewriting() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+    let repodata_path = subdir_path.join("repodata.json");
+    let original = serde_json::json!({
+        "info": { "subdir": "noarch" },
+        "packages": {},
+        "packages.conda": {},
+        "v4": { "future": "data" },
+        "repodata_version": 2
+    });
+    let original = serde_json::to_vec(&original).unwrap();
+    fs::write(&repodata_path, &original).unwrap();
+
+    let err = index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: true,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string()
+            .contains("repodata producer map v4 is not supported by this indexer")
+    );
+    assert_eq!(fs::read(repodata_path).unwrap(), original);
+}
+
+#[tokio::test]
+async fn test_reindex_rejects_v1_producer_map_without_rewriting() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+    let repodata_path = subdir_path.join("repodata.json");
+    let original = br#"{
+        "info": { "subdir": "noarch" },
+        "packages": {},
+        "packages.conda": {},
+        "v1": { "future": "data" },
+        "repodata_version": 2
+    }"#;
+    fs::write(&repodata_path, original).unwrap();
+
+    let err = index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: Vec::new(),
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.to_string()
+            .contains("repodata producer map v1 is not supported by this indexer")
+    );
+    assert_eq!(fs::read(repodata_path).unwrap(), original);
+}
+
+#[tokio::test]
+async fn test_reindex_preserves_existing_revision_messages_until_overridden() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let subdir_path = temp_dir.path().join("noarch");
+    fs::create_dir(&subdir_path).unwrap();
+    let repodata_path = subdir_path.join("repodata.json");
+    fs::write(
+        &repodata_path,
+        serde_json::to_vec(&serde_json::json!({
+            "info": {
+                "subdir": "noarch",
+                "repodata_revisions": { "v3": { "message": "existing", "n_packages": 99 } }
+            },
+            "packages": {},
+            "packages.conda": {},
+            "repodata_version": 2
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    for force in [false, true] {
+        index_fs(IndexFsConfig {
+            channel: temp_dir.path().into(),
+            target_platform: Some(Platform::NoArch),
+            repodata_patch: None,
+            write_zst: false,
+            write_shards: false,
+            repodata_revisions: Vec::new(),
+            package_revision_assignment: PackageRevisionAssignment::default(),
+            force,
+            max_parallel: 1,
+            multi_progress: None,
+        })
+        .await
+        .unwrap();
+        let repodata: Value = serde_json::from_reader(File::open(&repodata_path).unwrap()).unwrap();
+        assert_eq!(
+            repodata["info"]["repodata_revisions"]["v3"]["message"],
+            "existing"
+        );
+        assert_eq!(
+            repodata["info"]["repodata_revisions"]["v3"]["n_packages"],
+            0
+        );
+    }
+
+    index_fs(IndexFsConfig {
+        channel: temp_dir.path().into(),
+        target_platform: Some(Platform::NoArch),
+        repodata_patch: None,
+        write_zst: false,
+        write_shards: false,
+        repodata_revisions: vec![RepodataRevisionSelection {
+            revision: RepodataRevision::V3,
+            message: Some("caller".to_string()),
+        }],
+        package_revision_assignment: PackageRevisionAssignment::default(),
+        force: false,
+        max_parallel: 1,
+        multi_progress: None,
+    })
+    .await
+    .unwrap();
+    let repodata: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
+    assert_eq!(
+        repodata["info"]["repodata_revisions"]["v3"]["message"],
+        "caller"
+    );
+}
+
+#[tokio::test]
 async fn test_index_latest_repodata_revision() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = temp_dir.path().join("noarch");
@@ -244,11 +776,9 @@ async fn test_index_latest_repodata_revision() {
         repodata_patch: None,
         write_zst: true,
         write_shards: true,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
-            n_packages: None,
-            oldest: None,
-            newest: None,
+            message: None,
         }],
         package_revision_assignment: PackageRevisionAssignment::Latest,
         force: true,
@@ -284,6 +814,22 @@ async fn test_index_latest_repodata_revision() {
     assert_eq!(
         shard_index.info.repodata_revisions[&RepodataRevision::V3].n_packages,
         Some(1)
+    );
+
+    let shard_digest = shard_index.shards["empty"];
+    let shard_bytes = fs::read(
+        subdir_path
+            .join("shards")
+            .join(format!("{}.msgpack.zst", hex::encode(shard_digest))),
+    )
+    .unwrap();
+    let shard_bytes = zstd::decode_all(shard_bytes.as_slice()).unwrap();
+    let shard: Shard = rmp_serde::from_slice(&shard_bytes).unwrap();
+    assert!(
+        shard
+            .v3
+            .conda
+            .contains_key(&"empty-0.1.0-h4616a5c_0".parse().unwrap())
     );
 }
 
@@ -341,11 +887,9 @@ async fn test_index_repodata_revision_from_index_json() {
         repodata_patch: None,
         write_zst: false,
         write_shards: false,
-        repodata_revisions: vec![RepodataRevisionInfo {
+        repodata_revisions: vec![RepodataRevisionSelection {
             revision: RepodataRevision::V3,
-            n_packages: None,
-            oldest: None,
-            newest: None,
+            message: None,
         }],
         package_revision_assignment: PackageRevisionAssignment::FromIndexJson,
         force: true,
@@ -406,11 +950,9 @@ async fn test_index_writes_channel_metadata() {
             repodata_patch: None,
             write_zst: true,
             write_shards: true,
-            repodata_revisions: vec![RepodataRevisionInfo {
+            repodata_revisions: vec![RepodataRevisionSelection {
                 revision: RepodataRevision::V3,
-                n_packages: None,
-                oldest: None,
-                newest: None,
+                message: None,
             }],
             package_revision_assignment: PackageRevisionAssignment::Latest,
             force: true,

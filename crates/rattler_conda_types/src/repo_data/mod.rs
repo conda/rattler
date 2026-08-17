@@ -17,7 +17,7 @@ use std::{
 use indexmap::IndexMap;
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
 use rattler_macros::sorted;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use serde_with::{
     DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as, skip_serializing_none,
 };
@@ -118,6 +118,10 @@ pub type RepodataRevisions = IndexMap<RepodataRevision, RepodataRevisionMetadata
 /// the map key.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
 pub struct RepodataRevisionMetadata {
+    /// An optional message describing this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+
     /// The number of packages available in this revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub n_packages: Option<u64>,
@@ -133,63 +137,62 @@ pub struct RepodataRevisionMetadata {
     pub newest: Option<TimestampMs>,
 }
 
-/// A revision paired with its metadata: the flattened form of a
-/// [`RepodataRevisions`] entry, used as indexer input and in reporter messages.
+/// Published metadata for a repodata revision.
+///
+/// In `info.repodata_revisions`, the revision is represented by the enclosing
+/// `vN` map key. This flattened form is useful when revision metadata is
+/// handled as an individual value.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct RepodataRevisionInfo {
     /// The integer identifying the revision.
     #[serde(default)]
     pub revision: RepodataRevision,
 
+    /// An optional message describing this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+
     /// The number of packages available in this revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub n_packages: Option<u64>,
 
-    /// The Unix timestamp in milliseconds of the oldest record in this
-    /// revision.
+    /// The oldest package timestamp in this revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest: Option<TimestampMs>,
 
-    /// The Unix timestamp in milliseconds of the newest record in this
-    /// revision.
+    /// The newest package timestamp in this revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub newest: Option<TimestampMs>,
 }
 
-impl RepodataRevisionInfo {
-    /// Combines a revision identifier with its metadata.
-    pub fn from_metadata(revision: RepodataRevision, metadata: RepodataRevisionMetadata) -> Self {
-        Self {
-            revision,
-            n_packages: metadata.n_packages,
-            oldest: metadata.oldest,
-            newest: metadata.newest,
-        }
-    }
+/// Indexer configuration selecting a repodata revision to publish.
+///
+/// Package counts and timestamps are derived from emitted records, so callers
+/// can only select a revision and optionally override its message.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct RepodataRevisionSelection {
+    /// The revision to publish.
+    #[serde(default)]
+    pub revision: RepodataRevision,
 
-    /// Returns the metadata portion (everything but the revision).
-    pub fn metadata(&self) -> RepodataRevisionMetadata {
-        RepodataRevisionMetadata {
-            n_packages: self.n_packages,
-            oldest: self.oldest,
-            newest: self.newest,
-        }
-    }
+    /// An optional publisher message for this revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// A repodata revision.
 ///
-/// The serialized CEP wire format is an integer. Known variants are exposed as
-/// enum variants so writer APIs can be explicit, while [`RepodataRevision::Unknown`]
-/// keeps readers forward-compatible with future channel metadata.
+/// Legacy repodata predates numbered layouts and uses the `packages` and
+/// `packages.conda` maps. CEP 146 adds the v3 layout. Other numeric values are
+/// preserved so readers can report future revisions without interpreting them.
 #[derive(Debug, Default, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum RepodataRevision {
-    /// Legacy repodata maps: `packages` and `packages.conda`.
+    /// Repodata using the legacy `packages` and `packages.conda` maps.
     #[default]
     Legacy,
     /// Repodata records stored under the top-level `v3` map.
     V3,
-    /// A future or unsupported repodata revision.
+    /// A revision not modeled by rattler.
     Unknown(u64),
 }
 
@@ -199,17 +202,22 @@ impl RepodataRevision {
         match self {
             Self::Legacy => 0,
             Self::V3 => 3,
-            Self::Unknown(revision) => revision,
+            Self::Unknown(value) => value,
         }
+    }
+
+    /// Returns whether this revision uses the legacy package-map layout.
+    pub fn uses_legacy_package_layout(self) -> bool {
+        self == Self::Legacy
     }
 }
 
 impl From<u64> for RepodataRevision {
     fn from(value: u64) -> Self {
         match value {
-            0..=2 => Self::Legacy,
+            0 => Self::Legacy,
             3 => Self::V3,
-            revision => Self::Unknown(revision),
+            value => Self::Unknown(value),
         }
     }
 }
@@ -239,10 +247,7 @@ impl FromStr for RepodataRevision {
 
 impl Display for RepodataRevision {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Legacy => f.write_str("legacy"),
-            Self::V3 | Self::Unknown(_) => write!(f, "v{}", self.as_u64()),
-        }
+        write!(f, "v{}", self.as_u64())
     }
 }
 
@@ -299,6 +304,99 @@ impl ChannelRelations {
     }
 }
 
+const RESERVED_V3_BUCKETS: [&str; 3] = ["conda", "tar.bz2", "whl"];
+
+/// An error returned when an extension bucket collides with a typed v3 bucket.
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
+#[error("'{extension}' is a reserved v3 artifact bucket")]
+pub struct ReservedV3ExtensionError {
+    extension: String,
+}
+
+impl ReservedV3ExtensionError {
+    /// Returns the reserved extension that caused this error.
+    pub fn extension(&self) -> &str {
+        &self.extension
+    }
+}
+
+/// Extension buckets for v3 artifact types not yet modeled by rattler.
+///
+/// This type keeps the underlying map private so callers cannot add buckets
+/// that collide with the typed `conda`, `tar.bz2`, and `whl` fields.
+#[derive(Debug, Serialize, Eq, PartialEq, Clone, Default)]
+#[serde(transparent)]
+pub struct V3Extensions(BTreeMap<String, serde_json::Value>);
+
+impl V3Extensions {
+    /// Returns true if this set contains no extension buckets.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns a bucket by its artifact extension.
+    pub fn get(&self, extension: &str) -> Option<&serde_json::Value> {
+        self.0.get(extension)
+    }
+
+    /// Returns a mutable bucket by its artifact extension.
+    pub fn get_mut(&mut self, extension: &str) -> Option<&mut serde_json::Value> {
+        self.0.get_mut(extension)
+    }
+
+    /// Iterates over artifact extension buckets in deterministic order.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &serde_json::Value)> {
+        self.0.iter()
+    }
+
+    /// Adds or replaces an extension bucket.
+    ///
+    /// Typed buckets must be accessed through [`V3Packages`] directly, so this
+    /// rejects their reserved names.
+    pub fn insert(
+        &mut self,
+        extension: impl Into<String>,
+        bucket: serde_json::Value,
+    ) -> Result<Option<serde_json::Value>, ReservedV3ExtensionError> {
+        let extension = extension.into();
+        if RESERVED_V3_BUCKETS.contains(&extension.as_str()) {
+            return Err(ReservedV3ExtensionError { extension });
+        }
+        Ok(self.0.insert(extension, bucket))
+    }
+
+    /// Removes an extension bucket.
+    pub fn remove(&mut self, extension: &str) -> Option<serde_json::Value> {
+        self.0.remove(extension)
+    }
+}
+
+impl TryFrom<BTreeMap<String, serde_json::Value>> for V3Extensions {
+    type Error = ReservedV3ExtensionError;
+
+    fn try_from(extensions: BTreeMap<String, serde_json::Value>) -> Result<Self, Self::Error> {
+        if let Some(extension) = extensions
+            .keys()
+            .find(|extension| RESERVED_V3_BUCKETS.contains(&extension.as_str()))
+        {
+            return Err(ReservedV3ExtensionError {
+                extension: extension.clone(),
+            });
+        }
+        Ok(Self(extensions))
+    }
+}
+
+impl<'de> Deserialize<'de> for V3Extensions {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        BTreeMap::<String, serde_json::Value>::deserialize(deserializer)
+            .and_then(|extensions| Self::try_from(extensions).map_err(D::Error::custom))
+    }
+}
+
 /// Packages stored under the `v3` top-level key.
 ///
 /// Records in this set of packages can have conditional dependencies, extras
@@ -329,15 +427,28 @@ pub struct V3Packages {
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
     pub whl: ahash::HashMap<ArchiveIdentifier, WhlPackageRecord>,
+
+    /// Package buckets for archive extensions not yet modeled by rattler.
+    ///
+    /// These are preserved without interpretation so that readers do not
+    /// discard data from newer repodata revisions.
+    #[serde(flatten, default, skip_serializing_if = "V3Extensions::is_empty")]
+    pub extensions: V3Extensions,
 }
 
 impl V3Packages {
     /// Returns true if all sub-maps are empty.
     pub fn is_empty(&self) -> bool {
-        self.tar_bz2.is_empty() && self.conda.is_empty() && self.whl.is_empty()
+        self.tar_bz2.is_empty()
+            && self.conda.is_empty()
+            && self.whl.is_empty()
+            && self.extensions.is_empty()
     }
 
-    /// Iterates over all package records with their archive identifiers.
+    /// Iterates over all package records from typed v3 buckets with their
+    /// archive identifiers.
+    ///
+    /// Extension buckets remain available through [`Self::extensions`].
     pub fn records(&self) -> impl Iterator<Item = (DistArchiveIdentifier, &PackageRecord)> + '_ {
         self.tar_bz2
             .iter()
@@ -361,34 +472,57 @@ impl V3Packages {
             }))
     }
 
-    /// Consumes this value and iterates over all package records with their
+    /// Consumes this value and iterates over typed package records with their
     /// archive identifiers and optional wheel URL.
+    ///
+    /// Unknown extension buckets are not represented by this typed iterator.
+    /// Transformations that must preserve them should use
+    /// [`Self::into_records_with_url_and_extensions`] instead.
     pub fn into_records_with_url(
         self,
     ) -> impl Iterator<Item = (DistArchiveIdentifier, PackageRecord, Option<UrlOrPath>)> {
-        self.tar_bz2
-            .into_iter()
-            .map(|(id, record)| {
-                (
-                    DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
-                    record,
-                    None,
-                )
-            })
-            .chain(self.conda.into_iter().map(|(id, record)| {
-                (
-                    DistArchiveIdentifier::new(id, CondaArchiveType::Conda),
-                    record,
-                    None,
-                )
-            }))
-            .chain(self.whl.into_iter().map(|(id, record)| {
-                (
-                    DistArchiveIdentifier::new(id, WheelArchiveType::Whl),
-                    record.package_record,
-                    Some(record.url),
-                )
-            }))
+        self.into_records_with_url_and_extensions().0
+    }
+
+    /// Consumes this value and returns typed package records with their archive
+    /// identifiers and optional wheel URL, together with untyped extension
+    /// buckets.
+    ///
+    /// Use this method for transformations that need to preserve future v3
+    /// artifact types.
+    pub fn into_records_with_url_and_extensions(
+        self,
+    ) -> (
+        impl Iterator<Item = (DistArchiveIdentifier, PackageRecord, Option<UrlOrPath>)>,
+        V3Extensions,
+    ) {
+        let extensions = self.extensions;
+        (
+            self.tar_bz2
+                .into_iter()
+                .map(|(id, record)| {
+                    (
+                        DistArchiveIdentifier::new(id, CondaArchiveType::TarBz2),
+                        record,
+                        None,
+                    )
+                })
+                .chain(self.conda.into_iter().map(|(id, record)| {
+                    (
+                        DistArchiveIdentifier::new(id, CondaArchiveType::Conda),
+                        record,
+                        None,
+                    )
+                }))
+                .chain(self.whl.into_iter().map(|(id, record)| {
+                    (
+                        DistArchiveIdentifier::new(id, WheelArchiveType::Whl),
+                        record.package_record,
+                        Some(record.url),
+                    )
+                })),
+            extensions,
+        )
     }
 }
 
@@ -647,6 +781,14 @@ impl PackageRecord {
     /// Returns true if package `run_exports` is some.
     pub fn has_run_exports(&self) -> bool {
         self.run_exports.is_some()
+    }
+
+    /// Returns the timestamp used by indexing operations.
+    ///
+    /// This currently returns the package build timestamp. A future index
+    /// timestamp can change this method without changing its callers.
+    pub fn timestamp_for_indexing(&self) -> Option<TimestampMs> {
+        self.timestamp
     }
 }
 
@@ -1080,7 +1222,7 @@ mod test {
 
     use crate::{
         Channel, ChannelConfig, ChannelInfo, ChannelRelations, PackageRecord, RepoData,
-        RepodataRevision, V3Packages,
+        RepodataRevision, V3Extensions, V3Packages,
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
     };
@@ -1206,6 +1348,7 @@ mod test {
                 "subdir": "linux-64",
                 "repodata_revisions": {
                     "v4": {
+                        "message": "new artifact types available",
                         "n_packages": 2,
                         "oldest": 1768249989851,
                         "newest": 1773851561010
@@ -1219,7 +1362,11 @@ mod test {
         let repodata: RepoData = serde_json::from_str(raw).unwrap();
         let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
         assert_eq!(revisions.len(), 1);
-        let metadata = &revisions[&RepodataRevision::Unknown(4)];
+        let metadata = &revisions[&RepodataRevision::from(4)];
+        assert_eq!(
+            metadata.message.as_deref(),
+            Some("new artifact types available")
+        );
         assert_eq!(metadata.n_packages, Some(2));
         assert_eq!(
             metadata.oldest.map(|ts| ts.timestamp_millis()),
@@ -1232,10 +1379,254 @@ mod test {
 
         let json = serde_json::to_string(&repodata).unwrap();
         assert!(json.contains("\"repodata_revisions\":{\"v4\":{"));
+        assert!(json.contains("\"message\":\"new artifact types available\""));
         assert!(json.contains("\"oldest\":1768249989851"));
         assert!(json.contains("\"newest\":1773851561010"));
         // The revision identifier is the map key, not a field of the value.
         assert!(!json.contains("\"revision\""));
+
+        let info = crate::RepodataRevisionInfo {
+            revision: RepodataRevision::from(4),
+            message: metadata.message.clone(),
+            n_packages: metadata.n_packages,
+            oldest: metadata.oldest,
+            newest: metadata.newest,
+        };
+        assert_eq!(info.message, metadata.message);
+        assert_eq!(info.n_packages, Some(2));
+        assert_eq!(info.oldest, metadata.oldest);
+        assert_eq!(info.newest, metadata.newest);
+        let flattened = serde_json::to_value(&info).unwrap();
+        assert_eq!(flattened["revision"], 4);
+        assert_eq!(flattened["message"], "new artifact types available");
+        assert_eq!(flattened["n_packages"], 2);
+        assert_eq!(flattened["oldest"], 1768249989851i64);
+        assert_eq!(flattened["newest"], 1773851561010i64);
+        assert_eq!(
+            serde_json::from_value::<crate::RepodataRevisionInfo>(flattened).unwrap(),
+            info
+        );
+    }
+
+    #[test]
+    fn test_repodata_revisions_preserve_unknown_numeric_keys() {
+        let raw = serde_json::json!({
+            "info": {
+                "subdir": null,
+                "repodata_revisions": {
+                    "v0": { "message": "legacy package maps" },
+                    "v1": { "n_packages": 1 },
+                    "v2": { "n_packages": 2 }
+                }
+            },
+            "packages": {},
+            "packages.conda": {},
+            "repodata_version": 2
+        });
+
+        let repodata: RepoData = serde_json::from_value(raw.clone()).unwrap();
+        let revisions = &repodata.info.as_ref().unwrap().repodata_revisions;
+        assert_eq!(revisions.len(), 3);
+        assert_eq!(
+            revisions[&RepodataRevision::Legacy].message.as_deref(),
+            Some("legacy package maps")
+        );
+        assert_eq!(revisions[&RepodataRevision::Unknown(1)].n_packages, Some(1));
+        assert_eq!(revisions[&RepodataRevision::Unknown(2)].n_packages, Some(2));
+        assert_eq!(serde_json::to_value(&repodata).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_repodata_readers_accept_future_producer_maps() {
+        let repodata: RepoData = serde_json::from_value(serde_json::json!({
+            "packages": {},
+            "packages.conda": {},
+            "v4": { "future": "data" },
+            "repodata_version": 2
+        }))
+        .unwrap();
+        assert!(repodata.v3.is_empty());
+    }
+
+    #[test]
+    fn test_repodata_revision_keys_always_use_vn_format() {
+        for (revision, key) in [
+            (RepodataRevision::Legacy, "v0"),
+            (RepodataRevision::Unknown(1), "v1"),
+            (RepodataRevision::Unknown(2), "v2"),
+            (RepodataRevision::V3, "v3"),
+            (RepodataRevision::Unknown(4), "v4"),
+        ] {
+            assert_eq!(revision.to_string(), key);
+        }
+
+        // Continue accepting the former spelling when reading configuration,
+        // but always write the CEP `vN` spelling.
+        assert_eq!(
+            "legacy".parse::<RepodataRevision>().unwrap(),
+            RepodataRevision::Legacy
+        );
+    }
+
+    #[test]
+    fn test_repodata_revision_message_reader_is_permissive() {
+        let message = "m".repeat(8193);
+        let raw = serde_json::json!({ "message": message });
+        let metadata: crate::RepodataRevisionMetadata =
+            serde_json::from_value(raw.clone()).unwrap();
+
+        assert_eq!(
+            metadata.message.as_deref(),
+            Some(raw["message"].as_str().unwrap())
+        );
+        assert_eq!(serde_json::to_value(metadata).unwrap(), raw);
+    }
+
+    #[test]
+    fn test_v3_extensions_roundtrip() {
+        let raw = serde_json::json!({
+            "info": null,
+            "packages": {},
+            "packages.conda": {},
+            "v3": {
+                "conda": {
+                    "demo-1.0-0": {
+                        "build": "0",
+                        "build_number": 0,
+                        "name": "demo",
+                        "subdir": "noarch",
+                        "version": "1.0"
+                    }
+                },
+                "zip": {
+                    "demo-1.0-0": {
+                        "future_field": ["preserve", true]
+                    }
+                }
+            },
+            "repodata_version": 1
+        });
+
+        let repodata: RepoData = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(repodata.v3.conda.len(), 1);
+        assert_eq!(repodata.v3.extensions.get("zip"), Some(&raw["v3"]["zip"]));
+
+        let serialized = serde_json::to_string(&repodata).unwrap();
+        let reparsed: RepoData = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed, repodata);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&serialized).unwrap()["v3"]["zip"],
+            raw["v3"]["zip"]
+        );
+    }
+
+    #[test]
+    fn test_v3_extensions_permissively_roundtrip_all_json_bucket_shapes() {
+        let raw = serde_json::json!({
+            "info": null,
+            "packages": {},
+            "packages.conda": {},
+            "v3": {
+                "future-null": null,
+                "future-scalar": "opaque",
+                "future-array": ["opaque", { "nested-null": null }],
+                "future-object": { "nested": { "preserve": true } }
+            },
+            "repodata_version": 1
+        });
+
+        let repodata: RepoData = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&repodata).unwrap(), raw);
+        assert_eq!(
+            serde_json::from_value::<RepoData>(serde_json::to_value(&repodata).unwrap()).unwrap(),
+            repodata
+        );
+    }
+
+    #[test]
+    fn test_v3_extensions_reject_reserved_bucket_names() {
+        let mut extensions = V3Extensions::default();
+        for reserved in ["conda", "tar.bz2", "whl"] {
+            let err = extensions
+                .insert(reserved, serde_json::json!({}))
+                .unwrap_err();
+            assert_eq!(err.extension(), reserved);
+        }
+        extensions
+            .insert("zip", serde_json::json!({"future": true}))
+            .unwrap();
+
+        let raw = serde_json::json!({
+            "info": null,
+            "packages": {},
+            "packages.conda": {},
+            "v3": {
+                "tar.bz2": {
+                    "demo-1.0-0": {
+                        "build": "0",
+                        "build_number": 0,
+                        "name": "demo",
+                        "subdir": "noarch",
+                        "version": "1.0"
+                    }
+                },
+                "conda": {
+                    "demo-1.0-0": {
+                        "build": "0",
+                        "build_number": 0,
+                        "name": "demo",
+                        "subdir": "noarch",
+                        "version": "1.0"
+                    }
+                },
+                "whl": {
+                    "demo-1.0-0": {
+                        "build": "0",
+                        "build_number": 0,
+                        "name": "demo",
+                        "subdir": "noarch",
+                        "url": "demo-1.0-0.whl",
+                        "version": "1.0"
+                    }
+                }
+            },
+            "repodata_version": 1
+        });
+        let mut repodata: RepoData = serde_json::from_value(raw).unwrap();
+        repodata.v3.extensions = extensions;
+
+        let serialized = serde_json::to_string(&repodata).unwrap();
+        for reserved in ["conda", "tar.bz2", "whl"] {
+            assert_eq!(
+                serialized.matches(&format!(r#""{reserved}":{{"#)).count(),
+                1,
+                "{reserved} must be emitted only as its typed v3 bucket"
+            );
+        }
+        let reparsed: RepoData = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.v3.tar_bz2.len(), 1);
+        assert_eq!(reparsed.v3.conda.len(), 1);
+        assert_eq!(reparsed.v3.whl.len(), 1);
+        assert_eq!(
+            reparsed.v3.extensions.get("zip"),
+            Some(&serde_json::json!({"future": true}))
+        );
+    }
+
+    #[test]
+    fn test_package_record_timestamp_for_indexing() {
+        let timestamp = crate::utils::TimestampMs::from_timestamp_millis(
+            jiff::Timestamp::from_millisecond(1_700_000_000_000).unwrap(),
+        );
+        let mut record = PackageRecord::new(
+            crate::PackageName::new_unchecked("demo"),
+            crate::Version::major(1),
+            "0".to_string(),
+        );
+
+        assert_eq!(record.timestamp_for_indexing(), None);
+        record.timestamp = Some(timestamp);
+        assert_eq!(record.timestamp_for_indexing(), Some(timestamp));
     }
 
     #[test]
