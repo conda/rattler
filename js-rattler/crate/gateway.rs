@@ -69,15 +69,18 @@ impl From<rattler_repodata_gateway::ChannelNoticeResult> for Notice {
 }
 
 #[wasm_bindgen]
-#[repr(transparent)]
 #[derive(Clone)]
 pub struct JsGateway {
     inner: Gateway,
+    on_warning: Option<js_sys::Function>,
 }
 
 impl From<Gateway> for JsGateway {
     fn from(value: Gateway) -> Self {
-        JsGateway { inner: value }
+        JsGateway {
+            inner: value,
+            on_warning: None,
+        }
     }
 }
 
@@ -172,6 +175,8 @@ impl JsGateway {
         input: JsValue,
         #[wasm_bindgen(param_description = "A custom fetch implementation used for all requests")]
         fetch: Option<js_sys::Function>,
+        #[wasm_bindgen(param_description = "A callback invoked for every gateway warning")]
+        on_warning: Option<js_sys::Function>,
     ) -> JsResult<Self> {
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
 
@@ -190,6 +195,7 @@ impl JsGateway {
 
         Ok(Self {
             inner: builder.finish(),
+            on_warning,
         })
     }
 
@@ -210,12 +216,28 @@ impl JsGateway {
         Ok(serde_wasm_bindgen::to_value(&notices)?)
     }
 
+    /// Forward each [`GatewayWarning`] to the configured warning callback,
+    /// or to JS's `console.warn` when none is set. CEP-42's default `Warn`
+    /// mode produces non-fatal warnings that the Rust API surfaces on the
+    /// query output; forwarding them ensures they cannot be silently lost.
+    fn emit_warnings(&self, warnings: Vec<GatewayWarning>) {
+        for warning in warnings {
+            let message = warning.to_string();
+            match &self.on_warning {
+                Some(callback) => {
+                    let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&message));
+                }
+                None => console_warn(&message),
+            }
+        }
+    }
+
     pub async fn names(
         &self,
         channels: Vec<String>,
         platforms: Vec<String>,
         channel_notices: bool,
-    ) -> Result<JsValue, JsError> {
+    ) -> JsResult<JsValue> {
         // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -235,7 +257,7 @@ impl JsGateway {
             .channel_notices(channel_notices)
             .execute()
             .await?;
-        emit_gateway_warnings(output.warnings);
+        self.emit_warnings(output.warnings);
 
         #[derive(Serialize)]
         struct NamesOutput {
@@ -267,7 +289,7 @@ impl JsGateway {
             param_description = "Whether to recursively fetch the records of dependencies as well"
         )]
         recursive: bool,
-    ) -> Result<JsValue, JsError> {
+    ) -> JsResult<JsValue> {
         // TODO: Dont hardcode
         let channel_config =
             rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -301,7 +323,7 @@ impl JsGateway {
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>();
-        emit_gateway_warnings(output.warnings);
+        self.emit_warnings(output.warnings);
 
         #[derive(Serialize)]
         struct QueryOutput<'a> {

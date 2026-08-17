@@ -84,6 +84,13 @@ export type GatewayOptions = {
      * authentication, proxies, caching, or request mocking in tests.
      */
     fetch?: GatewayFetch;
+
+    /**
+     * A callback invoked for every warning the gateway emits, for example for
+     * malformed CEP-42 channel relations. When omitted, warnings are forwarded
+     * to `console.warn`.
+     */
+    onWarning?: (message: string) => void;
 };
 
 /**
@@ -120,8 +127,8 @@ export type RepoDataRecordJson = PackageRecordJson & {
 /**
  * The result of {@link Gateway.query}: the matching records, with the non-fatal
  * warnings encountered during the query attached. The warnings are also
- * forwarded to `console.warn` as they are recorded, so they surface even when
- * this field is ignored.
+ * forwarded to the `onWarning` callback (or `console.warn` when none is set)
+ * as they are recorded, so they surface even when this field is ignored.
  *
  * @public
  */
@@ -154,9 +161,9 @@ export class Gateway {
      * @param options - The options to configure the Gateway with.
      */
     constructor(options?: GatewayOptions | null) {
-        if (options?.fetch !== undefined) {
-            const { fetch: fetchImpl, ...rest } = options;
-            this.native = new JsGateway(rest, fetchImpl);
+        if (options && typeof options === "object") {
+            const { fetch: fetchImpl, onWarning, ...rest } = options;
+            this.native = new JsGateway(rest, fetchImpl, onWarning);
         } else {
             this.native = new JsGateway(options);
         }
