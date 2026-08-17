@@ -1,7 +1,7 @@
 use rattler_conda_types::utils::{InvalidPathComponentError, ensure_safe_path_component};
 use rattler_conda_types::{
     MatchSpec, PackageName, PackageRecord, VersionWithSource, match_spec::Matches,
-    package::CondaArchiveIdentifier,
+    package::{BuildString, CondaArchiveIdentifier},
 };
 use rattler_digest::{Md5Hash, Sha256, Sha256Hash, compute_bytes_digest, compute_url_digest};
 use std::path::Path;
@@ -114,7 +114,11 @@ impl CacheKey {
         let Ok(version) = self.version.parse::<VersionWithSource>() else {
             return false;
         };
-        let mut record = PackageRecord::new(name, version, self.build_string.clone());
+        let mut record = PackageRecord::new(
+            name,
+            version,
+            BuildString::new_unchecked(self.build_string.clone()),
+        );
         record.sha256 = self.sha256;
         record.md5 = self.md5;
         spec.matches(&record)
@@ -139,7 +143,7 @@ impl From<&PackageRecord> for CacheKey {
         Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record.build.clone(),
+            build_string: record.build.to_string(),
             sha256: record.sha256,
             md5: record.md5,
             origin_hash: None,

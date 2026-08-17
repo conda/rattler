@@ -80,7 +80,7 @@ mod tests {
             let record = PackageRecord::new(
                 PackageName::new_unchecked("multi"),
                 Version::major(1),
-                format!("h_{n}"),
+                crate::package::BuildString::new_unchecked(format!("h_{n}")),
             );
             (key, record)
         };
