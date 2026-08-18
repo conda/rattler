@@ -8,8 +8,15 @@ pub mod run_exports_cache;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod validation;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "experimental-virtual-package-plugins"
+))]
+pub mod virtual_package_plugin_cache;
 
 mod consts;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use consts::VIRTUAL_PACKAGE_PLUGINS_CACHE_DIR;
 pub use consts::{EXEC_ENVS_DIR, PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, RUN_EXPORTS_CACHE_DIR};
 
 /// Determines the default cache directory for rattler.
