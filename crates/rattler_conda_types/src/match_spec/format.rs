@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use rattler_digest::{Md5Hash, Sha256Hash};
-use rattler_redaction::redact_credentials_from_url;
+use rattler_redaction::redact_url_for_serialization;
 use url::Url;
 
 use super::condition::MatchSpecCondition;
@@ -400,7 +400,7 @@ fn is_safe_positional_token(value: &str) -> bool {
 /// renders values raw.
 fn channel_url_value(channel: &Channel, redact: bool) -> String {
     let mut value = if redact {
-        let mut redacted = redact_credentials_from_url(channel.base_url.url()).to_string();
+        let mut redacted = redact_url_for_serialization(channel.base_url.url()).to_string();
         // Redacting a token path swallows the trailing slash channel URLs
         // carry; restore it so the rendered URL stays normalized and a second
         // render produces the same text.
@@ -797,7 +797,7 @@ impl SpecView<'_> {
                     DisplayStyle::Legacy => write_scalar(f, ctx, "url", url),
                     // The canonical dialect never serializes credentials.
                     DisplayStyle::Canonical => {
-                        write_scalar(f, ctx, "url", &redact_credentials_from_url(url))
+                        write_scalar(f, ctx, "url", &redact_url_for_serialization(url))
                     }
                 }
             }

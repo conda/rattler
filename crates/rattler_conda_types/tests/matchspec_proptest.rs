@@ -27,7 +27,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, MatchSpecCondition, NamelessMatchSpec, PackageName,
     PackageNameMatcher, ParseMatchSpecOptions, RepodataRevision, StringMatcher, VersionSpec,
 };
-use rattler_redaction::redact_credentials_from_url;
+use rattler_redaction::redact_url_for_serialization;
 use url::Url;
 
 fn strict_v3() -> ParseMatchSpecOptions {
@@ -460,7 +460,7 @@ fn spec_with_optional_condition() -> BoxedStrategy<MatchSpec> {
 /// display name is derived and may differ.
 fn channel_equivalent(original: &Channel, reparsed: &Channel, redacted: bool) -> bool {
     let original_url = if redacted {
-        redact_credentials_from_url(original.base_url.url())
+        redact_url_for_serialization(original.base_url.url())
     } else {
         (**original.base_url.url()).clone()
     };
@@ -517,7 +517,7 @@ fn track_features_equivalent(original: Option<&[String]>, reparsed: Option<&[Str
 /// only the documented equivalences. `redacted` selects canonical semantics.
 fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str, redacted: bool) {
     let expected_url = if redacted {
-        original.url.as_ref().map(redact_credentials_from_url)
+        original.url.as_ref().map(redact_url_for_serialization)
     } else {
         original.url.clone()
     };

@@ -3,26 +3,29 @@ use url::Url;
 /// A default string to use for redaction.
 pub const DEFAULT_REDACTION_STR: &str = "********";
 
-/// Anaconda channels are not always publicly available. This function checks if a URL contains a
-/// secret by identifying whether it contains certain patterns. If it does, the function returns a
-/// modified URL where any secret has been masked.
+/// Masks the known secret patterns in a URL for display in logs and error
+/// messages: the password in the userinfo (the username stays) and the token
+/// in a `/t/<token>/` path. Query strings and fragments are left untouched,
+/// so the URL stays recognizable for debugging.
 ///
-/// The `redaction` argument can be used to specify a custom string that should be used to replace
-/// a secret. For consistency between application it is recommended to pass
-/// [`DEFAULT_REDACTION_STR`].
+/// Use [`redact_url_for_serialization`] instead when the URL is written into
+/// durable output.
+///
+/// The `redaction` argument replaces each masked secret. For consistency
+/// between applications it is recommended to pass [`DEFAULT_REDACTION_STR`].
 ///
 /// # Example
 ///
 /// ```rust
-/// # use rattler_redaction::{redact_known_secrets_from_url, Redact, DEFAULT_REDACTION_STR};
+/// # use rattler_redaction::{redact_url_for_display, Redact, DEFAULT_REDACTION_STR};
 /// # use url::Url;
 ///
 /// let url = Url::parse("https://conda.anaconda.org/t/12345677/conda-forge/noarch/repodata.json").unwrap();
-/// let redacted_url = redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url.clone());
+/// let redacted_url = redact_url_for_display(&url, DEFAULT_REDACTION_STR).unwrap_or(url.clone());
 /// // or you can use the shorthand
 /// let redacted_url = url.redact();
 /// ```
-pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
+pub fn redact_url_for_display(url: &Url, redaction: &str) -> Option<Url> {
     let mut url = url.clone();
     if url.password().is_some() {
         url.set_password(Some(redaction)).ok()?;
@@ -52,14 +55,24 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
     }
 }
 
-/// Returns a URL safe to serialize by removing userinfo, redacting known path
-/// tokens, and treating all query and non-digest fragment contents as secret.
+/// Deprecated name of [`redact_url_for_display`].
+#[deprecated(since = "0.2.3", note = "renamed to `redact_url_for_display`")]
+pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
+    redact_url_for_display(url, redaction)
+}
+
+/// Scrubs a URL for serialization into durable output such as canonical
+/// match specs, repodata, or lockfiles: the entire userinfo is removed, the
+/// token in a `/t/<token>/` path is masked, and any query string or fragment
+/// is replaced wholesale. Query strings are intentionally not filtered by
+/// key: arbitrary services use arbitrary parameter names for credentials, so
+/// no allowlist can provide a meaningful guarantee. The only fragments kept
+/// are conda artifact digests (`md5:<hex>` or `sha256:<hex>`), which are
+/// content addresses, not secrets.
 ///
-/// Query strings are intentionally replaced wholesale: arbitrary services can
-/// use arbitrary parameter names for credentials, so a key allowlist or denylist
-/// cannot provide a meaningful safety guarantee. Conda artifact fragments of the
-/// form `md5:<hex>` or `sha256:<hex>` are retained.
-pub fn redact_credentials_from_url(url: &Url) -> Url {
+/// Use [`redact_url_for_display`] instead when the URL is only shown to a
+/// human and should stay recognizable.
+pub fn redact_url_for_serialization(url: &Url) -> Url {
     fn is_artifact_digest(fragment: &str) -> bool {
         let Some((algorithm, digest)) = fragment.split_once(':') else {
             return false;
@@ -69,8 +82,7 @@ pub fn redact_credentials_from_url(url: &Url) -> Url {
             && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
     }
 
-    let mut url =
-        redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
+    let mut url = redact_url_for_display(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
     if !url.username().is_empty() || url.password().is_some() {
         let _ = url.set_username("");
         let _ = url.set_password(None);
@@ -98,8 +110,8 @@ pub trait Redact {
 impl Redact for reqwest_middleware::Error {
     fn redact(self) -> Self {
         if let Some(url) = self.url() {
-            let redacted_url = redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR)
-                .unwrap_or_else(|| url.clone());
+            let redacted_url =
+                redact_url_for_display(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
             self.with_url(redacted_url)
         } else {
             self
@@ -111,8 +123,8 @@ impl Redact for reqwest_middleware::Error {
 impl Redact for reqwest::Error {
     fn redact(self) -> Self {
         if let Some(url) = self.url() {
-            let redacted_url = redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR)
-                .unwrap_or_else(|| url.clone());
+            let redacted_url =
+                redact_url_for_display(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
             self.with_url(redacted_url)
         } else {
             self
@@ -122,7 +134,7 @@ impl Redact for reqwest::Error {
 
 impl Redact for Url {
     fn redact(self) -> Self {
-        redact_known_secrets_from_url(&self, DEFAULT_REDACTION_STR).unwrap_or(self)
+        redact_url_for_display(&self, DEFAULT_REDACTION_STR).unwrap_or(self)
     }
 }
 
@@ -132,9 +144,9 @@ mod test {
     use std::str::FromStr;
 
     #[test]
-    fn test_remove_known_secrets_from_url() {
+    fn test_redact_url_for_display() {
         assert_eq!(
-            redact_known_secrets_from_url(
+            redact_url_for_display(
                 &Url::from_str(
                     "https://conda.anaconda.org/t/12345677/conda-forge/noarch/repodata.json"
                 )
@@ -151,7 +163,7 @@ mod test {
 
         // should stay as is
         assert_eq!(
-            redact_known_secrets_from_url(
+            redact_url_for_display(
                 &Url::from_str("https://conda.anaconda.org/conda-forge/noarch/repodata.json")
                     .unwrap(),
                 "helloworld"
@@ -160,7 +172,7 @@ mod test {
             Url::from_str("https://conda.anaconda.org/conda-forge/noarch/repodata.json").unwrap(),
         );
 
-        let redacted = redact_known_secrets_from_url(
+        let redacted = redact_url_for_display(
             &Url::from_str("https://user:secret@prefix.dev/conda-forge").unwrap(),
             DEFAULT_REDACTION_STR,
         )
@@ -171,7 +183,7 @@ mod test {
             format!("https://user:{DEFAULT_REDACTION_STR}@prefix.dev/conda-forge")
         );
 
-        let redacted = redact_known_secrets_from_url(
+        let redacted = redact_url_for_display(
             &Url::from_str("https://user:secret@prefix.dev/conda-forge/").unwrap(),
             DEFAULT_REDACTION_STR,
         )
@@ -184,18 +196,18 @@ mod test {
     }
 
     #[test]
-    fn test_redact_credentials_from_url() {
+    fn test_redact_url_for_serialization() {
         let url = Url::parse(
             "https://user:password@prefix.dev/t/path-token/channel?auth=session&keep=value#ticket=fragment-token",
         )
         .unwrap();
 
         assert_eq!(
-            redact_credentials_from_url(&url).as_str(),
+            redact_url_for_serialization(&url).as_str(),
             "https://prefix.dev/t/********/channel?********#********"
         );
 
         let digest_url = Url::parse("https://prefix.dev/pkg.conda#sha256:deadbeef").unwrap();
-        assert_eq!(redact_credentials_from_url(&digest_url), digest_url);
+        assert_eq!(redact_url_for_serialization(&digest_url), digest_url);
     }
 }
