@@ -48,9 +48,10 @@ use package_name_matcher::PackageNameMatcher;
 ///
 /// [`Display`] preserves a historic, positional representation for backwards
 /// compatibility. It is not a stable serialization format. Use
-/// [`MatchSpec::to_canonical_string`] for deterministic, v3-compatible output:
-/// the package name is first and every populated non-name field is represented
-/// in a single bracket section.
+/// [`MatchSpec::to_canonical_string`] for deterministic, unambiguous output:
+/// the package name is first, every populated non-name field is represented
+/// in a single bracket section, and the same spec always renders to the same
+/// string.
 ///
 /// When `MatchSpec` attribute values are simple strings, the are interpreted using the
 /// following conventions:

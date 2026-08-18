@@ -1,6 +1,6 @@
 //! One renderer for every textual form of a [`MatchSpec`].
 //!
-//! Legacy `Display`, condition leaves, and the canonical V3 format all render
+//! Legacy `Display`, condition leaves, and the canonical format all render
 //! through [`SpecView::fmt`], parameterized by a [`DisplayContext`]. Adding a
 //! field to [`MatchSpec`] means extending [`Field`] and the order tables.
 //!
