@@ -25,7 +25,7 @@ tokio = { workspace = true, optional = true, features = ["process"]}
 birdcage = "0.8"
 
 [dev-dependencies]
-libtest-mimic = "0.8"
+libtest-mimic = "=0.8.2"
 
 [[test]]
 name = "integration_test"

@@ -64,7 +64,7 @@ version = "0.4"
 features = ["wasm_js"]
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
+wasm-bindgen-test = "=0.3.76"
 
 [profile.release]
 ## Tell `rustc` to optimize for small code size.
