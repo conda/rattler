@@ -169,8 +169,10 @@ const LEGACY_BRACKET_FIELDS: &[Field] = &[
     Field::When,
 ];
 
-/// Bracket fields of a legacy condition leaf. Conditions cannot nest, so
-/// `when` is absent.
+/// Bracket fields of a legacy condition leaf. The grammar cannot represent a
+/// nested `when`, but the infallible legacy dialect still renders it: the
+/// leaf parser rejects the key, so the output fails to parse loudly instead
+/// of silently dropping the condition.
 const LEGACY_CONDITION_LEAF_FIELDS: &[Field] = &[
     Field::Version,
     Field::Build,
@@ -187,6 +189,7 @@ const LEGACY_CONDITION_LEAF_FIELDS: &[Field] = &[
     Field::License,
     Field::LicenseFamily,
     Field::TrackFeatures,
+    Field::When,
 ];
 
 /// Bracket fields of the canonical format, in their stable documented order.
@@ -247,6 +250,15 @@ fn channel_renders_by_name(channel: &Channel) -> bool {
         return false;
     };
     if !is_safe_positional_token(name) {
+        return false;
+    }
+    // A name whose last segment is a platform (`conda-forge/linux-64`) would
+    // be split into channel and subdir on reparse; the bracket URL form keeps
+    // its trailing slash and survives.
+    if name
+        .rsplit_once('/')
+        .is_some_and(|(_, last)| Platform::from_str(last).is_ok())
+    {
         return false;
     }
     // Only the channel alias matters for name resolution; the root dir is
@@ -402,10 +414,6 @@ impl SpecView<'_> {
                     // syntax for nested conditions.
                     return Err(CanonicalMatchSpecError::NestedWhen.into());
                 }
-                debug_assert!(
-                    self.condition.is_none(),
-                    "MatchSpec inside a `when=` condition must not itself carry a `when` clause",
-                );
 
                 if let Some(name) = self.name {
                     write!(f, "{name}")?;
@@ -661,7 +669,8 @@ impl SpecView<'_> {
         if !matches!(self.name, Some(PackageNameMatcher::Exact(_))) {
             return false;
         }
-        if self.build.is_some()
+        if self.condition.is_some()
+            || self.build.is_some()
             || self.build_number.is_some()
             || self.file_name.is_some()
             || self.extras.is_some()

@@ -149,6 +149,8 @@ fn channel() -> impl Strategy<Value = Arc<Channel>> {
         // Alias-based names round-trip positionally.
         Just("conda-forge"),
         Just("bioconda/label/main"),
+        // A name ending in a platform segment must not render positionally.
+        Just("conda-forge/linux-64"),
         Just("*"),
         // URL channels, with and without platform selectors and credentials.
         Just("https://repo.example/custom"),

@@ -237,8 +237,10 @@ impl Channel {
                 }
             }
         } else {
-            // Validate that the channel is a valid name
-            if channel.contains([':', '\\']) {
+            // Validate that the channel is a valid name. Brackets are
+            // rejected so a malformed platform selector (`name[linux-64]x`)
+            // errors instead of becoming a literal channel name.
+            if channel.contains([':', '\\', '[', ']']) {
                 return Err(ParseChannelError::InvalidName(channel.to_owned()));
             }
             Channel {
@@ -443,11 +445,13 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    // A platform selector is a `[...]` group that ends the string. Using
-    // `strip_suffix` avoids panicking on a multi-byte trailing character and
-    // misreading a `]` in the middle of the string.
+    // A platform selector is the last `[...]` group, and it must end the
+    // string. Using `strip_suffix` avoids panicking on a multi-byte trailing
+    // character and misreading a `]` in the middle of the string; `rfind`
+    // keeps an IPv6 host bracket (`https://[::1]/x[linux-64]`) out of the
+    // selector.
     if let Some(channel_without_suffix) = channel.strip_suffix(']')
-        && let Some(start_platform_idx) = channel_without_suffix.find('[')
+        && let Some(start_platform_idx) = channel_without_suffix.rfind('[')
     {
         let platform_part = &channel_without_suffix[start_platform_idx + 1..];
         let platforms = platform_part
@@ -514,6 +518,26 @@ mod tests {
     use url::Url;
 
     use super::*;
+
+    #[test]
+    fn test_malformed_platform_selector_is_rejected() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        assert!(matches!(
+            Channel::from_str("conda-forge[linux-64]suffix", &config),
+            Err(ParseChannelError::InvalidName(_))
+        ));
+    }
+
+    #[test]
+    fn test_ipv6_channel_with_platform_selector() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("https://[::1]/conda[linux-64,noarch]", &config).unwrap();
+        assert_eq!(
+            channel.platforms,
+            Some(vec![Platform::Linux64, Platform::NoArch])
+        );
+        assert_eq!(channel.base_url.url().as_str(), "https://[::1]/conda/");
+    }
 
     #[test]
     fn test_issue_1953_artifactory_path_parsing() {

@@ -2027,6 +2027,45 @@ mod tests {
         }
     }
 
+    /// A nested `when` has no syntax; `Display` must render it so parsing
+    /// fails loudly instead of panicking or dropping the condition.
+    #[test]
+    fn test_nested_when_display_fails_loudly() {
+        let leaf = MatchSpec {
+            condition: Some(crate::MatchSpecCondition::MatchSpec(Box::new(
+                MatchSpec::from_str("__linux", Strict).unwrap(),
+            ))),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let spec = MatchSpec {
+            condition: Some(crate::MatchSpecCondition::MatchSpec(Box::new(leaf))),
+            ..MatchSpec::from_str("target", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        assert!(
+            parse_conditional(&rendered).is_err(),
+            "rendered: {rendered}"
+        );
+    }
+
+    /// A channel whose own name ends in a platform segment must not render
+    /// positionally: `conda-forge/linux-64::demo` would reparse as channel
+    /// `conda-forge` plus `subdir=linux-64`.
+    #[test]
+    fn test_channel_with_platform_suffix_name_roundtrips() {
+        let spec = MatchSpec {
+            channel: Some(Arc::new(
+                Channel::from_str("conda-forge/linux-64", &channel_config()).unwrap(),
+            )),
+            ..MatchSpec::from_str("demo", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        let reparsed = MatchSpec::from_str(&rendered, Strict).unwrap();
+        assert_eq!(reparsed, spec, "rendered: {rendered}");
+    }
+
     #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
