@@ -220,30 +220,19 @@ impl Display for MatchSpec {
 impl MatchSpec {
     /// Returns the stable, square-bracket representation of this match spec.
     ///
-    /// The package name is always emitted first. Every populated field is then
-    /// emitted in a single bracket section, in this order: `version`, `build`,
+    /// The package name comes first; every other populated field is emitted
+    /// in a single bracket section, in this order: `version`, `build`,
     /// `build_number`, `fn`, `extras`, `flags`, `channel`, `subdir`,
     /// `namespace`, `md5`, `sha256`, `url`, `license`, `license_family`,
-    /// `when`, and `track_features`. Scalar values use a deterministic quote
-    /// delimiter that preserves legacy escape semantics; `extras` and `flags`
-    /// use compact bare list elements because
-    /// their grammars exclude bracket delimiters.
+    /// `when`, and `track_features`. Unlike [`Display`], nothing is
+    /// positional besides the name.
     ///
-    /// Unlike [`Display`], this method never emits positional version or build
-    /// constraints, channels, subdirectories, or namespaces outside brackets.
-    ///
-    /// The rendered text is proven faithful by round-tripping it through the
-    /// parser exactly once: when the reparsed spec diverges from `self`, the
+    /// The rendered text is verified by one round-trip through the parser; a
     /// divergence is attributed to a field and returned as the matching
-    /// [`CanonicalMatchSpecError`] variant. For example,
-    /// [`CanonicalMatchSpecError::NestedWhen`] when a condition leaf itself
-    /// has a `when` condition, or
-    /// [`CanonicalMatchSpecError::UnrepresentableExtra`] when an extras group
-    /// name cannot be represented without changing the parsed state.
+    /// [`CanonicalMatchSpecError`] variant.
     ///
-    /// Channel and package URL userinfo and known path tokens are redacted.
-    /// Query strings and non-digest fragments are treated as sensitive and
-    /// replaced wholesale. Consequently, URLs containing any of this data do
+    /// Channel and package URL userinfo, known token paths, query strings,
+    /// and non-digest fragments are redacted, so URLs containing such data do
     /// not round-trip with exact equality.
     pub fn to_canonical_string(&self) -> Result<String, CanonicalMatchSpecError> {
         format::to_canonical_string(self)
@@ -417,9 +406,9 @@ where
 
     match s {
         Some(str_val) => {
-            // The root directory only matters for relative path channels;
-            // fall back to an empty root instead of panicking when the
-            // current directory is unavailable so those fail with an error.
+            // The root directory only resolves relative path channels. With
+            // an empty-root fallback those fail with an error instead of
+            // panicking when the current directory is unavailable.
             let config =
                 ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 

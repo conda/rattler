@@ -728,12 +728,10 @@ fn strip_package_name(
 ) -> Result<(PackageNameMatcher, &str), ParseMatchSpecError> {
     let trimmed = input.trim();
 
-    // A regex name matcher is anchored as `^...$`. Its body may contain
-    // whitespace and version-constraint characters (e.g. `^py(?!py).*$`), so
-    // splitting on those would cut the name short. Instead, the name ends at
-    // the first `$` that is followed by nothing, whitespace, or the start of
-    // a version constraint. Taking the final `$` would not work either: a
-    // build matcher after the name may itself be a regex ending in `$`.
+    // A regex name is anchored `^...$` and may contain whitespace and
+    // version-constraint characters (e.g. `^py(?!py).*$`), so the name ends
+    // at the first `$` followed by nothing, whitespace, or a constraint
+    // start. The final `$` would swallow a regex build matcher.
     if trimmed.starts_with('^') {
         let end = trimmed
             .match_indices('$')
@@ -1018,10 +1016,9 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
-    // The root directory is only used to resolve relative path channels. When
-    // the current directory is unavailable (e.g. it was deleted), fall back to
-    // an empty root so that relative path channels fail with a parse error
-    // instead of panicking, while every other channel form parses normally.
+    // The root directory only resolves relative path channels. With an
+    // empty-root fallback those fail with a parse error instead of panicking
+    // when the current directory is unavailable.
     let channel_config =
         ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
@@ -1998,15 +1995,10 @@ mod tests {
         }
     }
 
-    /// Regression guard for legacy `Display` scalar quoting.
-    ///
-    /// The parser stores quoted scalar bracket values (`fn`, `license`,
-    /// `subdir`, `namespace`, `license_family`) with escape sequences in
-    /// place; it only unescapes `when=` and `flags=`. Legacy `Display` must
-    /// therefore emit values verbatim inside a delimiter that keeps them
-    /// intact, never escaped: escaping a backslash-containing value made it
-    /// reparse with doubled backslashes, and escaping a quote-containing
-    /// value made it silently reparse to a different value.
+    /// Legacy `Display` must quote scalars losslessly, never escape them:
+    /// the parser keeps escape sequences in scalar bracket values in place
+    /// (only `when=` and `flags=` unescape), so an escaped value reparses to
+    /// a different value.
     #[test]
     fn test_display_scalar_quoting_roundtrips() {
         // Baseline fact about the parser: escapes are kept verbatim.

@@ -1,15 +1,12 @@
 //! One renderer for every textual form of a [`MatchSpec`].
 //!
-//! The historic positional [`std::fmt::Display`] format, the compact form for
-//! leaves inside `when="..."` conditions, and the stable canonical V3 format
-//! all come from the same renderer, parameterized by a [`DisplayContext`].
-//! Adding a field to [`MatchSpec`] means extending [`Field`] and the order
-//! tables instead of updating a handful of hand-rolled formatters.
+//! Legacy `Display`, condition leaves, and the canonical V3 format all render
+//! through [`SpecView::fmt`], parameterized by a [`DisplayContext`]. Adding a
+//! field to [`MatchSpec`] means extending [`Field`] and the order tables.
 //!
 //! [`to_canonical_string`] verifies its output with a single round-trip
-//! through the parser, so the happy path does exactly one parse. The
-//! per-field checks in [`diagnose_parse_failure`] and [`canonical_divergence`]
-//! only run when that round-trip fails, to point at the offending field.
+//! through the parser; the per-field diagnostics only run on the error path
+//! to point at the offending field.
 
 use std::fmt::{self, Display, Write};
 use std::str::FromStr;
@@ -33,13 +30,11 @@ use crate::{
 /// The dialect a match spec is rendered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DisplayStyle {
-    /// The historic positional representation produced by `Display`. Layout
-    /// and field order are kept stable for existing callers. Bracket values
-    /// are quoted with a delimiter that preserves them verbatim when one
-    /// exists, but this dialect is infallible and best-effort: it is not a
-    /// serialization format, and values containing `]` or both quote
-    /// characters do not round-trip. Use [`MatchSpec::to_canonical_string`]
-    /// for verified output.
+    /// The historic positional format produced by `Display`. Infallible and
+    /// best-effort: layout and field order stay stable for existing callers
+    /// and values are quoted losslessly when possible, but it is not a
+    /// serialization format. Use [`MatchSpec::to_canonical_string`] for
+    /// verified output.
     Legacy,
     /// The stable all-bracket representation produced by
     /// [`MatchSpec::to_canonical_string`].
@@ -51,7 +46,7 @@ pub(crate) enum DisplayStyle {
 pub(crate) enum SpecPosition {
     /// A stand-alone match spec.
     TopLevel,
-    /// A leaf inside a `when="..."` condition, where the compact
+    /// A leaf inside a `when="..."` condition: the compact
     /// `{name}{operator}{version}` form is preferred and a nested `when`
     /// cannot be represented.
     ConditionLeaf,
@@ -444,20 +439,16 @@ impl SpecView<'_> {
         Ok(())
     }
 
-    /// Decides which dual-representation fields the positional prefix of the
-    /// legacy top-level dialect consumes. In every other context nothing is
-    /// consumed positionally besides the name and the compact leaf version,
-    /// which are handled directly by [`SpecView::fmt`].
+    /// Decides which dual-representation fields the legacy top-level prefix
+    /// consumes. Every other context consumes nothing positionally.
     fn placement(&self, ctx: DisplayContext) -> LegacyPlacement {
         if ctx.style != DisplayStyle::Legacy || ctx.position != SpecPosition::TopLevel {
             return LegacyPlacement::default();
         }
 
-        // A channel renders as `{name}::` only when that string reconstructs
-        // the channel faithfully; a subdir rides along as `{name}/{subdir}::`
-        // only when the parser will split it back off (it must be a known
-        // platform); the `{channel}:{namespace}:` slot requires a positional
-        // channel. Everything else falls back to bracket fields.
+        // `{name}::` only when the name reconstructs the channel, `/{subdir}`
+        // only when the parser splits it back off (a known platform), and the
+        // `:{namespace}:` slot needs a positional channel.
         let channel = self.name.is_some() && self.channel.is_some_and(channel_renders_by_name);
         LegacyPlacement {
             channel,
@@ -466,12 +457,9 @@ impl SpecView<'_> {
                     .subdir
                     .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
             namespace: channel && self.namespace.is_some_and(is_safe_positional_token),
-            // A build matcher is positional only after a version: the historic
-            // `name * build` placeholder reparsed with `version: Any` instead
-            // of `version: None`. Its text must also survive the tokenization
-            // that runs before build parsing (the channel/namespace colon
-            // split, comment stripping, the semicolon check, and bracket
-            // detection).
+            // Positional only after a version (the old `name * build`
+            // placeholder reparsed as `version: Any`) and only when the text
+            // survives the tokenization that runs before build parsing.
             build: self.version.is_some()
                 && self
                     .build
@@ -705,10 +693,8 @@ impl SpecView<'_> {
     }
 }
 
-/// Writes a `key=[..]` list field. Elements accepted by `is_valid_bare`
-/// render unquoted. Everything else renders quoted, so an element that would
-/// re-tokenize under bare rendering (a comma, whitespace, an empty or invalid
-/// name) reaches the parser as a single quoted element and fails validation
+/// Writes a `key=[..]` list field. Elements rejected by `is_valid_bare` are
+/// quoted, so they reach the parser as a single element and fail validation
 /// loudly instead of silently splitting.
 fn write_list<T: Display>(
     f: &mut dyn Write,
@@ -738,15 +724,13 @@ fn write_list<T: Display>(
     Ok(())
 }
 
-/// Writes one scalar `key=value` field with the quoting rules of the context.
+/// Writes one scalar `key=value` field.
 ///
-/// Both dialects quote scalars with a delimiter that keeps the value intact.
-/// The parser stores most quoted bracket values verbatim (only `when=` and
-/// `flags=` are unescaped), so escaping here would silently change the value
-/// on round-trip. The canonical dialect refuses values no delimiter can hold.
-/// The infallible legacy dialect falls back to the raw double-quoted form,
-/// which fails loudly at parse time instead of round-tripping to a different
-/// value.
+/// Scalars are quoted with a delimiter that keeps the value intact: the
+/// parser stores most quoted values verbatim (only `when=` and `flags=`
+/// unescape), so escaping would change the value on round-trip. Canonical
+/// refuses values no delimiter can hold; infallible legacy falls back to a
+/// raw quoted form that fails loudly at parse time.
 fn write_scalar(
     f: &mut dyn Write,
     ctx: DisplayContext,
@@ -767,10 +751,8 @@ fn write_scalar(
 }
 
 impl MatchSpecCondition {
-    /// Renders this condition in `style`, emitting only the parentheses
-    /// required to preserve precedence and the exact shape of this
-    /// left-associative AST. Both dialects share this rule: extra parentheses
-    /// carry no information and the output reparses to the identical tree.
+    /// Renders this condition in `style` with only the parentheses needed to
+    /// preserve the precedence and shape of this left-associative AST.
     pub(crate) fn fmt_with(
         &self,
         f: &mut dyn Write,
@@ -837,12 +819,9 @@ impl MatchSpecCondition {
     }
 }
 
-/// Picks a quote delimiter that lets `value` be emitted verbatim.
-///
-/// `MatchSpec` parsing preserves ordinary scalar escapes verbatim, so the only
-/// lossless quoting is a delimiter that does not occur unescaped in the value.
-/// Returns `None` when neither quote character can hold the value: both quotes
-/// occur unescaped, or a trailing backslash would swallow the closing quote.
+/// Picks a quote delimiter that lets `value` be emitted verbatim, or `None`
+/// when neither quote character can hold it: both quotes occur unescaped, or
+/// a trailing backslash would swallow the closing quote.
 fn pick_quote_delimiter(value: &str) -> Option<char> {
     fn contains_unescaped(value: &str, delimiter: char) -> bool {
         let mut escaped = false;
@@ -935,7 +914,7 @@ pub(crate) fn to_canonical_string(spec: &MatchSpec) -> Result<String, CanonicalM
 
 /// Compares a spec against its reparsed canonical form and attributes the
 /// first divergence to a field. Returns `None` when the round-trip is
-/// faithful. Only runs when the canonical text parsed but something was lost.
+/// faithful.
 fn canonical_divergence(spec: &MatchSpec, reparsed: &MatchSpec) -> Option<CanonicalMatchSpecError> {
     use CanonicalMatchSpecError as Error;
 
