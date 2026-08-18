@@ -6,7 +6,7 @@ use pyo3::{
 };
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
-    shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
+    shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh, Sh},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -110,6 +110,7 @@ impl PyActivationResult {
 pub enum PyShellEnum {
     Bash,
     Zsh,
+    Sh,
     Xonsh,
     CmdExe,
     PowerShell,
@@ -121,6 +122,7 @@ impl PyShellEnum {
         match self {
             PyShellEnum::Bash => Bash::default().into(),
             PyShellEnum::Zsh => Zsh.into(),
+            PyshellEnum::Sh => Sh.into(),
             PyShellEnum::Xonsh => Xonsh.into(),
             PyShellEnum::CmdExe => CmdExe.into(),
             PyShellEnum::PowerShell => PowerShell::default().into(),
