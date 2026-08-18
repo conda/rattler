@@ -147,16 +147,16 @@ enum Field {
 }
 
 /// Bracket fields of the legacy top-level format, in their historic order.
-/// `version` is always positional in this dialect; `build`, `channel`,
-/// `subdir` and `namespace` prefer their positional spot and fall back to
-/// these brackets when the positional grammar cannot represent them
-/// faithfully (see [`LegacyPlacement`]).
+/// `version`, `build`, `channel`, `subdir` and `namespace` prefer their
+/// positional spot and fall back to these brackets when the positional
+/// grammar cannot represent them faithfully (see [`LegacyPlacement`]).
 const LEGACY_BRACKET_FIELDS: &[Field] = &[
     Field::Extras,
     Field::Flags,
     Field::Md5,
     Field::Sha256,
     Field::BuildNumber,
+    Field::Version,
     Field::Build,
     Field::FileName,
     Field::Url,
@@ -222,6 +222,7 @@ struct LegacyPlacement {
     channel: bool,
     subdir: bool,
     namespace: bool,
+    version: bool,
     build: bool,
 }
 
@@ -232,10 +233,26 @@ impl LegacyPlacement {
             Field::Channel => self.channel,
             Field::Subdir => self.subdir,
             Field::Namespace => self.namespace,
+            Field::Version => self.version,
             Field::Build => self.build,
             _ => false,
         }
     }
+}
+
+/// Whether a version or build rendering can occupy a positional slot without
+/// being re-tokenized by an earlier parse stage: whitespace splits the
+/// version/build slots, and the listed characters are eaten by the
+/// channel/namespace colon split, comment stripping, the semicolon check, or
+/// bracket detection.
+fn is_safe_positional_value(text: &str) -> bool {
+    !text.chars().any(char::is_whitespace) && !text.contains([':', '#', ';', '[', ']'])
+}
+
+/// A positional build must additionally avoid the version-group separators:
+/// `python ==1 ,*` merges the build back into the version group on reparse.
+fn is_safe_positional_build(text: &str) -> bool {
+    is_safe_positional_value(text) && !text.contains([',', '|'])
 }
 
 /// Whether rendering this channel as its bare name reconstructs it: there is
@@ -459,6 +476,11 @@ impl SpecView<'_> {
         // only when the parser splits it back off (a known platform), and the
         // `:{namespace}:` slot needs a positional channel.
         let channel = self.name.is_some() && self.channel.is_some_and(channel_renders_by_name);
+        // A version rendering with whitespace (some lenient version groups)
+        // or tokenizer characters would re-split into version and build.
+        let version = self
+            .version
+            .is_some_and(|version| is_safe_positional_value(&version.to_string()));
         LegacyPlacement {
             channel,
             subdir: channel
@@ -466,13 +488,13 @@ impl SpecView<'_> {
                     .subdir
                     .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
             namespace: channel && self.namespace.is_some_and(is_safe_positional_token),
-            // Positional only after a version (the old `name * build`
-            // placeholder reparsed as `version: Any`) and only when the text
-            // survives the tokenization that runs before build parsing.
-            build: self.version.is_some()
+            version,
+            // Positional only after a positional version (the old
+            // `name * build` placeholder reparsed as `version: Any`).
+            build: version
                 && self
                     .build
-                    .is_some_and(|build| !build.to_string().contains([':', '#', ';', '[', ']'])),
+                    .is_some_and(|build| is_safe_positional_build(&build.to_string())),
         }
     }
 
@@ -488,12 +510,12 @@ impl SpecView<'_> {
     ) -> fmt::Result {
         let Some(name) = self.name else {
             match self.version {
-                Some(version) => write!(f, "{version}")?,
+                Some(version) if placement.version => write!(f, "{version}")?,
                 // Only emit the historic `*` placeholder when nothing else
                 // renders. It reparses as `version: Any`, which matches the
                 // same set as `version: None`.
                 None if !renders_brackets => f.write_char('*')?,
-                None => {}
+                _ => {}
             }
             if placement.build
                 && let Some(build) = self.build
@@ -521,7 +543,9 @@ impl SpecView<'_> {
 
         write!(f, "{name}")?;
 
-        if let Some(version) = self.version {
+        if placement.version
+            && let Some(version) = self.version
+        {
             write!(f, " {version}")?;
         }
 
@@ -693,12 +717,15 @@ impl SpecView<'_> {
             // The compact form requires the rendered version to start with a
             // version-constraint operator character so the parser can split
             // `{name}` from `{version}`. This excludes e.g. `StartsWith`
-            // (renders `1.2.*`) and the wildcard `Any` (`*`).
-            Some(version) => version
-                .to_string()
-                .chars()
-                .next()
-                .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~')),
+            // (renders `1.2.*`) and the wildcard `Any` (`*`). It must also
+            // survive tokenization; see `is_safe_positional_value`.
+            Some(version) => {
+                let text = version.to_string();
+                text.chars()
+                    .next()
+                    .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~'))
+                    && is_safe_positional_value(&text)
+            }
         }
     }
 }

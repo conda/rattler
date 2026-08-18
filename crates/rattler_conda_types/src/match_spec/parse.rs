@@ -2072,6 +2072,25 @@ mod tests {
         assert_eq!(reparsed, spec, "rendered: {rendered}");
     }
 
+    /// A build matcher containing a version-group separator must not render
+    /// positionally: `python ==1 ,*` merges the build back into the version
+    /// group on reparse.
+    #[test]
+    fn test_group_separator_build_display_roundtrips() {
+        let spec = MatchSpec {
+            version: Some(VersionSpec::from_str("==1", Strict).unwrap()),
+            build: Some(",*".parse().unwrap()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+
+        let rendered = spec.to_string();
+        for strictness in [Strict, ParseStrictness::Lenient] {
+            if let Ok(reparsed) = MatchSpec::from_str(&rendered, strictness) {
+                assert_eq!(reparsed, spec, "rendered: {rendered}");
+            }
+        }
+    }
+
     #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
