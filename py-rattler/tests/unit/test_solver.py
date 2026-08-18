@@ -167,7 +167,8 @@ async def test_solve_with_repodata() -> None:
 
 
 def python_repodata(tmp_path: Path, python_version: str = "3.12.0") -> SparseRepoData:
-    repodata_path = tmp_path / "repodata.json"
+    repodata_path = tmp_path / "noarch" / "repodata.json"
+    repodata_path.parent.mkdir()
     repodata_path.write_text(
         json.dumps(
             {
@@ -197,6 +198,14 @@ def python_repodata(tmp_path: Path, python_version: str = "3.12.0") -> SparseRep
                         "subdir": "noarch",
                         "version": "1.0",
                     },
+                    "application-1.0-0.tar.bz2": {
+                        "name": "application",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["python"],
+                        "subdir": "noarch",
+                    },
                 },
             }
         )
@@ -206,6 +215,39 @@ def python_repodata(tmp_path: Path, python_version: str = "3.12.0") -> SparseRep
         subdir="noarch",
         path=repodata_path,
     )
+
+
+@pytest.mark.asyncio
+async def test_solve_adds_pip_to_cached_python(tmp_path: Path) -> None:
+    python_repodata(tmp_path)
+    channel = Channel(str(tmp_path))
+    gateway = Gateway()
+
+    without_pip = await solve(
+        [channel],
+        ["application"],
+        platforms=["noarch"],
+        gateway=gateway,
+    )
+    with_pip = await solve(
+        [channel],
+        ["application"],
+        platforms=["noarch"],
+        gateway=gateway,
+        add_pip_as_python_dependency=True,
+    )
+
+    assert {record.name.normalized for record in without_pip} == {
+        "application",
+        "python",
+    }
+    assert {record.name.normalized for record in with_pip} == {
+        "application",
+        "python",
+        "pip",
+    }
+    python_record = next(record for record in with_pip if record.name.normalized == "python")
+    assert "pip" in python_record.depends
 
 
 @pytest.mark.parametrize(

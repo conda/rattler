@@ -36,6 +36,7 @@ async def solve(
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     channel_relations: Optional[ChannelRelationsMode] = None,
     channel_relations_max_depth: Optional[int] = None,
+    add_pip_as_python_dependency: bool = False,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -89,6 +90,8 @@ async def solve(
             ``"strict"`` to raise on malformed relation metadata.
         channel_relations_max_depth: Maximum recursion depth when following
             ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
+        add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
+            package records before solving.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -136,6 +139,7 @@ async def solve(
             else [],
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            add_pip_as_python_dependency=add_pip_as_python_dependency,
         )
     ]
 

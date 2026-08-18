@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Add an `add_pip_as_python_dependency` option to `solve_with_sparse_repodata`.
-
 ## [0.25.0] - 2026-06-09
 
 ### Changed

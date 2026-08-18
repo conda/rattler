@@ -64,20 +64,34 @@ fn parse_exclude_newer(
     }
 }
 
-fn add_pip_to_python(record: &mut PackageRecord) {
+fn is_python_2_or_3(record: &PackageRecord) -> bool {
     static PYTHON_VERSION: LazyLock<VersionSpec> = LazyLock::new(|| {
         VersionSpec::from_str("2.*|3.*", ParseStrictness::Strict)
             .expect("the Python version spec is valid")
     });
 
-    if record.name.as_normalized() == "python" && PYTHON_VERSION.matches(&record.version) {
+    record.name.as_normalized() == "python" && PYTHON_VERSION.matches(&record.version)
+}
+
+fn add_pip_to_python(record: &mut PackageRecord) {
+    if is_python_2_or_3(record) {
         record.depends.push("pip".to_owned());
     }
 }
 
+fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
+    if !is_python_2_or_3(&record.package_record) {
+        return None;
+    }
+
+    let mut patched = record.clone();
+    add_pip_to_python(&mut patched.package_record);
+    Some(patched)
+}
+
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -96,6 +110,7 @@ pub fn py_solve<'a>(
     strategy: Option<Wrap<SolveStrategy>>,
     channel_relations: Option<Wrap<rattler_repodata_gateway::ChannelRelationsMode>>,
     channel_relations_max_depth: Option<usize>,
+    add_pip_as_python_dependency: bool,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -117,6 +132,9 @@ pub fn py_solve<'a>(
         }
         if let Some(depth) = channel_relations_max_depth {
             query = query.channel_relations_max_depth(depth);
+        }
+        if add_pip_as_python_dependency {
+            query = query.with_record_patch(patch_python_with_pip);
         }
         let output = query.execute().await.map_err(PyRattlerError::from)?;
         emit_gateway_warnings(output.warnings)?;
