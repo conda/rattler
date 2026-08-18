@@ -11,6 +11,7 @@ use pyo3::{
     Bound, PyAny, PyErr, PyResult, Python, exceptions::PyTypeError, intern, pyclass, pymethods,
     types::PyBytes,
 };
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
     Flag, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, UrlOrPath, VersionWithSource,
     WhlPackageRecord,
@@ -1018,6 +1019,28 @@ impl PyRecord {
         Ok(PackageRecord::from_index_json(index, size, sha256, md5)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Builds a `PyRecord` (as a `RepoDataRecord`) directly from a local
+    /// `.conda` or `.tar.bz2` package file, without requiring a channel or
+    /// `repodata.json`.
+    ///
+    /// The resulting record's `url` is a `file://` URL pointing at the given
+    /// path, and `channel` is left unset.
+    #[staticmethod]
+    fn from_package_archive(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyAny>> {
+        future_into_py(py, async move {
+            let record =
+                rattler_package_streaming::local_package::repodata_record_from_package_archive(
+                    path,
+                )
+                .await
+                .map_err(PyRattlerError::from)?;
+
+            Ok(Self {
+                inner: RecordInner::RepoData(Arc::new(record)),
+            })
+        })
     }
 
     /// Validate that the given package records are valid w.r.t. 'depends' and

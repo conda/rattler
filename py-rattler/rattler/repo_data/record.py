@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from rattler.rattler import PyRecord
 from rattler.repo_data.package_record import PackageRecord
 
@@ -13,6 +15,35 @@ class RepoDataRecord(PackageRecord):
             channel,
         )
         self._record = record
+
+    @staticmethod
+    async def from_package_archive(path: os.PathLike[str]) -> RepoDataRecord:
+        """
+        Builds a `RepoDataRecord` directly from a local `.conda` or
+        `.tar.bz2` package file, without requiring a channel or
+        `repodata.json`.
+
+        This is useful for installing a package directly from a local file,
+        similar to `conda install /path/to/local/package.conda`. It can be passed
+        directly to `rattler.install`.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> record = asyncio.run(
+        ...     RepoDataRecord.from_package_archive(
+        ...         "../test-data/clobber/clobber-fd-1-0.1.0-h4616a5c_0.conda"
+        ...     )
+        ... )
+        >>> assert isinstance(record, RepoDataRecord)
+        >>> record.channel is None
+        True
+        >>>
+        ```
+        """
+        py_record = await PyRecord.from_package_archive(path)
+        return RepoDataRecord._from_py_record(py_record)
 
     @property
     def url(self) -> str:
