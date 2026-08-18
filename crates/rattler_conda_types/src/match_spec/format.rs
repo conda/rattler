@@ -36,9 +36,12 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DisplayStyle {
     /// The historic positional representation produced by `Display`. The
-    /// layout and field order are kept stable for existing callers, but every
-    /// bracket value is escaped and quoted so the output always reparses; it
-    /// is not a serialization format.
+    /// layout and field order are kept stable for existing callers. Every
+    /// bracket value is quoted with a delimiter that preserves it verbatim
+    /// where one exists, but this dialect is infallible and best-effort — it
+    /// is not a serialization format and not every value round-trips (e.g.
+    /// values containing `]` or both quote characters). Use
+    /// [`MatchSpec::to_canonical_string`] for verified output.
     Legacy,
     /// The stable all-bracket representation produced by
     /// [`MatchSpec::to_canonical_string`].
@@ -561,11 +564,13 @@ impl SpecView<'_> {
 
 /// Writes one scalar `key=value` field with the quoting rules of the context.
 ///
-/// The legacy dialect always emits an escaped, double-quoted value: emitting a
-/// value verbatim would produce an unparseable spec as soon as it contains a
-/// quote or backslash. Escaping is the identity for every other value, and the
-/// parser unescapes quoted bracket values symmetrically, so this is the only
-/// legacy quoting that round-trips.
+/// Both dialects quote every scalar with a delimiter that keeps the value
+/// intact, because the parser stores most quoted bracket values verbatim
+/// (only `when=` and `flags=` are unescaped on parse) — so escaping here
+/// would silently mutate the value on round-trip. The canonical dialect
+/// refuses values no delimiter can hold; the infallible legacy dialect falls
+/// back to the historic raw double-quoted form for them, which fails loudly
+/// at parse time instead of round-tripping to a different value.
 fn write_scalar(
     f: &mut dyn Write,
     ctx: DisplayContext,
@@ -574,7 +579,11 @@ fn write_scalar(
 ) -> Result<(), FormatError> {
     match ctx.style {
         DisplayStyle::Legacy => {
-            write!(f, "{key}=\"{}\"", escape_bracket_value(&value.to_string()))?;
+            let value = value.to_string();
+            match pick_quote_delimiter(&value) {
+                Some(delimiter) => write!(f, "{key}={delimiter}{value}{delimiter}")?,
+                None => write!(f, "{key}=\"{value}\"")?,
+            }
         }
         DisplayStyle::Canonical => write!(f, "{key}={}", canonical_bracket_value(value)?)?,
     }
@@ -652,12 +661,13 @@ impl MatchSpecCondition {
     }
 }
 
-/// Formats a scalar value for canonical `MatchSpec` bracket syntax.
+/// Picks a quote delimiter that lets `value` be emitted verbatim.
 ///
-/// Legacy `MatchSpec` parsing preserves ordinary scalar escapes verbatim. Pick
-/// a delimiter that does not occur unescaped and emit the contents unchanged.
-/// This keeps canonical parsing non-lossy without reinterpreting old inputs.
-fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatchSpecError> {
+/// `MatchSpec` parsing preserves ordinary scalar escapes verbatim, so the only
+/// lossless quoting is a delimiter that does not occur unescaped in the value.
+/// Returns `None` when neither quote character can hold the value: both quotes
+/// occur unescaped, or a trailing backslash would swallow the closing quote.
+fn pick_quote_delimiter(value: &str) -> Option<char> {
     fn contains_unescaped(value: &str, delimiter: char) -> bool {
         let mut escaped = false;
         for character in value.chars() {
@@ -672,7 +682,6 @@ fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatch
         false
     }
 
-    let value = value.to_string();
     let has_odd_trailing_backslash_run = value
         .chars()
         .rev()
@@ -681,20 +690,30 @@ fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatch
         % 2
         == 1;
     if has_odd_trailing_backslash_run {
-        return Err(CanonicalMatchSpecError::UnrepresentableScalar(value));
+        return None;
     }
-    let delimiter_is_safe = |delimiter| !contains_unescaped(&value, delimiter);
+    let delimiter_is_safe = |delimiter| !contains_unescaped(value, delimiter);
 
     if value.contains("\\'") && delimiter_is_safe('"') {
-        Ok(format!("\"{value}\""))
+        Some('"')
     } else if delimiter_is_safe('\'') && value.contains(['\\', '"']) {
-        Ok(format!("'{value}'"))
+        Some('\'')
     } else if delimiter_is_safe('"') {
-        Ok(format!("\"{value}\""))
+        Some('"')
     } else if delimiter_is_safe('\'') {
-        Ok(format!("'{value}'"))
+        Some('\'')
     } else {
-        Err(CanonicalMatchSpecError::UnrepresentableScalar(value))
+        None
+    }
+}
+
+/// Formats a scalar value for canonical `MatchSpec` bracket syntax, or errors
+/// when no quote delimiter can hold the value losslessly.
+fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatchSpecError> {
+    let value = value.to_string();
+    match pick_quote_delimiter(&value) {
+        Some(delimiter) => Ok(format!("{delimiter}{value}{delimiter}")),
+        None => Err(CanonicalMatchSpecError::UnrepresentableScalar(value)),
     }
 }
 
@@ -1007,14 +1026,14 @@ struct RenderedCondition<'a>(&'a MatchSpecCondition);
 
 impl Display for RenderedCondition<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0
-            .fmt_with(f, DisplayStyle::Canonical)
-            .map_err(|error| match error {
-                FormatError::Fmt(error) => error,
-                // This adapter is only used for conditions that already
-                // rendered canonically as part of the whole spec, so a
-                // canonical failure cannot occur here.
-                FormatError::Canonical(_) => fmt::Error,
-            })
+        match self.0.fmt_with(f, DisplayStyle::Canonical) {
+            Ok(()) => Ok(()),
+            Err(FormatError::Fmt(error)) => Err(error),
+            // This adapter is only used for conditions that already rendered
+            // canonically as part of the whole spec, so a canonical failure
+            // cannot occur here — but if it ever does, emit a placeholder
+            // instead of a `fmt::Error`, which `to_string` turns into a panic.
+            Err(FormatError::Canonical(_)) => f.write_str("<unrepresentable condition>"),
+        }
     }
 }

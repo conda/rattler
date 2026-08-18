@@ -153,6 +153,7 @@ pub struct MatchSpec {
 
 /// An error returned when a [`MatchSpec`] cannot be represented canonically.
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+#[non_exhaustive]
 pub enum CanonicalMatchSpecError {
     /// A `when` condition contains a nested `when` condition, which `MatchSpec`
     /// grammar cannot represent.
