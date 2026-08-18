@@ -78,6 +78,7 @@ rattler_package_streaming = { path = "../rattler_package_streaming", default-fea
 ] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
+proptest = { workspace = true }
 hex-literal = { workspace = true }
 criterion = { workspace = true, features = ["html_reports"] }
 pathdiff = { workspace = true }

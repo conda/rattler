@@ -5056,6 +5056,7 @@ dependencies = [
  "nom 8.0.0",
  "nom-language",
  "pathdiff",
+ "proptest",
  "purl",
  "rand 0.10.2",
  "rattler_digest",

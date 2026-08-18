@@ -15,6 +15,7 @@
 //! the failure to a specific field.
 
 use std::fmt::{self, Display, Write};
+use std::str::FromStr;
 
 use itertools::Itertools;
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -28,8 +29,8 @@ use super::parse::{escape_bracket_value, is_valid_extra_group_name};
 use super::{CanonicalMatchSpecError, MatchSpec, NamelessMatchSpec};
 use crate::flags::is_valid_matchspec_flag;
 use crate::{
-    Channel, ChannelConfig, ParseMatchSpecOptions, ParseStrictness, RepodataRevision, VersionSpec,
-    build_spec::BuildNumberSpec,
+    Channel, ChannelConfig, ParseMatchSpecOptions, ParseStrictness, Platform, RepodataRevision,
+    VersionSpec, build_spec::BuildNumberSpec,
 };
 
 /// The dialect a match spec is rendered in.
@@ -154,31 +155,26 @@ enum Field {
     TrackFeatures,
 }
 
-/// Bracket fields of the legacy named format, in their historic order.
-/// `channel`, `subdir`, `namespace`, `version` and `build` are positional in
-/// this dialect and therefore absent.
+/// Bracket fields of the legacy top-level format, in their historic order.
+/// `version` is always positional in this dialect; `build`, `channel`,
+/// `subdir` and `namespace` prefer their positional spot and fall back to
+/// these brackets when the positional grammar cannot represent them
+/// faithfully (see [`LegacyPlacement`]).
 const LEGACY_BRACKET_FIELDS: &[Field] = &[
     Field::Extras,
     Field::Flags,
     Field::Md5,
     Field::Sha256,
     Field::BuildNumber,
+    Field::Build,
     Field::FileName,
     Field::Url,
     Field::License,
     Field::LicenseFamily,
     Field::TrackFeatures,
-    Field::When,
-];
-
-/// Bracket fields of the legacy nameless format. This historic list drops
-/// several fields (`extras`, `build_number`, `fn`, `url`, ...); it is kept
-/// as-is because the legacy dialect is a compatibility surface.
-const LEGACY_NAMELESS_BRACKET_FIELDS: &[Field] = &[
-    Field::Flags,
-    Field::Md5,
-    Field::Sha256,
-    Field::LicenseFamily,
+    Field::Channel,
+    Field::Subdir,
+    Field::Namespace,
     Field::When,
 ];
 
@@ -222,6 +218,97 @@ const CANONICAL_BRACKET_FIELDS: &[Field] = &[
     Field::When,
     Field::TrackFeatures,
 ];
+
+/// Which dual-representation fields the legacy positional prefix consumed,
+/// so the bracket section skips them. Fields stay positional only when the
+/// positional grammar reproduces them faithfully; otherwise they fall back to
+/// their bracket form.
+#[derive(Debug, Default, Clone, Copy)]
+struct LegacyPlacement {
+    channel: bool,
+    subdir: bool,
+    namespace: bool,
+    build: bool,
+}
+
+impl LegacyPlacement {
+    /// Whether `field` was consumed by the positional prefix.
+    fn is_positional(self, field: Field) -> bool {
+        match field {
+            Field::Channel => self.channel,
+            Field::Subdir => self.subdir,
+            Field::Namespace => self.namespace,
+            Field::Build => self.build,
+            _ => false,
+        }
+    }
+}
+
+/// Whether rendering this channel as its bare name reconstructs it
+/// faithfully: no explicit platform selector, and parsing the name under the
+/// default channel alias yields the same base URL. URL channels whose name is
+/// merely derived from the URL (and path channels) fail this and render as
+/// their full base URL instead.
+fn channel_renders_by_name(channel: &Channel) -> bool {
+    if channel.platforms.is_some() {
+        return false;
+    }
+    let Some(name) = channel.name.as_deref() else {
+        return false;
+    };
+    if !is_safe_positional_token(name) {
+        return false;
+    }
+    // Only the channel alias matters for name resolution; the root dir is
+    // used for path channels alone, which never pass the URL comparison.
+    let config = ChannelConfig::default_with_root_dir(std::path::PathBuf::new());
+    Channel::from_name(name, &config).base_url == channel.base_url
+}
+
+/// Whether a channel name or namespace can occupy a positional slot without
+/// being re-tokenized as something else (comments, bracket sections, quotes,
+/// version constraints, or the `::` separator itself).
+fn is_safe_positional_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|c| {
+            !c.is_whitespace()
+                && !matches!(
+                    c,
+                    '#' | ';'
+                        | ':'
+                        | '['
+                        | ']'
+                        | '"'
+                        | '\''
+                        | '\\'
+                        | '('
+                        | ')'
+                        | '='
+                        | '<'
+                        | '>'
+                        | '!'
+                        | '~'
+                        | ','
+                )
+        })
+}
+
+/// Renders a channel as its base URL plus any explicit platform selector.
+/// The canonical dialect redacts credentials; the legacy dialect historically
+/// renders values raw.
+fn channel_url_value(channel: &Channel, redact: bool) -> String {
+    let mut value = if redact {
+        redact_credentials_from_url(channel.base_url.url()).to_string()
+    } else {
+        channel.base_url.url().to_string()
+    };
+    if let Some(platforms) = channel.platforms.as_ref() {
+        value.push('[');
+        value.push_str(&platforms.iter().format(",").to_string());
+        value.push(']');
+    }
+    value
+}
 
 /// A borrowed, name-optional view over the fields shared by [`MatchSpec`] and
 /// [`NamelessMatchSpec`], so both types render through the same code.
@@ -298,8 +385,22 @@ impl SpecView<'_> {
     /// entry point behind the `Display` implementations, condition-leaf
     /// rendering, and [`MatchSpec::to_canonical_string`].
     pub(crate) fn fmt(&self, f: &mut dyn Write, ctx: DisplayContext) -> Result<(), FormatError> {
+        let placement = self.placement(ctx);
+        let bracket_fields = match ctx.style {
+            DisplayStyle::Legacy => match ctx.position {
+                SpecPosition::TopLevel => LEGACY_BRACKET_FIELDS,
+                SpecPosition::ConditionLeaf => LEGACY_CONDITION_LEAF_FIELDS,
+            },
+            DisplayStyle::Canonical => CANONICAL_BRACKET_FIELDS,
+        };
+        let renders_brackets = bracket_fields
+            .iter()
+            .any(|&field| self.has(field) && !placement.is_positional(field));
+
         match (ctx.style, ctx.position) {
-            (DisplayStyle::Legacy, SpecPosition::TopLevel) => self.fmt_legacy_prefix(f)?,
+            (DisplayStyle::Legacy, SpecPosition::TopLevel) => {
+                self.fmt_legacy_prefix(f, placement, renders_brackets)?;
+            }
             (DisplayStyle::Canonical, SpecPosition::TopLevel) => {
                 if let Some(name) = self.name {
                     write!(f, "{name}")?;
@@ -328,18 +429,9 @@ impl SpecView<'_> {
             }
         }
 
-        let bracket_fields = match (ctx.style, ctx.position) {
-            (DisplayStyle::Legacy, SpecPosition::TopLevel) if self.name.is_some() => {
-                LEGACY_BRACKET_FIELDS
-            }
-            (DisplayStyle::Legacy, SpecPosition::TopLevel) => LEGACY_NAMELESS_BRACKET_FIELDS,
-            (DisplayStyle::Legacy, SpecPosition::ConditionLeaf) => LEGACY_CONDITION_LEAF_FIELDS,
-            (DisplayStyle::Canonical, _) => CANONICAL_BRACKET_FIELDS,
-        };
-
         let mut first = true;
         for &field in bracket_fields {
-            if !self.has(field) {
+            if !self.has(field) || placement.is_positional(field) {
                 continue;
             }
             if first {
@@ -357,32 +449,82 @@ impl SpecView<'_> {
         Ok(())
     }
 
+    /// Decides which dual-representation fields the positional prefix of the
+    /// legacy top-level dialect consumes. In every other context nothing is
+    /// consumed positionally besides the name and the compact leaf version,
+    /// which are handled directly by [`SpecView::fmt`].
+    fn placement(&self, ctx: DisplayContext) -> LegacyPlacement {
+        if ctx.style != DisplayStyle::Legacy || ctx.position != SpecPosition::TopLevel {
+            return LegacyPlacement::default();
+        }
+
+        // A channel renders as `{name}::` only when that string reconstructs
+        // the channel faithfully; a subdir rides along as `{name}/{subdir}::`
+        // only when the parser will split it back off (it must be a known
+        // platform); the `{channel}:{namespace}:` slot requires a positional
+        // channel. Everything else falls back to bracket fields.
+        let channel = self.name.is_some() && self.channel.is_some_and(channel_renders_by_name);
+        LegacyPlacement {
+            channel,
+            subdir: channel
+                && self
+                    .subdir
+                    .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
+            namespace: channel && self.namespace.is_some_and(is_safe_positional_token),
+            // A build matcher is positional only after a version (the historic
+            // `name * build` placeholder reparsed with `version: Any` instead
+            // of `version: None`), and only when its text survives the
+            // tokenization stages that run before build parsing: the
+            // channel/namespace colon split, comment stripping, the semicolon
+            // check, and bracket detection.
+            build: self.version.is_some()
+                && self
+                    .build
+                    .is_some_and(|build| !build.to_string().contains([':', '#', ';', '[', ']'])),
+        }
+    }
+
     /// The positional `channel/subdir::name version build` prefix of the
-    /// legacy dialect.
-    fn fmt_legacy_prefix(&self, f: &mut dyn Write) -> fmt::Result {
+    /// legacy dialect. `renders_brackets` tells the nameless form whether a
+    /// bracket section follows, so it can drop the `*` version placeholder
+    /// whenever anything else identifies the spec.
+    fn fmt_legacy_prefix(
+        &self,
+        f: &mut dyn Write,
+        placement: LegacyPlacement,
+        renders_brackets: bool,
+    ) -> fmt::Result {
         let Some(name) = self.name else {
-            // The nameless prefix is just `version build`, with a wildcard
-            // version placeholder.
             match self.version {
                 Some(version) => write!(f, "{version}")?,
-                None => f.write_char('*')?,
+                // Without a version the spec is only identified by its other
+                // fields; emit the historic `*` placeholder only when nothing
+                // else renders (note: it reparses as `version: Any`, which
+                // matches identically to `version: None`).
+                None if !renders_brackets => f.write_char('*')?,
+                None => {}
             }
-            if let Some(build) = self.build {
+            if placement.build
+                && let Some(build) = self.build
+            {
                 write!(f, " {build}")?;
             }
             return Ok(());
         };
 
-        if let Some(channel) = self.channel {
+        if placement.channel {
+            let channel = self.channel.expect("placement checked by caller");
             write!(f, "{}", channel.name())?;
-            if let Some(subdir) = self.subdir {
+            if placement.subdir {
+                let subdir = self.subdir.expect("placement checked by caller");
                 write!(f, "/{subdir}")?;
             }
         }
 
-        if let Some(namespace) = self.namespace {
+        if placement.namespace {
+            let namespace = self.namespace.expect("placement checked by caller");
             write!(f, ":{namespace}:")?;
-        } else if self.channel.is_some() || self.subdir.is_some() {
+        } else if placement.channel {
             f.write_str("::")?;
         }
 
@@ -390,13 +532,11 @@ impl SpecView<'_> {
 
         if let Some(version) = self.version {
             write!(f, " {version}")?;
-        } else if self.build.is_some() {
-            // A build matcher requires a version placeholder so the rendered
-            // spec parses back with the build in the build position.
-            f.write_str(" *")?;
         }
 
-        if let Some(build) = self.build {
+        if placement.build
+            && let Some(build) = self.build
+        {
             write!(f, " {build}")?;
         }
 
@@ -452,20 +592,29 @@ impl SpecView<'_> {
             }
             Field::Extras => {
                 let extras = self.extras.expect("presence checked by caller");
-                write!(f, "extras=[{}]", extras.iter().format(ctx.list_separator()))?;
-                Ok(())
+                write_list(f, ctx, "extras", extras.iter(), |extra| {
+                    is_valid_extra_group_name(extra)
+                })
             }
             Field::Flags => {
                 let flags = self.flags.expect("presence checked by caller");
-                write!(f, "flags=[{}]", flags.iter().format(ctx.list_separator()))?;
-                Ok(())
+                write_list(f, ctx, "flags", flags.iter(), |flag| {
+                    is_valid_matchspec_flag(flag)
+                })
             }
             Field::Channel => {
                 let channel = self.channel.expect("presence checked by caller");
                 match ctx.style {
-                    // The legacy dialect only renders channels in brackets for
-                    // condition leaves, and does so by name.
-                    DisplayStyle::Legacy => write_scalar(f, ctx, "channel", &channel.name()),
+                    // A bracket channel renders by name only when the name
+                    // reconstructs it faithfully; otherwise the full URL (and
+                    // platform selector) is used so nothing is lost.
+                    DisplayStyle::Legacy => {
+                        if channel_renders_by_name(channel) {
+                            write_scalar(f, ctx, "channel", &channel.name())
+                        } else {
+                            write_scalar(f, ctx, "channel", &channel_url_value(channel, false))
+                        }
+                    }
                     DisplayStyle::Canonical => {
                         let value = canonical_channel_value(channel)?;
                         write!(f, "channel={}", canonical_bracket_value(&value)?)?;
@@ -560,6 +709,39 @@ impl SpecView<'_> {
                 .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~')),
         }
     }
+}
+
+/// Writes a `key=[..]` list field. Elements whose text `is_valid_bare`
+/// accepts render unquoted; anything else renders quoted, so an element that
+/// would re-tokenize under bare rendering (a comma, whitespace, an empty or
+/// invalid name) reaches the parser as a single quoted element that fails
+/// validation loudly, instead of silently splitting into different elements.
+fn write_list<T: Display>(
+    f: &mut dyn Write,
+    ctx: DisplayContext,
+    key: &str,
+    elements: impl Iterator<Item = T>,
+    mut is_valid_bare: impl FnMut(&str) -> bool,
+) -> Result<(), FormatError> {
+    write!(f, "{key}=[")?;
+    for (index, element) in elements.enumerate() {
+        if index > 0 {
+            f.write_str(ctx.list_separator())?;
+        }
+        let text = element.to_string();
+        if is_valid_bare(&text) {
+            f.write_str(&text)?;
+        } else {
+            match pick_quote_delimiter(&text) {
+                Some(delimiter) => write!(f, "{delimiter}{text}{delimiter}")?,
+                // No delimiter can hold the value; the raw form fails loudly
+                // at parse time.
+                None => write!(f, "\"{text}\"")?,
+            }
+        }
+    }
+    f.write_char(']')?;
+    Ok(())
 }
 
 /// Writes one scalar `key=value` field with the quoting rules of the context.
@@ -726,14 +908,7 @@ fn canonical_channel_value(channel: &Channel) -> Result<String, CanonicalMatchSp
         return Err(CanonicalMatchSpecError::EmptyChannelPlatforms);
     }
 
-    let mut value = redact_credentials_from_url(channel.base_url.url()).to_string();
-    if let Some(platforms) = channel.platforms.as_ref() {
-        value.push('[');
-        value.push_str(&platforms.iter().format(",").to_string());
-        value.push(']');
-    }
-
-    Ok(value)
+    Ok(channel_url_value(channel, true))
 }
 
 /// The parse options a canonical string is expected to round-trip through.

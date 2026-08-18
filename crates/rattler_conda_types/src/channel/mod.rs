@@ -443,10 +443,14 @@ impl From<url::ParseError> for ParseChannelError {
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
 fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
-    if channel.rfind(']').is_some()
-        && let Some(start_platform_idx) = channel.find('[')
+    // A platform selector is a `[...]` group that ends the string. Checking
+    // for the closing bracket with `strip_suffix` (instead of slicing to
+    // `len() - 1`) keeps this from panicking on multi-byte trailing
+    // characters and from misreading a `]` in the middle of the string.
+    if let Some(channel_without_suffix) = channel.strip_suffix(']')
+        && let Some(start_platform_idx) = channel_without_suffix.find('[')
     {
-        let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
+        let platform_part = &channel_without_suffix[start_platform_idx + 1..];
         let platforms = platform_part
             .split(',')
             .map(str::trim)

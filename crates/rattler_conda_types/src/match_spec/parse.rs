@@ -726,12 +726,45 @@ fn strip_package_name(
     input: &str,
     exact_names_only: bool,
 ) -> Result<(PackageNameMatcher, &str), ParseMatchSpecError> {
+    let trimmed = input.trim();
+
+    // A regex name matcher is anchored as `^...$`. Its body may contain
+    // whitespace and version-constraint characters (e.g. `^py(?!py).*$`), so
+    // splitting on those would cut the name short. Instead, the name ends at
+    // the first `$` that is followed by nothing, whitespace, or the start of
+    // a version constraint — a following build matcher may itself be a regex
+    // ending in `$`, so taking the final `$` would swallow it.
+    if trimmed.starts_with('^') {
+        let end = trimmed
+            .match_indices('$')
+            .map(|(index, _)| index)
+            .find(|&index| {
+                trimmed[index + 1..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| c.is_whitespace() || is_start_of_version_constraint(c))
+            });
+        if let Some(end) = end {
+            let (package_name, rest) = trimmed.split_at(end + 1);
+            let package_name = PackageNameMatcher::from_str(package_name)
+                .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?;
+            if let PackageNameMatcher::Regex(regex) = &package_name {
+                if exact_names_only {
+                    return Err(
+                        ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedRegex(
+                            regex.as_str().to_string(),
+                        ),
+                    );
+                }
+                return Ok((package_name, rest.trim()));
+            }
+        }
+    }
+
     let (rest, package_name) =
-        take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
-            input.trim(),
-        )
-        .finish()
-        .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
+        take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(trimmed)
+            .finish()
+            .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
 
     let trimmed_package_name = package_name.trim();
     if trimmed_package_name.is_empty() {
@@ -985,9 +1018,12 @@ impl NamelessMatchSpec {
 fn parse_channel_and_subdir(
     input: &str,
 ) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
-    let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().expect("Could not get current directory"),
-    );
+    // The root directory is only used to resolve relative path channels. When
+    // the current directory is unavailable (e.g. it was deleted), fall back to
+    // an empty root so that relative path channels fail with a parse error
+    // instead of panicking, while every other channel form parses normally.
+    let channel_config =
+        ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
@@ -1946,17 +1982,19 @@ mod tests {
 
     #[test]
     fn test_build_only_matchspec_roundtrips() {
-        // Without a `*` placeholder the build slides into the version slot and misparses.
+        // A build without a version renders in brackets: the historic
+        // `foo * py39h123_0` placeholder reparsed with `version: Any` instead
+        // of `version: None`.
         let spec = MatchSpec::from_str("foo[build=py39h123_0]", Strict).unwrap();
         assert_eq!(spec.version, None);
         assert!(spec.build.is_some());
 
         let rendered = spec.to_string();
-        assert_eq!(rendered, "foo * py39h123_0");
+        assert_eq!(rendered, r#"foo[build="py39h123_0"]"#);
 
         for strictness in [ParseStrictness::Lenient, Strict] {
             let reparsed = MatchSpec::from_str(&rendered, strictness).unwrap();
-            assert_eq!(reparsed.build, spec.build);
+            assert_eq!(reparsed, spec);
         }
     }
 

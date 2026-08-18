@@ -417,9 +417,11 @@ where
 
     match s {
         Some(str_val) => {
-            let config = ChannelConfig::default_with_root_dir(
-                std::env::current_dir().expect("Could not determine current directory"),
-            );
+            // The root directory only matters for relative path channels;
+            // fall back to an empty root instead of panicking when the
+            // current directory is unavailable so those fail with an error.
+            let config =
+                ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap_or_default());
 
             Channel::from_str(str_val, &config)
                 .map(|channel| Some(Arc::new(channel)))
