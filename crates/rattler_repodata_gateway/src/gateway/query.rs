@@ -1,10 +1,12 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     future::{Future, IntoFuture},
     sync::Arc,
 };
 
 use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform,
     RepoDataRecord,
@@ -39,6 +41,29 @@ pub struct RepoDataQueryOutput {
     /// Non-fatal warnings encountered during the query. Also streamed
     /// to [`Reporter::on_gateway_warning`] as they are recorded.
     pub warnings: Vec<GatewayWarning>,
+    /// Virtual package detection plugins declared by the queried channel
+    /// subdirs, in resolved channel-priority order.
+    ///
+    /// Reported exactly as declared: duplicate claims on the same virtual
+    /// package are not resolved, and no plugin is fetched or executed.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub virtual_package_plugins: Vec<SubdirVirtualPackagePlugins>,
+}
+
+/// Plugin registrations declared by a single channel subdir.
+///
+/// Kept per subdir rather than per channel because different subdirs of one
+/// channel may declare different metadata; collapsing them would silently drop
+/// registrations.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+#[derive(Debug, Clone)]
+pub struct SubdirVirtualPackagePlugins {
+    /// The channel that declared these plugins.
+    pub channel: ChannelUrl,
+    /// The subdir the declaration was read from.
+    pub platform: Platform,
+    /// Plugin package name mapped to the virtual packages it provides.
+    pub plugins: VirtualPackagePlugins,
 }
 
 impl std::ops::Deref for RepoDataQueryOutput {
@@ -377,9 +402,13 @@ struct QueryExecutor {
 
     /// CEP-42 expansion state.
     expander: ChannelExpander,
-
     /// CEP-6 notice collection state.
     notices: NoticeCollector,
+
+    /// Plugin registrations collected from each resolved channel subdir.
+    /// Emitted in channel-priority order once the final order is known.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    virtual_package_plugins: ahash::HashMap<(ChannelUrl, Platform), VirtualPackagePlugins>,
 }
 
 /// Collects CEP-6 notices while a query runs. Fetches are queued as channels
@@ -594,6 +623,8 @@ impl QueryExecutor {
             pending_records: FuturesUnordered::new(),
             expander,
             notices,
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins: ahash::HashMap::default(),
         })
     }
 
@@ -955,6 +986,14 @@ impl QueryExecutor {
                     }
                     self.expand_pattern_specs_for_subdir(subdir.as_ref());
                     if let Some((url, platform)) = kind_url_and_platform {
+                        #[cfg(feature = "experimental-virtual-package-plugins")]
+                        {
+                            let plugins = subdir.virtual_package_plugins();
+                            if !plugins.is_empty() {
+                                self.virtual_package_plugins
+                                    .insert((url.clone(), platform), plugins.clone());
+                            }
+                        }
                         self.expand_relations_for_subdir(&url, platform, subdir.as_ref())?;
                     }
                     if self.pending_subdirs.is_empty() {
@@ -1030,11 +1069,7 @@ impl QueryExecutor {
             .queue(&self.gateway, &url, channel.clone(), self.reporter.clone());
         let barrier = Arc::new(BarrierCell::new());
 
-        let policy = if self.expander.strict() {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
+        let policy = discovery_policy(&self.expander);
         let fut = build_channel_subdir_future(
             self.gateway.clone(),
             channel,
@@ -1068,14 +1103,6 @@ impl QueryExecutor {
         let mut handles = self.subdir_handles;
 
         if self.expander.enabled() && self.expander.has_observed_relations() {
-            let resolution = self.expander.finalize()?;
-
-            let priority_of: std::collections::HashMap<&ChannelUrl, usize> = resolution
-                .order
-                .iter()
-                .enumerate()
-                .map(|(i, u)| (u, i))
-                .collect();
             let platform_idx_of: std::collections::HashMap<Platform, usize> = self
                 .expander
                 .platforms()
@@ -1094,18 +1121,10 @@ impl QueryExecutor {
                 })
                 .collect();
 
-            // Anchors derive from the final edge set, independent of
-            // fetch completion order.
-            let mut users_by_caller_idx: Vec<(usize, ChannelUrl)> = user_channel_caller_idx
-                .iter()
-                .map(|(url, idx)| (*idx, url.clone()))
-                .collect();
-            users_by_caller_idx.sort();
-            let user_priority: Vec<ChannelUrl> = users_by_caller_idx
-                .into_iter()
-                .map(|(_, url)| url)
-                .collect();
-            let anchor_of = self.expander.anchors(&user_priority);
+            let ranks = self
+                .expander
+                .finalize_channel_order(&user_channel_caller_idx)?
+                .ranks;
 
             let mut tagged: Vec<((usize, usize, usize, usize), SubdirHandle)> = handles
                 .into_iter()
@@ -1113,19 +1132,22 @@ impl QueryExecutor {
                 .map(|(orig_idx, h)| {
                     let (anchor, prio, plat) = match (&h.kind, h.caller_source_idx) {
                         (SubdirKind::Custom, Some(i)) => (i, 0_usize, 0_usize),
+                        // A handle the caller supplied keeps the slot the
+                        // caller put it in, so one channel named twice stays in
+                        // both places rather than collapsing into one.
                         (SubdirKind::Channel { url, platform }, Some(i)) => {
-                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                            let r = ranks.get(url).map_or(usize::MAX, |rank| rank.priority);
                             let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
                             (i, r, p)
                         }
                         (SubdirKind::Channel { url, platform }, None) => {
-                            let anchor = anchor_of
-                                .get(url)
-                                .and_then(|u| user_channel_caller_idx.get(u).copied())
-                                .unwrap_or(usize::MAX);
-                            let r = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                            let rank = ranks.get(url);
                             let p = platform_idx_of.get(platform).copied().unwrap_or(usize::MAX);
-                            (anchor, r, p)
+                            (
+                                rank.map_or(usize::MAX, |rank| rank.anchor),
+                                rank.map_or(usize::MAX, |rank| rank.priority),
+                                p,
+                            )
                         }
                         (SubdirKind::Custom, None) => {
                             unreachable!("custom sources are always caller-supplied")
@@ -1137,6 +1159,27 @@ impl QueryExecutor {
             tagged.sort_by_key(|(key, _)| *key);
             handles = tagged.into_iter().map(|(_, h)| h).collect();
         }
+
+        // `handles` is already in channel-priority order, so walking it yields
+        // the registrations in that order too. Custom sources have no channel.
+        #[cfg(feature = "experimental-virtual-package-plugins")]
+        let virtual_package_plugins = handles
+            .iter()
+            .filter_map(|h| match &h.kind {
+                SubdirKind::Channel { url, platform } => {
+                    let key = (url.clone(), *platform);
+                    self.virtual_package_plugins.remove(&key).map(|plugins| {
+                        let (channel, platform) = key;
+                        SubdirVirtualPackagePlugins {
+                            channel,
+                            platform,
+                            plugins,
+                        }
+                    })
+                }
+                SubdirKind::Custom => None,
+            })
+            .collect();
 
         let mut repodata: Vec<RepoData> =
             Vec::with_capacity(handles.len() + usize::from(direct.is_some()));
@@ -1153,6 +1196,8 @@ impl QueryExecutor {
                 .into_iter()
                 .map(GatewayWarning::from)
                 .collect(),
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            virtual_package_plugins,
         })
     }
 }
@@ -1291,13 +1336,13 @@ fn spawn_one_package_fetch(
 #[cfg(target_arch = "wasm32")]
 type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
 
+#[cfg(not(target_arch = "wasm32"))]
+type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
+
 #[cfg(target_arch = "wasm32")]
 fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
     future.boxed_local()
 }
-
-#[cfg(not(target_arch = "wasm32"))]
-type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
@@ -1410,81 +1455,24 @@ impl NamesQuery {
     /// Execute the query and return the package names along with any
     /// non-fatal CEP-42 warnings.
     pub async fn execute(self) -> Result<NamesQueryOutput, GatewayError> {
-        let mut expander = ChannelExpander::new(
-            self.channel_relations_mode,
-            self.channel_relations_max_depth,
-            self.platforms.clone(),
-            self.reporter.clone(),
-        );
-        let mut notices = NoticeCollector::new(self.channel_notices);
-
-        let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
-        for channel in self.channels {
-            let (url, channel_arc) = expander.register_user_channel(channel);
-            notices.queue(
-                &self.gateway,
-                &url,
-                channel_arc.clone(),
-                self.reporter.clone(),
-            );
-            for &platform in &self.platforms {
-                pending.push(spawn_names_fetch(
-                    self.gateway.clone(),
-                    channel_arc.clone(),
-                    platform,
-                    url.clone(),
-                    self.reporter.clone(),
-                    FetchErrorPolicy::Propagate,
-                ));
-            }
-        }
-
         let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
-        let strict = expander.strict();
-        let policy = if strict {
-            FetchErrorPolicy::WrapAsChannelRelationsError
-        } else {
-            FetchErrorPolicy::SwallowAsWarning
-        };
-
-        loop {
-            select_biased! {
-                result = pending.select_next_some() => {
-                    let (url, platform, subdir, warning) = result?;
-                    if let Some(w) = warning {
-                        expander.push_warning(w);
-                    }
-                    if let Some(subdir_names) = subdir.package_names() {
-                        names.extend(subdir_names);
-                    }
-                    for (new_url, new_channel, new_plat) in expander.observe(&url, platform, &subdir)? {
-                        notices.queue(&self.gateway, &new_url, new_channel.clone(), self.reporter.clone());
-                        pending.push(spawn_names_fetch(
-                            self.gateway.clone(),
-                            new_channel,
-                            new_plat,
-                            new_url,
-                            self.reporter.clone(),
-                            policy,
-                        ));
-                    }
+        let walk = walk_channels(
+            ChannelWalkOptions {
+                gateway: self.gateway,
+                channels: self.channels,
+                platforms: self.platforms,
+                mode: self.channel_relations_mode,
+                max_depth: self.channel_relations_max_depth,
+                reporter: self.reporter,
+                collect_notices: self.channel_notices,
+            },
+            |_url, _platform, subdir| {
+                if let Some(subdir_names) = subdir.package_names() {
+                    names.extend(subdir_names);
                 }
-
-                batch = notices.pending.select_next_some() => {
-                    notices.collect(self.reporter.as_deref(), batch);
-                }
-
-                complete => {
-                    break;
-                }
-            }
-        }
-
-        if expander.enabled() && expander.has_observed_relations() {
-            // Names are an unordered set; finalize only for its
-            // depth/cycle diagnostics and strict-mode errors.
-            expander.finalize()?;
-        }
+            },
+        )
+        .await?;
 
         let names = names
             .into_iter()
@@ -1492,14 +1480,169 @@ impl NamesQuery {
             .collect::<Result<Vec<PackageName>, _>>()?;
         Ok(NamesQueryOutput {
             names,
-            notices: notices.collected,
-            warnings: expander
-                .take_warnings()
+            notices: walk.notices,
+            warnings: walk
+                .warnings
                 .into_iter()
                 .map(GatewayWarning::from)
                 .collect(),
         })
     }
+}
+
+/// Everything a walk over a set of channels and the channels their CEP-42
+/// relations reach produced.
+pub(super) struct ChannelWalk {
+    /// Every channel walked, in CEP-42 priority order.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub order: Vec<ChannelUrl>,
+
+    /// The [`Channel`] behind each url, since a walk discovers channels the
+    /// caller never named and a caller may want to query them.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub channels: HashMap<ChannelUrl, Arc<Channel>>,
+
+    /// CEP-6 notices, empty unless the walk was asked for them.
+    pub notices: Vec<ChannelNoticeResult>,
+
+    /// Non-fatal relation problems met on the way.
+    pub warnings: Vec<ChannelRelationsWarning>,
+}
+
+/// What a [`walk_channels`] needs: where to fetch from, what to start from, and
+/// how much of CEP-42 to honour on the way.
+pub(super) struct ChannelWalkOptions {
+    /// Where to fetch subdirs from.
+    pub gateway: Arc<GatewayInner>,
+
+    /// The channels to start from, in the order the caller gave them, which
+    /// CEP-42 treats as priority edges of its own.
+    pub channels: Vec<Channel>,
+
+    /// The subdirs to fetch of every channel walked.
+    pub platforms: Vec<Platform>,
+
+    /// How to treat the relations the channels declare.
+    pub mode: ChannelRelationsMode,
+
+    /// How far a chain of relations may be followed.
+    pub max_depth: usize,
+
+    /// Told about warnings as they are recorded.
+    pub reporter: Option<Arc<dyn Reporter>>,
+
+    /// Whether to fetch the CEP-6 notices of every channel walked.
+    pub collect_notices: bool,
+}
+
+/// Which error policy a channel a relation discovered is fetched under.
+fn discovery_policy(expander: &ChannelExpander) -> FetchErrorPolicy {
+    if expander.strict() {
+        FetchErrorPolicy::WrapAsChannelRelationsError
+    } else {
+        FetchErrorPolicy::SwallowAsWarning
+    }
+}
+
+/// Fetches every subdir of `channels` and of the channels their CEP-42
+/// relations reach, hands each one to `visit`, and resolves the priority order
+/// they end up in.
+pub(super) async fn walk_channels<Visit>(
+    options: ChannelWalkOptions,
+    mut visit: Visit,
+) -> Result<ChannelWalk, GatewayError>
+where
+    Visit: FnMut(&ChannelUrl, Platform, &Subdir),
+{
+    let ChannelWalkOptions {
+        gateway,
+        channels,
+        platforms,
+        mode,
+        max_depth,
+        reporter,
+        collect_notices,
+    } = options;
+
+    let mut expander = ChannelExpander::new(mode, max_depth, platforms.clone(), reporter.clone());
+    let mut notices = NoticeCollector::new(collect_notices);
+    let mut walked: HashMap<ChannelUrl, Arc<Channel>> = HashMap::new();
+
+    let mut pending: FuturesUnordered<BoxFuture<NamesFetchResult>> = FuturesUnordered::new();
+    let mut user_order: Vec<ChannelUrl> = Vec::new();
+    for channel in channels {
+        let (url, channel) = expander.register_user_channel(channel);
+        if !user_order.contains(&url) {
+            user_order.push(url.clone());
+        }
+        walked.insert(url.clone(), channel.clone());
+        notices.queue(&gateway, &url, channel.clone(), reporter.clone());
+        for &platform in &platforms {
+            pending.push(spawn_names_fetch(
+                gateway.clone(),
+                channel.clone(),
+                platform,
+                url.clone(),
+                reporter.clone(),
+                FetchErrorPolicy::Propagate,
+            ));
+        }
+    }
+
+    let policy = discovery_policy(&expander);
+    loop {
+        select_biased! {
+            result = pending.select_next_some() => {
+                let (url, platform, subdir, warning) = result?;
+                if let Some(warning) = warning {
+                    expander.push_warning(warning);
+                }
+                visit(&url, platform, subdir.as_ref());
+                for (url, channel, platform) in expander.observe(&url, platform, &subdir)? {
+                    walked.insert(url.clone(), channel.clone());
+                    notices.queue(&gateway, &url, channel.clone(), reporter.clone());
+                    pending.push(spawn_names_fetch(
+                        gateway.clone(),
+                        channel,
+                        platform,
+                        url,
+                        reporter.clone(),
+                        policy,
+                    ));
+                }
+            }
+
+            batch = notices.pending.select_next_some() => {
+                notices.collect(reporter.as_deref(), batch);
+            }
+
+            complete => {
+                break;
+            }
+        }
+    }
+
+    // Resolved even where no relation was declared: the order is then the one
+    // the caller gave. Finalizing also reports the depth and cycle problems met
+    // on the way, so it runs whether or not anything reads the order it produces.
+    let user_caller_idx: HashMap<ChannelUrl, usize> = user_order
+        .into_iter()
+        .enumerate()
+        .map(|(index, url)| (url, index))
+        .collect();
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    let order = expander.finalize_channel_order(&user_caller_idx)?.channels;
+    #[cfg(not(feature = "experimental-virtual-package-plugins"))]
+    expander.finalize_channel_order(&user_caller_idx)?;
+
+    Ok(ChannelWalk {
+        #[cfg(feature = "experimental-virtual-package-plugins")]
+        order,
+        #[cfg(feature = "experimental-virtual-package-plugins")]
+        channels: walked,
+        notices: notices.collected,
+        warnings: expander.take_warnings(),
+    })
 }
 
 type NamesFetchResult = Result<

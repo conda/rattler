@@ -35,9 +35,13 @@ use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 #[cfg(feature = "indicatif")]
 pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use query::SubdirVirtualPackagePlugins;
 pub use query::{NamesQuery, NamesQueryOutput, RepoDataQuery, RepoDataQueryOutput};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{Channel, ChannelRelations, MatchSpec, Platform, RepoDataRecord};
 use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
@@ -91,6 +95,19 @@ impl SubdirSelection {
             SubdirSelection::Some(subdirs) => subdirs.contains(&subdir.to_string()),
         }
     }
+}
+
+/// The channels a set of user-specified channels resolves to, in
+/// [CEP-42] priority order.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedChannels {
+    /// The channels the user named together with the ones their relations
+    /// brought in, highest priority first.
+    pub channels: Vec<Channel>,
+
+    /// Non-fatal problems met while following the relations.
+    pub warnings: Vec<GatewayWarning>,
 }
 
 /// Specifies what caches to clear.
@@ -227,6 +244,67 @@ impl Gateway {
             // for every platform except noarch; catch the noarch
             // error so `None` holds for all platforms.
             Err(GatewayError::SubdirNotFoundError(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolves `channels` into the [CEP-42] channel priority order,
+    /// following the relations the channels declare and discovering the
+    /// channels they name.
+    ///
+    /// Relation problems degrade the result rather than failing it, as in
+    /// [`ChannelRelationsMode::Warn`]
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub async fn resolved_channels(
+        &self,
+        channels: impl IntoIterator<Item = Channel>,
+        platforms: impl IntoIterator<Item = Platform>,
+    ) -> Result<ResolvedChannels, GatewayError> {
+        let walk = query::walk_channels(
+            query::ChannelWalkOptions {
+                gateway: self.inner.clone(),
+                channels: channels.into_iter().collect(),
+                platforms: platforms.into_iter().collect(),
+                mode: ChannelRelationsMode::default(),
+                max_depth: DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+                reporter: None,
+                collect_notices: false,
+            },
+            |_url, _platform, _subdir| {},
+        )
+        .await?;
+
+        Ok(ResolvedChannels {
+            channels: walk
+                .order
+                .iter()
+                .filter_map(|url| walk.channels.get(url).map(|channel| (**channel).clone()))
+                .collect(),
+            warnings: walk
+                .warnings
+                .into_iter()
+                .map(GatewayWarning::from)
+                .collect(),
+        })
+    }
+
+    /// Returns the virtual package detection plugins registered by the
+    /// given `(channel, platform)` subdirectory, keyed by the name of the
+    /// package providing the plugin. Empty if the subdirectory registers
+    /// none or doesn't exist.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub async fn virtual_package_plugins(
+        &self,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<VirtualPackagePlugins, GatewayError> {
+        match self
+            .inner
+            .get_or_create_subdir(channel, platform, None)
+            .await
+        {
+            Ok(subdir) => Ok(subdir.virtual_package_plugins().clone()),
+            Err(GatewayError::SubdirNotFoundError(_)) => Ok(VirtualPackagePlugins::default()),
             Err(err) => Err(err),
         }
     }
@@ -3005,6 +3083,383 @@ mod test {
         );
     }
 
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn write_test_subdir_with_plugins(root: &std::path::Path, pkg: &str, plugins: &str) {
+        let subdir = root.join("linux-64");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let json = format!(
+            r#"{{
+    "info": {{
+        "subdir": "linux-64",
+        "virtual_package_plugins": {{{plugins}}}
+    }},
+    "packages.conda": {{
+        "{pkg}-1.0.0-0.conda": {{
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "md5": "00000000000000000000000000000000",
+            "name": "{pkg}",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 1000,
+            "subdir": "linux-64",
+            "timestamp": 1700000000000,
+            "version": "1.0.0"
+        }}
+    }}
+}}"#
+        );
+        std::fs::write(subdir.join("repodata.json"), json).unwrap();
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    type FlatPlugins = Vec<(String, Platform, Vec<(String, Vec<String>)>)>;
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn flatten_plugins(output: &crate::RepoDataQueryOutput) -> FlatPlugins {
+        output
+            .virtual_package_plugins
+            .iter()
+            .map(|entry| {
+                (
+                    entry.channel.url().path().trim_matches('/').to_string(),
+                    entry.platform,
+                    entry
+                        .plugins
+                        .iter()
+                        .map(|(plugin, provided)| {
+                            (
+                                plugin.as_source().to_string(),
+                                provided.iter().map(|v| v.as_source().to_string()).collect(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_reported_per_subdir() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a");
+        write_test_subdir_with_plugins(&a, "shared", r#""cuda-detect": ["__cuda", "__cuda_arch"]"#);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            flatten_plugins(&output),
+            vec![(
+                "a".to_string(),
+                Platform::Linux64,
+                vec![(
+                    "cuda-detect".to_string(),
+                    vec!["__cuda".to_string(), "__cuda_arch".to_string()],
+                )],
+            )]
+        );
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_conflicting_channels_both_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""a-detect": ["__rocm"]"#,
+        );
+        write_test_subdir_with_plugins(
+            &dir.path().join("b"),
+            "shared",
+            r#""b-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let a = Channel::from_url(server.url().join("a/").unwrap());
+        let b = Channel::from_url(server.url().join("b/").unwrap());
+
+        let output = Gateway::new()
+            .query(
+                vec![a, b],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        let reported: Vec<String> = flatten_plugins(&output)
+            .into_iter()
+            .map(|(channel, _, plugins)| format!("{channel}:{}", plugins[0].0))
+            .collect();
+        assert_eq!(reported, vec!["a:a-detect", "b:b-detect"]);
+        assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_duplicate_claim_within_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""first-detect": ["__rocm"], "second-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        let plugins = flatten_plugins(&output);
+        assert_eq!(
+            plugins[0].2,
+            vec![
+                ("first-detect".to_string(), vec!["__rocm".to_string()]),
+                ("second-detect".to_string(), vec!["__rocm".to_string()]),
+            ]
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_resolved_order_agrees_with_a_query_over_two_user_channels() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("alpha"), "pkg-alpha", "1.0.0", None, None);
+        write_test_subdir(
+            &dir.path().join("beta"),
+            "pkg-beta",
+            "1.0.0",
+            Some("../shared"),
+            None,
+        );
+        write_test_subdir(
+            &dir.path().join("shared"),
+            "pkg-shared",
+            "1.0.0",
+            None,
+            None,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let alpha = Channel::from_url(server.url().join("alpha/").unwrap());
+        let beta = Channel::from_url(server.url().join("beta/").unwrap());
+
+        let gateway = Gateway::new();
+        let resolved = gateway
+            .resolved_channels(vec![alpha.clone(), beta.clone()], vec![Platform::Linux64])
+            .await
+            .unwrap();
+
+        // Each channel holds one uniquely named package, so a bucket's records
+        // name the channel it came from.
+        let buckets = gateway
+            .query(
+                vec![alpha, beta],
+                vec![Platform::Linux64],
+                vec![
+                    MatchSpec::from_str("pkg-alpha", Strict).unwrap(),
+                    MatchSpec::from_str("pkg-beta", Strict).unwrap(),
+                    MatchSpec::from_str("pkg-shared", Strict).unwrap(),
+                ],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+        let queried: Vec<String> = buckets
+            .repodata
+            .iter()
+            .filter_map(|repodata| {
+                repodata.iter().next().map(|record| {
+                    record
+                        .package_record
+                        .name
+                        .as_normalized()
+                        .trim_start_matches("pkg-")
+                        .to_string()
+                })
+            })
+            .collect();
+
+        assert_eq!(
+            resolved_names(&resolved),
+            queried,
+            "resolved_channels and query disagree on channel priority"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn resolved_names(resolved: &crate::ResolvedChannels) -> Vec<String> {
+        resolved
+            .channels
+            .iter()
+            .map(|channel| {
+                channel
+                    .base_url
+                    .url()
+                    .path_segments()
+                    .and_then(|mut segments| segments.rfind(|segment| !segment.is_empty()))
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_resolved_channels_follows_relations() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(
+            &dir.path().join("conda-forge"),
+            "shared",
+            "1.0.0",
+            None,
+            None,
+        );
+        write_test_subdir(
+            &dir.path().join("bioconda"),
+            "shared",
+            "2.0.0",
+            Some("../conda-forge"),
+            None,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let resolved = Gateway::new()
+            .resolved_channels(
+                vec![Channel::from_url(server.url().join("bioconda/").unwrap())],
+                vec![Platform::Linux64],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resolved_names(&resolved), ["conda-forge", "bioconda"]);
+        assert!(resolved.warnings.is_empty(), "{:?}", resolved.warnings);
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_resolved_channels_keep_the_user_order() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(
+            &dir.path().join("conda-forge"),
+            "shared",
+            "1.0.0",
+            None,
+            None,
+        );
+        write_test_subdir(
+            &dir.path().join("bioconda"),
+            "shared",
+            "2.0.0",
+            Some("../conda-forge"),
+            None,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let resolved = Gateway::new()
+            .resolved_channels(
+                vec![
+                    Channel::from_url(server.url().join("bioconda/").unwrap()),
+                    Channel::from_url(server.url().join("conda-forge/").unwrap()),
+                ],
+                vec![Platform::Linux64],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resolved_names(&resolved), ["bioconda", "conda-forge"]);
+        assert!(
+            resolved.warnings.iter().any(|warning| matches!(
+                warning,
+                crate::GatewayWarning::ChannelRelations(
+                    crate::ChannelRelationsWarning::UserOrderConflict { .. }
+                )
+            )),
+            "expected the dropped relation to be reported; got {:?}",
+            resolved.warnings,
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_reported_for_unmatched_spec() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            &dir.path().join("a"),
+            "shared",
+            r#""cuda-detect": ["__cuda"]"#,
+        );
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("no-such-package", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert!(
+            output.iter().all(RepoData::is_empty),
+            "the spec must not match any record"
+        );
+        assert_eq!(
+            flatten_plugins(&output),
+            vec![(
+                "a".to_string(),
+                Platform::Linux64,
+                vec![("cuda-detect".to_string(), vec!["__cuda".to_string()])],
+            )]
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_virtual_package_plugins_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        write_test_subdir(&dir.path().join("a"), "shared", "1.0.0", None, None);
+
+        let server = SimpleChannelServer::new(dir.path()).await;
+        let output = Gateway::new()
+            .query(
+                vec![Channel::from_url(server.url().join("a/").unwrap())],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("shared", Strict).unwrap()],
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .unwrap();
+
+        assert!(output.virtual_package_plugins.is_empty());
+    }
+
     /// Repodata with CEP-42 `channel_relations` in `info`.
     fn make_repodata_with_relations(
         name: &str,
@@ -3125,6 +3580,81 @@ mod test {
                 .await
                 .unwrap_or_else(|e| panic!("{platform} must return None, not error: {e}"));
             assert!(relations.is_none());
+        }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_roundtrip() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            channel_dir.path(),
+            "testpkg",
+            r#""cuda-detect": ["__cuda", "__cuda_arch"], "rocm-detect": ["__rocm"]"#,
+        );
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let plugins = Gateway::new()
+            .virtual_package_plugins(&server.channel(), Platform::Linux64)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            plugins
+                .iter()
+                .map(|(plugin, provided)| (
+                    plugin.as_source(),
+                    provided
+                        .iter()
+                        .map(PackageName::as_source)
+                        .collect::<Vec<_>>()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("cuda-detect", vec!["__cuda", "__cuda_arch"]),
+                ("rocm-detect", vec!["__rocm"]),
+            ]
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_absent() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+        std::fs::write(
+            subdir_path.join("repodata.json"),
+            make_repodata("testpkg", "1.0.0"),
+        )
+        .unwrap();
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let plugins = Gateway::new()
+            .virtual_package_plugins(&server.channel(), Platform::Linux64)
+            .await
+            .unwrap();
+        assert!(plugins.is_empty());
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[tokio::test]
+    async fn test_gateway_virtual_package_plugins_missing_subdir() {
+        let channel_dir = tempfile::tempdir().unwrap();
+        write_test_subdir_with_plugins(
+            channel_dir.path(),
+            "testpkg",
+            r#""cuda-detect": ["__cuda"]"#,
+        );
+
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let gateway = Gateway::new();
+        for platform in [Platform::Osx64, Platform::NoArch] {
+            let plugins = gateway
+                .virtual_package_plugins(&server.channel(), platform)
+                .await
+                .unwrap_or_else(|e| panic!("{platform} must return empty, not error: {e}"));
+            assert!(plugins.is_empty(), "{platform} declared none");
         }
     }
 

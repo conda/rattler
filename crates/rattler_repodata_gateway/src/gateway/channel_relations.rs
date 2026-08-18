@@ -23,7 +23,7 @@ pub const DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH: usize = 10;
 
 /// Where a [`PriorityEdge`] originated from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum EdgeSource {
+pub(super) enum EdgeSource {
     /// Implied by the user's channel ordering.
     User,
     /// Declared via the `to` channel's `base`.
@@ -34,34 +34,34 @@ pub enum EdgeSource {
 
 /// Directed priority edge: `from` outranks `to`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PriorityEdge<K> {
-    pub from: K,
-    pub to: K,
-    pub source: EdgeSource,
+pub(super) struct PriorityEdge<K> {
+    pub(super) from: K,
+    pub(super) to: K,
+    pub(super) source: EdgeSource,
 }
 
 /// Outcome of a channel priority resolution. Always succeeds; the
 /// caller surfaces `ignored_edges` / `broken_cycle_edges` as warnings
 /// or errors per its mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Resolution<K> {
+pub(super) struct Resolution<K> {
     /// Final priority order, highest first.
-    pub order: Vec<K>,
+    pub(super) order: Vec<K>,
     /// Edges respected by `order`.
-    pub edges: Vec<PriorityEdge<K>>,
+    pub(super) edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped because they contradicted the user's
     /// explicit ordering. Surfaced by the expander as
     /// `UserOrderConflict` warnings.
-    pub ignored_edges: Vec<PriorityEdge<K>>,
+    pub(super) ignored_edges: Vec<PriorityEdge<K>>,
     /// Relation edges dropped to break a cycle.
-    pub broken_cycle_edges: Vec<PriorityEdge<K>>,
+    pub(super) broken_cycle_edges: Vec<PriorityEdge<K>>,
 }
 
 /// Resolve the priority order over `discovered_channels` from the
 /// user's channel order plus the deduplicated relation edges. The
 /// output is fully determined by the inputs; callers needing
 /// run-to-run determinism must pass canonically ordered slices.
-pub fn resolve_channel_priority<K>(
+pub(super) fn resolve_channel_priority<K>(
     user_channels: &[K],
     discovered_channels: &[K],
     relation_edges: &[PriorityEdge<K>],
@@ -627,11 +627,6 @@ mod tests {
         assert_eq!(dropped.to, "b");
     }
 
-    /// A self-loop on a user-listed channel is no longer routed to
-    /// `ignored_edges` via the user-conflict check; self-relations
-    /// are malformed metadata. The algorithm reports them via
-    /// `broken_cycle_edges`; the caller (the expander) translates
-    /// that into a warning/error per its mode.
     #[test]
     fn self_loop_on_a_user_channel_is_treated_as_a_cycle() {
         let reg = registry([("a", Some("a"), None)]);
@@ -743,9 +738,6 @@ mod tests {
         assert!(sources.contains(&EdgeSource::Override));
     }
 
-    /// Two platforms of the same channel declaring DIFFERENT bases is
-    /// valid per CEP-42. Both edges must be respected in the final
-    /// order, with neither silently dropped.
     #[test]
     fn divergent_per_platform_relations_are_both_respected() {
         // Channel `app` has base `cf-linux` (one platform) and base
@@ -772,9 +764,6 @@ mod tests {
         assert!(r.broken_cycle_edges.is_empty());
     }
 
-    /// Exact duplicate relation edges (same from/to/source) must not
-    /// produce a cycle on their own; they're redundant, not
-    /// contradictory.
     #[test]
     fn exact_duplicate_relation_edges_are_not_cycles() {
         let user = ["app"];

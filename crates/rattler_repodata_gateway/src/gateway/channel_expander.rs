@@ -187,7 +187,7 @@ pub(super) struct ChannelExpander {
 }
 
 impl ChannelExpander {
-    pub fn new(
+    pub(super) fn new(
         mode: ChannelRelationsMode,
         max_depth: usize,
         platforms: Vec<Platform>,
@@ -209,26 +209,26 @@ impl ChannelExpander {
     }
 
     /// `max_depth == 0` is equivalent to [`ChannelRelationsMode::Disabled`].
-    pub fn enabled(&self) -> bool {
+    pub(super) fn enabled(&self) -> bool {
         !matches!(self.mode, ChannelRelationsMode::Disabled) && self.max_depth > 0
     }
 
-    pub fn strict(&self) -> bool {
+    pub(super) fn strict(&self) -> bool {
         matches!(self.mode, ChannelRelationsMode::Strict)
     }
 
-    pub fn platforms(&self) -> &[Platform] {
+    pub(super) fn platforms(&self) -> &[Platform] {
         &self.platforms
     }
 
     /// `true` once any subdir contributed an edge; gates reordering.
-    pub fn has_observed_relations(&self) -> bool {
+    pub(super) fn has_observed_relations(&self) -> bool {
         !self.edges.is_empty()
     }
 
     /// Record a warning unless an identical one exists, notifying the
     /// reporter on acceptance.
-    pub fn push_warning(&mut self, warning: ChannelRelationsWarning) {
+    pub(super) fn push_warning(&mut self, warning: ChannelRelationsWarning) {
         if self.emitted.insert(warning.to_string()) {
             if let Some(reporter) = &self.reporter {
                 reporter.on_gateway_warning(&GatewayWarning::from(warning.clone()));
@@ -250,12 +250,12 @@ impl ChannelExpander {
     }
 
     /// Drain the accumulated warnings.
-    pub fn take_warnings(&mut self) -> Vec<ChannelRelationsWarning> {
+    pub(super) fn take_warnings(&mut self) -> Vec<ChannelRelationsWarning> {
         std::mem::take(&mut self.warnings)
     }
 
     /// Register a user channel at depth 0, deduplicating repeats.
-    pub fn register_user_channel(&mut self, channel: Channel) -> (ChannelUrl, Arc<Channel>) {
+    pub(super) fn register_user_channel(&mut self, channel: Channel) -> (ChannelUrl, Arc<Channel>) {
         let url = channel.base_url.clone();
         if let Some(existing) = self.discovered.get(&url) {
             return (url, existing.clone());
@@ -274,7 +274,7 @@ impl ChannelExpander {
     /// the executor can abort. Depth violations are deferred to
     /// [`finalize`](Self::finalize), where they no longer depend on
     /// fetch completion order.
-    pub fn observe(
+    pub(super) fn observe(
         &mut self,
         channel_url: &ChannelUrl,
         _platform: Platform,
@@ -454,7 +454,7 @@ impl ChannelExpander {
     /// Report deferred depth refusals, resolve the priority order from
     /// canonically sorted inputs (identical run to run), and surface
     /// ignored and broken edges.
-    pub fn finalize(&mut self) -> Result<Resolution<ChannelUrl>, super::GatewayError> {
+    fn finalize(&mut self) -> Result<Resolution<ChannelUrl>, super::GatewayError> {
         self.report_depth_refusals()?;
 
         let mut nodes = self.user_channels.clone();
@@ -565,7 +565,7 @@ impl ChannelExpander {
     /// Map each discovered channel to the first user channel in
     /// `user_priority` that reaches it. Derived from the final edge
     /// set, so independent of fetch completion order.
-    pub fn anchors(&self, user_priority: &[ChannelUrl]) -> HashMap<ChannelUrl, ChannelUrl> {
+    fn anchors(&self, user_priority: &[ChannelUrl]) -> HashMap<ChannelUrl, ChannelUrl> {
         // Discovery arcs run declaring -> target: a Base edge stores
         // (from: target, to: declaring), an Override edge stores
         // (from: declaring, to: target).
@@ -601,6 +601,110 @@ impl ChannelExpander {
         }
         anchors
     }
+
+    /// The rank of every channel this walk reached.
+    ///
+    /// `user_caller_idx` maps every channel the caller named to the slot it
+    /// occupied in the caller's source list. Those indices can skip values,
+    /// because a caller may pass custom sources alongside its channels.
+    fn channel_ranks(
+        &self,
+        resolution_order: &[ChannelUrl],
+        user_caller_idx: &HashMap<ChannelUrl, usize>,
+    ) -> HashMap<ChannelUrl, ChannelRank> {
+        let priority_of: HashMap<&ChannelUrl, usize> = resolution_order
+            .iter()
+            .enumerate()
+            .map(|(index, url)| (url, index))
+            .collect();
+
+        // Anchoring reads the final edge set rather than the order fetches
+        // completed in, and it needs the caller's channels in the caller's own
+        // order to decide which of them claims a discovered channel.
+        let mut by_caller_idx: Vec<(usize, ChannelUrl)> = user_caller_idx
+            .iter()
+            .map(|(url, index)| (*index, url.clone()))
+            .collect();
+        by_caller_idx.sort();
+        let user_priority: Vec<ChannelUrl> =
+            by_caller_idx.into_iter().map(|(_, url)| url).collect();
+        let anchor_of = self.anchors(&user_priority);
+
+        resolution_order
+            .iter()
+            .chain(user_priority.iter())
+            .map(|url| {
+                let anchor = user_caller_idx
+                    .get(url)
+                    .copied()
+                    .or_else(|| {
+                        anchor_of
+                            .get(url)
+                            .and_then(|introducer| user_caller_idx.get(introducer).copied())
+                    })
+                    .unwrap_or(usize::MAX);
+                let priority = priority_of.get(url).copied().unwrap_or(usize::MAX);
+                (url.clone(), ChannelRank { anchor, priority })
+            })
+            .collect()
+    }
+
+    /// Resolve this walk into the channel priority order the gateway applies.
+    ///
+    /// Resolving is also what reports the depth and cycle problems met on the
+    /// way, so this runs whether or not the caller reads the order it returns.
+    pub(super) fn finalize_channel_order(
+        &mut self,
+        user_caller_idx: &HashMap<ChannelUrl, usize>,
+    ) -> Result<ChannelOrder, super::GatewayError> {
+        let resolution = self.finalize()?;
+        let ranks = self.channel_ranks(&resolution.order, user_caller_idx);
+
+        #[cfg(feature = "experimental-virtual-package-plugins")]
+        let channels = {
+            let mut channels = resolution.order;
+            channels.sort_by_key(|url| {
+                ranks.get(url).copied().unwrap_or(ChannelRank {
+                    anchor: usize::MAX,
+                    priority: usize::MAX,
+                })
+            });
+            channels
+        };
+
+        Ok(ChannelOrder {
+            #[cfg(feature = "experimental-virtual-package-plugins")]
+            channels,
+            ranks,
+        })
+    }
+}
+
+/// The channels a walk reached, in the priority order the gateway applies.
+pub(super) struct ChannelOrder {
+    /// Every channel the walk reached, highest priority first.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub(super) channels: Vec<ChannelUrl>,
+
+    /// The rank each channel sits at, for a caller sorting something richer
+    /// than a channel list: the repodata query sorts subdir handles by it.
+    pub(super) ranks: HashMap<ChannelUrl, ChannelRank>,
+}
+
+/// Where one channel sits in the channel priority order the gateway applies.
+///
+/// Ordered so that sorting by it *is* the channel priority order: the caller
+/// slot first, then CEP-42 priority inside that slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ChannelRank {
+    /// The caller slot this channel belongs to. A channel the caller named
+    /// keeps its own slot; a channel found through a relation inherits the slot
+    /// of the user channel that introduced it.
+    pub(super) anchor: usize,
+
+    /// CEP-42 priority, which orders the channels sharing one slot and places
+    /// a base ahead of the channel declaring it.
+    pub(super) priority: usize,
 }
 
 fn field_name(source: EdgeSource) -> &'static str {
