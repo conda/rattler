@@ -440,7 +440,8 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 
     // Scan forward for the group that closes at the end of the input,
     // ignoring brackets inside quoted values: a `]` in `fn='a]b'` is content,
-    // and counting it would mis-slice the section or reject it as unbalanced.
+    // and counting it would slice the section wrong or reject it as
+    // unbalanced.
     let mut depth = 0usize;
     let mut open = None;
     let mut quote = None;
@@ -2018,7 +2019,7 @@ mod tests {
         };
         let rendered = spec.to_string();
         let reparsed = MatchSpec::from_str(&rendered, Strict)
-            .unwrap_or_else(|e| panic!("Display output {rendered:?} unparseable: {e}"));
+            .unwrap_or_else(|e| panic!("Display output {rendered:?} unparsable: {e}"));
         assert_eq!(reparsed.file_name.as_deref(), Some(r"a\b"));
 
         // Quote value: whenever the rendered form parses, the value must
