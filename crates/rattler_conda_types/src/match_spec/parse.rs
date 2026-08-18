@@ -1998,6 +1998,43 @@ mod tests {
         }
     }
 
+    /// Regression guard for legacy `Display` scalar quoting.
+    ///
+    /// The parser stores quoted scalar bracket values (`fn`, `license`,
+    /// `subdir`, `namespace`, `license_family`) with escape sequences in
+    /// place; it only unescapes `when=` and `flags=`. Legacy `Display` must
+    /// therefore emit values verbatim inside a delimiter that keeps them
+    /// intact, never escaped: escaping a backslash-containing value made it
+    /// reparse with doubled backslashes, and escaping a quote-containing
+    /// value made it silently reparse to a different value.
+    #[test]
+    fn test_display_scalar_quoting_roundtrips() {
+        // Baseline fact about the parser: escapes are kept verbatim.
+        let parsed = MatchSpec::from_str(r#"python[fn="a\b"]"#, Strict).unwrap();
+        assert_eq!(parsed.file_name.as_deref(), Some(r"a\b"));
+
+        // Backslash value: Display -> parse must give back the same file_name.
+        let spec = MatchSpec {
+            file_name: Some(r"a\b".to_string()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let rendered = spec.to_string();
+        let reparsed = MatchSpec::from_str(&rendered, Strict)
+            .unwrap_or_else(|e| panic!("Display output {rendered:?} unparseable: {e}"));
+        assert_eq!(reparsed.file_name.as_deref(), Some(r"a\b"));
+
+        // Quote value: whenever the rendered form parses, the value must
+        // survive.
+        let spec = MatchSpec {
+            file_name: Some(r#"qu"ote"#.to_string()),
+            ..MatchSpec::from_str("python", Strict).unwrap()
+        };
+        let rendered = spec.to_string();
+        if let Ok(reparsed) = MatchSpec::from_str(&rendered, Strict) {
+            assert_eq!(reparsed.file_name.as_deref(), Some(r#"qu"ote"#));
+        }
+    }
+
     #[test]
     fn test_pixi_issue_3922() {
         let match_spec = MatchSpec::from_str(
