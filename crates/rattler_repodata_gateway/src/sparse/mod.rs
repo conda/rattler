@@ -14,6 +14,8 @@ use std::{
 
 use bytes::Bytes;
 use itertools::Itertools;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use rattler_conda_types::VirtualPackagePlugins;
 use rattler_conda_types::{
     Channel, ChannelInfo, ChannelRelations, MatchSpec, Matches, PackageName, PackageRecord,
     RepoDataRecord, RepodataRevisions, UrlOrPath, WhlPackageRecord, compute_package_url,
@@ -34,6 +36,14 @@ use thiserror::Error;
 /// Shared empty revisions, returned by accessors when none are advertised.
 pub(crate) fn empty_repodata_revisions() -> &'static RepodataRevisions {
     static EMPTY: LazyLock<RepodataRevisions> = LazyLock::new(RepodataRevisions::new);
+    &EMPTY
+}
+
+/// Shared empty plugin registrations, returned by accessors when a subdir
+/// registers none.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub(crate) fn empty_virtual_package_plugins() -> &'static VirtualPackagePlugins {
+    static EMPTY: LazyLock<VirtualPackagePlugins> = LazyLock::new(VirtualPackagePlugins::new);
     &EMPTY
 }
 
@@ -537,6 +547,16 @@ impl SparseRepoData {
             .as_ref()?
             .channel_relations
             .as_ref()
+    }
+
+    /// Virtual package detection plugins registered in
+    /// `info.virtual_package_plugins`.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    pub fn virtual_package_plugins(&self) -> &VirtualPackagePlugins {
+        match &self.inner.borrow_repo_data().info {
+            Some(info) => &info.virtual_package_plugins,
+            None => empty_virtual_package_plugins(),
+        }
     }
 }
 
