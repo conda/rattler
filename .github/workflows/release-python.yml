@@ -135,6 +135,9 @@ jobs:
 
   linux-cross:
     runs-on: ubuntu-latest
+    # The QEMU test step normally runs in a couple of minutes; anything much
+    # longer is a hang, not slow progress.
+    timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
@@ -181,6 +184,7 @@ jobs:
 
   linux-cross-native-tls:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
@@ -207,8 +211,11 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
+      # Skipped for both PowerPC targets: the emulated container hangs in
+      # apt-get while installing Python. uv dropped the same step for the
+      # same reason in astral-sh/uv#11229 and has never restored it.
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
+        if: ${{ !startsWith(matrix.platform.arch, 'ppc64') }}
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
@@ -278,6 +285,7 @@ jobs:
 
   musllinux-cross:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
