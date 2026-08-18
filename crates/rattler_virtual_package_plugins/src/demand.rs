@@ -80,6 +80,7 @@ mod tests {
                 "conda-forge::__cuda >=12",
                 "__archspec 1 zen5",
                 "__cuda_arch[version='>=8.0']",
+                "__vendor_gpu=1.2.3=0",
             ]),
             [
                 "__archspec",
@@ -89,6 +90,7 @@ mod tests {
                 "__osx",
                 "__rocm",
                 "__unix",
+                "__vendor_gpu",
             ]
         );
     }

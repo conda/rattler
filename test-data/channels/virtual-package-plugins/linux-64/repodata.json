@@ -1,0 +1,36 @@
+{
+  "info": {
+    "subdir": "linux-64",
+    "base_url": "../linux-64",
+    "virtual_package_plugins": {
+      "foobar-detect": [
+        "__foobar",
+        "__foobar_arch"
+      ],
+      "rocm-detect": [
+        "__rocm"
+      ],
+      "change-me-detect": [
+        "__change_me"
+      ]
+    }
+  },
+  "packages.conda": {
+    "accelerated-1.0.0-h0000000_0.conda": {
+      "build": "h0000000_0",
+      "build_number": 0,
+      "depends": [
+        "__rocm >=6.0"
+      ],
+      "license": "BSD-3-Clause",
+      "md5": "00000000000000000000000000000000",
+      "name": "accelerated",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 1000,
+      "subdir": "linux-64",
+      "timestamp": 1700000000000,
+      "version": "1.0.0"
+    }
+  },
+  "repodata_version": 2
+}
