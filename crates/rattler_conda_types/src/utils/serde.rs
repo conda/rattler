@@ -229,6 +229,447 @@ impl Serialize for TimestampMs {
 /// string.
 pub struct DeserializeFromStrUnchecked;
 
+/// A helper struct to deserialize virtual package plugin registrations,
+/// validating every name and skipping the ones a channel got wrong.
+///
+/// A registration whose plugin name is invalid is dropped entirely; an invalid
+/// virtual package name is dropped from the plugin that claimed it. Each is
+/// reported as a warning. A malformed name is a mistake by one channel, so it
+/// must not fail the surrounding repodata, but it must not be handed on to a
+/// consumer that would resolve it to an executable either.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub struct DeserializeVirtualPackagePlugins;
+
+#[cfg(feature = "experimental-virtual-package-plugins")]
+impl<'de> DeserializeAs<'de, crate::repo_data::VirtualPackagePlugins>
+    for DeserializeVirtualPackagePlugins
+{
+    fn deserialize_as<D>(
+        deserializer: D,
+    ) -> Result<crate::repo_data::VirtualPackagePlugins, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Read the entries as a sequence of pairs rather than a map: a map
+        // resolves a repeated key last-wins, which would hide a collision the
+        // CEP makes an error. A value that is not a map at all -- an explicit
+        // null, a list, a string -- is itself an error, so it is accepted here
+        // and reported below rather than failing the surrounding repodata.
+        struct Entries;
+        impl<'de> serde::de::Visitor<'de> for Entries {
+            type Value = Option<Vec<(MaybeName, MaybeArray)>>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a map of plugin names to virtual package names")
+            }
+
+            // The key is read leniently too: JSON keys are always strings,
+            // but the shard index is msgpack, whose maps can carry keys of
+            // any type. A typed key would fail the surrounding document.
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+                while let Some(entry) = map.next_entry::<MaybeName, MaybeArray>()? {
+                    entries.push(entry);
+                }
+                Ok(Some(entries))
+            }
+
+            fn visit_newtype_struct<D: Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<Self::Value, D::Error> {
+                serde::de::IgnoredAny::deserialize(d)?;
+                Ok(None)
+            }
+
+            // Anything that is not a map is reported by the caller, so every
+            // other shape a self-describing format can hand us resolves to
+            // "not a map" instead of failing the surrounding document.
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+                d.deserialize_any(self)
+            }
+            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_bytes<E: serde::de::Error>(self, _: &[u8]) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                Ok(None)
+            }
+        }
+
+        let Some(raw) = deserializer.deserialize_any(Entries)? else {
+            tracing::warn!(
+                "ignoring info.virtual_package_plugins: it is not a map of plugin registrations"
+            );
+            return Ok(crate::repo_data::VirtualPackagePlugins::default());
+        };
+
+        // A channel that contradicted itself has not established what it meant,
+        // so the whole set goes rather than the offending entry.
+        match registrations_from(raw) {
+            Ok(registrations) => Ok(registrations),
+            Err(reason) => {
+                tracing::warn!("ignoring info.virtual_package_plugins entirely: {reason}");
+                Ok(crate::repo_data::VirtualPackagePlugins::default())
+            }
+        }
+    }
+}
+
+/// Builds the registrations, or names the contradiction that makes the whole
+/// set unusable. Returning the reason rather than a value lets the caller report
+/// it and fall back to no registrations, which is what the CEP asks for: the
+/// section is ignored, the rest of the repodata is not.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn registrations_from(
+    raw: Vec<(MaybeName, MaybeArray)>,
+) -> Result<crate::repo_data::VirtualPackagePlugins, String> {
+    let mut registrations = crate::repo_data::VirtualPackagePlugins::default();
+    let mut registered_plugins = std::collections::HashSet::new();
+    let mut claimed = std::collections::HashSet::new();
+
+    for (plugin, provides) in raw {
+        let MaybeName::Name(plugin) = plugin else {
+            return Err("a plugin key is not a string".to_string());
+        };
+        let plugin = validated_plugin_name(plugin)?;
+        if !registered_plugins.insert(plugin.clone()) {
+            return Err(format!(
+                "the channel registers the plugin package '{}' more than once",
+                plugin.as_source()
+            ));
+        }
+
+        let MaybeArray::Array(provides) = provides else {
+            return Err(format!(
+                "the registration of plugin '{}' is not an array of virtual package names",
+                plugin.as_source()
+            ));
+        };
+
+        // Counted over what the plugin declares, before invalid names are
+        // dropped, so that ignoring a malformed name cannot turn a plugin that
+        // declared too many into one that looks acceptable.
+        if provides.is_empty() || provides.len() > MAX_VIRTUAL_PACKAGES_PER_PLUGIN {
+            return Err(format!(
+                "plugin '{}' registers {} virtual packages, outside the 1 to {} a plugin may \
+                 register",
+                plugin.as_source(),
+                provides.len(),
+                MAX_VIRTUAL_PACKAGES_PER_PLUGIN
+            ));
+        }
+
+        let provides: Vec<_> = provides
+            .into_iter()
+            .filter_map(|name| match name {
+                MaybeName::Name(name) => validated_virtual_package_name(name),
+                MaybeName::NotAName => {
+                    tracing::warn!(
+                        "ignoring a registered virtual package of plugin '{}': it is not a name \
+                         at all",
+                        plugin.as_source()
+                    );
+                    None
+                }
+            })
+            .collect();
+        for name in &provides {
+            if !claimed.insert(name.clone()) {
+                return Err(format!(
+                    "the virtual package '{}' is registered more than once",
+                    name.as_source()
+                ));
+            }
+        }
+
+        // Every name it declared was invalid and dropped above. The plugin
+        // speaks for nothing, which is ignored rather than fatal: the channel's
+        // mistake is in the names, which are ignored one at a time.
+        if provides.is_empty() {
+            tracing::warn!(
+                "ignoring plugin '{}': it registers no valid virtual package",
+                plugin.as_source()
+            );
+            continue;
+        }
+
+        registrations.insert(plugin, provides);
+    }
+    Ok(registrations)
+}
+
+/// The value of one registration entry. A channel that put something other
+/// than an array there has not written a map of registrations, which the CEP
+/// makes an error: the section is ignored as a whole, but the surrounding
+/// repodata must survive, so any shape is accepted here and rejected later.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+enum MaybeArray {
+    Array(Vec<MaybeName>),
+    NotAnArray,
+}
+
+#[cfg(feature = "experimental-virtual-package-plugins")]
+impl<'de> Deserialize<'de> for MaybeArray {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // A hand-written visitor rather than an untagged enum: untagged
+        // buffers the value through serde's recursive `Content` tree, which a
+        // deeply nested value blows through, failing the surrounding document.
+        // `IgnoredAny` drains junk without buffering it.
+        struct ArrayVisitor;
+        impl<'de> serde::de::Visitor<'de> for ArrayVisitor {
+            type Value = MaybeArray;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an array of virtual package names")
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut names = Vec::new();
+                while let Some(name) = seq.next_element::<MaybeName>()? {
+                    names.push(name);
+                }
+                Ok(MaybeArray::Array(names))
+            }
+
+            fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+                d.deserialize_any(self)
+            }
+            fn visit_newtype_struct<D: Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<Self::Value, D::Error> {
+                serde::de::IgnoredAny::deserialize(d)?;
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                while map
+                    .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                    .is_some()
+                {}
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+            fn visit_bytes<E: serde::de::Error>(self, _: &[u8]) -> Result<Self::Value, E> {
+                Ok(MaybeArray::NotAnArray)
+            }
+        }
+        deserializer.deserialize_any(ArrayVisitor)
+    }
+}
+
+/// One element of a registration array. A channel that put something other than
+/// a string there has published a name that cannot be a package name, and the
+/// CEP requires such a value to be discarded rather than to invalidate the
+/// surrounding repodata, so the element is accepted and dropped later.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+enum MaybeName {
+    Name(String),
+    NotAName,
+}
+
+#[cfg(feature = "experimental-virtual-package-plugins")]
+impl<'de> Deserialize<'de> for MaybeName {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // A hand-written visitor for the same reason as `MaybeArray`'s, and
+        // for one more: an untagged enum would accept binary data whose bytes
+        // happen to be UTF-8 as a name, but a name is a string, not bytes.
+        struct NameVisitor;
+        impl<'de> serde::de::Visitor<'de> for NameVisitor {
+            type Value = MaybeName;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a virtual package name")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, name: &str) -> Result<Self::Value, E> {
+                Ok(MaybeName::Name(name.to_string()))
+            }
+            fn visit_string<E: serde::de::Error>(self, name: String) -> Result<Self::Value, E> {
+                Ok(MaybeName::Name(name))
+            }
+
+            fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+                d.deserialize_any(self)
+            }
+            fn visit_newtype_struct<D: Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<Self::Value, D::Error> {
+                serde::de::IgnoredAny::deserialize(d)?;
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                while map
+                    .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                    .is_some()
+                {}
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+            fn visit_bytes<E: serde::de::Error>(self, _: &[u8]) -> Result<Self::Value, E> {
+                Ok(MaybeName::NotAName)
+            }
+        }
+        deserializer.deserialize_any(NameVisitor)
+    }
+}
+
+/// The longest name CEP 26 allows, for a package or a virtual package.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+const MAX_NAME_LENGTH: usize = 64;
+
+/// The most virtual packages CEP XXXX lets one plugin register, which bounds
+/// how much a single plugin can feed into a solve.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+const MAX_VIRTUAL_PACKAGES_PER_PLUGIN: usize = 16;
+
+/// The distributable package name rule of CEP 26. `fancy_regex` is used
+/// because the pattern needs the negative lookahead that keeps a leading
+/// underscore from being followed by another.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+static PACKAGE_NAME: std::sync::LazyLock<fancy_regex::Regex> = std::sync::LazyLock::new(|| {
+    #[allow(clippy::expect_used, reason = "the pattern is a literal from CEP 26")]
+    fancy_regex::Regex::new(r"(?i)^(([a-z0-9])|([a-z0-9_](?!_)))[._-]?([a-z0-9]+(\.|-|_|$))*$")
+        .expect("the CEP 26 package name pattern is valid")
+});
+
+/// The virtual package name rule of CEP 26.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+static VIRTUAL_PACKAGE_NAME: std::sync::LazyLock<fancy_regex::Regex> =
+    std::sync::LazyLock::new(|| {
+        #[allow(clippy::expect_used, reason = "the pattern is a literal from CEP 26")]
+        fancy_regex::Regex::new(r"^__[a-z0-9][._-]?([a-z0-9]+(\.|-|_|$))*$")
+            .expect("the CEP 26 virtual package name pattern is valid")
+    });
+
+/// Whether a name a channel published satisfies one of the CEP 26 patterns.
+///
+/// Matched against the spelling the channel published, not the normalized form.
+/// Normalizing first would lowercase the name and so accept an uppercase
+/// virtual package name, which CEP 26 does not allow: it states the virtual
+/// pattern in lowercase and, unlike the distributable one, does not call it
+/// case-insensitive. The distributable pattern carries its own `(?i)`, so a
+/// mixed-case plugin key still passes.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn matches(pattern: &fancy_regex::Regex, name: &crate::PackageName) -> bool {
+    let name = name.as_source();
+    name.len() <= MAX_NAME_LENGTH && pattern.is_match(name).unwrap_or(false)
+}
+
+/// Validates the name of the package providing a plugin. The key names the
+/// package a client installs and the executable it then runs, so a key that is
+/// not a package name has not said what the channel meant. A virtual package
+/// name is rejected with it: nothing serves a virtual package, and the CEP 26
+/// package name rule already excludes the `__` prefix.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn validated_plugin_name(name: String) -> Result<crate::PackageName, String> {
+    let source = name.clone();
+    let name = crate::PackageName::try_from(name)
+        .map_err(|err| format!("'{source}' is not a package name: {err}"))?;
+    if !matches(&PACKAGE_NAME, &name) {
+        return Err(format!("'{}' is not a package name", name.as_source()));
+    }
+    Ok(name)
+}
+
+/// Validates a name a plugin claims to provide, which CEP 26 requires to be a
+/// package name carrying the `__` prefix.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn validated_virtual_package_name(name: String) -> Option<crate::PackageName> {
+    let name = crate::PackageName::try_from(name)
+        .inspect_err(|err| tracing::warn!("ignoring registered virtual package name: {err}"))
+        .ok()?;
+    if !matches(&VIRTUAL_PACKAGE_NAME, &name) {
+        tracing::warn!(
+            "ignoring registered virtual package '{}': it is not a virtual package name",
+            name.as_source()
+        );
+        return None;
+    }
+    Some(name)
+}
+
 /// A helper function used to sort map alphabetically when serializing.
 pub(crate) fn sort_map_alphabetically<K: Ord + Serialize, T: Serialize, H, S: serde::Serializer>(
     value: &HashMap<K, T, H>,

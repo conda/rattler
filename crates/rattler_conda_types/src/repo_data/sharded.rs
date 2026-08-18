@@ -2,7 +2,11 @@
 
 use crate::PackageRecord;
 use crate::package::DistArchiveIdentifier;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::repo_data::VirtualPackagePlugins;
 use crate::repo_data::{ChannelRelations, RepodataRevisions, V3Packages};
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::utils::serde::DeserializeVirtualPackagePlugins;
 use crate::utils::serde::{sort_index_map_alphabetically, sort_set_alphabetically};
 use indexmap::IndexMap;
 use jiff::Timestamp;
@@ -60,6 +64,12 @@ pub struct ShardedSubdirInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// Virtual package detection plugins registered by the channel.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[serde_as(deserialize_as = "DeserializeVirtualPackagePlugins")]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub virtual_package_plugins: VirtualPackagePlugins,
 }
 
 #[cfg(test)]
@@ -121,6 +131,8 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations: None,
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             },
             shards: ahash::HashMap::default(),
         };
@@ -160,10 +172,193 @@ mod tests {
                 created_at: None,
                 repodata_revisions: IndexMap::default(),
                 channel_relations,
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             };
             let json = serde_json::to_string(&info).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_normalizes_plugin_names() {
+        let raw = r#"{
+            "subdir": "linux-64",
+            "base_url": "./",
+            "shards_base_url": "./shards/",
+            "virtual_package_plugins": { "CUDA-Detect": ["__cuda"] }
+        }"#;
+        let info: ShardedSubdirInfo = serde_json::from_str(raw).unwrap();
+        let plugin = PackageName::try_from("cuda-detect").unwrap();
+        assert!(
+            info.virtual_package_plugins.contains_key(&plugin),
+            "a sharded registration is unreachable by its normalized name"
+        );
+        assert!(
+            info.virtual_package_plugins[&plugin]
+                .contains(&PackageName::try_from("__cuda").unwrap()),
+            "a provided virtual package never matches the detected name"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_virtual_package_plugins() {
+        let raw = r#"{
+            "subdir": "linux-64",
+            "base_url": "./",
+            "shards_base_url": "./shards/",
+            "virtual_package_plugins": {
+                "cuda-detect": ["__cuda", "__cuda_arch"]
+            }
+        }"#;
+        let info: ShardedSubdirInfo = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            info.virtual_package_plugins[&PackageName::new_unchecked("cuda-detect")]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda", "__cuda_arch"]
+        );
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"virtual_package_plugins\""));
+
+        // Omitted entirely when no plugins are registered.
+        let info = ShardedSubdirInfo {
+            virtual_package_plugins: VirtualPackagePlugins::default(),
+            ..info
+        };
+        assert!(
+            !serde_json::to_string(&info)
+                .unwrap()
+                .contains("virtual_package_plugins")
+        );
+    }
+
+    /// A msgpack `ShardedSubdirInfo` document with the given already-encoded
+    /// msgpack bytes as the value of `virtual_package_plugins`. msgpack can
+    /// express shapes JSON cannot (binary data, non-string keys, invalid
+    /// UTF-8, ext types), and the shard index is remote data, so those shapes
+    /// are reachable in production.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    fn msgpack_info_with_plugins_section(section: &[u8]) -> Vec<u8> {
+        let fixstr = |out: &mut Vec<u8>, text: &str| {
+            out.push(0xa0 | u8::try_from(text.len()).unwrap());
+            out.extend_from_slice(text.as_bytes());
+        };
+        let mut out = vec![0x84];
+        fixstr(&mut out, "subdir");
+        fixstr(&mut out, "linux-64");
+        fixstr(&mut out, "base_url");
+        fixstr(&mut out, "./");
+        fixstr(&mut out, "shards_base_url");
+        fixstr(&mut out, "./shards/");
+        fixstr(&mut out, "virtual_package_plugins");
+        out.extend_from_slice(section);
+        out
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[track_caller]
+    fn parse_msgpack_plugins_section(section: &[u8]) -> ShardedSubdirInfo {
+        rmp_serde::from_slice(&msgpack_info_with_plugins_section(section)).unwrap_or_else(|err| {
+            panic!("the malformed section rejected the surrounding shard index: {err}")
+        })
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[track_caller]
+    fn assert_msgpack_plugins_section_dropped(section: &[u8]) {
+        let info = parse_msgpack_plugins_section(section);
+        assert!(
+            info.virtual_package_plugins.is_empty(),
+            "expected the whole section to be dropped, got {:?}",
+            info.virtual_package_plugins
+        );
+        assert_eq!(
+            info.subdir, "linux-64",
+            "the rest of the index info was lost"
+        );
+    }
+
+    /// A registration key that is not a string cannot be a package name, so
+    /// the section is not a map of registrations: an error that drops the
+    /// section -- and never the surrounding shard index, which is remote data
+    /// one hostile key must not be able to take down.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_drops_the_section_on_a_non_string_key() {
+        let value = [&[0x91, 0xa3][..], b"__x"].concat();
+        for (label, key) in [
+            ("an integer key", vec![0x05]),
+            ("a nil key", vec![0xc0]),
+            ("a binary key", [&[0xc4, 0x02][..], b"ab"].concat()),
+            ("an invalid UTF-8 str key", vec![0xa2, 0xff, 0xfe]),
+        ] {
+            let section = [&[0x81][..], &key, &value].concat();
+            let info = parse_msgpack_plugins_section(&section);
+            assert!(
+                info.virtual_package_plugins.is_empty(),
+                "{label} did not drop the section, got {:?}",
+                info.virtual_package_plugins
+            );
+        }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_drops_the_section_on_an_ext_value() {
+        // fixext1, type 1, one payload byte: not a map of registrations.
+        assert_msgpack_plugins_section_dropped(&[0xd4, 0x01, 0x2a]);
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_drops_a_binary_element_alone() {
+        // {"cuda-detect": ["__cuda", bin"__x"]}: binary data is not a name,
+        // however name-like its bytes, and must be dropped like any other
+        // shape that is not a string.
+        let section = [
+            &[0x81, 0xab][..],
+            b"cuda-detect",
+            &[0x92, 0xa6],
+            b"__cuda",
+            &[0xc4, 0x03],
+            b"__x",
+        ]
+        .concat();
+        let info = parse_msgpack_plugins_section(&section);
+        assert_eq!(
+            info.virtual_package_plugins[&PackageName::new_unchecked("cuda-detect")]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda"],
+            "a binary element was not dropped alone"
+        );
+    }
+
+    /// The shard index travels as msgpack, and the registration deserializer
+    /// relies on `deserialize_any` and an untagged enum, both of which a
+    /// self-describing format must support.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_sharded_subdir_info_plugins_survive_msgpack() {
+        let raw = r#"{
+            "subdir": "linux-64",
+            "base_url": "./",
+            "shards_base_url": "./shards/",
+            "virtual_package_plugins": { "cuda-detect": ["__cuda", "__cuda_arch"] }
+        }"#;
+        let info: ShardedSubdirInfo = serde_json::from_str(raw).unwrap();
+        let bytes = rmp_serde::to_vec_named(&info).unwrap();
+        let back: ShardedSubdirInfo = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(
+            back.virtual_package_plugins, info.virtual_package_plugins,
+            "the registrations changed through a msgpack round trip"
+        );
     }
 }
 

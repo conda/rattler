@@ -24,6 +24,8 @@ use serde_with::{
 use thiserror::Error;
 use url::Url;
 
+#[cfg(feature = "experimental-virtual-package-plugins")]
+use crate::utils::serde::DeserializeVirtualPackagePlugins;
 use crate::{
     Arch, Channel, Flag, MatchSpec, Matches, NoArchType, PackageName, PackageUrl,
     ParseMatchSpecError, ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -107,7 +109,22 @@ pub struct ChannelInfo {
     /// [CEP-42](https://github.com/conda/ceps/blob/main/cep-0042.md).
     #[serde(default, skip_serializing_if = "ChannelRelations::is_none_or_empty")]
     pub channel_relations: Option<ChannelRelations>,
+
+    /// Virtual package detection plugins registered by the channel.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[serde_as(deserialize_as = "DeserializeVirtualPackagePlugins")]
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub virtual_package_plugins: VirtualPackagePlugins,
 }
+
+/// Virtual package detection plugins registered by a channel: the name of the
+/// package providing the plugin, mapped to the virtual packages it provides.
+///
+/// One plugin may provide several virtual packages, e.g. a `foobar-detect`
+/// providing both `__foobar` and `__something_else`. The executable to run is
+/// named after the plugin package.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub type VirtualPackagePlugins = IndexMap<PackageName, Vec<PackageName>>;
 
 /// Repodata revisions keyed by revision, mirroring the `vN` dictionary of the
 /// CEP draft <https://github.com/conda/ceps/pull/146>. Keying encodes
@@ -1226,6 +1243,8 @@ mod test {
         package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
     };
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    use crate::{PackageName, repo_data::VirtualPackagePlugins};
 
     // isl-0.12.2-1.tar.bz2
     // gmp-5.1.2-6.tar.bz2
@@ -1308,6 +1327,8 @@ mod test {
                     base: Some("../conda-forge".to_string()),
                     overrides: None,
                 }),
+                #[cfg(feature = "experimental-virtual-package-plugins")]
+                virtual_package_plugins: VirtualPackagePlugins::default(),
             }),
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
@@ -1330,6 +1351,8 @@ mod test {
                     base_url: None,
                     repodata_revisions: IndexMap::default(),
                     channel_relations,
+                    #[cfg(feature = "experimental-virtual-package-plugins")]
+                    virtual_package_plugins: VirtualPackagePlugins::default(),
                 }),
                 packages: IndexMap::default(),
                 conda_packages: IndexMap::default(),
@@ -1339,6 +1362,414 @@ mod test {
             let json = serde_json::to_string(&repodata).unwrap();
             assert!(!json.contains("channel_relations"));
         }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins() {
+        // A single plugin may provide several virtual packages; the order of
+        // both the plugins and their virtual packages is preserved.
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": {
+                    "foobar-detect": ["__foobar", "__something_else"],
+                    "rocm-detect": ["__rocm"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let plugins = &repodata.info.as_ref().unwrap().virtual_package_plugins;
+
+        assert_eq!(
+            plugins
+                .keys()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["foobar-detect", "rocm-detect"]
+        );
+        assert_eq!(
+            plugins[&PackageName::new_unchecked("foobar-detect")]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__foobar", "__something_else"]
+        );
+        assert_eq!(
+            plugins[&PackageName::new_unchecked("rocm-detect")]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__rocm"]
+        );
+
+        let json = serde_json::to_string(&repodata).unwrap();
+        assert!(json.contains("\"virtual_package_plugins\""));
+        assert_eq!(serde_json::from_str::<RepoData>(&json).unwrap(), repodata);
+
+        let without = RepoData {
+            version: Some(2),
+            info: Some(ChannelInfo {
+                subdir: Some("linux-64".to_string()),
+                base_url: None,
+                repodata_revisions: IndexMap::default(),
+                channel_relations: None,
+                virtual_package_plugins: VirtualPackagePlugins::default(),
+            }),
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
+            v3: V3Packages::default(),
+            removed: ahash::HashSet::default(),
+        };
+        assert!(
+            !serde_json::to_string(&without)
+                .unwrap()
+                .contains("virtual_package_plugins")
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_contradictions_drop_the_whole_section() {
+        let seventeen: Vec<String> = (0..17).map(|index| format!("\"__v{index}\"")).collect();
+        for (label, body) in [
+            ("not a map", "null".to_string()),
+            ("not a map either", r#"["cuda-detect"]"#.to_string()),
+            (
+                "key is not a package name",
+                r#"{"invalid$plugin": ["__cuda"]}"#.to_string(),
+            ),
+            (
+                "key is a virtual package name",
+                r#"{"__leading": ["__cuda"]}"#.to_string(),
+            ),
+            (
+                "one package under two keys",
+                r#"{"A-Detect": ["__x"], "a-detect": ["__y"]}"#.to_string(),
+            ),
+            (
+                "the same key twice",
+                r#"{"a-detect": ["__x"], "a-detect": ["__y"]}"#.to_string(),
+            ),
+            (
+                "one virtual package from two plugins",
+                r#"{"cuda-detect": ["__cuda"], "other-detect": ["__cuda"]}"#.to_string(),
+            ),
+            (
+                "one virtual package twice in one plugin",
+                r#"{"cuda-detect": ["__cuda", "__cuda"]}"#.to_string(),
+            ),
+            (
+                "no virtual packages declared",
+                r#"{"empty-detect": []}"#.to_string(),
+            ),
+            (
+                "a registration value that is a string",
+                r#"{"cuda-detect": "__cuda"}"#.to_string(),
+            ),
+            (
+                "a registration value that is null",
+                r#"{"cuda-detect": null}"#.to_string(),
+            ),
+            (
+                "a registration value that is a number",
+                r#"{"cuda-detect": 5}"#.to_string(),
+            ),
+            (
+                "a registration value that is a map",
+                r#"{"cuda-detect": {"__cuda": true}}"#.to_string(),
+            ),
+            (
+                "a valid registration next to a malformed one",
+                r#"{"good-detect": ["__good"], "bad-detect": 5}"#.to_string(),
+            ),
+            (
+                "more than sixteen declared",
+                format!(r#"{{"big-detect": [{}]}}"#, seventeen.join(", ")),
+            ),
+        ] {
+            let raw = format!(
+                r#"{{
+                    "info": {{ "subdir": "linux-64", "virtual_package_plugins": {body} }},
+                    "packages": {{}},
+                    "packages.conda": {{}},
+                    "repodata_version": 2
+                }}"#
+            );
+            let repodata: RepoData = serde_json::from_str(&raw)
+                .unwrap_or_else(|err| panic!("{label} invalidated the repodata: {err}"));
+            assert!(
+                repodata
+                    .info
+                    .as_ref()
+                    .unwrap()
+                    .virtual_package_plugins
+                    .is_empty(),
+                "{label} left registrations behind"
+            );
+            assert_eq!(
+                repodata.info.as_ref().unwrap().subdir.as_deref(),
+                Some("linux-64"),
+                "{label} lost the rest of the info dictionary"
+            );
+        }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_virtual_names_are_lowercase_only() {
+        // CEP 26 states the virtual package pattern in lowercase and, unlike
+        // the distributable one, does not call it case-insensitive.
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": {
+                    "CUDA-Detect": ["__cuda", "__Foo_Bar"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let plugins = &repodata.info.as_ref().unwrap().virtual_package_plugins;
+
+        assert_eq!(
+            plugins[&PackageName::try_from("cuda-detect").unwrap()]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda"],
+            "an uppercase virtual package name was kept"
+        );
+        assert_eq!(
+            plugins
+                .keys()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["CUDA-Detect"],
+            "a mixed-case plugin key was rejected, though CEP 26 calls that pattern \
+             case-insensitive"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_non_string_value_is_ignored() {
+        // Not a package name in any sense, so it is discarded like any other
+        // invalid name rather than invalidating the surrounding repodata.
+        for entry in ["5", "null", "[\"__x\"]", "{\"a\": 1}", "true"] {
+            let raw = format!(
+                r#"{{
+                    "info": {{
+                        "subdir": "linux-64",
+                        "virtual_package_plugins": {{ "cuda-detect": ["__cuda", {entry}] }}
+                    }},
+                    "packages": {{}},
+                    "packages.conda": {{}}
+                }}"#
+            );
+            let repodata: RepoData = serde_json::from_str(&raw)
+                .unwrap_or_else(|err| panic!("{entry} invalidated the repodata: {err}"));
+            assert_eq!(
+                repodata.info.as_ref().unwrap().virtual_package_plugins
+                    [&PackageName::try_from("cuda-detect").unwrap()]
+                    .iter()
+                    .map(PackageName::as_source)
+                    .collect::<Vec<_>>(),
+                ["__cuda"],
+                "{entry} did not leave the plugin's other names intact"
+            );
+        }
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_invalid_value_is_ignored() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": {
+                    "cuda-detect": ["__cuda", "__", "cuda", "_cuda", "__a--b"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            repodata.info.as_ref().unwrap().virtual_package_plugins
+                [&PackageName::try_from("cuda-detect").unwrap()]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda"],
+            "a value CEP 26 does not allow as a virtual package name was kept"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_reject_non_virtual_names() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": {
+                    "cuda-detect": ["__cuda", "cuda", "_cuda"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let plugins = &repodata.info.as_ref().unwrap().virtual_package_plugins;
+        assert_eq!(
+            plugins[&PackageName::try_from("cuda-detect").unwrap()]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda"],
+            "a name without the '__' prefix was registered as a virtual package"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_drop_plugins_providing_nothing() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": {
+                    "bogus-detect": ["cuda", "invalid$virtual"],
+                    "cuda-detect": ["__cuda"]
+                }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            repodata
+                .info
+                .as_ref()
+                .unwrap()
+                .virtual_package_plugins
+                .keys()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["cuda-detect"],
+            "a plugin whose every declared name was invalid was kept"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_names_are_normalized() {
+        let raw = r#"{
+            "info": {
+                "subdir": "linux-64",
+                "virtual_package_plugins": { "CUDA-Detect": ["__cuda"] }
+            },
+            "packages": {},
+            "packages.conda": {}
+        }"#;
+        let repodata: RepoData = serde_json::from_str(raw).unwrap();
+        let plugins = &repodata.info.as_ref().unwrap().virtual_package_plugins;
+
+        let plugin = PackageName::try_from("cuda-detect").unwrap();
+        assert!(
+            plugins.contains_key(&plugin),
+            "a registration is unreachable by the plugin's normalized name"
+        );
+        assert!(
+            plugins[&plugin].contains(&PackageName::try_from("__cuda").unwrap()),
+            "a provided virtual package never matches the detected name"
+        );
+        assert_eq!(
+            plugins.keys().next().unwrap().as_source(),
+            "CUDA-Detect",
+            "the spelling the channel published was not preserved"
+        );
+    }
+
+    /// A client without this feature ignores the field's bytes iteratively, so
+    /// knowing the field must not turn nesting the schema never asks for into
+    /// a fatal parse error for the surrounding repodata.
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_deep_nesting_does_not_reject_the_document() {
+        let deep = format!("{}{}", "[".repeat(150), "]".repeat(150));
+
+        // Nested junk where a name belongs is dropped alone.
+        let raw = format!(
+            r#"{{
+                "info": {{
+                    "subdir": "linux-64",
+                    "virtual_package_plugins": {{ "cuda-detect": ["__cuda", {deep}] }}
+                }},
+                "packages": {{}},
+                "packages.conda": {{}}
+            }}"#
+        );
+        let repodata: RepoData = serde_json::from_str(&raw)
+            .unwrap_or_else(|err| panic!("a nested element invalidated the repodata: {err}"));
+        assert_eq!(
+            repodata.info.as_ref().unwrap().virtual_package_plugins
+                [&PackageName::try_from("cuda-detect").unwrap()]
+                .iter()
+                .map(PackageName::as_source)
+                .collect::<Vec<_>>(),
+            ["__cuda"],
+            "a deeply nested element was not dropped alone"
+        );
+
+        // Nested junk where the registration array belongs drops the section.
+        let deep_maps = format!("{}0{}", r#"{"a":"#.repeat(150), "}".repeat(150));
+        let raw = format!(
+            r#"{{
+                "info": {{
+                    "subdir": "linux-64",
+                    "virtual_package_plugins": {{ "cuda-detect": {deep_maps} }}
+                }},
+                "packages": {{}},
+                "packages.conda": {{}}
+            }}"#
+        );
+        let repodata: RepoData = serde_json::from_str(&raw)
+            .unwrap_or_else(|err| panic!("a nested value invalidated the repodata: {err}"));
+        assert!(
+            repodata
+                .info
+                .as_ref()
+                .unwrap()
+                .virtual_package_plugins
+                .is_empty(),
+            "a registration value that is not an array was kept"
+        );
+    }
+
+    #[cfg(feature = "experimental-virtual-package-plugins")]
+    #[test]
+    fn test_virtual_package_plugins_roundtrip_keeps_identity() {
+        let mut plugins = VirtualPackagePlugins::default();
+        plugins.insert(
+            PackageName::try_from("CUDA-Detect").unwrap(),
+            vec![PackageName::try_from("__cuda").unwrap()],
+        );
+        let info = ChannelInfo {
+            subdir: Some("linux-64".to_string()),
+            base_url: None,
+            repodata_revisions: IndexMap::default(),
+            channel_relations: None,
+            virtual_package_plugins: plugins.clone(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let back: ChannelInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.virtual_package_plugins, plugins,
+            "a validated registration changed identity through a round trip ({json})"
+        );
     }
 
     #[test]
