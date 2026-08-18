@@ -172,25 +172,12 @@ fn starts_bracket_fields(input: &str) -> bool {
         .last()
         .unwrap_or(0);
     let key = &contents[..key_end];
-    matches!(
-        key,
-        "version"
-            | "build"
-            | "build_number"
-            | "extras"
-            | "flags"
-            | "sha256"
-            | "md5"
-            | "fn"
-            | "url"
-            | "subdir"
-            | "channel"
-            | "license"
-            | "track_features"
-            | "when"
-            | "license_family"
-            | "namespace"
-    ) && contents[key_end..].trim_start().starts_with('=')
+    // Any identifier followed by `=` marks a field section; unknown keys are
+    // rejected later with a precise error. A key whitelist here would leave
+    // quotes untracked for unknown keys, so a `#` inside a quoted value would
+    // be stripped as a comment. Platform selectors (`[linux-64]`) and glob
+    // character classes have no `=` and still fall through.
+    !key.is_empty() && contents[key_end..].trim_start().starts_with('=')
 }
 
 /// Returns up to `limit` occurrences of `needle` outside quoted bracket fields.

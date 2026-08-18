@@ -753,10 +753,15 @@ fn write_scalar(
             match pick_quote_delimiter(&value) {
                 Some(delimiter) => write!(f, "{key}={delimiter}{value}{delimiter}")?,
                 // No delimiter can hold the value, and raw output could
-                // re-tokenize into something that parses. Emit a key the
-                // parser always rejects so the failure stays loud no matter
-                // how the value slices.
-                None => write!(f, "unrepresentable-{key}=\"{value}\"")?,
+                // re-tokenize into something that parses. Emit an escaped
+                // value (so it always tokenizes as a single pair) under a key
+                // the parser rejects: the failure is loud no matter what the
+                // value contains.
+                None => write!(
+                    f,
+                    "unrepresentable-{key}=\"{}\"",
+                    escape_bracket_value(&value)
+                )?,
             }
         }
         DisplayStyle::Canonical => write!(f, "{key}={}", canonical_bracket_value(value)?)?,

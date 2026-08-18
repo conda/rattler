@@ -50,24 +50,64 @@ fn channel_cfg() -> ChannelConfig {
 // Strategies
 // -------------------------------------------------------------------------
 
+/// Always-valid version text built from components; shrinks toward `0`.
+fn version_text() -> BoxedStrategy<String> {
+    (
+        prop::collection::vec(0u8..30, 1..4),
+        prop::option::weighted(0.15, 1u8..3),
+    )
+        .prop_map(|(segments, epoch)| {
+            let segments = segments
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(".");
+            match epoch {
+                Some(epoch) => format!("{epoch}!{segments}"),
+                None => segments,
+            }
+        })
+        .boxed()
+}
+
+/// Always-valid package-name text; shrinks toward `a`.
+fn package_name_text() -> BoxedStrategy<String> {
+    prop::collection::vec(
+        prop_oneof![
+            8 => prop::char::range('a', 'z'),
+            1 => prop::char::range('0', '9'),
+            1 => prop::sample::select(&['_', '-', '.'][..]),
+        ],
+        1..8,
+    )
+    .prop_map(|mut chars| {
+        // Keep the first character a letter so every value is a valid name.
+        if !chars[0].is_ascii_lowercase() {
+            chars[0] = 'a';
+        }
+        chars.into_iter().collect()
+    })
+    .boxed()
+}
+
 fn name_matcher() -> BoxedStrategy<PackageNameMatcher> {
     prop_oneof![
-        // Exact names, including ones that read like condition keywords.
-        4 => prop_oneof![
-            "[a-z][a-z0-9_.-]{0,10}",
-            Just("and".to_string()),
-            Just("or".to_string()),
-            Just("pandoc".to_string()),
-            Just("android".to_string()),
-        ]
-        .prop_filter_map("valid package name", |name| {
-            PackageName::try_from(name).ok().map(PackageNameMatcher::Exact)
+        // Constructive arms first: always valid, so shrinking moves through
+        // them without hitting parse-rejection walls.
+        4 => package_name_text().prop_map(|name| {
+            PackageNameMatcher::Exact(
+                PackageName::try_from(name).expect("constructed package name must be valid"),
+            )
+        }),
+        // Names that read like condition keywords.
+        1 => prop::sample::select(&["and", "or", "pandoc", "android"][..]).prop_map(|name| {
+            PackageNameMatcher::Exact(PackageName::try_from(name.to_string()).expect("valid name"))
         }),
         // Globs and regexes, including regex bodies with version-constraint
         // characters and whitespace.
         1 => prop_oneof![
-            "[a-z][a-z0-9_]{0,5}\\*",
-            "\\*[a-z]{1,4}",
+            package_name_text().prop_map(|name| format!("{name}*")),
+            package_name_text().prop_map(|name| format!("*{name}")),
             Just("^py(?!py).*$".to_string()),
             Just("^foo bar$".to_string()),
             Just("^py.*$".to_string()),
@@ -80,36 +120,69 @@ fn name_matcher() -> BoxedStrategy<PackageNameMatcher> {
 }
 
 fn version_spec() -> BoxedStrategy<VersionSpec> {
+    let operator = prop::sample::select(&[">=", ">", "<=", "<", "==", "!="][..]);
     prop_oneof![
-        ">=[0-9]{1,2}\\.[0-9]{1,2}",
-        "==[0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2}",
-        "[0-9]{1,2}\\.[0-9]{1,2}\\.\\*",
-        ">=[0-9]{1,2},<[0-9]{1,3}",
-        "!=[0-9]{1,2}\\.[0-9]{1,2}",
-        "~=[0-9]{1,2}\\.[0-9]{1,2}",
-        ">=[0-9]{1,2}\\.[0-9]{1,2}\\|<[0-9]{1,2}",
-        Just("*".to_string()),
-        // Trailing underscores and epochs stress the version grammar.
-        Just(">=1.2.3dev_".to_string()),
-        Just("==1!2.0".to_string()),
+        // Constructive arms first, for the same shrinking reason.
+        4 => (operator, version_text()).prop_map(|(op, version)| format!("{op}{version}")),
+        1 => Just("*".to_string()),
+        1 => version_text().prop_map(|version| format!("{version}.*")),
+        1 => (version_text(), version_text()).prop_map(|(low, high)| format!(">={low},<{high}")),
+        1 => (version_text(), version_text()).prop_map(|(a, b)| format!(">={a}|<{b}")),
+        // Oddities the constructive arms do not produce.
+        1 => prop_oneof![
+            Just(">=1.2.3dev_".to_string()),
+            Just("==1!2.0".to_string()),
+            Just("~=1.2".to_string()),
+        ],
     ]
-    .prop_filter_map("valid version spec", |spec| {
-        VersionSpec::from_str(&spec, rattler_conda_types::ParseStrictness::Lenient).ok()
+    .prop_map(|spec| {
+        VersionSpec::from_str(&spec, rattler_conda_types::ParseStrictness::Lenient)
+            .expect("constructed version spec must parse")
     })
     .boxed()
 }
 
+/// Exact-matcher text; shrinks toward `a`.
+fn matcher_text() -> BoxedStrategy<String> {
+    prop::collection::vec(
+        prop_oneof![
+            6 => prop::char::range('a', 'z'),
+            1 => prop::char::range('0', '9'),
+            1 => Just('_'),
+        ],
+        1..8,
+    )
+    .prop_map(|chars| chars.into_iter().collect())
+    .boxed()
+}
+
 /// String matchers as the parser produces them: their rendered text always
-/// reparses to the identical matcher.
+/// reparses to the identical matcher. Constructive arms first so failures
+/// shrink toward a plain exact matcher.
 fn parsed_string_matcher() -> BoxedStrategy<StringMatcher> {
-    prop_oneof!["[a-z0-9_]{1,8}", "py\\*", "\\*_[0-9]", "\\*", "\\^py.*\\$"]
-        .prop_filter_map("valid matcher", |value| value.parse::<StringMatcher>().ok())
-        .boxed()
+    prop_oneof![
+        4 => matcher_text(),
+        1 => Just("*".to_string()),
+        1 => (matcher_text(), matcher_text()).prop_map(|(a, b)| format!("{a}*{b}")),
+        1 => matcher_text().prop_map(|body| format!("^{body}.*$")),
+    ]
+    .prop_map(|value| {
+        value
+            .parse::<StringMatcher>()
+            .expect("constructed matcher must parse")
+    })
+    .boxed()
 }
 
 fn string_matcher() -> BoxedStrategy<StringMatcher> {
     prop_oneof![
-        4 => parsed_string_matcher(),
+        6 => parsed_string_matcher(),
+        // Regex matchers with arbitrary bodies stay behind a filter because
+        // not every body compiles; listed late so shrinking prefers the
+        // constructive arms.
+        1 => "\\^py.*\\$".prop_filter_map("valid matcher", |value| {
+            value.parse::<StringMatcher>().ok()
+        }),
         // Programmatic construction can force states whose text reparses as a
         // different matcher variant, e.g. an Exact matcher that reads as a
         // glob; see `matcher_equivalent`.
@@ -120,51 +193,52 @@ fn string_matcher() -> BoxedStrategy<StringMatcher> {
 
 /// Fragments the fuzz property concatenates into parser input. Grammar
 /// pieces dominate so a decent share of inputs parses; the rest exercises
-/// rejection paths.
+/// rejection paths. Ordered inert-first because `select` shrinks toward the
+/// front of the slice, which keeps minimal repros readable.
 const FUZZ_FRAGMENTS: &[&str] = &[
     "python",
     "conda-forge",
     "linux-64",
     "noarch",
-    "::",
-    ":",
-    "/",
-    "[",
-    "]",
-    "when=",
-    "extras=[docs,tests]",
-    "flags=[cuda]",
+    " ",
+    "1.2.*",
+    ">=1.2,<2",
+    "==1!2.0dev_",
+    "^py.*$",
+    "0123456789abcdef0123456789abcdef",
     "version=",
     "build=",
     "fn=",
     "channel=",
     "subdir=",
     "md5=",
-    "0123456789abcdef0123456789abcdef",
-    "\"",
-    "'",
-    "\\",
-    "#",
-    ";",
-    " if ",
-    " and ",
-    " or ",
+    "when=",
+    "extras=[docs,tests]",
+    "flags=[cuda]",
+    "::",
+    ":",
+    "/",
+    "[",
+    "]",
     "(",
     ")",
     "*",
     "=",
     ",",
-    " ",
-    ">=1.2,<2",
-    "==1!2.0dev_",
-    "1.2.*",
-    "^py.*$",
+    "\"",
+    "'",
+    "\\",
+    "#",
+    ";",
     "$",
+    " if ",
+    " and ",
+    " or ",
     "https://",
     "[::1]",
     "user:secret@repo.example",
     "?token",
-    "ðŸ¦€",
+    "\u{1F980}",
 ];
 
 fn fuzz_input() -> BoxedStrategy<String> {
@@ -177,13 +251,22 @@ fn fuzz_input() -> BoxedStrategy<String> {
         .boxed()
 }
 
-/// Printable-ASCII scalars including quotes, backslashes, brackets, `#`,
-/// commas and spaces, plus some unicode.
+/// Scalar values mixing plain text with the characters that stress quoting:
+/// quotes, backslashes, brackets, `#`, commas, spaces, and raw unicode.
+/// Built from a char vec so shrinking removes characters and drifts the rest
+/// toward `a`.
 fn scalar_value() -> BoxedStrategy<String> {
-    prop_oneof![
-        4 => "[ -~]{1,12}",
-        1 => "[a-zA-Z0-9Î±Î²â˜… ]{1,8}",
-    ]
+    prop::collection::vec(
+        prop_oneof![
+            6 => prop::char::range('a', 'z'),
+            2 => prop::sample::select(
+                &[' ', '"', '\'', '\\', '[', ']', '#', ',', '=', ':', '?'][..]
+            ),
+            1 => prop::char::any(),
+        ],
+        1..12,
+    )
+    .prop_map(|chars| chars.into_iter().collect())
     .boxed()
 }
 
@@ -254,10 +337,10 @@ fn channel() -> BoxedStrategy<Arc<Channel>> {
             format!("https://{host}/{name}{}", selector.unwrap_or_default())
         }),
     ]
-    .prop_filter_map("parseable channel", |channel| {
-        Channel::from_str(&channel, &channel_cfg())
-            .ok()
-            .map(Arc::new)
+    .prop_map(|channel| {
+        // Every composed channel is valid by construction, keeping the shrink
+        // chain free of parse-rejection walls.
+        Arc::new(Channel::from_str(&channel, &channel_cfg()).expect("constructed channel"))
     })
     .boxed()
 }
@@ -504,6 +587,13 @@ fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str, r
 // -------------------------------------------------------------------------
 
 proptest! {
+    // A full spec plus a condition tree is a big value; give the shrinker
+    // enough budget to minimize it completely.
+    #![proptest_config(ProptestConfig {
+        max_shrink_iters: 8192,
+        ..ProptestConfig::default()
+    })]
+
     /// Legacy `Display` never lies: its output either fails to parse (loud)
     /// or reparses to the same query.
     #[test]
