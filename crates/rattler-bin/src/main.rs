@@ -124,7 +124,9 @@ async fn async_main() -> miette::Result<()> {
         Command::Solve(opts) => commands::solve::solve(opts, offline).await,
         Command::List(opts) => commands::list::list(opts).await,
         Command::ShellHook(opts) => commands::shell_hook::shell_hook(opts).await,
-        Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
+        Command::VirtualPackages(opts) => {
+            commands::virtual_packages::virtual_packages(opts, offline).await
+        }
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Run(opts) => commands::run::run(opts).await,
