@@ -4,9 +4,10 @@
 //! through [`SpecView::fmt`], parameterized by a [`DisplayContext`]. Adding a
 //! field to [`MatchSpec`] means extending [`Field`] and the order tables.
 //!
-//! [`to_canonical_string`] verifies its output with a single round-trip
-//! through the parser; the per-field diagnostics only run on the error path
-//! to point at the offending field.
+//! [`to_canonical_string`] performs no parsing: states the grammar cannot
+//! represent are refused while rendering, with the error attributed to the
+//! offending field. Round-trip fidelity of the output is enforced by the
+//! property tests in `tests/matchspec_proptest.rs`.
 
 use std::fmt::{self, Display, Write};
 use std::str::FromStr;
@@ -16,16 +17,13 @@ use rattler_digest::{Md5Hash, Sha256Hash};
 use rattler_redaction::redact_credentials_from_url;
 use url::Url;
 
-use super::condition::{MatchSpecCondition, parse_condition_with_options};
+use super::condition::MatchSpecCondition;
 use super::matcher::StringMatcher;
 use super::package_name_matcher::PackageNameMatcher;
 use super::parse::{escape_bracket_value, is_valid_extra_group_name};
 use super::{CanonicalMatchSpecError, MatchSpec, NamelessMatchSpec};
 use crate::flags::is_valid_matchspec_flag;
-use crate::{
-    Channel, ChannelConfig, ParseMatchSpecOptions, ParseStrictness, Platform, RepodataRevision,
-    VersionSpec, build_spec::BuildNumberSpec,
-};
+use crate::{Channel, ChannelConfig, Platform, VersionSpec, build_spec::BuildNumberSpec};
 
 /// The dialect a match spec is rendered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +253,90 @@ fn is_safe_positional_build(text: &str) -> bool {
     is_safe_positional_value(text) && !text.contains([',', '|'])
 }
 
+/// Mirrors the classification in [`StringMatcher`] and
+/// [`PackageNameMatcher`] parsing: `^...$` parses as a regex, anything else
+/// containing `*` as a glob.
+fn classifies_as_regex(text: &str) -> bool {
+    text.len() >= 2 && text.starts_with('^') && text.ends_with('$')
+}
+
+/// Whether the matcher's rendered text reparses as the same matcher variant.
+/// A programmatically constructed `Exact("cuda*")` renders as `cuda*`, which
+/// classifies as a glob; no text can represent it.
+fn string_matcher_is_canonical(matcher: &StringMatcher) -> bool {
+    let text = matcher.to_string();
+    let regex = classifies_as_regex(&text);
+    let glob = !regex && text.contains('*');
+    match matcher {
+        StringMatcher::Exact(_) => !regex && !glob,
+        StringMatcher::Glob(_) => glob,
+        StringMatcher::Regex(_) => regex,
+    }
+}
+
+/// Writes the positional package name for the canonical dialect, refusing
+/// matchers whose text would not reparse as the same matcher.
+fn fmt_canonical_name(f: &mut dyn Write, name: &PackageNameMatcher) -> Result<(), FormatError> {
+    if !name_matcher_is_canonical(name) {
+        return Err(CanonicalMatchSpecError::UnrepresentableName(name.to_string()).into());
+    }
+    write!(f, "{name}")?;
+    Ok(())
+}
+
+/// Whether name text survives the condition tokenizer, which splits leaves
+/// on parentheses and on `and`/`or` at word boundaries (preceded and
+/// followed by whitespace, a parenthesis, or the ends of the token). A
+/// trailing operator word only counts when the name is `terminal`: followed
+/// by a version or a bracket section it no longer sits on a boundary.
+fn name_is_condition_safe(text: &str, terminal: bool) -> bool {
+    if text.contains(['(', ')']) {
+        return false;
+    }
+    for word in ["and", "or"] {
+        let mut search_start = 0;
+        while let Some(found) = text[search_start..].find(word) {
+            let position = search_start + found;
+            let boundary_before = position == 0
+                || text[..position]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_whitespace);
+            let after = text[position + word.len()..].chars().next();
+            let boundary_after = match after {
+                None => terminal,
+                Some(character) => character.is_whitespace(),
+            };
+            if boundary_before && boundary_after {
+                return false;
+            }
+            search_start = position + 1;
+        }
+    }
+    true
+}
+
+/// Whether the name matcher's text survives the positional name slot and
+/// reparses as the same matcher. Exact names have a safe grammar; glob and
+/// regex text must keep its classification and avoid the characters earlier
+/// tokenization stages would eat (for regexes, an inner `$` would also end
+/// the name early).
+fn name_matcher_is_canonical(name: &PackageNameMatcher) -> bool {
+    match name {
+        PackageNameMatcher::Exact(_) => true,
+        PackageNameMatcher::Glob(glob) => {
+            let text = glob.as_str();
+            text.contains('*') && !classifies_as_regex(text) && is_safe_positional_value(text)
+        }
+        PackageNameMatcher::Regex(regex) => {
+            let text = regex.as_str();
+            classifies_as_regex(text)
+                && !text.contains([':', '#', ';', '[', ']'])
+                && !text[..text.len() - 1].contains('$')
+        }
+    }
+}
+
 /// Whether rendering this channel as its bare name reconstructs it: there is
 /// no explicit platform selector, and parsing the name under the default
 /// channel alias yields the same base URL. URL and path channels whose name
@@ -318,7 +400,14 @@ fn is_safe_positional_token(value: &str) -> bool {
 /// renders values raw.
 fn channel_url_value(channel: &Channel, redact: bool) -> String {
     let mut value = if redact {
-        redact_credentials_from_url(channel.base_url.url()).to_string()
+        let mut redacted = redact_credentials_from_url(channel.base_url.url()).to_string();
+        // Redacting a token path swallows the trailing slash channel URLs
+        // carry; restore it so the rendered URL stays normalized and a second
+        // render produces the same text.
+        if !redacted.ends_with('/') {
+            redacted.push('/');
+        }
+        redacted
     } else {
         channel.base_url.url().to_string()
     };
@@ -423,7 +512,7 @@ impl SpecView<'_> {
             }
             (DisplayStyle::Canonical, SpecPosition::TopLevel) => {
                 if let Some(name) = self.name {
-                    write!(f, "{name}")?;
+                    fmt_canonical_name(f, name)?;
                 }
             }
             (style, SpecPosition::ConditionLeaf) => {
@@ -434,7 +523,27 @@ impl SpecView<'_> {
                 }
 
                 if let Some(name) = self.name {
-                    write!(f, "{name}")?;
+                    if style == DisplayStyle::Canonical {
+                        // The condition tokenizer splits leaves on
+                        // parentheses and on bare `and`/`or` words, so name
+                        // text that contains them cannot be a leaf. A
+                        // trailing `and`/`or` only counts when nothing
+                        // follows the name in the rendering.
+                        let terminal = if self.is_simple_condition_leaf() {
+                            self.version.is_none()
+                        } else {
+                            !renders_brackets
+                        };
+                        if !name_is_condition_safe(&name.to_string(), terminal) {
+                            return Err(CanonicalMatchSpecError::UnrepresentableConditionLeaf(
+                                name.to_string(),
+                            )
+                            .into());
+                        }
+                        fmt_canonical_name(f, name)?;
+                    } else {
+                        write!(f, "{name}")?;
+                    }
                 }
                 if self.is_simple_condition_leaf() {
                     if let Some(version) = self.version {
@@ -595,6 +704,11 @@ impl SpecView<'_> {
             }
             Field::Build => {
                 let build = self.build.expect("presence checked by caller");
+                if ctx.style == DisplayStyle::Canonical && !string_matcher_is_canonical(build) {
+                    return Err(
+                        CanonicalMatchSpecError::UnrepresentableBuild(build.to_string()).into(),
+                    );
+                }
                 write_scalar(f, ctx, "build", build)
             }
             Field::BuildNumber => {
@@ -607,12 +721,36 @@ impl SpecView<'_> {
             }
             Field::Extras => {
                 let extras = self.extras.expect("presence checked by caller");
+                if ctx.style == DisplayStyle::Canonical {
+                    let invalid = extras
+                        .iter()
+                        .find(|extra| !is_valid_extra_group_name(extra))
+                        .cloned()
+                        .or_else(|| extras.is_empty().then(String::new));
+                    if let Some(extra) = invalid {
+                        return Err(CanonicalMatchSpecError::UnrepresentableExtra(extra).into());
+                    }
+                }
                 write_list(f, ctx, "extras", extras.iter(), |extra| {
                     is_valid_extra_group_name(extra)
                 })
             }
             Field::Flags => {
                 let flags = self.flags.expect("presence checked by caller");
+                if ctx.style == DisplayStyle::Canonical {
+                    let invalid = flags
+                        .iter()
+                        .map(ToString::to_string)
+                        .zip(flags)
+                        .find(|(text, flag)| {
+                            !is_valid_matchspec_flag(text) || !string_matcher_is_canonical(flag)
+                        })
+                        .map(|(text, _)| text)
+                        .or_else(|| flags.is_empty().then(String::new));
+                    if let Some(flag) = invalid {
+                        return Err(CanonicalMatchSpecError::UnrepresentableFlag(flag).into());
+                    }
+                }
                 write_list(f, ctx, "flags", flags.iter(), |flag| {
                     is_valid_matchspec_flag(flag)
                 })
@@ -683,6 +821,18 @@ impl SpecView<'_> {
             }
             Field::TrackFeatures => {
                 let track_features = self.track_features.expect("presence checked by caller");
+                if ctx.style == DisplayStyle::Canonical {
+                    let invalid = track_features
+                        .iter()
+                        .find(|feature| feature.is_empty() || feature.contains([',', ' ']))
+                        .cloned()
+                        .or_else(|| track_features.is_empty().then(String::new));
+                    if let Some(feature) = invalid {
+                        return Err(
+                            CanonicalMatchSpecError::UnrepresentableTrackFeature(feature).into(),
+                        );
+                    }
+                }
                 write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
             }
         }
@@ -725,6 +875,8 @@ impl SpecView<'_> {
                     .next()
                     .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~'))
                     && is_safe_positional_value(&text)
+                    // Parentheses would be tokenized as condition grouping.
+                    && !text.contains(['(', ')'])
             }
         }
     }
@@ -846,23 +998,6 @@ impl MatchSpecCondition {
 
         Ok(())
     }
-
-    /// Iterates over the match-spec leaves of this condition, left to right.
-    fn leaves(&self) -> impl Iterator<Item = &MatchSpec> + '_ {
-        let mut stack = vec![self];
-        std::iter::from_fn(move || {
-            while let Some(node) = stack.pop() {
-                match node {
-                    Self::MatchSpec(spec) => return Some(&**spec),
-                    Self::And(lhs, rhs) | Self::Or(lhs, rhs) => {
-                        stack.push(rhs);
-                        stack.push(lhs);
-                    }
-                }
-            }
-            None
-        })
-    }
 }
 
 /// Picks a quote delimiter that lets `value` be emitted verbatim, or `None`
@@ -929,17 +1064,9 @@ fn canonical_channel_value(channel: &Channel) -> Result<String, CanonicalMatchSp
 
     Ok(channel_url_value(channel, true))
 }
-
-/// The parse options a canonical string is expected to round-trip through.
-fn canonical_parse_options() -> ParseMatchSpecOptions {
-    ParseMatchSpecOptions::strict()
-        .with_repodata_revision(RepodataRevision::V3)
-        .with_exact_names_only(false)
-}
-
-/// Renders `spec` canonically and proves the result faithful by round-tripping
-/// it through the parser exactly once. See
-/// [`MatchSpec::to_canonical_string`] for the public contract.
+/// Renders `spec` canonically. Representability is checked while rendering;
+/// round-trip fidelity of the output is enforced by the property tests in
+/// `tests/matchspec_proptest.rs`.
 pub(crate) fn to_canonical_string(spec: &MatchSpec) -> Result<String, CanonicalMatchSpecError> {
     let mut rendered = String::new();
     SpecView::from(spec)
@@ -948,285 +1075,5 @@ pub(crate) fn to_canonical_string(spec: &MatchSpec) -> Result<String, CanonicalM
             FormatError::Canonical(error) => error,
             FormatError::Fmt(_) => unreachable!("writing to a String cannot fail"),
         })?;
-
-    match MatchSpec::from_str(&rendered, canonical_parse_options()) {
-        Ok(reparsed) => match canonical_divergence(spec, &reparsed) {
-            None => Ok(rendered),
-            Some(error) => Err(error),
-        },
-        Err(_) => Err(diagnose_parse_failure(spec, rendered)),
-    }
-}
-
-/// Compares a spec against its reparsed canonical form and attributes the
-/// first divergence to a field. Returns `None` when the round-trip is
-/// faithful.
-fn canonical_divergence(spec: &MatchSpec, reparsed: &MatchSpec) -> Option<CanonicalMatchSpecError> {
-    use CanonicalMatchSpecError as Error;
-
-    if reparsed.name != spec.name {
-        return Some(Error::UnrepresentableName(spec.name.to_string()));
-    }
-    if reparsed.version != spec.version {
-        return Some(Error::UnrepresentableVersion(display_or_default(
-            spec.version.as_ref(),
-        )));
-    }
-    if reparsed.build != spec.build {
-        return Some(Error::UnrepresentableBuild(display_or_default(
-            spec.build.as_ref(),
-        )));
-    }
-    if reparsed.build_number != spec.build_number {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.build_number.as_ref(),
-        )));
-    }
-    if reparsed.file_name != spec.file_name {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.file_name.as_ref(),
-        )));
-    }
-    if reparsed.extras != spec.extras {
-        return Some(Error::UnrepresentableExtra(first_divergent_element(
-            spec.extras.as_deref(),
-            reparsed.extras.as_deref(),
-        )));
-    }
-    if reparsed.flags != spec.flags {
-        return Some(Error::UnrepresentableFlag(first_divergent_element(
-            spec.flags.as_deref(),
-            reparsed.flags.as_deref(),
-        )));
-    }
-    match (spec.channel.as_deref(), reparsed.channel.as_deref()) {
-        (None, None) => {}
-        (Some(original), Some(parsed)) if channel_roundtrips(original, parsed) => {}
-        (original, _) => {
-            return Some(Error::UnrepresentableChannel(original.map_or_else(
-                String::new,
-                |channel| {
-                    canonical_channel_value(channel).unwrap_or_else(|_| channel.name().to_string())
-                },
-            )));
-        }
-    }
-    if reparsed.subdir != spec.subdir {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.subdir.as_ref(),
-        )));
-    }
-    if reparsed.namespace != spec.namespace {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.namespace.as_ref(),
-        )));
-    }
-    if reparsed.md5 != spec.md5 {
-        return Some(Error::UnrepresentableScalar(
-            spec.md5.map(hex::encode).unwrap_or_default(),
-        ));
-    }
-    if reparsed.sha256 != spec.sha256 {
-        return Some(Error::UnrepresentableScalar(
-            spec.sha256.map(hex::encode).unwrap_or_default(),
-        ));
-    }
-    if reparsed.url != spec.url.as_ref().map(redact_credentials_from_url) {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.url.as_ref(),
-        )));
-    }
-    if reparsed.license != spec.license {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.license.as_ref(),
-        )));
-    }
-    if reparsed.license_family != spec.license_family {
-        return Some(Error::UnrepresentableScalar(display_or_default(
-            spec.license_family.as_ref(),
-        )));
-    }
-    if reparsed.track_features != spec.track_features {
-        return Some(Error::UnrepresentableTrackFeature(first_divergent_element(
-            spec.track_features.as_deref(),
-            reparsed.track_features.as_deref(),
-        )));
-    }
-    if reparsed.condition != spec.condition {
-        return spec
-            .condition
-            .as_ref()
-            .and_then(diagnose_condition)
-            .or_else(|| {
-                Some(Error::UnrepresentableConditionLeaf(display_or_default(
-                    spec.condition.as_ref().map(RenderedCondition),
-                )))
-            });
-    }
-
-    None
-}
-
-/// Attributes a whole-string parse failure to a field. Only runs on the error
-/// path, so the targeted per-field reparses here do not burden canonical
-/// rendering.
-fn diagnose_parse_failure(spec: &MatchSpec, rendered: String) -> CanonicalMatchSpecError {
-    use CanonicalMatchSpecError as Error;
-
-    // Names are the only positional token; a name whose text reads as bracket
-    // or positional syntax corrupts everything after it.
-    let name = spec.name.to_string();
-    let expected = MatchSpec {
-        name: spec.name.clone(),
-        ..MatchSpec::default()
-    };
-    if !matches!(
-        MatchSpec::from_str(&name, canonical_parse_options()),
-        Ok(parsed) if parsed == expected
-    ) {
-        return Error::UnrepresentableName(name);
-    }
-
-    if let Some(extra) = spec
-        .extras
-        .iter()
-        .flatten()
-        .find(|extra| !is_valid_extra_group_name(extra))
-    {
-        return Error::UnrepresentableExtra(extra.clone());
-    }
-    if let Some(flag) = spec
-        .flags
-        .iter()
-        .flatten()
-        .find(|flag| !is_valid_matchspec_flag(&flag.to_string()))
-    {
-        return Error::UnrepresentableFlag(flag.to_string());
-    }
-    if let Some(feature) = spec
-        .track_features
-        .iter()
-        .flatten()
-        .find(|feature| feature.is_empty() || feature.contains([',', ' ']))
-    {
-        return Error::UnrepresentableTrackFeature(feature.clone());
-    }
-
-    if let Some(version) = &spec.version {
-        let value = version.to_string();
-        if !matches!(
-            VersionSpec::from_str(&value, ParseStrictness::Strict),
-            Ok(parsed) if parsed == *version
-        ) {
-            return Error::UnrepresentableVersion(value);
-        }
-    }
-    if let Some(build) = &spec.build {
-        let value = build.to_string();
-        if !matches!(value.parse::<StringMatcher>(), Ok(parsed) if parsed == *build) {
-            return Error::UnrepresentableBuild(value);
-        }
-    }
-
-    if let Some(channel) = spec.channel.as_deref() {
-        match canonical_channel_value(channel) {
-            Err(error) => return error,
-            Ok(value) => {
-                // The root is irrelevant for this absolute URL, but channel
-                // parsing still requires one. `temp_dir` is deterministic
-                // enough here and cannot fail due to a deleted or inaccessible
-                // current working directory.
-                let config = ChannelConfig::default_with_root_dir(std::env::temp_dir());
-                if !matches!(
-                    Channel::from_str(&value, &config),
-                    Ok(parsed) if channel_roundtrips(channel, &parsed)
-                ) {
-                    return Error::UnrepresentableChannel(value);
-                }
-            }
-        }
-    }
-
-    if let Some(error) = spec.condition.as_ref().and_then(diagnose_condition) {
-        return error;
-    }
-
-    Error::NotRoundTrippable(rendered)
-}
-
-/// Finds the first condition leaf whose canonical text does not parse back as
-/// a single match-spec leaf.
-fn diagnose_condition(condition: &MatchSpecCondition) -> Option<CanonicalMatchSpecError> {
-    for leaf in condition.leaves() {
-        let mut rendered = String::new();
-        match SpecView::from(leaf).fmt(
-            &mut rendered,
-            DisplayContext::condition_leaf(DisplayStyle::Canonical),
-        ) {
-            Err(FormatError::Canonical(error)) => return Some(error),
-            Err(FormatError::Fmt(_)) => unreachable!("writing to a String cannot fail"),
-            Ok(()) => {}
-        }
-
-        if !matches!(
-            parse_condition_with_options(&rendered, canonical_parse_options()),
-            Ok((rest, MatchSpecCondition::MatchSpec(_))) if rest.trim().is_empty()
-        ) {
-            return Some(CanonicalMatchSpecError::UnrepresentableConditionLeaf(
-                rendered,
-            ));
-        }
-    }
-    None
-}
-
-/// Channel names are ignored here on purpose: the canonical text carries the
-/// base URL, and a reparsed channel may derive a different display name from
-/// it. File URLs must round-trip exactly because their identity depends on
-/// more than the URL text.
-fn channel_roundtrips(original: &Channel, parsed: &Channel) -> bool {
-    let canonical_base_url = redact_credentials_from_url(original.base_url.url());
-    **parsed.base_url.url() == canonical_base_url
-        && parsed.platforms == original.platforms
-        && (original.base_url.url().scheme() != "file" || parsed == original)
-}
-
-/// Renders an optional displayable value, defaulting to the empty string.
-fn display_or_default<T: Display>(value: Option<T>) -> String {
-    value.map(|value| value.to_string()).unwrap_or_default()
-}
-
-/// Renders the first element of `original` that its reparsed counterpart does
-/// not reproduce, for use in error messages about list-valued fields.
-fn first_divergent_element<T: Display + PartialEq>(
-    original: Option<&[T]>,
-    parsed: Option<&[T]>,
-) -> String {
-    let original = original.unwrap_or_default();
-    let parsed = parsed.unwrap_or_default();
-    original
-        .iter()
-        .enumerate()
-        .find(|(index, element)| parsed.get(*index) != Some(*element))
-        .map_or_else(
-            || original.iter().format(",").to_string(),
-            |(_, element)| element.to_string(),
-        )
-}
-
-/// Adapter rendering a condition in its canonical form for error messages.
-struct RenderedCondition<'a>(&'a MatchSpecCondition);
-
-impl Display for RenderedCondition<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0.fmt_with(f, DisplayStyle::Canonical) {
-            Ok(()) => Ok(()),
-            Err(FormatError::Fmt(error)) => Err(error),
-            // This adapter only runs for conditions that already rendered
-            // canonically as part of the whole spec, so a canonical failure
-            // cannot happen here. If it ever does, emit a placeholder instead
-            // of a `fmt::Error`, which `to_string` turns into a panic.
-            Err(FormatError::Canonical(_)) => f.write_str("<unrepresentable condition>"),
-        }
-    }
+    Ok(rendered)
 }

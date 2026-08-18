@@ -192,22 +192,9 @@ pub enum CanonicalMatchSpecError {
     #[error("an explicit empty channel-platform selector cannot be represented canonically")]
     EmptyChannelPlatforms,
 
-    /// A version constraint would not reparse to the same public state.
-    #[error("version constraint '{0}' cannot be represented in canonical MatchSpec syntax")]
-    UnrepresentableVersion(String),
-
     /// A condition leaf would be tokenized as a logical expression.
     #[error("condition leaf '{0}' cannot be represented in canonical MatchSpec syntax")]
     UnrepresentableConditionLeaf(String),
-
-    /// A channel would not reparse to the same public state.
-    #[error("channel '{0}' cannot be represented in canonical MatchSpec syntax")]
-    UnrepresentableChannel(String),
-
-    /// The rendered canonical text failed to reparse and the failure could not
-    /// be attributed to a specific field.
-    #[error("'{0}' does not round-trip through the MatchSpec parser")]
-    NotRoundTrippable(String),
 }
 
 impl Display for MatchSpec {
@@ -229,9 +216,11 @@ impl MatchSpec {
     /// `when`, and `track_features`. Unlike [`Display`], nothing is
     /// positional besides the name.
     ///
-    /// The rendered text is verified by one round-trip through the parser; a
-    /// divergence is attributed to a field and returned as the matching
-    /// [`CanonicalMatchSpecError`] variant.
+    /// States the grammar cannot represent are refused while rendering, with
+    /// the error attributed to the offending field as the matching
+    /// [`CanonicalMatchSpecError`] variant. No parsing happens here;
+    /// round-trip fidelity is enforced by the property tests in
+    /// `tests/matchspec_proptest.rs`.
     ///
     /// Channel and package URL userinfo, known token paths, query strings,
     /// and non-digest fragments are redacted, so URLs containing such data do

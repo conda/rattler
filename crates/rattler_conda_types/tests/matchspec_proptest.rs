@@ -464,7 +464,10 @@ fn channel_equivalent(original: &Channel, reparsed: &Channel, redacted: bool) ->
     } else {
         (**original.base_url.url()).clone()
     };
-    **reparsed.base_url.url() == original_url && reparsed.platforms == original.platforms
+    // Redaction can swallow a trailing slash that reparsing re-adds.
+    reparsed.base_url.url().as_str().trim_end_matches('/')
+        == original_url.as_str().trim_end_matches('/')
+        && reparsed.platforms == original.platforms
 }
 
 /// A reparsed matcher is faithful when it is identical, or when it equals
@@ -682,7 +685,8 @@ proptest! {
                 if let Ok(reparsed) = MatchSpec::from_str(&rendered, strict_v3()) {
                     assert_faithful(&spec, &reparsed, &rendered, false);
                 }
-                // Must not panic; Ok is verified internally by round-trip.
+                // Must not panic; fidelity of Ok results is asserted by the
+                // canonical property.
                 let _ = spec.to_canonical_string();
             }
             let _ = NamelessMatchSpec::from_str(&input, options);
