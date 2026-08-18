@@ -59,6 +59,7 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
 fs-err = { workspace = true }
 memmap2 = { workspace = true }
 
@@ -80,6 +81,8 @@ rattler_package_streaming = { path = "../rattler_package_streaming", default-fea
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 proptest = { workspace = true }
+# Enables the `proptest` feature for this crate's own tests.
+rattler_conda_types = { path = ".", features = ["proptest"] }
 hex-literal = { workspace = true }
 criterion = { workspace = true, features = ["html_reports"] }
 pathdiff = { workspace = true }
