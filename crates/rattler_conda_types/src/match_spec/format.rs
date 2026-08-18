@@ -32,9 +32,9 @@ use crate::{
 pub(crate) enum DisplayStyle {
     /// The historic positional format produced by `Display`. Infallible and
     /// best-effort: layout and field order stay stable for existing callers
-    /// and values are quoted losslessly when possible, but it is not a
-    /// serialization format. Use [`MatchSpec::to_canonical_string`] for
-    /// verified output.
+    /// and values are quoted losslessly when possible (a value holding both
+    /// quote characters is not). Not a serialization format; use
+    /// [`MatchSpec::to_canonical_string`] for verified output.
     Legacy,
     /// The stable all-bracket representation produced by
     /// [`MatchSpec::to_canonical_string`].
@@ -264,7 +264,8 @@ fn channel_renders_by_name(channel: &Channel) -> bool {
     // Only the channel alias matters for name resolution; the root dir is
     // used for path channels alone, which never pass the URL comparison.
     let config = ChannelConfig::default_with_root_dir(std::path::PathBuf::new());
-    Channel::from_name(name, &config).base_url == channel.base_url
+    Channel::try_from_name(name, &config)
+        .is_some_and(|derived| derived.base_url == channel.base_url)
 }
 
 /// Whether a channel name or namespace can occupy a positional slot without
@@ -751,7 +752,11 @@ fn write_scalar(
             let value = value.to_string();
             match pick_quote_delimiter(&value) {
                 Some(delimiter) => write!(f, "{key}={delimiter}{value}{delimiter}")?,
-                None => write!(f, "{key}=\"{value}\"")?,
+                // No delimiter can hold the value, and raw output could
+                // re-tokenize into something that parses. Emit a key the
+                // parser always rejects so the failure stays loud no matter
+                // how the value slices.
+                None => write!(f, "unrepresentable-{key}=\"{value}\"")?,
             }
         }
         DisplayStyle::Canonical => write!(f, "{key}={}", canonical_bracket_value(value)?)?,

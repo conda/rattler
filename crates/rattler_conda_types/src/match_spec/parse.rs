@@ -446,34 +446,53 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    let bytes = input.as_bytes();
-
     // Brackets are a balanced `[...]` group at the end of the spec.
-    if bytes.last() != Some(&b']') {
+    if !input.ends_with(']') {
         return Ok((input.into(), SmallVec::new()));
     }
 
-    // Scan back to the matching `[`, tracking depth. `[`/`]` are ASCII, so byte
-    // scanning is safe on UTF-8 input.
+    // Scan forward for the group that closes at the end of the input,
+    // ignoring brackets inside quoted values: a `]` in `fn='a]b'` is content,
+    // and counting it would mis-slice the section or reject it as unbalanced.
     let mut depth = 0usize;
     let mut open = None;
-    for (idx, &b) in bytes.iter().enumerate().rev() {
-        match b {
-            b']' => depth += 1,
-            b'[' => {
-                depth -= 1;
+    let mut quote = None;
+    let mut characters = input.char_indices();
+    while let Some((idx, character)) = characters.next() {
+        if let Some(quote_character) = quote {
+            match character {
+                '\\' => {
+                    characters.next();
+                }
+                character if character == quote_character => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+        match character {
+            '\'' | '"' if depth > 0 => quote = Some(character),
+            '[' => {
                 if depth == 0 {
                     open = Some(idx);
-                    break;
+                }
+                depth += 1;
+            }
+            ']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && idx != input.len() - 1 {
+                    open = None;
                 }
             }
             _ => {}
         }
     }
 
-    let Some(open) = open else {
-        // Unbalanced brackets: leave the input untouched.
-        return Ok((input.into(), SmallVec::new()));
+    let (Some(open), 0, None) = (open, depth, quote) else {
+        // The input ends with `]` but no well-formed bracket group closes at
+        // the end. Report the malformed section instead of letting bracket
+        // text flow into the positional grammar, where it could accidentally
+        // parse as something else.
+        return Err(ParseMatchSpecError::InvalidBracket);
     };
 
     let bracket_contents = parse_bracket_list(&input[open..])?;

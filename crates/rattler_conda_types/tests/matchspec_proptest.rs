@@ -8,6 +8,10 @@
 //! must reparse equal (modulo documented URL credential redaction) and must
 //! be idempotent.
 //!
+//! The fuzz property runs the opposite direction: fragment-composed raw
+//! strings go straight into the parsers, which must never panic, and
+//! anything they accept must obey the same loud-or-faithful rule.
+//!
 //! Documented equivalences the assertions allow:
 //! * A reparsed [`Channel`] may carry a different display `name`. The URL
 //!   and platform selector are the channel's identity, the name is derived.
@@ -32,11 +36,21 @@ fn strict_v3() -> ParseMatchSpecOptions {
         .with_exact_names_only(false)
 }
 
+fn lenient_v3() -> ParseMatchSpecOptions {
+    ParseMatchSpecOptions::lenient()
+        .with_repodata_revision(RepodataRevision::V3)
+        .with_exact_names_only(false)
+}
+
+fn channel_cfg() -> ChannelConfig {
+    ChannelConfig::default_with_root_dir(std::env::temp_dir())
+}
+
 // -------------------------------------------------------------------------
 // Strategies
 // -------------------------------------------------------------------------
 
-fn name_matcher() -> impl Strategy<Value = PackageNameMatcher> {
+fn name_matcher() -> BoxedStrategy<PackageNameMatcher> {
     prop_oneof![
         // Exact names, including ones that read like condition keywords.
         4 => prop_oneof![
@@ -62,9 +76,10 @@ fn name_matcher() -> impl Strategy<Value = PackageNameMatcher> {
             name.parse::<PackageNameMatcher>().ok()
         }),
     ]
+    .boxed()
 }
 
-fn version_spec() -> impl Strategy<Value = VersionSpec> {
+fn version_spec() -> BoxedStrategy<VersionSpec> {
     prop_oneof![
         ">=[0-9]{1,2}\\.[0-9]{1,2}",
         "==[0-9]{1,2}\\.[0-9]{1,2}\\.[0-9]{1,2}",
@@ -81,16 +96,18 @@ fn version_spec() -> impl Strategy<Value = VersionSpec> {
     .prop_filter_map("valid version spec", |spec| {
         VersionSpec::from_str(&spec, rattler_conda_types::ParseStrictness::Lenient).ok()
     })
+    .boxed()
 }
 
 /// String matchers as the parser produces them: their rendered text always
 /// reparses to the identical matcher.
-fn parsed_string_matcher() -> impl Strategy<Value = StringMatcher> {
+fn parsed_string_matcher() -> BoxedStrategy<StringMatcher> {
     prop_oneof!["[a-z0-9_]{1,8}", "py\\*", "\\*_[0-9]", "\\*", "\\^py.*\\$"]
         .prop_filter_map("valid matcher", |value| value.parse::<StringMatcher>().ok())
+        .boxed()
 }
 
-fn string_matcher() -> impl Strategy<Value = StringMatcher> {
+fn string_matcher() -> BoxedStrategy<StringMatcher> {
     prop_oneof![
         4 => parsed_string_matcher(),
         // Programmatic construction can force states whose text reparses as a
@@ -98,18 +115,79 @@ fn string_matcher() -> impl Strategy<Value = StringMatcher> {
         // glob; see `matcher_equivalent`.
         1 => Just(StringMatcher::Exact("cuda*".to_string())),
     ]
+    .boxed()
+}
+
+/// Fragments the fuzz property concatenates into parser input. Grammar
+/// pieces dominate so a decent share of inputs parses; the rest exercises
+/// rejection paths.
+const FUZZ_FRAGMENTS: &[&str] = &[
+    "python",
+    "conda-forge",
+    "linux-64",
+    "noarch",
+    "::",
+    ":",
+    "/",
+    "[",
+    "]",
+    "when=",
+    "extras=[docs,tests]",
+    "flags=[cuda]",
+    "version=",
+    "build=",
+    "fn=",
+    "channel=",
+    "subdir=",
+    "md5=",
+    "0123456789abcdef0123456789abcdef",
+    "\"",
+    "'",
+    "\\",
+    "#",
+    ";",
+    " if ",
+    " and ",
+    " or ",
+    "(",
+    ")",
+    "*",
+    "=",
+    ",",
+    " ",
+    ">=1.2,<2",
+    "==1!2.0dev_",
+    "1.2.*",
+    "^py.*$",
+    "$",
+    "https://",
+    "[::1]",
+    "user:secret@repo.example",
+    "?token",
+    "ðŸ¦€",
+];
+
+fn fuzz_input() -> BoxedStrategy<String> {
+    let fragment = prop_oneof![
+        6 => prop::sample::select(FUZZ_FRAGMENTS).prop_map(str::to_string),
+        1 => "[ -~]{1,6}",
+    ];
+    prop::collection::vec(fragment, 0..8)
+        .prop_map(|fragments| fragments.concat())
+        .boxed()
 }
 
 /// Printable-ASCII scalars including quotes, backslashes, brackets, `#`,
 /// commas and spaces, plus some unicode.
-fn scalar_value() -> impl Strategy<Value = String> {
+fn scalar_value() -> BoxedStrategy<String> {
     prop_oneof![
         4 => "[ -~]{1,12}",
-        1 => "[a-zA-Z0-9αβ★ ]{1,8}",
+        1 => "[a-zA-Z0-9Î±Î²â˜… ]{1,8}",
     ]
+    .boxed()
 }
 
-fn extras() -> impl Strategy<Value = Vec<String>> {
+fn extras() -> BoxedStrategy<Vec<String>> {
     prop::collection::vec(
         prop_oneof![
             4 => "[a-z][a-z0-9_.+-]{0,8}",
@@ -117,10 +195,10 @@ fn extras() -> impl Strategy<Value = Vec<String>> {
             1 => prop_oneof![Just("Docs".to_string()), Just("a,b".to_string()), Just(String::new())],
         ],
         1..3,
-    )
+    ).boxed()
 }
 
-fn flags() -> impl Strategy<Value = Vec<StringMatcher>> {
+fn flags() -> BoxedStrategy<Vec<StringMatcher>> {
     prop::collection::vec(
         prop_oneof![
             "[a-z][a-z0-9_]{0,6}".prop_map(StringMatcher::Exact),
@@ -128,9 +206,10 @@ fn flags() -> impl Strategy<Value = Vec<StringMatcher>> {
         ],
         1..3,
     )
+    .boxed()
 }
 
-fn track_features() -> impl Strategy<Value = Vec<String>> {
+fn track_features() -> BoxedStrategy<Vec<String>> {
     prop::collection::vec(
         prop_oneof![
             4 => "[a-z][a-z0-9_]{0,6}",
@@ -138,31 +217,52 @@ fn track_features() -> impl Strategy<Value = Vec<String>> {
         ],
         1..3,
     )
+    .boxed()
 }
 
-fn channel() -> impl Strategy<Value = Arc<Channel>> {
-    fn channel_cfg() -> ChannelConfig {
-        ChannelConfig::default_with_root_dir(std::env::temp_dir())
-    }
+/// Channels composed from parts instead of a hand-picked list, so the
+/// randomness reaches the dimensions bugs have lived in: names whose last
+/// segment is a platform, multi-segment label paths, IPv6 hosts, embedded
+/// credentials, and platform selectors on any of them.
+fn channel() -> BoxedStrategy<Arc<Channel>> {
+    let segment = prop_oneof![
+        3 => "[a-z][a-z0-9-]{0,8}",
+        1 => Just("linux-64".to_string()),
+        1 => Just("noarch".to_string()),
+    ];
+    let name = prop_oneof![
+        4 => prop::collection::vec(segment, 1..4).prop_map(|segments| segments.join("/")),
+        1 => Just("*".to_string()),
+    ];
+    let host = prop_oneof![
+        3 => Just("repo.example".to_string()),
+        1 => Just("[::1]".to_string()),
+        1 => Just("user:secret@repo.example".to_string()),
+    ];
+    let selector = prop::option::weighted(
+        0.3,
+        prop_oneof![
+            Just("[linux-64]".to_string()),
+            Just("[linux-64,noarch]".to_string()),
+        ],
+    );
 
     prop_oneof![
-        // Alias-based names round-trip positionally.
-        Just("conda-forge"),
-        Just("bioconda/label/main"),
-        // A name ending in a platform segment must not render positionally.
-        Just("conda-forge/linux-64"),
-        Just("*"),
-        // URL channels, with and without platform selectors and credentials.
-        Just("https://repo.example/custom"),
-        Just("https://repo.example/custom[linux-64,noarch]"),
-        Just("https://user:secret@repo.example/private"),
+        (name.clone(), selector.clone())
+            .prop_map(|(name, selector)| format!("{name}{}", selector.unwrap_or_default())),
+        (host, name, selector).prop_map(|(host, name, selector)| {
+            format!("https://{host}/{name}{}", selector.unwrap_or_default())
+        }),
     ]
-    .prop_map(|channel| {
-        Arc::new(Channel::from_str(channel, &channel_cfg()).expect("valid channel"))
+    .prop_filter_map("parseable channel", |channel| {
+        Channel::from_str(&channel, &channel_cfg())
+            .ok()
+            .map(Arc::new)
     })
+    .boxed()
 }
 
-fn url() -> impl Strategy<Value = Url> {
+fn url() -> BoxedStrategy<Url> {
     prop_oneof![
         "[a-z0-9-]{1,8}".prop_map(|segment| {
             Url::parse(&format!("https://repo.example/{segment}.conda")).unwrap()
@@ -170,6 +270,7 @@ fn url() -> impl Strategy<Value = Url> {
         Just(Url::parse("https://u:p@repo.example/pkg.conda?auth=tok#frag").unwrap()),
         Just(Url::parse("https://repo.example/pkg.conda#sha256:deadbeef").unwrap()),
     ]
+    .boxed()
 }
 
 prop_compose! {
@@ -222,17 +323,28 @@ prop_compose! {
     }
 }
 
-fn condition() -> impl Strategy<Value = MatchSpecCondition> {
+fn condition() -> BoxedStrategy<MatchSpecCondition> {
     let leaf = (
         name_matcher(),
         prop::option::weighted(0.6, version_spec()),
         prop::option::weighted(0.2, parsed_string_matcher()),
+        // The grammar cannot represent a nested `when` on a leaf: canonical
+        // must return NestedWhen and legacy Display must fail loudly, never
+        // panic or drop the condition.
+        prop::option::weighted(0.08, "[a-z]{1,6}"),
     )
-        .prop_map(|(name, version, build)| {
+        .prop_map(|(name, version, build, nested)| {
             MatchSpecCondition::MatchSpec(Box::new(MatchSpec {
                 name,
                 version,
                 build,
+                condition: nested.and_then(|nested| {
+                    let name = nested.parse().ok()?;
+                    Some(MatchSpecCondition::MatchSpec(Box::new(MatchSpec {
+                        name,
+                        ..MatchSpec::default()
+                    })))
+                }),
                 ..MatchSpec::default()
             }))
         });
@@ -244,13 +356,16 @@ fn condition() -> impl Strategy<Value = MatchSpecCondition> {
                 .prop_map(|(a, b)| MatchSpecCondition::Or(Box::new(a), Box::new(b))),
         ]
     })
+    .boxed()
 }
 
-fn spec_with_optional_condition() -> impl Strategy<Value = MatchSpec> {
-    (bare_spec(), prop::option::weighted(0.4, condition())).prop_map(|(mut spec, condition)| {
-        spec.condition = condition;
-        spec
-    })
+fn spec_with_optional_condition() -> BoxedStrategy<MatchSpec> {
+    (bare_spec(), prop::option::weighted(0.4, condition()))
+        .prop_map(|(mut spec, condition)| {
+            spec.condition = condition;
+            spec
+        })
+        .boxed()
 }
 
 // -------------------------------------------------------------------------
@@ -465,5 +580,23 @@ proptest! {
         let original = MatchSpec::from_nameless(nameless, "x".parse().unwrap());
         let reparsed = MatchSpec::from_nameless(reparsed, "x".parse().unwrap());
         assert_faithful(&original, &reparsed, &rendered, false);
+    }
+
+    /// The parsers never panic on arbitrary input, and any spec they accept
+    /// follows the loud-or-faithful rule when rendered again.
+    #[test]
+    fn parser_never_panics_and_accepted_input_roundtrips(input in fuzz_input()) {
+        for options in [strict_v3(), lenient_v3()] {
+            if let Ok(spec) = MatchSpec::from_str(&input, options) {
+                let rendered = spec.to_string();
+                if let Ok(reparsed) = MatchSpec::from_str(&rendered, strict_v3()) {
+                    assert_faithful(&spec, &reparsed, &rendered, false);
+                }
+                // Must not panic; Ok is verified internally by round-trip.
+                let _ = spec.to_canonical_string();
+            }
+            let _ = NamelessMatchSpec::from_str(&input, options);
+        }
+        let _ = Channel::from_str(&input, &channel_cfg());
     }
 }

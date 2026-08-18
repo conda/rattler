@@ -243,10 +243,9 @@ impl Channel {
             if channel.contains([':', '\\', '[', ']']) {
                 return Err(ParseChannelError::InvalidName(channel.to_owned()));
             }
-            Channel {
-                platforms,
-                ..Channel::from_name(channel, config)
-            }
+            let base = Channel::try_from_name(channel, config)
+                .ok_or_else(|| ParseChannelError::InvalidName(channel.to_owned()))?;
+            Channel { platforms, ..base }
         };
 
         Ok(channel)
@@ -297,6 +296,13 @@ impl Channel {
 
     /// Construct a channel from a name, platform and configuration.
     pub fn from_name(name: &str, config: &ChannelConfig) -> Self {
+        Self::try_from_name(name, config).expect("name is not a valid Url")
+    }
+
+    /// Fallible variant of [`Channel::from_name`], used by parsing and
+    /// rendering so a name that does not resolve against the channel alias
+    /// (e.g. `//x`) becomes an error instead of a panic.
+    pub(crate) fn try_from_name(name: &str, config: &ChannelConfig) -> Option<Self> {
         // TODO: custom channels
 
         let dir_name = if name.ends_with('/') {
@@ -306,15 +312,11 @@ impl Channel {
         };
 
         let name = name.trim_end_matches('/');
-        Self {
+        Some(Self {
             platforms: None,
-            base_url: config
-                .channel_alias
-                .join(dir_name.as_ref())
-                .expect("name is not a valid Url")
-                .into(),
+            base_url: config.channel_alias.join(dir_name.as_ref()).ok()?.into(),
             name: (!name.is_empty()).then_some(name).map(str::to_owned),
-        }
+        })
     }
 
     /// Constructs a channel from a directory path.
