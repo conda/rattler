@@ -49,4 +49,4 @@ windows-registry = "0.6"
 
 [dev-dependencies]
 insta = { workspace = true, features = ["json"] }
-configparser = { version = "3", features = ["indexmap"] }
+configparser = { version = "=3.2.0", features = ["indexmap"] }
