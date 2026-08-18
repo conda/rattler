@@ -15,6 +15,7 @@ use super::{
     BarrierCell, ChannelNoticeResult, GatewayError, GatewayInner, GatewayWarning, RepoData,
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
+    local_subdir::LocalSubdirClient,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
@@ -562,6 +563,40 @@ impl QueryExecutor {
                             })
                         });
                         (SubdirKind::Custom, fut)
+                    }
+                    Source::SparseRepoData(sparse_list) => {
+                        // Each entry represents a different subdir, so find the one
+                        // matching the requested platform; if none matches, treat it
+                        // as having no records, same as a channel that doesn't
+                        // publish a given subdir.
+                        let matching = sparse_list
+                            .iter()
+                            .find(|sparse| platform.as_str() == sparse.subdir())
+                            .cloned();
+                        let url = matching
+                            .as_ref()
+                            .or_else(|| sparse_list.first())
+                            .map(|sparse| sparse.channel.base_url.clone());
+                        let kind = match url {
+                            Some(url) => SubdirKind::Channel { url, platform },
+                            None => SubdirKind::Custom,
+                        };
+                        let subdir = match matching {
+                            Some(sparse) => Arc::new(Subdir::Found(SubdirData::from_client(
+                                LocalSubdirClient::new(sparse),
+                            ))),
+                            None => Arc::new(Subdir::NotFound),
+                        };
+                        let b = barrier.clone();
+                        let fut = box_future(async move {
+                            b.set(subdir.clone()).expect("subdir was set twice");
+                            Ok(PendingSubdirOk {
+                                subdir,
+                                kind_url_and_platform: None,
+                                warning: None,
+                            })
+                        });
+                        (kind, fut)
                     }
                 };
 

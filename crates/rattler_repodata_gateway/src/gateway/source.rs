@@ -8,7 +8,7 @@ use super::{
     GatewayError,
     subdir::{PackageRecords, SubdirClient, extract_unique_deps_split},
 };
-use crate::Reporter;
+use crate::{Reporter, sparse::SparseRepoData};
 
 /// A source of repodata records for a specific subdirectory.
 ///
@@ -39,7 +39,7 @@ pub trait RepoDataSource: Send + Sync {
 /// A source of repodata, either a channel or a custom source.
 ///
 /// This enum allows the [`Gateway::query()`](super::Gateway::query) method
-/// to accept both traditional channels and custom repodata sources.
+/// to accept both traditional channels custom repodata sources and sparse repodata.
 #[derive(Clone)]
 pub enum Source {
     /// A traditional conda channel (expanded to all requested platforms).
@@ -47,6 +47,10 @@ pub enum Source {
 
     /// A custom repodata source (provides records for requested platforms).
     Custom(Arc<dyn RepoDataSource>),
+
+    /// A sparse repodata source (provides records for requested platforms from sparse
+    /// repodata). Each entry represents a different subdir.
+    SparseRepoData(Vec<Arc<SparseRepoData>>),
 }
 
 impl From<Channel> for Source {
@@ -58,6 +62,18 @@ impl From<Channel> for Source {
 impl From<Arc<dyn RepoDataSource>> for Source {
     fn from(source: Arc<dyn RepoDataSource>) -> Self {
         Source::Custom(source)
+    }
+}
+
+impl From<Arc<SparseRepoData>> for Source {
+    fn from(source: Arc<SparseRepoData>) -> Self {
+        Source::SparseRepoData(vec![source])
+    }
+}
+
+impl From<Vec<Arc<SparseRepoData>>> for Source {
+    fn from(sources: Vec<Arc<SparseRepoData>>) -> Self {
+        Source::SparseRepoData(sources)
     }
 }
 

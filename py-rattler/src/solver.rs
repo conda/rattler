@@ -233,7 +233,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let repo_data_refs = repo_data_locks
                 .iter()
                 .map(|s| {
-                    s.as_ref()
+                    s.as_deref()
                         .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
                 })
                 .collect::<Result<Vec<_>, _>>()?;

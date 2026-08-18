@@ -5,7 +5,9 @@ use std::sync::Arc;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyAnyMethods;
-use pyo3::{Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
+use pyo3::{
+    Borrowed, Bound, FromPyObject, PyAny, PyErr, PyRef, PyResult, Python, pyclass, pymethods,
+};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{
@@ -22,6 +24,7 @@ use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::repo_data::PyChannelRelations;
 use crate::repo_data::source::PyRepoDataSource;
+use crate::repo_data::sparse::PySparseRepoData;
 use crate::{PyChannel, Wrap};
 
 #[pyclass(from_py_object)]
@@ -146,12 +149,18 @@ pub(crate) fn emit_gateway_warnings(warnings: Vec<GatewayWarning>) -> PyResult<(
 ///
 /// Accepts either:
 /// - A `PyChannel` object (wrapped Channel)
+/// - A `PySparseRepoData` object
 /// - Any object implementing the `RepoDataSource` protocol
 ///   (has `fetch_package_records` and `package_names` methods)
 pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     // First try to extract as PyChannel
     if let Ok(channel) = obj.extract::<PyChannel>() {
         return Ok(Source::from(channel.inner));
+    }
+
+    // Then try to extract as SparseRepoData
+    if let Ok(sparse) = obj.extract::<PyRef<'_, PySparseRepoData>>() {
+        return Ok(Source::from(sparse.as_source()?));
     }
 
     // Check if it implements the RepoDataSource protocol
@@ -163,7 +172,7 @@ pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     }
 
     Err(PyTypeError::new_err(
-        "Expected Channel or object implementing RepoDataSource protocol \
+        "Expected Channel, SparseRepoData, or object implementing RepoDataSource protocol \
          (with fetch_package_records and package_names methods)",
     ))
 }
@@ -360,11 +369,14 @@ impl PyGateway {
         // Separate channels and custom sources
         let mut channels: Vec<rattler_conda_types::Channel> = Vec::new();
         let mut custom_sources: Vec<Arc<dyn rattler_repodata_gateway::RepoDataSource>> = Vec::new();
+        let mut sparse_sources: Vec<Arc<rattler_repodata_gateway::sparse::SparseRepoData>> =
+            Vec::new();
 
         for source in rust_sources {
             match source {
                 Source::Channel(channel) => channels.push(channel),
                 Source::Custom(custom) => custom_sources.push(custom),
+                Source::SparseRepoData(sparse) => sparse_sources.extend(sparse),
             }
         }
 
