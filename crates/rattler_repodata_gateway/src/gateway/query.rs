@@ -16,9 +16,11 @@ use super::{
     channel_expander::{ChannelExpander, ChannelRelationsMode, ChannelRelationsWarning},
     channel_relations::DEFAULT_CHANNEL_RELATIONS_MAX_DEPTH,
     source::{CustomSourceClient, Source},
-    subdir::{PackageRecords, Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData, extract_unique_deps_split},
 };
 use crate::Reporter;
+
+type RecordPatch = dyn Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync;
 
 /// Result of a successful [`RepoDataQuery::execute`].
 ///
@@ -136,6 +138,9 @@ pub struct RepoDataQuery {
     /// Whether to recursively fetch dependencies
     recursive: bool,
 
+    /// A query-local patch applied to repodata records.
+    record_patch: Option<Arc<RecordPatch>>,
+
     /// The reporter to use by the query.
     reporter: Option<Arc<dyn Reporter>>,
 
@@ -236,6 +241,7 @@ impl RepoDataQuery {
             specs,
 
             recursive: false,
+            record_patch: None,
             reporter: None,
             channel_notices: false,
             channel_relations_mode: ChannelRelationsMode::default(),
@@ -284,6 +290,25 @@ impl RepoDataQuery {
         Self { recursive, ..self }
     }
 
+    /// Applies a query-local patch to repodata records.
+    ///
+    /// The patch runs after records are retrieved, including from the gateway
+    /// cache, and before recursive dependency discovery. Returning `Some`
+    /// replaces the record for this query, while returning `None` reuses the
+    /// original record. Replacement records are never written to the gateway
+    /// cache. Patches must preserve record identity fields such as the package
+    /// name, identifier, and URL.
+    #[must_use]
+    pub fn with_record_patch(
+        self,
+        patch: impl Fn(&RepoDataRecord) -> Option<RepoDataRecord> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            record_patch: Some(Arc::new(patch)),
+            ..self
+        }
+    }
+
     /// Sets the reporter to use for this query.
     ///
     /// The reporter is notified of important evens during the execution of the
@@ -314,6 +339,7 @@ struct QueryExecutor {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gateway: Arc<GatewayInner>,
     recursive: bool,
+    record_patch: Option<Arc<RecordPatch>>,
     reporter: Option<Arc<dyn Reporter>>,
 
     // Specs categorized at construction
@@ -420,6 +446,7 @@ impl QueryExecutor {
             platforms,
             specs,
             recursive,
+            record_patch,
             reporter,
             channel_notices,
             channel_relations_mode,
@@ -551,6 +578,7 @@ impl QueryExecutor {
         Ok(Self {
             gateway,
             recursive,
+            record_patch,
             reporter,
             direct_url_specs,
             direct_url_result,
@@ -709,6 +737,28 @@ impl QueryExecutor {
                 }
             }
         }
+    }
+
+    /// Apply the query-local record patch and rebuild derived dependency data.
+    fn patch_package_records(&self, mut pkg: PackageRecords) -> PackageRecords {
+        let Some(patch) = &self.record_patch else {
+            return pkg;
+        };
+
+        let mut changed = false;
+        for record in &mut pkg.records {
+            if let Some(patched) = patch(record.as_ref()) {
+                *record = Arc::new(patched);
+                changed = true;
+            }
+        }
+
+        if changed {
+            (pkg.unique_base_deps, pkg.unique_extra_deps) =
+                extract_unique_deps_split(pkg.records.iter().map(AsRef::as_ref));
+        }
+
+        pkg
     }
 
     /// Walk the deps of newly-active extras against records that have
@@ -916,6 +966,7 @@ impl QueryExecutor {
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
                     let (target, request, pkg) = records?;
+                    let pkg = self.patch_package_records(pkg);
 
                     if self.recursive {
                         let entry =

@@ -1425,6 +1425,120 @@ mod test {
         )
     }
 
+    #[tokio::test]
+    async fn test_record_patch_is_query_local() {
+        fn names(output: &crate::RepoDataQueryOutput) -> std::collections::BTreeSet<String> {
+            output
+                .iter()
+                .flat_map(RepoData::iter)
+                .map(|record| record.package_record.name.as_normalized().to_string())
+                .collect()
+        }
+
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir = channel_dir.path().join("linux-64");
+        fs_err::create_dir_all(&subdir).unwrap();
+        fs_err::write(
+            subdir.join("repodata.json"),
+            serde_json::json!({
+                "info": {"subdir": "linux-64"},
+                "packages": {
+                    "application-1.0-0.tar.bz2": {
+                        "name": "application",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["python"],
+                        "subdir": "linux-64"
+                    },
+                    "python-3.12.0-0.tar.bz2": {
+                        "name": "python",
+                        "version": "3.12.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    },
+                    "pip-25.0-0.tar.bz2": {
+                        "name": "pip",
+                        "version": "25.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "subdir": "linux-64"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let gateway = Gateway::new();
+        let channel = Channel::try_from_directory(channel_dir.path()).unwrap();
+        let application = || MatchSpec::from_str("application", Lenient).unwrap();
+
+        let unpatched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let patched = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![application()],
+            )
+            .recursive(true)
+            .with_record_patch(|record| {
+                if record.package_record.name.as_normalized() != "python" {
+                    return None;
+                }
+                let mut record = record.clone();
+                record.package_record.depends.push("pip".to_string());
+                Some(record)
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&patched),
+            ["application", "pip", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+
+        let unpatched_again = gateway
+            .query(vec![channel], vec![Platform::Linux64], vec![application()])
+            .recursive(true)
+            .await
+            .unwrap();
+        assert_eq!(
+            names(&unpatched_again),
+            ["application", "python"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
+        let python = unpatched_again
+            .iter()
+            .flat_map(RepoData::iter)
+            .find(|record| record.package_record.name.as_normalized() == "python")
+            .unwrap();
+        assert!(python.package_record.depends.is_empty());
+    }
+
     /// Integration test that verifies cache clearing actually works end-to-end.
     /// Creates a simple channel with a single package, queries it, modifies
     /// the source data, and verifies that memory-only cache clearing still

@@ -1,5 +1,7 @@
 import datetime
+import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -162,6 +164,136 @@ async def test_solve_with_repodata() -> None:
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert len(solved_data) == 2
+
+
+def python_repodata(tmp_path: Path, python_version: str = "3.12.0") -> SparseRepoData:
+    repodata_path = tmp_path / "noarch" / "repodata.json"
+    repodata_path.parent.mkdir()
+    repodata_path.write_text(
+        json.dumps(
+            {
+                "info": {"subdir": "noarch"},
+                "packages": {
+                    f"python-{python_version}-0.tar.bz2": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "name": "python",
+                        "subdir": "noarch",
+                        "version": python_version,
+                    },
+                    "pip-1.0-0.tar.bz2": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "name": "pip",
+                        "subdir": "noarch",
+                        "version": "1.0",
+                    },
+                    "standalone-1.0-0.tar.bz2": {
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": [],
+                        "name": "standalone",
+                        "subdir": "noarch",
+                        "version": "1.0",
+                    },
+                    "application-1.0-0.tar.bz2": {
+                        "name": "application",
+                        "version": "1.0",
+                        "build": "0",
+                        "build_number": 0,
+                        "depends": ["python"],
+                        "subdir": "noarch",
+                    },
+                },
+            }
+        )
+    )
+    return SparseRepoData(
+        channel=Channel(str(tmp_path)),
+        subdir="noarch",
+        path=repodata_path,
+    )
+
+
+@pytest.mark.asyncio
+async def test_solve_adds_pip_to_cached_python(tmp_path: Path) -> None:
+    python_repodata(tmp_path)
+    channel = Channel(str(tmp_path))
+    gateway = Gateway()
+
+    without_pip = await solve(
+        [channel],
+        ["application"],
+        platforms=["noarch"],
+        gateway=gateway,
+    )
+    with_pip = await solve(
+        [channel],
+        ["application"],
+        platforms=["noarch"],
+        gateway=gateway,
+        add_pip_as_python_dependency=True,
+    )
+
+    assert {record.name.normalized for record in without_pip} == {
+        "application",
+        "python",
+    }
+    assert {record.name.normalized for record in with_pip} == {
+        "application",
+        "python",
+        "pip",
+    }
+    python_record = next(record for record in with_pip if record.name.normalized == "python")
+    assert "pip" in python_record.depends
+
+
+@pytest.mark.parametrize(
+    ("python_version", "add_pip", "expected_names"),
+    [
+        ("2.7.18", True, {"python", "pip"}),
+        ("3.12.0", True, {"python", "pip"}),
+        ("4.0.0", True, {"python"}),
+        ("3.12.0", False, {"python"}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_solve_with_sparse_repodata_adds_pip_to_python(
+    tmp_path: Path,
+    python_version: str,
+    add_pip: bool,
+    expected_names: set[str],
+) -> None:
+    sparse_repodata = python_repodata(tmp_path, python_version)
+
+    solved_data = await solve_with_sparse_repodata(
+        ["python"],
+        [sparse_repodata],
+        add_pip_as_python_dependency=add_pip,
+    )
+
+    assert {record.name.normalized for record in solved_data} == expected_names
+    python_record = next(record for record in solved_data if record.name.normalized == "python")
+    assert ("pip" in python_record.depends) is (add_pip and python_version[0] in "23")
+
+
+@pytest.mark.asyncio
+async def test_add_pip_does_not_patch_locked_python(tmp_path: Path) -> None:
+    sparse_repodata = python_repodata(tmp_path)
+    locked_python = sparse_repodata.load_records("python")[0]
+
+    solved_data = await solve_with_sparse_repodata(
+        ["python", "standalone"],
+        [sparse_repodata],
+        locked_packages=[locked_python],
+        add_pip_as_python_dependency=True,
+    )
+
+    assert {record.name.normalized for record in solved_data} == {"python", "standalone"}
+    python_record = next(record for record in solved_data if record.name.normalized == "python")
+    assert "pip" not in python_record.depends
 
 
 @pytest.mark.asyncio

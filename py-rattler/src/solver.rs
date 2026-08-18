@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
 
 use jiff::Timestamp;
 use pyo3::{
@@ -6,7 +9,7 @@ use pyo3::{
     pybacked::PyBackedStr, pyfunction,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{PackageRecord, ParseStrictness, RepoDataRecord, VersionSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     ExcludeNewer, RepoDataIter, SolveStrategy, SolverImpl, SolverTask, resolvo::Solver,
@@ -61,9 +64,34 @@ fn parse_exclude_newer(
     }
 }
 
+fn is_python_2_or_3(record: &PackageRecord) -> bool {
+    static PYTHON_VERSION: LazyLock<VersionSpec> = LazyLock::new(|| {
+        VersionSpec::from_str("2.*|3.*", ParseStrictness::Strict)
+            .expect("the Python version spec is valid")
+    });
+
+    record.name.as_normalized() == "python" && PYTHON_VERSION.matches(&record.version)
+}
+
+fn add_pip_to_python(record: &mut PackageRecord) {
+    if is_python_2_or_3(record) {
+        record.depends.push("pip".to_owned());
+    }
+}
+
+fn patch_python_with_pip(record: &RepoDataRecord) -> Option<RepoDataRecord> {
+    if !is_python_2_or_3(&record.package_record) {
+        return None;
+    }
+
+    let mut patched = record.clone();
+    add_pip_to_python(&mut patched.package_record);
+    Some(patched)
+}
+
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, channel_relations=None, channel_relations_max_depth=None, add_pip_as_python_dependency=false)
 )]
 pub fn py_solve<'a>(
     py: Python<'a>,
@@ -82,6 +110,7 @@ pub fn py_solve<'a>(
     strategy: Option<Wrap<SolveStrategy>>,
     channel_relations: Option<Wrap<rattler_repodata_gateway::ChannelRelationsMode>>,
     channel_relations_max_depth: Option<usize>,
+    add_pip_as_python_dependency: bool,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Convert Python sources to Rust Source enum
     let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
@@ -103,6 +132,9 @@ pub fn py_solve<'a>(
         }
         if let Some(depth) = channel_relations_max_depth {
             query = query.channel_relations_max_depth(depth);
+        }
+        if add_pip_as_python_dependency {
+            query = query.with_record_patch(patch_python_with_pip);
         }
         let output = query.execute().await.map_err(PyRattlerError::from)?;
         emit_gateway_warnings(output.warnings)?;
@@ -167,7 +199,7 @@ pub fn py_solve<'a>(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, exclude_newer_duration_seconds=None, strategy=None, add_pip_as_python_dependency=false)
 )]
 pub fn py_solve_with_sparse_repodata<'py>(
     py: Python<'py>,
@@ -183,6 +215,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
     exclude_newer_timestamp_ms: Option<i64>,
     exclude_newer_duration_seconds: Option<u64>,
     strategy: Option<Wrap<SolveStrategy>>,
+    add_pip_as_python_dependency: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
     // object in another thread.
@@ -212,7 +245,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
                 package_names,
-                None,
+                add_pip_as_python_dependency.then_some(add_pip_to_python),
                 package_format_selection.into(),
             )?;
 

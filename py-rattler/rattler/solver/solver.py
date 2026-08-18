@@ -36,6 +36,7 @@ async def solve(
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     channel_relations: Optional[ChannelRelationsMode] = None,
     channel_relations_max_depth: Optional[int] = None,
+    add_pip_as_python_dependency: bool = False,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -89,6 +90,8 @@ async def solve(
             ``"strict"`` to raise on malformed relation metadata.
         channel_relations_max_depth: Maximum recursion depth when following
             ``channel_relations``. ``0`` behaves like ``channel_relations="disabled"``.
+        add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
+            package records before solving.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -136,6 +139,7 @@ async def solve(
             else [],
             channel_relations=channel_relations,
             channel_relations_max_depth=channel_relations_max_depth,
+            add_pip_as_python_dependency=add_pip_as_python_dependency,
         )
     ]
 
@@ -152,6 +156,7 @@ async def solve_with_sparse_repodata(
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
+    add_pip_as_python_dependency: bool = False,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -198,6 +203,8 @@ async def solve_with_sparse_repodata(
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
         package_format_selection: Defines which package formats are selected
+        add_pip_as_python_dependency: Add `pip` as a dependency of Python 2 and 3
+            package records before solving.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -228,6 +235,7 @@ async def solve_with_sparse_repodata(
             if isinstance(exclude_newer, datetime.timedelta)
             else None,
             strategy=strategy,
+            add_pip_as_python_dependency=add_pip_as_python_dependency,
             constraints=[
                 constraint._match_spec
                 if isinstance(constraint, MatchSpec)
