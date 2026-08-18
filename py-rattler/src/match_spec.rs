@@ -155,8 +155,8 @@ impl PyMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns the stable, canonical string representation of `MatchSpec`,
-    /// verified by a round-trip through the parser.
+    /// Returns the stable, canonical string representation of `MatchSpec`.
+    /// Values that cannot be represented in canonical syntax are an error.
     pub fn to_canonical_string(&self) -> PyResult<String> {
         Ok(self
             .inner

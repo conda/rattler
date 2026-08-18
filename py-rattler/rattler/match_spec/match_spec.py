@@ -202,7 +202,8 @@ class MatchSpec:
         """
         Returns the stable, canonical string representation of this match
         spec: the package name first and every other populated field in a
-        single bracket section, verified by a round-trip through the parser.
+        single bracket section, with the same spec always rendering to the
+        same string.
 
         Raises `CanonicalMatchSpecError` when a value cannot be represented
         in canonical MatchSpec syntax.
