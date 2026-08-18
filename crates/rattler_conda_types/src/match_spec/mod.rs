@@ -218,9 +218,8 @@ impl MatchSpec {
     ///
     /// States the grammar cannot represent are refused while rendering, with
     /// the error attributed to the offending field as the matching
-    /// [`CanonicalMatchSpecError`] variant. No parsing happens here;
-    /// round-trip fidelity is enforced by the property tests in
-    /// `tests/matchspec_proptest.rs`.
+    /// [`CanonicalMatchSpecError`] variant. Round-trip fidelity is enforced
+    /// by the property tests in `tests/matchspec_proptest.rs`.
     ///
     /// Channel and package URL userinfo, known token paths, query strings,
     /// and non-digest fragments are redacted, so URLs containing such data do

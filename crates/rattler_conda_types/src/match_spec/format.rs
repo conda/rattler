@@ -4,10 +4,10 @@
 //! through [`SpecView::fmt`], parameterized by a [`DisplayContext`]. Adding a
 //! field to [`MatchSpec`] means extending [`Field`] and the order tables.
 //!
-//! [`to_canonical_string`] performs no parsing: states the grammar cannot
-//! represent are refused while rendering, with the error attributed to the
-//! offending field. Round-trip fidelity of the output is enforced by the
-//! property tests in `tests/matchspec_proptest.rs`.
+//! [`to_canonical_string`] refuses states the grammar cannot represent while
+//! rendering, attributing the error to the offending field. Round-trip
+//! fidelity of the output is enforced by the property tests in
+//! `tests/matchspec_proptest.rs`.
 
 use std::fmt::{self, Display, Write};
 use std::str::FromStr;
