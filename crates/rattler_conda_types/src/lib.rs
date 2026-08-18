@@ -32,6 +32,8 @@ pub mod prefix;
 pub mod prefix_data;
 pub mod prefix_record;
 mod record_traits;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+mod sourced_virtual_package;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
@@ -66,6 +68,8 @@ pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_data::PrefixData;
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use repo_data::VirtualPackagePlugins;
 pub use repo_data::{
     ChannelInfo, ChannelRelations, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
     RepodataRevision, RepodataRevisionInfo, RepodataRevisionMetadata, RepodataRevisionSelection,
@@ -76,6 +80,8 @@ pub use repo_data::{
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub use sourced_virtual_package::{SourcedVirtualPackage, VirtualPackageSource};
 #[cfg(feature = "semver")]
 pub use version::VersionToSemverError;
 pub use version::{
