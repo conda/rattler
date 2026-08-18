@@ -24,63 +24,9 @@ pub enum MatchSpecCondition {
 
 impl Display for MatchSpecCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MatchSpecCondition::MatchSpec(ms) => ms.fmt_in_condition(f),
-            MatchSpecCondition::And(lhs, rhs) => write!(f, "({lhs} and {rhs})"),
-            MatchSpecCondition::Or(lhs, rhs) => write!(f, "({lhs} or {rhs})"),
-        }
-    }
-}
-
-impl MatchSpecCondition {
-    /// Renders a canonical condition with only the parentheses required to
-    /// preserve precedence and the exact shape of this left-associative AST.
-    pub(crate) fn to_canonical_string(&self) -> Result<String, crate::CanonicalMatchSpecError> {
-        self.to_canonical_string_with_parent(0, false)
-    }
-
-    fn to_canonical_string_with_parent(
-        &self,
-        parent_precedence: u8,
-        is_right_child: bool,
-    ) -> Result<String, crate::CanonicalMatchSpecError> {
-        let precedence = match self {
-            Self::MatchSpec(_) => 3,
-            Self::And(_, _) => 2,
-            Self::Or(_, _) => 1,
-        };
-        let mut value = match self {
-            Self::MatchSpec(match_spec) => {
-                let leaf = match_spec.to_canonical_condition_string()?;
-                let options = crate::ParseMatchSpecOptions::strict()
-                    .with_repodata_revision(crate::RepodataRevision::V3)
-                    .with_exact_names_only(false);
-                if !matches!(
-                    parse_condition_with_options(&leaf, options),
-                    Ok((rest, Self::MatchSpec(_))) if rest.trim().is_empty()
-                ) {
-                    return Err(crate::CanonicalMatchSpecError::UnrepresentableConditionLeaf(leaf));
-                }
-                leaf
-            }
-            Self::And(lhs, rhs) => format!(
-                "{} and {}",
-                lhs.to_canonical_string_with_parent(precedence, false)?,
-                rhs.to_canonical_string_with_parent(precedence, true)?,
-            ),
-            Self::Or(lhs, rhs) => format!(
-                "{} or {}",
-                lhs.to_canonical_string_with_parent(precedence, false)?,
-                rhs.to_canonical_string_with_parent(precedence, true)?,
-            ),
-        };
-
-        if precedence < parent_precedence
-            || (is_right_child && precedence == parent_precedence && precedence < 3)
-        {
-            value = format!("({value})");
-        }
-        Ok(value)
+        // The legacy dialect cannot fail; see `format::MatchSpecCondition::fmt_with`.
+        self.fmt_with(f, crate::match_spec::format::DisplayStyle::Legacy)
+            .map_err(crate::match_spec::format::FormatError::into_fmt_error)
     }
 }
 

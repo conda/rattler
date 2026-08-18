@@ -2,13 +2,11 @@
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::CondaArchiveIdentifier;
 use crate::{
-    GenericVirtualPackage, PackageName, PackageRecord, ParseMatchSpecOptions, ParseStrictness,
-    RepoDataRecord, RepodataRevision, VersionSpec, build_spec::BuildNumberSpec,
+    GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord, RepodataRevision,
+    VersionSpec, build_spec::BuildNumberSpec,
 };
-use itertools::Itertools;
 use rattler_digest::{Md5, Sha256, parse_digest_from_hex};
 use rattler_digest::{Md5Hash, Sha256Hash, serde::SerializableHash};
-use rattler_redaction::redact_credentials_from_url;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
@@ -18,10 +16,11 @@ use url::Url;
 
 use crate::Channel;
 use crate::ChannelConfig;
-use crate::flags::is_valid_matchspec_flag;
 
 /// Experimental conditionals for match specs.
 pub mod condition;
+/// The single renderer behind every textual representation of a match spec.
+pub(crate) mod format;
 /// Match a given string either by exact match, glob or regex
 pub mod matcher;
 /// Match package names either by exact match, glob or regex
@@ -31,7 +30,6 @@ pub mod parse;
 
 use matcher::StringMatcher;
 use package_name_matcher::PackageNameMatcher;
-use parse::{escape_bracket_value, is_valid_extra_group_name};
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -202,92 +200,19 @@ pub enum CanonicalMatchSpecError {
     /// A channel would not reparse to the same public state.
     #[error("channel '{0}' cannot be represented in canonical MatchSpec syntax")]
     UnrepresentableChannel(String),
+
+    /// The rendered canonical text failed to reparse and the failure could not
+    /// be attributed to a specific field.
+    #[error("'{0}' does not round-trip through the MatchSpec parser")]
+    NotRoundTrippable(String),
 }
 
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(channel) = &self.channel {
-            let name = channel.name();
-            write!(f, "{name}")?;
-
-            if let Some(subdir) = &self.subdir {
-                write!(f, "/{subdir}")?;
-            }
-        }
-
-        if let Some(namespace) = &self.namespace {
-            write!(f, ":{namespace}:")?;
-        } else if self.channel.is_some() || self.subdir.is_some() {
-            write!(f, "::")?;
-        }
-
-        write!(f, "{}", self.name)?;
-
-        if let Some(version) = &self.version {
-            write!(f, " {version}")?;
-        } else if self.build.is_some() {
-            write!(f, " *")?;
-        }
-
-        if let Some(build) = &self.build {
-            write!(f, " {build}")?;
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(extras) = &self.extras {
-            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
-        }
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(build_number) = &self.build_number {
-            keys.push(format!("build_number=\"{build_number}\""));
-        }
-
-        if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{file_name}\""));
-        }
-
-        if let Some(url) = &self.url {
-            keys.push(format!("url=\"{url}\""));
-        }
-
-        if let Some(license) = &self.license {
-            keys.push(format!("license=\"{license}\""));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(track_features) = &self.track_features {
-            keys.push(format!(
-                "track_features=\"{}\"",
-                track_features.iter().format(" ")
-            ));
-        }
-
-        if let Some(condition) = &self.condition {
-            let condition_str = condition.to_string();
-            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
+        // The legacy dialect cannot fail; see `format::SpecView::fmt`.
+        format::SpecView::from(self)
+            .fmt(f, format::DisplayContext::LEGACY)
+            .map_err(format::FormatError::into_fmt_error)
     }
 }
 
@@ -306,316 +231,21 @@ impl MatchSpec {
     /// Unlike [`Display`], this method never emits positional version or build
     /// constraints, channels, subdirectories, or namespaces outside brackets.
     ///
-    /// Returns [`CanonicalMatchSpecError::NestedWhen`] when a condition leaf
-    /// itself has a `when` condition, since that state has no `MatchSpec` syntax.
-    /// Returns [`CanonicalMatchSpecError::UnrepresentableExtra`],
-    /// [`CanonicalMatchSpecError::UnrepresentableFlag`], or
-    /// [`CanonicalMatchSpecError::UnrepresentableTrackFeature`] when a list
-    /// element cannot be represented without changing the parsed state.
+    /// The rendered text is proven faithful by round-tripping it through the
+    /// parser exactly once: when the reparsed spec diverges from `self`, the
+    /// divergence is attributed to a field and returned as the matching
+    /// [`CanonicalMatchSpecError`] variant — for example
+    /// [`CanonicalMatchSpecError::NestedWhen`] when a condition leaf itself
+    /// has a `when` condition, or
+    /// [`CanonicalMatchSpecError::UnrepresentableExtra`] when an extras group
+    /// name cannot be represented without changing the parsed state.
     ///
     /// Channel and package URL userinfo and known path tokens are redacted.
     /// Query strings and non-digest fragments are treated as sensitive and
     /// replaced wholesale. Consequently, URLs containing any of this data do
     /// not round-trip with exact equality.
     pub fn to_canonical_string(&self) -> Result<String, CanonicalMatchSpecError> {
-        let mut result = canonical_name_value(&self.name)?;
-        let fields = self.canonical_fields(true)?;
-
-        if !fields.is_empty() {
-            result.push('[');
-            result.push_str(&fields.join(","));
-            result.push(']');
-        }
-
-        Ok(result)
-    }
-
-    /// Renders this match spec as a leaf inside a canonical `when` condition.
-    fn to_canonical_condition_string(&self) -> Result<String, CanonicalMatchSpecError> {
-        if self.condition.is_some() {
-            return Err(CanonicalMatchSpecError::NestedWhen);
-        }
-
-        let mut result = canonical_name_value(&self.name)?;
-        if self.is_simple_for_condition() {
-            if let Some(version) = &self.version {
-                result.push_str(&canonical_version_value(version)?);
-            }
-            return Ok(result);
-        }
-
-        let fields = self.canonical_fields(false)?;
-        if !fields.is_empty() {
-            result.push('[');
-            result.push_str(&fields.join(","));
-            result.push(']');
-        }
-
-        Ok(result)
-    }
-
-    /// Returns canonical key-value fields in their stable order.
-    fn canonical_fields(
-        &self,
-        include_condition: bool,
-    ) -> Result<Vec<String>, CanonicalMatchSpecError> {
-        let mut fields = Vec::new();
-
-        if let Some(version) = &self.version {
-            fields.push(format!(
-                "version={}",
-                canonical_bracket_value(canonical_version_value(version)?)?
-            ));
-        }
-
-        if let Some(build) = &self.build {
-            fields.push(format!(
-                "build={}",
-                canonical_bracket_value(canonical_build_value(build)?)?
-            ));
-        }
-
-        if let Some(build_number) = &self.build_number {
-            fields.push(format!(
-                "build_number={}",
-                canonical_bracket_value(build_number)?
-            ));
-        }
-
-        if let Some(file_name) = &self.file_name {
-            fields.push(format!("fn={}", canonical_bracket_value(file_name)?));
-        }
-
-        if let Some(extras) = &self.extras {
-            if let Some(extra) = extras
-                .iter()
-                .find(|extra| !is_valid_extra_group_name(extra))
-            {
-                return Err(CanonicalMatchSpecError::UnrepresentableExtra(extra.clone()));
-            }
-
-            fields.push(format!("extras=[{}]", extras.iter().format(",")));
-        }
-
-        if let Some(flags) = &self.flags {
-            let flags = flags
-                .iter()
-                .map(canonical_flag_value)
-                .collect::<Result<Vec<_>, _>>()?;
-            fields.push(format!("flags=[{}]", flags.iter().format(",")));
-        }
-
-        if let Some(channel) = &self.channel {
-            fields.push(format!(
-                "channel={}",
-                canonical_bracket_value(canonical_channel_value(channel)?)?
-            ));
-        }
-
-        if let Some(subdir) = &self.subdir {
-            fields.push(format!("subdir={}", canonical_bracket_value(subdir)?));
-        }
-
-        if let Some(namespace) = &self.namespace {
-            fields.push(format!("namespace={}", canonical_bracket_value(namespace)?));
-        }
-
-        if let Some(md5) = &self.md5 {
-            fields.push(format!(
-                "md5={}",
-                canonical_bracket_value(hex::encode(md5))?
-            ));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            fields.push(format!(
-                "sha256={}",
-                canonical_bracket_value(hex::encode(sha256))?
-            ));
-        }
-
-        if let Some(url) = &self.url {
-            fields.push(format!(
-                "url={}",
-                canonical_bracket_value(canonical_url_value(url))?
-            ));
-        }
-
-        if let Some(license) = &self.license {
-            fields.push(format!("license={}", canonical_bracket_value(license)?));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            fields.push(format!(
-                "license_family={}",
-                canonical_bracket_value(license_family)?
-            ));
-        }
-
-        if include_condition && let Some(condition) = &self.condition {
-            // `when` has historically unescaped its outer scalar before parsing
-            // the nested condition, so it can use the canonical escaped form
-            // without changing ordinary bracket-field semantics.
-            fields.push(format!(
-                "when=\"{}\"",
-                escape_bracket_value(&condition.to_canonical_string()?)
-            ));
-        }
-
-        if let Some(track_features) = &self.track_features {
-            if let Some(feature) = track_features
-                .iter()
-                .find(|feature| feature.is_empty() || feature.contains([',', ' ']))
-            {
-                return Err(CanonicalMatchSpecError::UnrepresentableTrackFeature(
-                    feature.clone(),
-                ));
-            }
-
-            fields.push(format!(
-                "track_features={}",
-                canonical_bracket_value(track_features.iter().format(" "))?
-            ));
-        }
-
-        Ok(fields)
-    }
-
-    /// Renders this match spec for inclusion inside a `when=` condition value.
-    ///
-    /// Uses the compact `{name}{operator}{version}` form when this is a simple
-    /// name+version query (and the version's rendering starts with one of the
-    /// version-constraint operator characters). Otherwise emits all constraints
-    /// using the bracket syntax `name[key="value", ...]`. Never emits a `when=`
-    /// key — nested conditions are not allowed.
-    pub(crate) fn fmt_in_condition(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        debug_assert!(
-            self.condition.is_none(),
-            "MatchSpec inside a `when=` condition must not itself carry a `when` clause",
-        );
-
-        write!(f, "{}", self.name)?;
-
-        if self.is_simple_for_condition() {
-            if let Some(version) = &self.version {
-                write!(f, "{version}")?;
-            }
-            return Ok(());
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(version) = &self.version {
-            keys.push(format!(
-                "version=\"{}\"",
-                escape_bracket_value(&version.to_string())
-            ));
-        }
-
-        if let Some(build) = &self.build {
-            keys.push(format!(
-                "build=\"{}\"",
-                escape_bracket_value(&build.to_string())
-            ));
-        }
-
-        if let Some(build_number) = &self.build_number {
-            keys.push(format!("build_number=\"{build_number}\""));
-        }
-
-        if let Some(channel) = &self.channel {
-            keys.push(format!("channel=\"{}\"", channel.name()));
-        }
-
-        if let Some(subdir) = &self.subdir {
-            keys.push(format!("subdir=\"{subdir}\""));
-        }
-
-        if let Some(namespace) = &self.namespace {
-            keys.push(format!("namespace=\"{namespace}\""));
-        }
-
-        if let Some(extras) = &self.extras {
-            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
-        }
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{file_name}\""));
-        }
-
-        if let Some(url) = &self.url {
-            keys.push(format!("url=\"{url}\""));
-        }
-
-        if let Some(license) = &self.license {
-            keys.push(format!("license=\"{license}\""));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(track_features) = &self.track_features {
-            keys.push(format!(
-                "track_features=\"{}\"",
-                track_features.iter().format(" ")
-            ));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
-    }
-
-    /// Returns true if this match spec can be emitted as the compact
-    /// `{name}{operator}{version}` form inside a `when=` condition.
-    fn is_simple_for_condition(&self) -> bool {
-        if !matches!(self.name, PackageNameMatcher::Exact(_)) {
-            return false;
-        }
-        if self.build.is_some()
-            || self.build_number.is_some()
-            || self.file_name.is_some()
-            || self.extras.is_some()
-            || self.flags.is_some()
-            || self.channel.is_some()
-            || self.subdir.is_some()
-            || self.namespace.is_some()
-            || self.md5.is_some()
-            || self.sha256.is_some()
-            || self.url.is_some()
-            || self.license.is_some()
-            || self.license_family.is_some()
-            || self.track_features.is_some()
-        {
-            return false;
-        }
-        match &self.version {
-            None => true,
-            // The compact form requires the rendered version to start with a
-            // version-constraint operator character so the parser can split
-            // `{name}` from `{version}`. This excludes e.g. `StartsWith`
-            // (renders `1.2.*`) and the wildcard `Any` (`*`).
-            Some(v) => v
-                .to_string()
-                .chars()
-                .next()
-                .is_some_and(|c| matches!(c, '>' | '<' | '=' | '!' | '~')),
-        }
+        format::to_canonical_string(self)
     }
 
     /// Returns the repodata revision required to represent this matchspec.
@@ -663,139 +293,6 @@ impl MatchSpec {
             PackageNameMatcher::Regex(regex) => regex.as_str().starts_with(r"^__"),
         }
     }
-}
-
-/// Formats a scalar value for canonical `MatchSpec` bracket syntax.
-///
-/// Legacy `MatchSpec` parsing preserves ordinary scalar escapes verbatim. Pick a
-/// delimiter that does not occur unescaped and emit the contents unchanged.
-/// This keeps canonical parsing non-lossy without reinterpreting old inputs.
-fn canonical_bracket_value(value: impl Display) -> Result<String, CanonicalMatchSpecError> {
-    fn contains_unescaped(value: &str, delimiter: char) -> bool {
-        let mut escaped = false;
-        for character in value.chars() {
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == delimiter {
-                return true;
-            }
-        }
-        false
-    }
-
-    let value = value.to_string();
-    let has_odd_trailing_backslash_run = value
-        .chars()
-        .rev()
-        .take_while(|&character| character == '\\')
-        .count()
-        % 2
-        == 1;
-    if has_odd_trailing_backslash_run {
-        return Err(CanonicalMatchSpecError::UnrepresentableScalar(value));
-    }
-    let delimiter_is_safe = |delimiter| !contains_unescaped(&value, delimiter);
-
-    if value.contains("\\'") && delimiter_is_safe('"') {
-        Ok(format!("\"{value}\""))
-    } else if delimiter_is_safe('\'') && value.contains(['\\', '"']) {
-        Ok(format!("'{value}'"))
-    } else if delimiter_is_safe('"') {
-        Ok(format!("\"{value}\""))
-    } else if delimiter_is_safe('\'') {
-        Ok(format!("'{value}'"))
-    } else {
-        Err(CanonicalMatchSpecError::UnrepresentableScalar(value))
-    }
-}
-
-/// Reject names whose text the complete V3 parser would reinterpret as fields
-/// or positional syntax rather than as the same package-name matcher.
-fn canonical_name_value(name: &PackageNameMatcher) -> Result<String, CanonicalMatchSpecError> {
-    let value = name.to_string();
-    let options = ParseMatchSpecOptions::strict()
-        .with_repodata_revision(RepodataRevision::V3)
-        .with_exact_names_only(false);
-    let expected = MatchSpec {
-        name: name.clone(),
-        ..MatchSpec::default()
-    };
-    if !matches!(MatchSpec::from_str(&value, options), Ok(parsed) if parsed == expected) {
-        return Err(CanonicalMatchSpecError::UnrepresentableName(value));
-    }
-    Ok(value)
-}
-
-/// Returns a version constraint only when its canonical text reparses identically.
-fn canonical_version_value(version: &VersionSpec) -> Result<String, CanonicalMatchSpecError> {
-    let value = version.to_string();
-    if !matches!(VersionSpec::from_str(&value, ParseStrictness::Strict), Ok(parsed) if parsed == *version)
-    {
-        return Err(CanonicalMatchSpecError::UnrepresentableVersion(value));
-    }
-    Ok(value)
-}
-
-/// Returns a build matcher only when its canonical text reparses identically.
-fn canonical_build_value(build: &StringMatcher) -> Result<String, CanonicalMatchSpecError> {
-    let value = build.to_string();
-    if !matches!(value.parse::<StringMatcher>(), Ok(parsed) if parsed == *build) {
-        return Err(CanonicalMatchSpecError::UnrepresentableBuild(value));
-    }
-    Ok(value)
-}
-
-/// Renders a package URL without credentials.
-fn canonical_url_value(url: &Url) -> String {
-    redact_credentials_from_url(url).into()
-}
-
-/// Renders a channel without losing its base URL or explicit platform selectors.
-fn canonical_channel_value(channel: &Channel) -> Result<String, CanonicalMatchSpecError> {
-    if channel.platforms.as_ref().is_some_and(Vec::is_empty) {
-        return Err(CanonicalMatchSpecError::EmptyChannelPlatforms);
-    }
-
-    let canonical_base_url = redact_credentials_from_url(channel.base_url.url());
-    let mut value = canonical_base_url.to_string();
-
-    if let Some(platforms) = channel.platforms.as_ref() {
-        value.push('[');
-        value.push_str(&platforms.iter().format(",").to_string());
-        value.push(']');
-    }
-
-    // The root is irrelevant for this absolute URL, but channel parsing still
-    // requires one. `temp_dir` is deterministic enough here and cannot fail due
-    // to a deleted or inaccessible current working directory.
-    let config = ChannelConfig::default_with_root_dir(std::env::temp_dir());
-    if let Ok(parsed) = Channel::from_str(&value, &config) {
-        let loses_url_state =
-            **parsed.base_url.url() != canonical_base_url || parsed.platforms != channel.platforms;
-        let loses_file_identity = channel.base_url.url().scheme() == "file" && parsed != *channel;
-        if loses_url_state || loses_file_identity {
-            return Err(CanonicalMatchSpecError::UnrepresentableChannel(value));
-        }
-    } else {
-        return Err(CanonicalMatchSpecError::UnrepresentableChannel(value));
-    }
-
-    Ok(value)
-}
-
-/// Returns a canonical flags-list element or an error if reparsing it would
-/// produce a different matcher.
-fn canonical_flag_value(flag: &StringMatcher) -> Result<String, CanonicalMatchSpecError> {
-    let value = flag.to_string();
-    let reparses_as_same_matcher =
-        matches!(value.parse::<StringMatcher>(), Ok(parsed) if parsed == *flag);
-    if !is_valid_matchspec_flag(&value) || !reparses_as_same_matcher {
-        return Err(CanonicalMatchSpecError::UnrepresentableFlag(value));
-    }
-
-    Ok(value)
 }
 
 // Enable constructing a match spec from a package name.
@@ -853,43 +350,10 @@ pub struct NamelessMatchSpec {
 
 impl Display for NamelessMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.version {
-            Some(version) => write!(f, "{version}")?,
-            None => write!(f, "*")?,
-        }
-
-        if let Some(build) = &self.build {
-            write!(f, " {build}")?;
-        }
-
-        let mut keys = Vec::new();
-
-        if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
-        }
-
-        if let Some(md5) = &self.md5 {
-            keys.push(format!("md5=\"{}\"", hex::encode(md5)));
-        }
-
-        if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256=\"{}\"", hex::encode(sha256)));
-        }
-
-        if let Some(license_family) = &self.license_family {
-            keys.push(format!("license_family=\"{license_family}\""));
-        }
-
-        if let Some(condition) = &self.condition {
-            let condition_str = condition.to_string();
-            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
-        }
-
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
-        }
-
-        Ok(())
+        // The legacy dialect cannot fail; see `format::SpecView::fmt`.
+        format::SpecView::from(self)
+            .fmt(f, format::DisplayContext::LEGACY)
+            .map_err(format::FormatError::into_fmt_error)
     }
 }
 
