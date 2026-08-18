@@ -5601,6 +5601,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_virtual_package_plugins"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "fs-err",
+ "hex",
+ "indexmap 2.14.0",
+ "insta",
+ "rattler",
+ "rattler_cache",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_repodata_gateway",
+ "rattler_shell",
+ "rattler_solve",
+ "rattler_virtual_packages",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "rattler_virtual_packages"
 version = "6.0.0"
 dependencies = [
