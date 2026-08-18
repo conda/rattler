@@ -229,6 +229,222 @@ impl Serialize for TimestampMs {
 /// string.
 pub struct DeserializeFromStrUnchecked;
 
+/// A helper struct to deserialize virtual package plugin registrations,
+/// validating every name and skipping the ones a channel got wrong.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+pub struct DeserializeVirtualPackagePlugins;
+
+#[cfg(feature = "experimental-virtual-package-plugins")]
+impl<'de> DeserializeAs<'de, crate::repo_data::VirtualPackagePlugins>
+    for DeserializeVirtualPackagePlugins
+{
+    fn deserialize_as<D>(
+        deserializer: D,
+    ) -> Result<crate::repo_data::VirtualPackagePlugins, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Read the entries as pairs rather than a map: a map resolves a
+        // repeated key last-wins, which would hide a collision the CEP makes an
+        // error.
+        struct Entries;
+        impl<'de> serde::de::Visitor<'de> for Entries {
+            type Value = Option<Vec<(String, Vec<MaybeName>)>>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a map of plugin names to virtual package names")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+                while let Some(entry) = map.next_entry::<String, Vec<MaybeName>>()? {
+                    entries.push(entry);
+                }
+                Ok(Some(entries))
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+
+            fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+        }
+
+        let raw = match deserializer.deserialize_any(Entries) {
+            Ok(Some(raw)) => raw,
+            Ok(None) => {
+                tracing::warn!(
+                    "ignoring info.virtual_package_plugins: it is not a map of plugin registrations"
+                );
+                return Ok(crate::repo_data::VirtualPackagePlugins::default());
+            }
+            Err(reason) => {
+                tracing::warn!("ignoring info.virtual_package_plugins: {reason}");
+                return Ok(crate::repo_data::VirtualPackagePlugins::default());
+            }
+        };
+
+        // A channel that contradicted itself has not established what it meant,
+        // so the whole set goes rather than the offending entry.
+        match registrations_from(raw) {
+            Ok(registrations) => Ok(registrations),
+            Err(reason) => {
+                tracing::warn!("ignoring info.virtual_package_plugins entirely: {reason}");
+                Ok(crate::repo_data::VirtualPackagePlugins::default())
+            }
+        }
+    }
+}
+
+/// Builds the registrations, or names the contradiction that makes the whole
+/// set unusable. Returning the reason rather than a value lets the caller report
+/// it and fall back to no registrations.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn registrations_from(
+    raw: Vec<(String, Vec<MaybeName>)>,
+) -> Result<crate::repo_data::VirtualPackagePlugins, String> {
+    let mut registrations = crate::repo_data::VirtualPackagePlugins::default();
+    let mut registered_plugins = std::collections::HashSet::new();
+    let mut claimed = std::collections::HashSet::new();
+
+    for (plugin, provides) in raw {
+        let plugin = validated_plugin_name(plugin)?;
+        if !registered_plugins.insert(plugin.clone()) {
+            return Err(format!(
+                "the channel registers the plugin package '{}' more than once",
+                plugin.as_source()
+            ));
+        }
+
+        // Counted over what the plugin declares, before invalid names are dropped.
+        if provides.is_empty() || provides.len() > MAX_VIRTUAL_PACKAGES_PER_PLUGIN {
+            return Err(format!(
+                "plugin '{}' registers {} virtual packages, outside the 1 to {} a plugin may \
+                 register",
+                plugin.as_source(),
+                provides.len(),
+                MAX_VIRTUAL_PACKAGES_PER_PLUGIN
+            ));
+        }
+
+        let provides: Vec<_> = provides
+            .into_iter()
+            .filter_map(|name| match name {
+                MaybeName::Name(name) => validated_virtual_package_name(name),
+                MaybeName::NotAName(_) => {
+                    tracing::warn!(
+                        "ignoring a registered virtual package of plugin '{}': it is not a name \
+                         at all",
+                        plugin.as_source()
+                    );
+                    None
+                }
+            })
+            .collect();
+        for name in &provides {
+            if !claimed.insert(name.clone()) {
+                return Err(format!(
+                    "the virtual package '{}' is registered more than once",
+                    name.as_source()
+                ));
+            }
+        }
+
+        // Every name it declared was invalid and dropped above. The plugin
+        // speaks for nothing, which is ignored rather than fatal.
+        if provides.is_empty() {
+            tracing::warn!(
+                "ignoring plugin '{}': it registers no valid virtual package",
+                plugin.as_source()
+            );
+            continue;
+        }
+
+        registrations.insert(plugin, provides);
+    }
+    Ok(registrations)
+}
+
+/// One element of a registration array. A channel that put something other than
+/// a string there has published a name that cannot be a package name, and the
+/// CEP requires such a value to be discarded
+#[cfg(feature = "experimental-virtual-package-plugins")]
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MaybeName {
+    Name(String),
+    NotAName(serde::de::IgnoredAny),
+}
+
+/// The longest name CEP 26 allows, for a package or a virtual package.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+const MAX_NAME_LENGTH: usize = 64;
+
+/// The most virtual packages CEP lets one plugin register, which bounds how much
+/// a single plugin can feed into a solve.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+const MAX_VIRTUAL_PACKAGES_PER_PLUGIN: usize = 16;
+
+/// The distributable package name rule of CEP 26. `fancy_regex` is used
+/// because the pattern needs the negative lookahead that keeps a leading
+/// underscore from being followed by another.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+static PACKAGE_NAME: std::sync::LazyLock<fancy_regex::Regex> = std::sync::LazyLock::new(|| {
+    #[allow(clippy::expect_used, reason = "the pattern is a literal from CEP 26")]
+    fancy_regex::Regex::new(r"(?i)^(([a-z0-9])|([a-z0-9_](?!_)))[._-]?([a-z0-9]+(\.|-|_|$))*$")
+        .expect("the CEP 26 package name pattern is valid")
+});
+
+/// The virtual package name rule of CEP 26.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+static VIRTUAL_PACKAGE_NAME: std::sync::LazyLock<fancy_regex::Regex> =
+    std::sync::LazyLock::new(|| {
+        #[allow(clippy::expect_used, reason = "the pattern is a literal from CEP 26")]
+        fancy_regex::Regex::new(r"^__[a-z0-9][._-]?([a-z0-9]+(\.|-|_|$))*$")
+            .expect("the CEP 26 virtual package name pattern is valid")
+    });
+
+/// Whether a name a channel published satisfies one of the CEP 26 patterns.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn matches(pattern: &fancy_regex::Regex, name: &crate::PackageName) -> bool {
+    let name = name.as_source();
+    name.len() <= MAX_NAME_LENGTH && pattern.is_match(name).unwrap_or(false)
+}
+
+/// Validates the name of the package providing a plugin.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn validated_plugin_name(name: String) -> Result<crate::PackageName, String> {
+    let source = name.clone();
+    let name = crate::PackageName::try_from(name)
+        .map_err(|err| format!("'{source}' is not a package name: {err}"))?;
+    if !matches(&PACKAGE_NAME, &name) {
+        return Err(format!("'{}' is not a package name", name.as_source()));
+    }
+    Ok(name)
+}
+
+/// Validates a name a plugin claims to provide, which CEP 26 requires to be a
+/// package name carrying the `__` prefix.
+#[cfg(feature = "experimental-virtual-package-plugins")]
+fn validated_virtual_package_name(name: String) -> Option<crate::PackageName> {
+    let name = crate::PackageName::try_from(name)
+        .inspect_err(|err| tracing::warn!("ignoring registered virtual package name: {err}"))
+        .ok()?;
+    if !matches(&VIRTUAL_PACKAGE_NAME, &name) {
+        tracing::warn!(
+            "ignoring registered virtual package '{}': it is not a virtual package name",
+            name.as_source()
+        );
+        return None;
+    }
+    Some(name)
+}
+
 /// A helper function used to sort map alphabetically when serializing.
 pub(crate) fn sort_map_alphabetically<K: Ord + Serialize, T: Serialize, H, S: serde::Serializer>(
     value: &HashMap<K, T, H>,
