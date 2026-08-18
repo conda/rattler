@@ -198,6 +198,26 @@ class MatchSpec:
         """
         return self._match_spec.condition
 
+    def to_canonical_string(self) -> str:
+        """
+        Returns the stable, canonical string representation of this match
+        spec: the package name first and every other populated field in a
+        single bracket section, verified by a round-trip through the parser.
+
+        Raises `CanonicalMatchSpecError` when a value cannot be represented
+        in canonical MatchSpec syntax.
+
+        Examples
+        --------
+        ```python
+        >>> spec = MatchSpec('conda-forge::foo >=1.0', strict=True)
+        >>> spec.to_canonical_string()
+        'foo[version=">=1.0",channel="https://conda.anaconda.org/conda-forge/"]'
+        >>>
+        ```
+        """
+        return self._match_spec.to_canonical_string()
+
     @property
     def md5(self) -> Optional[bytes]:
         """

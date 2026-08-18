@@ -38,7 +38,8 @@ use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::PyRattlerError;
 use exceptions::{
     ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
-    ConversionError, ConvertSubdirError, DetectVirtualPackageError, EnvironmentCreationError,
+    CanonicalMatchSpecError, ConversionError, ConvertSubdirError, DetectVirtualPackageError,
+    EnvironmentCreationError,
     FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
     InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
     InvalidVersionSpecError, IoError, LinkError, LockFileError, PackageNameMatcherParseError,
@@ -215,6 +216,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add(
         "InvalidMatchSpecError",
         py.get_type::<InvalidMatchSpecError>(),
+    )?;
+    m.add(
+        "CanonicalMatchSpecError",
+        py.get_type::<CanonicalMatchSpecError>(),
     )?;
     m.add(
         "InvalidPackageNameError",

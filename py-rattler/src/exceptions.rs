@@ -4,6 +4,7 @@ use pyo3::exceptions::{PyException, PyUserWarning};
 create_exception!(exceptions, InvalidVersionError, PyException);
 create_exception!(exceptions, InvalidVersionSpecError, PyException);
 create_exception!(exceptions, InvalidMatchSpecError, PyException);
+create_exception!(exceptions, CanonicalMatchSpecError, PyException);
 create_exception!(exceptions, InvalidPackageNameError, PyException);
 create_exception!(exceptions, PackageNameMatcherParseError, PyException);
 create_exception!(exceptions, InvalidUrlError, PyException);
