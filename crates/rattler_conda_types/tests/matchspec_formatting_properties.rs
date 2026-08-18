@@ -97,8 +97,8 @@ fn spec_diff(a: &MatchSpec, b: &MatchSpec) -> Vec<&'static str> {
     diffs
 }
 
-/// True when the only divergence between `orig` and `reparsed` is the URL and
-/// the original URL carried data the canonical form documents as redacted.
+/// True when the specs only differ in the URL, and the original URL carried
+/// data the canonical form documents as redacted.
 fn url_redaction_only(orig: &MatchSpec, reparsed: &MatchSpec) -> bool {
     let Some(url) = orig.url.as_ref() else {
         return false;
@@ -118,8 +118,8 @@ fn url_redaction_only(orig: &MatchSpec, reparsed: &MatchSpec) -> bool {
     patched == *orig
 }
 
-/// True when the only divergence is channel identity but base URL contents
-/// carried credentials (documented redaction).
+/// True when the specs only differ in the channel, and its base URL carried
+/// credentials the canonical form documents as redacted.
 fn channel_redaction_only(orig: &MatchSpec, reparsed: &MatchSpec) -> bool {
     let Some(channel) = orig.channel.as_deref() else {
         return false;
@@ -137,8 +137,8 @@ fn channel_redaction_only(orig: &MatchSpec, reparsed: &MatchSpec) -> bool {
     patched == *orig
 }
 
-/// The systematic matrix of (label, spec) cases shared by the Display and
-/// canonical round-trip attacks.
+/// The systematic matrix of (label, spec) cases used by the round-trip
+/// tests.
 fn spec_matrix() -> Vec<(String, MatchSpec)> {
     let o = strict_v3();
     let mut specs: Vec<(String, MatchSpec)> = Vec::new();
@@ -326,8 +326,8 @@ fn spec_matrix() -> Vec<(String, MatchSpec)> {
     specs
 }
 
-/// Attack 2: every canonical Ok must reparse (strict V3) to an equal spec
-/// (modulo documented URL credential redaction) and be idempotent.
+/// Every canonical `Ok` must reparse (strict V3) to an equal spec, modulo
+/// the documented URL credential redaction, and must be idempotent.
 #[test]
 fn canonical_roundtrip_matrix() {
     let options = strict_v3();
@@ -388,7 +388,7 @@ fn canonical_roundtrip_matrix() {
 }
 
 // ---------------------------------------------------------------------------
-// Attack 3: conditions built directly as ASTs.
+// Conditions built directly as ASTs.
 // ---------------------------------------------------------------------------
 
 fn leaf(name: &str) -> MatchSpecCondition {
@@ -575,7 +575,7 @@ fn condition_ast_canonical_roundtrip() {
 /// Regression guard for legacy-Display scalar quoting.
 ///
 /// The parser stores quoted scalar bracket values (`fn`, `license`, `subdir`,
-/// `namespace`, `license_family`) with escape sequences IN PLACE — it only
+/// `namespace`, `license_family`) with escape sequences in place; it only
 /// unescapes `when=` and `flags=`. Legacy `write_scalar` must therefore emit
 /// values verbatim inside a delimiter that keeps them intact, never escaped:
 /// escaping a backslash-containing value made it reparse with doubled
@@ -608,7 +608,7 @@ fn display_scalar_escaping_minimized() {
         "REGRESSION: Display rendered {rendered:?}; the backslash was doubled on reparse"
     );
 
-    // Quote value: previously unparseable (loud); now silently mutates.
+    // Quote value: whenever the rendered form parses, the value must survive.
     let spec = MatchSpec {
         name: "python".parse().unwrap(),
         file_name: Some(r#"qu"ote"#.to_string()),
@@ -624,8 +624,8 @@ fn display_scalar_escaping_minimized() {
     }
 }
 
-/// Attack 5: panic hunt on maximally weird specs. ANY panic is a finding;
-/// round-trip correctness is not asserted here.
+/// Panic hunt on maximally weird specs. Any panic is a failure; round-trip
+/// correctness is not asserted here.
 #[test]
 fn panic_hunt_on_weird_specs() {
     let mut cases: Vec<(String, MatchSpec)> = Vec::new();

@@ -2,19 +2,19 @@
 //!
 //! Random specs and condition ASTs are rendered through `Display` and
 //! `to_canonical_string` and parsed back. The central invariant of both
-//! dialects is: **rendering may produce text the parser rejects (a loud
-//! failure), but whenever the text parses it must describe the same query**.
-//! Silent divergence is always a bug. The canonical dialect is stricter: an
-//! `Ok` must reparse equal (modulo documented URL credential redaction) and
-//! must be idempotent.
+//! dialects: rendering may produce text the parser rejects (a loud failure),
+//! but whenever the text parses it must describe the same query. Silent
+//! divergence is always a bug. The canonical dialect is stricter: an `Ok`
+//! must reparse equal (modulo documented URL credential redaction) and must
+//! be idempotent.
 //!
 //! Documented equivalences the assertions allow:
-//! * A reparsed [`Channel`] may carry a different display `name` — the URL
+//! * A reparsed [`Channel`] may carry a different display `name`. The URL
 //!   and platform selector are the channel's identity, the name is derived.
 //! * Canonical output redacts URL credentials, so URLs are compared after
 //!   redaction.
 //! * A `NamelessMatchSpec` with no fields at all renders as `*`, which
-//!   reparses as `version: Any` — a matcher identical to `version: None`.
+//!   reparses as `version: Any`, a matcher identical to `version: None`.
 
 use std::sync::Arc;
 
@@ -101,7 +101,7 @@ fn string_matcher() -> impl Strategy<Value = StringMatcher> {
 }
 
 /// Printable-ASCII scalars including quotes, backslashes, brackets, `#`,
-/// commas and spaces — plus a dash of unicode.
+/// commas and spaces, plus some unicode.
 fn scalar_value() -> impl Strategy<Value = String> {
     prop_oneof![
         4 => "[ -~]{1,12}",
@@ -270,8 +270,8 @@ fn channel_equivalent(original: &Channel, reparsed: &Channel, redacted: bool) ->
 /// A reparsed matcher is faithful when it is identical, or when it equals
 /// what the matcher's own rendered text parses to. The latter covers
 /// programmatically constructed matchers whose text belongs to a different
-/// variant (e.g. `Exact("cuda*")` widens to the glob `cuda*`) — states the
-/// grammar cannot distinguish, so their text identity is the best any
+/// variant, e.g. `Exact("cuda*")` widens to the glob `cuda*`. The grammar
+/// cannot distinguish those states, so their text identity is the best any
 /// renderer can preserve.
 fn matcher_equivalent(original: &StringMatcher, reparsed: &StringMatcher) -> bool {
     original == reparsed
@@ -453,8 +453,8 @@ proptest! {
         };
 
         // The one documented exception: a spec with no fields at all renders
-        // as `*`, which reparses as `version: Any` (matching-equivalent to
-        // `version: None`).
+        // as `*`, which reparses as `version: Any` and matches the same set
+        // as `version: None`.
         if nameless == NamelessMatchSpec::default() {
             prop_assert_eq!(rendered.as_str(), "*");
             return Ok(());

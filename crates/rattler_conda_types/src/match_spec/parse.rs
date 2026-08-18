@@ -732,8 +732,8 @@ fn strip_package_name(
     // whitespace and version-constraint characters (e.g. `^py(?!py).*$`), so
     // splitting on those would cut the name short. Instead, the name ends at
     // the first `$` that is followed by nothing, whitespace, or the start of
-    // a version constraint — a following build matcher may itself be a regex
-    // ending in `$`, so taking the final `$` would swallow it.
+    // a version constraint. Taking the final `$` would not work either: a
+    // build matcher after the name may itself be a regex ending in `$`.
     if trimmed.starts_with('^') {
         let end = trimmed
             .match_indices('$')

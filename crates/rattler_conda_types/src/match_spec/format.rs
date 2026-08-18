@@ -1,18 +1,15 @@
-//! A single rendering pipeline for the [`MatchSpec`] family of types.
+//! One renderer for every textual form of a [`MatchSpec`].
 //!
-//! Every textual representation of a match spec — the historic positional
-//! [`std::fmt::Display`] format, the compact form used for leaves inside
-//! `when="..."` conditions, and the stable canonical V3 format — is produced
-//! by one renderer that is parameterized by a [`DisplayContext`]. This keeps
-//! the field inventory in one place: adding a field to [`MatchSpec`] means
-//! extending [`Field`] and the per-context order tables instead of updating
-//! several hand-rolled formatters.
+//! The historic positional [`std::fmt::Display`] format, the compact form for
+//! leaves inside `when="..."` conditions, and the stable canonical V3 format
+//! all come from the same renderer, parameterized by a [`DisplayContext`].
+//! Adding a field to [`MatchSpec`] means extending [`Field`] and the order
+//! tables instead of updating a handful of hand-rolled formatters.
 //!
-//! Canonical rendering is verified by a single round-trip through the parser
-//! in [`to_canonical_string`]. The happy path therefore performs exactly one
-//! parse; the per-field forensics in [`diagnose_parse_failure`] and
-//! [`canonical_divergence`] only run when that round-trip fails, to attribute
-//! the failure to a specific field.
+//! [`to_canonical_string`] verifies its output with a single round-trip
+//! through the parser, so the happy path does exactly one parse. The
+//! per-field checks in [`diagnose_parse_failure`] and [`canonical_divergence`]
+//! only run when that round-trip fails, to point at the offending field.
 
 use std::fmt::{self, Display, Write};
 use std::str::FromStr;
@@ -36,13 +33,13 @@ use crate::{
 /// The dialect a match spec is rendered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DisplayStyle {
-    /// The historic positional representation produced by `Display`. The
-    /// layout and field order are kept stable for existing callers. Every
-    /// bracket value is quoted with a delimiter that preserves it verbatim
-    /// where one exists, but this dialect is infallible and best-effort — it
-    /// is not a serialization format and not every value round-trips (e.g.
-    /// values containing `]` or both quote characters). Use
-    /// [`MatchSpec::to_canonical_string`] for verified output.
+    /// The historic positional representation produced by `Display`. Layout
+    /// and field order are kept stable for existing callers. Bracket values
+    /// are quoted with a delimiter that preserves them verbatim when one
+    /// exists, but this dialect is infallible and best-effort: it is not a
+    /// serialization format, and values containing `]` or both quote
+    /// characters do not round-trip. Use [`MatchSpec::to_canonical_string`]
+    /// for verified output.
     Legacy,
     /// The stable all-bracket representation produced by
     /// [`MatchSpec::to_canonical_string`].
@@ -99,9 +96,8 @@ impl DisplayContext {
     }
 }
 
-/// A formatting error that also carries canonical representability failures,
-/// so the canonical dialect can flow through the same rendering code as the
-/// infallible legacy dialect.
+/// A formatting error that can also carry a canonical representability
+/// failure, so both dialects run through the same rendering code.
 pub(crate) enum FormatError {
     Fmt(fmt::Error),
     Canonical(CanonicalMatchSpecError),
@@ -244,11 +240,10 @@ impl LegacyPlacement {
     }
 }
 
-/// Whether rendering this channel as its bare name reconstructs it
-/// faithfully: no explicit platform selector, and parsing the name under the
-/// default channel alias yields the same base URL. URL channels whose name is
-/// merely derived from the URL (and path channels) fail this and render as
-/// their full base URL instead.
+/// Whether rendering this channel as its bare name reconstructs it: there is
+/// no explicit platform selector, and parsing the name under the default
+/// channel alias yields the same base URL. URL and path channels whose name
+/// is only derived fail this check and render as their full base URL instead.
 fn channel_renders_by_name(channel: &Channel) -> bool {
     if channel.platforms.is_some() {
         return false;
@@ -471,12 +466,12 @@ impl SpecView<'_> {
                     .subdir
                     .is_some_and(|subdir| Platform::from_str(subdir).is_ok()),
             namespace: channel && self.namespace.is_some_and(is_safe_positional_token),
-            // A build matcher is positional only after a version (the historic
+            // A build matcher is positional only after a version: the historic
             // `name * build` placeholder reparsed with `version: Any` instead
-            // of `version: None`), and only when its text survives the
-            // tokenization stages that run before build parsing: the
-            // channel/namespace colon split, comment stripping, the semicolon
-            // check, and bracket detection.
+            // of `version: None`. Its text must also survive the tokenization
+            // that runs before build parsing (the channel/namespace colon
+            // split, comment stripping, the semicolon check, and bracket
+            // detection).
             build: self.version.is_some()
                 && self
                     .build
@@ -497,10 +492,9 @@ impl SpecView<'_> {
         let Some(name) = self.name else {
             match self.version {
                 Some(version) => write!(f, "{version}")?,
-                // Without a version the spec is only identified by its other
-                // fields; emit the historic `*` placeholder only when nothing
-                // else renders (note: it reparses as `version: Any`, which
-                // matches identically to `version: None`).
+                // Only emit the historic `*` placeholder when nothing else
+                // renders. It reparses as `version: Any`, which matches the
+                // same set as `version: None`.
                 None if !renders_brackets => f.write_char('*')?,
                 None => {}
             }
@@ -711,11 +705,11 @@ impl SpecView<'_> {
     }
 }
 
-/// Writes a `key=[..]` list field. Elements whose text `is_valid_bare`
-/// accepts render unquoted; anything else renders quoted, so an element that
-/// would re-tokenize under bare rendering (a comma, whitespace, an empty or
-/// invalid name) reaches the parser as a single quoted element that fails
-/// validation loudly, instead of silently splitting into different elements.
+/// Writes a `key=[..]` list field. Elements accepted by `is_valid_bare`
+/// render unquoted. Everything else renders quoted, so an element that would
+/// re-tokenize under bare rendering (a comma, whitespace, an empty or invalid
+/// name) reaches the parser as a single quoted element and fails validation
+/// loudly instead of silently splitting.
 fn write_list<T: Display>(
     f: &mut dyn Write,
     ctx: DisplayContext,
@@ -746,13 +740,13 @@ fn write_list<T: Display>(
 
 /// Writes one scalar `key=value` field with the quoting rules of the context.
 ///
-/// Both dialects quote every scalar with a delimiter that keeps the value
-/// intact, because the parser stores most quoted bracket values verbatim
-/// (only `when=` and `flags=` are unescaped on parse) — so escaping here
-/// would silently mutate the value on round-trip. The canonical dialect
-/// refuses values no delimiter can hold; the infallible legacy dialect falls
-/// back to the historic raw double-quoted form for them, which fails loudly
-/// at parse time instead of round-tripping to a different value.
+/// Both dialects quote scalars with a delimiter that keeps the value intact.
+/// The parser stores most quoted bracket values verbatim (only `when=` and
+/// `flags=` are unescaped), so escaping here would silently change the value
+/// on round-trip. The canonical dialect refuses values no delimiter can hold.
+/// The infallible legacy dialect falls back to the raw double-quoted form,
+/// which fails loudly at parse time instead of round-tripping to a different
+/// value.
 fn write_scalar(
     f: &mut dyn Write,
     ctx: DisplayContext,
@@ -1161,11 +1155,10 @@ fn diagnose_condition(condition: &MatchSpecCondition) -> Option<CanonicalMatchSp
     None
 }
 
-/// The parser deliberately ignores channel names when checking whether a
-/// canonical channel is faithful: the canonical text carries the base URL, and
-/// a reparsed channel may derive a different display name from it. File URLs
-/// must round-trip exactly because their identity depends on more than the
-/// URL text.
+/// Channel names are ignored here on purpose: the canonical text carries the
+/// base URL, and a reparsed channel may derive a different display name from
+/// it. File URLs must round-trip exactly because their identity depends on
+/// more than the URL text.
 fn channel_roundtrips(original: &Channel, parsed: &Channel) -> bool {
     let canonical_base_url = redact_credentials_from_url(original.base_url.url());
     **parsed.base_url.url() == canonical_base_url
@@ -1204,10 +1197,10 @@ impl Display for RenderedCondition<'_> {
         match self.0.fmt_with(f, DisplayStyle::Canonical) {
             Ok(()) => Ok(()),
             Err(FormatError::Fmt(error)) => Err(error),
-            // This adapter is only used for conditions that already rendered
+            // This adapter only runs for conditions that already rendered
             // canonically as part of the whole spec, so a canonical failure
-            // cannot occur here — but if it ever does, emit a placeholder
-            // instead of a `fmt::Error`, which `to_string` turns into a panic.
+            // cannot happen here. If it ever does, emit a placeholder instead
+            // of a `fmt::Error`, which `to_string` turns into a panic.
             Err(FormatError::Canonical(_)) => f.write_str("<unrepresentable condition>"),
         }
     }

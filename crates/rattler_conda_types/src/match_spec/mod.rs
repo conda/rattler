@@ -235,7 +235,7 @@ impl MatchSpec {
     /// The rendered text is proven faithful by round-tripping it through the
     /// parser exactly once: when the reparsed spec diverges from `self`, the
     /// divergence is attributed to a field and returned as the matching
-    /// [`CanonicalMatchSpecError`] variant — for example
+    /// [`CanonicalMatchSpecError`] variant. For example,
     /// [`CanonicalMatchSpecError::NestedWhen`] when a condition leaf itself
     /// has a `when` condition, or
     /// [`CanonicalMatchSpecError::UnrepresentableExtra`] when an extras group
