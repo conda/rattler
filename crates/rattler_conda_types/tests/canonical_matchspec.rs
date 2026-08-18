@@ -286,6 +286,6 @@ fn display_remains_legacy() {
     )
     .unwrap();
 
-    assert_eq!(spec.to_string(), r#"target >=1 py*[when="(a and b)"]"#);
+    assert_eq!(spec.to_string(), r#"target >=1 py*[when="a and b"]"#);
     assert_ne!(spec.to_string(), spec.to_canonical_string().unwrap());
 }

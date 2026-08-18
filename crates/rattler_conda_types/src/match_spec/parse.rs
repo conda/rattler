@@ -2059,10 +2059,7 @@ mod tests {
     fn test_conditional_parsing_with_and_or() {
         // Complex condition with AND/OR
         let spec = parse_conditional(r#"foo[when="python >=3.6 and linux"]"#).unwrap();
-        assert_eq!(
-            spec.condition.unwrap().to_string(),
-            "(python>=3.6 and linux)"
-        );
+        assert_eq!(spec.condition.unwrap().to_string(), "python>=3.6 and linux");
     }
 
     #[test]
@@ -2085,7 +2082,7 @@ mod tests {
         let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
         assert_eq!(
             spec.condition.unwrap().to_string(),
-            "(python>=3.6 or python<3.0)"
+            "python>=3.6 or python<3.0"
         );
     }
 
@@ -2367,7 +2364,7 @@ mod tests {
         let condition = spec.condition.as_ref().unwrap().to_string();
         assert_eq!(
             condition,
-            r#"((python[version=">=3.8", build="py39*"] and __linux) or __win)"#
+            r#"python[version=">=3.8", build="py39*"] and __linux or __win"#
         );
 
         let rendered = spec.to_string();

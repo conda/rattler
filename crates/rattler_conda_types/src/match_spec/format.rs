@@ -35,8 +35,10 @@ use crate::{
 /// The dialect a match spec is rendered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DisplayStyle {
-    /// The historic positional representation produced by `Display`. Kept
-    /// byte-for-byte stable for existing callers; not a serialization format.
+    /// The historic positional representation produced by `Display`. The
+    /// layout and field order are kept stable for existing callers, but every
+    /// bracket value is escaped and quoted so the output always reparses; it
+    /// is not a serialization format.
     Legacy,
     /// The stable all-bracket representation produced by
     /// [`MatchSpec::to_canonical_string`].
@@ -431,21 +433,19 @@ impl SpecView<'_> {
         match field {
             Field::Version => {
                 let version = self.version.expect("presence checked by caller");
-                // The legacy dialect escapes version constraints because they
-                // routinely contain characters like `,` and `*`.
-                write_scalar(f, ctx, "version", version, LegacyQuoting::Escaped)
+                write_scalar(f, ctx, "version", version)
             }
             Field::Build => {
                 let build = self.build.expect("presence checked by caller");
-                write_scalar(f, ctx, "build", build, LegacyQuoting::Escaped)
+                write_scalar(f, ctx, "build", build)
             }
             Field::BuildNumber => {
                 let build_number = self.build_number.expect("presence checked by caller");
-                write_scalar(f, ctx, "build_number", build_number, LegacyQuoting::Raw)
+                write_scalar(f, ctx, "build_number", build_number)
             }
             Field::FileName => {
                 let file_name = self.file_name.expect("presence checked by caller");
-                write_scalar(f, ctx, "fn", &file_name, LegacyQuoting::Raw)
+                write_scalar(f, ctx, "fn", &file_name)
             }
             Field::Extras => {
                 let extras = self.extras.expect("presence checked by caller");
@@ -462,10 +462,7 @@ impl SpecView<'_> {
                 match ctx.style {
                     // The legacy dialect only renders channels in brackets for
                     // condition leaves, and does so by name.
-                    DisplayStyle::Legacy => {
-                        write!(f, "channel=\"{}\"", channel.name())?;
-                        Ok(())
-                    }
+                    DisplayStyle::Legacy => write_scalar(f, ctx, "channel", &channel.name()),
                     DisplayStyle::Canonical => {
                         let value = canonical_channel_value(channel)?;
                         write!(f, "channel={}", canonical_bracket_value(&value)?)?;
@@ -475,47 +472,37 @@ impl SpecView<'_> {
             }
             Field::Subdir => {
                 let subdir = self.subdir.expect("presence checked by caller");
-                write_scalar(f, ctx, "subdir", &subdir, LegacyQuoting::Raw)
+                write_scalar(f, ctx, "subdir", &subdir)
             }
             Field::Namespace => {
                 let namespace = self.namespace.expect("presence checked by caller");
-                write_scalar(f, ctx, "namespace", &namespace, LegacyQuoting::Raw)
+                write_scalar(f, ctx, "namespace", &namespace)
             }
             Field::Md5 => {
                 let md5 = self.md5.expect("presence checked by caller");
-                write_scalar(f, ctx, "md5", &hex::encode(md5), LegacyQuoting::Raw)
+                write_scalar(f, ctx, "md5", &hex::encode(md5))
             }
             Field::Sha256 => {
                 let sha256 = self.sha256.expect("presence checked by caller");
-                write_scalar(f, ctx, "sha256", &hex::encode(sha256), LegacyQuoting::Raw)
+                write_scalar(f, ctx, "sha256", &hex::encode(sha256))
             }
             Field::Url => {
                 let url = self.url.expect("presence checked by caller");
                 match ctx.style {
-                    DisplayStyle::Legacy => write_scalar(f, ctx, "url", url, LegacyQuoting::Raw),
+                    DisplayStyle::Legacy => write_scalar(f, ctx, "url", url),
                     // The canonical dialect never serializes credentials.
-                    DisplayStyle::Canonical => write_scalar(
-                        f,
-                        ctx,
-                        "url",
-                        &redact_credentials_from_url(url),
-                        LegacyQuoting::Raw,
-                    ),
+                    DisplayStyle::Canonical => {
+                        write_scalar(f, ctx, "url", &redact_credentials_from_url(url))
+                    }
                 }
             }
             Field::License => {
                 let license = self.license.expect("presence checked by caller");
-                write_scalar(f, ctx, "license", &license, LegacyQuoting::Raw)
+                write_scalar(f, ctx, "license", &license)
             }
             Field::LicenseFamily => {
                 let license_family = self.license_family.expect("presence checked by caller");
-                write_scalar(
-                    f,
-                    ctx,
-                    "license_family",
-                    &license_family,
-                    LegacyQuoting::Raw,
-                )
+                write_scalar(f, ctx, "license_family", &license_family)
             }
             Field::When => {
                 let condition = self.condition.expect("presence checked by caller");
@@ -529,13 +516,7 @@ impl SpecView<'_> {
             }
             Field::TrackFeatures => {
                 let track_features = self.track_features.expect("presence checked by caller");
-                write_scalar(
-                    f,
-                    ctx,
-                    "track_features",
-                    &track_features.iter().format(" "),
-                    LegacyQuoting::Raw,
-                )
+                write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
             }
         }
     }
@@ -578,40 +559,33 @@ impl SpecView<'_> {
     }
 }
 
-/// How the legacy dialect quotes a scalar bracket value.
-#[derive(Clone, Copy)]
-enum LegacyQuoting {
-    /// `key="{value}"`, the historic default.
-    Raw,
-    /// `key="{escaped}"`, used for values that routinely contain quotes.
-    Escaped,
-}
-
 /// Writes one scalar `key=value` field with the quoting rules of the context.
+///
+/// The legacy dialect always emits an escaped, double-quoted value: emitting a
+/// value verbatim would produce an unparseable spec as soon as it contains a
+/// quote or backslash. Escaping is the identity for every other value, and the
+/// parser unescapes quoted bracket values symmetrically, so this is the only
+/// legacy quoting that round-trips.
 fn write_scalar(
     f: &mut dyn Write,
     ctx: DisplayContext,
     key: &str,
     value: &dyn Display,
-    legacy_quoting: LegacyQuoting,
 ) -> Result<(), FormatError> {
     match ctx.style {
-        DisplayStyle::Legacy => match legacy_quoting {
-            LegacyQuoting::Raw => write!(f, "{key}=\"{value}\"")?,
-            LegacyQuoting::Escaped => {
-                write!(f, "{key}=\"{}\"", escape_bracket_value(&value.to_string()))?;
-            }
-        },
+        DisplayStyle::Legacy => {
+            write!(f, "{key}=\"{}\"", escape_bracket_value(&value.to_string()))?;
+        }
         DisplayStyle::Canonical => write!(f, "{key}={}", canonical_bracket_value(value)?)?,
     }
     Ok(())
 }
 
 impl MatchSpecCondition {
-    /// Renders this condition with the parenthesization rules of `style`: the
-    /// legacy dialect parenthesizes every logical operation, while the
-    /// canonical dialect emits only the parentheses required to preserve
-    /// precedence and the exact shape of this left-associative AST.
+    /// Renders this condition in `style`, emitting only the parentheses
+    /// required to preserve precedence and the exact shape of this
+    /// left-associative AST. Both dialects share this rule: extra parentheses
+    /// carry no information and the output reparses to the identical tree.
     pub(crate) fn fmt_with(
         &self,
         f: &mut dyn Write,
@@ -632,13 +606,8 @@ impl MatchSpecCondition {
             Self::And(_, _) => 2,
             Self::Or(_, _) => 1,
         };
-        let needs_parentheses = match style {
-            DisplayStyle::Legacy => precedence < 3,
-            DisplayStyle::Canonical => {
-                precedence < parent_precedence
-                    || (is_right_child && precedence == parent_precedence && precedence < 3)
-            }
-        };
+        let needs_parentheses = precedence < parent_precedence
+            || (is_right_child && precedence == parent_precedence && precedence < 3);
 
         if needs_parentheses {
             f.write_char('(')?;
