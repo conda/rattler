@@ -39,13 +39,13 @@ use error::PyRattlerError;
 use exceptions::{
     ActivationError, ActivationScriptFormatError, AuthenticationStorageError, CacheDirError,
     CanonicalMatchSpecError, ConversionError, ConvertSubdirError, DetectVirtualPackageError,
-    EnvironmentCreationError,
-    FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError, InvalidHeaderValueError,
-    InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError, InvalidVersionError,
-    InvalidVersionSpecError, IoError, LinkError, LockFileError, PackageNameMatcherParseError,
-    ParseArchError, ParseCondaLockError, ParseExplicitEnvironmentSpecError, ParsePlatformError,
-    RequirementError, ShellError, SolverError, TransactionError, ValidatePackageRecordsError,
-    VersionBumpError, VersionExtendError,
+    EnvironmentCreationError, FetchRepoDataError, InvalidChannelError, InvalidHeaderNameError,
+    InvalidHeaderValueError, InvalidMatchSpecError, InvalidPackageNameError, InvalidUrlError,
+    InvalidVersionError, InvalidVersionSpecError, IoError, LinkError, LockFileError,
+    PackageNameMatcherParseError, ParseArchError, ParseCondaLockError,
+    ParseExplicitEnvironmentSpecError, ParsePlatformError, RequirementError, ShellError,
+    SolverError, TransactionError, ValidatePackageRecordsError, VersionBumpError,
+    VersionExtendError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
