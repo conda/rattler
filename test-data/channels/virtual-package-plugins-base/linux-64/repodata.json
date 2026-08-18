@@ -1,0 +1,11 @@
+{
+  "info": {
+    "subdir": "linux-64",
+    "base_url": "../linux-64",
+    "virtual_package_plugins": {
+      "cuda-detect": ["__cuda", "__cuda_arch"]
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2
+}
