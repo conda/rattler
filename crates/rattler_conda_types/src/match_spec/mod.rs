@@ -28,6 +28,7 @@ pub mod package_name_matcher;
 /// Parse a match spec from a string
 pub mod parse;
 
+use format::{DisplayContext, FormatError, SpecView};
 use matcher::StringMatcher;
 use package_name_matcher::PackageNameMatcher;
 
@@ -210,10 +211,10 @@ pub enum CanonicalMatchSpecError {
 
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // The legacy dialect cannot fail; see `format::SpecView::fmt`.
-        format::SpecView::from(self)
-            .fmt(f, format::DisplayContext::LEGACY)
-            .map_err(format::FormatError::into_fmt_error)
+        // The legacy dialect cannot fail; see `SpecView::fmt`.
+        SpecView::from(self)
+            .fmt(f, DisplayContext::LEGACY)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 
@@ -340,10 +341,10 @@ pub struct NamelessMatchSpec {
 
 impl Display for NamelessMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // The legacy dialect cannot fail; see `format::SpecView::fmt`.
-        format::SpecView::from(self)
-            .fmt(f, format::DisplayContext::LEGACY)
-            .map_err(format::FormatError::into_fmt_error)
+        // The legacy dialect cannot fail; see `SpecView::fmt`.
+        SpecView::from(self)
+            .fmt(f, DisplayContext::LEGACY)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 

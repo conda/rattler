@@ -9,6 +9,8 @@ use nom::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::ParseMatchSpecOptions;
+use crate::match_spec::format::{DisplayStyle, FormatError};
 use crate::match_spec::parse::matchspec_parser;
 
 /// Represents a condition in a match spec, which can be a match spec itself or a logical combination
@@ -24,9 +26,9 @@ pub enum MatchSpecCondition {
 
 impl Display for MatchSpecCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The legacy dialect cannot fail; see `format::MatchSpecCondition::fmt_with`.
-        self.fmt_with(f, crate::match_spec::format::DisplayStyle::Legacy)
-            .map_err(crate::match_spec::format::FormatError::into_fmt_error)
+        // The legacy dialect cannot fail; see `MatchSpecCondition::fmt_with`.
+        self.fmt_with(f, DisplayStyle::Legacy)
+            .map_err(FormatError::into_fmt_error)
     }
 }
 
@@ -108,10 +110,7 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
     Ok((&input[end..], token))
 }
 
-fn matchspec(
-    input: &str,
-    options: crate::ParseMatchSpecOptions,
-) -> IResult<&str, MatchSpecCondition> {
+fn matchspec(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
     let (remaining, matchspec_str) = matchspec_token(input)?;
     let mut leaf_options = options;
     leaf_options.set_conditionals(false);
@@ -130,7 +129,7 @@ fn matchspec(
 
 fn parenthesized_condition(
     input: &str,
-    options: crate::ParseMatchSpecOptions,
+    options: ParseMatchSpecOptions,
 ) -> IResult<&str, MatchSpecCondition> {
     delimited(
         (char('('), ws),
@@ -142,7 +141,7 @@ fn parenthesized_condition(
 
 fn primary_condition(
     input: &str,
-    options: crate::ParseMatchSpecOptions,
+    options: ParseMatchSpecOptions,
 ) -> IResult<&str, MatchSpecCondition> {
     alt((
         |input| parenthesized_condition(input, options),
@@ -151,10 +150,7 @@ fn primary_condition(
     .parse(input)
 }
 
-fn and_condition(
-    input: &str,
-    options: crate::ParseMatchSpecOptions,
-) -> IResult<&str, MatchSpecCondition> {
+fn and_condition(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
     let (input, first) = primary_condition(input, options)?;
     let (input, rest) = nom::multi::many0(preceded((ws, tag("and"), ws), |input| {
         primary_condition(input, options)
@@ -169,10 +165,7 @@ fn and_condition(
     ))
 }
 
-fn or_condition(
-    input: &str,
-    options: crate::ParseMatchSpecOptions,
-) -> IResult<&str, MatchSpecCondition> {
+fn or_condition(input: &str, options: ParseMatchSpecOptions) -> IResult<&str, MatchSpecCondition> {
     let (input, first) = and_condition(input, options)?;
     let (input, rest) = nom::multi::many0(preceded((ws, tag("or"), ws), |input| {
         and_condition(input, options)
@@ -189,14 +182,14 @@ fn or_condition(
 
 pub(crate) fn parse_condition_with_options(
     input: &str,
-    options: crate::ParseMatchSpecOptions,
+    options: ParseMatchSpecOptions,
 ) -> IResult<&str, MatchSpecCondition> {
     or_condition(input, options)
 }
 
 #[cfg(test)]
 pub(crate) fn parse_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
-    parse_condition_with_options(input, crate::ParseMatchSpecOptions::strict())
+    parse_condition_with_options(input, ParseMatchSpecOptions::strict())
 }
 
 #[cfg(test)]

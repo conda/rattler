@@ -1204,9 +1204,9 @@ mod tests {
     };
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
-        ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version, VersionSpec,
-        match_spec::parse::parse_bracket_list,
+        BuildNumberSpec, Channel, ChannelConfig, MatchSpecCondition, NamelessMatchSpec,
+        ParseChannelError, ParseMatchSpecOptions, ParseStrictness, ParseStrictness::*, Version,
+        VersionSpec, match_spec::parse::parse_bracket_list,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -2038,13 +2038,13 @@ mod tests {
     #[test]
     fn test_nested_when_display_fails_loudly() {
         let leaf = MatchSpec {
-            condition: Some(crate::MatchSpecCondition::MatchSpec(Box::new(
+            condition: Some(MatchSpecCondition::MatchSpec(Box::new(
                 MatchSpec::from_str("__linux", Strict).unwrap(),
             ))),
             ..MatchSpec::from_str("python", Strict).unwrap()
         };
         let spec = MatchSpec {
-            condition: Some(crate::MatchSpecCondition::MatchSpec(Box::new(leaf))),
+            condition: Some(MatchSpecCondition::MatchSpec(Box::new(leaf))),
             ..MatchSpec::from_str("target", Strict).unwrap()
         };
 
