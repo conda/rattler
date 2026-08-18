@@ -21,7 +21,7 @@ name = "py-rattler"
 name = "pixi-build-python"
 version = ">=0.7.0"
 [package.host-dependencies]
-maturin = "*"
+maturin = ">=1.14.0,<2"
 [package.build.config]
 abi3 = true
 compilers = ["c", "rust"]
