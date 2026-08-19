@@ -83,16 +83,17 @@ pub mod virtual_fs;
 
 use std::{
     collections::HashMap,
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use metadata_tree::MetadataNode;
 use rattler::install::PythonInfo;
-use rattler::install::python_entry_point_template;
+use rattler::install::{get_windows_launcher, python_entry_point_template};
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::Platform;
 use rattler_conda_types::package::{EntryPoint, LinkJson, NoArchLinks, PackageFile, PathsJson};
+use rattler_conda_types::{PackageRecord, Platform};
 use rattler_lock::LockFile;
 use rattler_networking::LazyClient;
 use virtual_fs::VirtualFS;
@@ -187,6 +188,7 @@ pub(crate) fn path_parse(
     python_info: Option<&PythonInfo>,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut HashMap<PathBuf, usize>,
 ) {
     let cachepath: Arc<Path> = cache_path.into();
 
@@ -238,7 +240,6 @@ pub(crate) fn path_parse(
 
         let file_name = virtual_path.file_name().expect("files always have names");
 
-        let file_index = env_paths.len();
         let mut file_entry = MetadataNode::new_file(
             file_name.into(),
             parent_index,
@@ -249,13 +250,44 @@ pub(crate) fn path_parse(
         if let Some(ref override_path) = cache_prefix_override {
             file_entry.as_file_mut().unwrap().cache_prefix_path = Some(override_path.clone());
         }
-        env_paths.push(file_entry);
 
+        // Clobber key: the file's virtual path under the prefix.
+        let parent_prefix = env_paths[parent_index]
+            .as_directory()
+            .expect("parent is always a directory")
+            .prefix_path
+            .clone();
+        let file_key = parent_prefix.join(file_name);
+
+        upsert_file_node(file_entry, parent_index, file_key, env_paths, file_indices);
+    }
+}
+
+/// Insert `node` as a child of `parent_index`, or replace the file already at
+/// `file_key`.
+///
+/// Clobbered paths (the same path shipped by two packages) resolve last-writer-
+/// wins. The caller feeds packages in topological order (see
+/// [`build_metadata_tree`]), so the winner matches what `rattler`'s installer
+/// keeps after `unclobber`. Replacing in place keeps `readdir` duplicate-free.
+fn upsert_file_node(
+    node: MetadataNode,
+    parent_index: usize,
+    file_key: PathBuf,
+    env_paths: &mut Vec<MetadataNode>,
+    file_indices: &mut HashMap<PathBuf, usize>,
+) {
+    if let Some(&existing) = file_indices.get(&file_key) {
+        env_paths[existing] = node;
+    } else {
+        let file_index = env_paths.len();
+        env_paths.push(node);
         env_paths[parent_index]
             .as_directory_mut()
             .expect("parent is a directory")
             .children
             .push(file_index);
+        file_indices.insert(file_key, file_index);
     }
 }
 
@@ -282,40 +314,87 @@ fn ensure_directory(
     child_index
 }
 
-/// Generate noarch python entry point scripts and add them as virtual files
-/// in the metadata tree.
+/// A single materialized file backing a Python entry point.
+pub(crate) struct EntryPointArtifact {
+    /// File name within the entry-point directory (`bin/` or `Scripts/`).
+    pub file_name: OsString,
+    /// Fully materialized file contents.
+    pub content: Vec<u8>,
+}
+
+/// Entry-point artifact(s) for `ep`, mirroring `rattler`'s installer:
+/// on Unix a single shebang script named after the command; on Windows a
+/// `<cmd>-script.py` plus a `<cmd>.exe` launcher. Branches on `platform`
+/// (not `cfg!`) so the Windows layout is testable on any host.
+pub(crate) fn entry_point_artifacts(
+    target_prefix: &str,
+    ep: &EntryPoint,
+    python_info: &PythonInfo,
+    platform: Platform,
+) -> Vec<EntryPointArtifact> {
+    if platform.is_windows() {
+        let script = python_entry_point_template(target_prefix, true, ep, python_info);
+        vec![
+            EntryPointArtifact {
+                file_name: format!("{}-script.py", ep.command).into(),
+                content: script.into_bytes(),
+            },
+            EntryPointArtifact {
+                file_name: format!("{}.exe", ep.command).into(),
+                content: get_windows_launcher(&platform).to_vec(),
+            },
+        ]
+    } else {
+        let script = python_entry_point_template(target_prefix, false, ep, python_info);
+        vec![EntryPointArtifact {
+            file_name: ep.command.as_str().into(),
+            content: script.into_bytes(),
+        }]
+    }
+}
+
+/// Generate noarch python entry point scripts and add them as virtual files.
+///
+/// The target directory (`bin/` on Unix, `Scripts/` on Windows) comes from
+/// `python_info.bin_dir`. Entries go through [`upsert_file_node`], so a
+/// collision with a real file follows the same last-writer-wins clobber rule.
 pub(crate) fn add_entry_points(
     entry_points: &[EntryPoint],
     target_prefix: &str,
     python_info: &PythonInfo,
+    platform: Platform,
     env_paths: &mut Vec<MetadataNode>,
     directory_indices: &mut HashMap<PathBuf, usize>,
+    file_indices: &mut HashMap<PathBuf, usize>,
 ) {
-    let bin_dir = PathBuf::from("./bin");
-    let bin_index = ensure_directory(bin_dir, 0, env_paths, directory_indices);
+    // `./bin` (Unix) or `./Scripts` (Windows), matching the tree's convention.
+    let bin_dir = Path::new(".").join(&python_info.bin_dir);
+    let bin_index = ensure_directory(bin_dir.clone(), 0, env_paths, directory_indices);
 
     for ep in entry_points {
-        let content = python_entry_point_template(target_prefix, false, ep, python_info);
-        let file_index = env_paths.len();
-        env_paths.push(MetadataNode::new_virtual_file(
-            ep.command.as_str().into(),
-            bin_index,
-            content.into_bytes(),
-        ));
-        env_paths[bin_index]
-            .as_directory_mut()
-            .expect("bin is a directory")
-            .children
-            .push(file_index);
+        for artifact in entry_point_artifacts(target_prefix, ep, python_info, platform) {
+            let file_key = bin_dir.join(&artifact.file_name);
+            let node =
+                MetadataNode::new_virtual_file(artifact.file_name, bin_index, artifact.content);
+            upsert_file_node(node, bin_index, file_key, env_paths, file_indices);
+        }
     }
 }
 
-/// Initialise the root directory and index for a new virtual filesystem tree.
-pub(crate) fn new_empty_tree() -> (Vec<MetadataNode>, HashMap<PathBuf, usize>) {
+/// Initialise a new virtual filesystem tree, returning
+/// `(env_paths, directory_indices, file_indices)`. The two index maps track
+/// directory and file node indices by virtual path; `file_indices` drives
+/// clobber resolution (see [`upsert_file_node`]).
+pub(crate) fn new_empty_tree() -> (
+    Vec<MetadataNode>,
+    HashMap<PathBuf, usize>,
+    HashMap<PathBuf, usize>,
+) {
     let env_paths = vec![MetadataNode::new_directory(PathBuf::from("."), 0)];
     let mut directory_indices = HashMap::new();
     directory_indices.insert(PathBuf::from("."), 0);
-    (env_paths, directory_indices)
+    let file_indices = HashMap::new();
+    (env_paths, directory_indices, file_indices)
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +696,10 @@ impl MountHandle {
     }
 }
 
+/// A fetched-and-parsed conda package:
+/// `(cache_path, paths_json, is_noarch_python, entry_points)`.
+type FetchedPackage = (PathBuf, PathsJson, bool, Vec<EntryPoint>);
+
 /// Build the in-memory metadata tree from a parsed lock file.
 ///
 /// Fetches packages from `package_cache` as needed, reads `PathsJson` for each,
@@ -651,6 +734,23 @@ pub async fn build_metadata_tree(
         })?
         .collect();
 
+    // pypi packages aren't served by the VFS (they live in a separate wheel
+    // cache, installed by pip/uv). Skipping them silently would produce a
+    // mount that looks complete but isn't, so warn loudly and list them.
+    let dropped_pypi: Vec<String> = package_refs
+        .iter()
+        .filter_map(|p| p.as_pypi())
+        .map(|p| {
+            let version = p
+                .version()
+                .map_or_else(|| "<unknown version>".to_string(), ToString::to_string);
+            format!("{} {}", p.name(), version)
+        })
+        .collect();
+    if !dropped_pypi.is_empty() {
+        tracing::warn!("{}", format_dropped_pypi_warning(&dropped_pypi));
+    }
+
     let python_info = package_refs
         .iter()
         .filter_map(|p| p.as_binary_conda())
@@ -659,7 +759,7 @@ pub async fn build_metadata_tree(
         .transpose()
         .map_err(|e| anyhow::anyhow!("failed to get python info: {e}"))?;
 
-    let (mut env_paths, mut directory_indices) = new_empty_tree();
+    let (mut env_paths, mut directory_indices, mut file_indices) = new_empty_tree();
     let mount_str = mount_point.to_string_lossy().to_string();
 
     // Build a single lazily-initialized HTTP client for the whole package loop.
@@ -684,13 +784,13 @@ pub async fn build_metadata_tree(
             .cmp(&a.package_record.size.unwrap_or(0))
     });
 
-    // Fetch + parse packages in parallel. The tree mutation (path_parse)
-    // stays serial because env_paths/directory_indices are shared mutable
-    // state — the downloads and JSON parses are the expensive parts.
+    // Fetch + parse packages in parallel (the expensive part); tree mutation
+    // stays serial. Each task carries its `conda_packages` index so results can
+    // be reordered deterministically regardless of completion order.
     let concurrency = Arc::new(tokio::sync::Semaphore::new(16));
     let mut join_set = tokio::task::JoinSet::new();
 
-    for package_data in &conda_packages {
+    for (idx, package_data) in conda_packages.iter().enumerate() {
         let cache = package_cache.clone();
         let client = client.clone();
         let record = package_data.package_record.clone();
@@ -739,14 +839,32 @@ pub async fn build_metadata_tree(
                 Vec::new()
             };
 
-            Ok::<_, anyhow::Error>((path, paths_json, is_noarch_python, entry_points))
+            Ok::<_, anyhow::Error>((idx, path, paths_json, is_noarch_python, entry_points))
         });
     }
 
-    // Collect results and build the tree serially.
+    // Collect results by their `conda_packages` index. `join_next` yields in
+    // fetch-completion order; indexing here lets the build below run in a
+    // deterministic order so clobbering resolves the same way every run.
+    let mut fetched: Vec<Option<FetchedPackage>> =
+        (0..conda_packages.len()).map(|_| None).collect();
     while let Some(result) = join_set.join_next().await {
-        let (cache_path, paths_json, is_noarch_python, entry_points) =
+        let (idx, cache_path, paths_json, is_noarch_python, entry_points) =
             result.map_err(|e| anyhow::anyhow!("fetch task failed: {e}"))??;
+        fetched[idx] = Some((cache_path, paths_json, is_noarch_python, entry_points));
+    }
+
+    // Build in topological order so clobbering resolves like the installer:
+    // the last (most dependent / noarch) package wins in `upsert_file_node`.
+    let records: Vec<PackageRecord> = conda_packages
+        .iter()
+        .map(|p| p.package_record.clone())
+        .collect();
+    for idx in topological_order_of_records(&records) {
+        let Some((cache_path, paths_json, is_noarch_python, entry_points)) = fetched[idx].take()
+        else {
+            continue;
+        };
 
         let noarch_python_info = if is_noarch_python {
             python_info.as_ref()
@@ -759,6 +877,7 @@ pub async fn build_metadata_tree(
             noarch_python_info,
             &mut env_paths,
             &mut directory_indices,
+            &mut file_indices,
         );
 
         if let Some(ref python_info) = python_info
@@ -768,8 +887,10 @@ pub async fn build_metadata_tree(
                 &entry_points,
                 &mount_str,
                 python_info,
+                platform,
                 &mut env_paths,
                 &mut directory_indices,
+                &mut file_indices,
             );
         }
 
@@ -777,6 +898,51 @@ pub async fn build_metadata_tree(
     }
 
     Ok(MetadataTree(env_paths))
+}
+
+/// Warning emitted when pypi packages are present but can't be served by the
+/// VFS. Factored out to be unit-testable without a live mount.
+pub(crate) fn format_dropped_pypi_warning(packages: &[String]) -> String {
+    format!(
+        "{} pypi package(s) in this environment are NOT served by the virtual \
+         filesystem and will be missing from the mount: {}. The VFS only \
+         projects conda packages; pypi wheels are installed separately by \
+         pip/uv. This environment is incomplete when mounted.",
+        packages.len(),
+        packages.join(", "),
+    )
+}
+
+/// Deterministic build order (indices into `records`) via
+/// [`PackageRecord::sort_topologically`]: dependencies before dependents,
+/// noarch packages last. Records the sort doesn't place (e.g. duplicate names,
+/// which it doesn't support) are appended so none is dropped.
+fn topological_order_of_records(records: &[PackageRecord]) -> Vec<usize> {
+    // Topological sort keys on unique names, which conda environments satisfy.
+    let mut name_to_idx: HashMap<String, usize> = HashMap::with_capacity(records.len());
+    for (i, r) in records.iter().enumerate() {
+        name_to_idx.insert(r.name.as_normalized().to_string(), i);
+    }
+
+    let sorted = PackageRecord::sort_topologically(records.to_vec());
+
+    let mut order: Vec<usize> = Vec::with_capacity(records.len());
+    let mut seen = vec![false; records.len()];
+    for record in &sorted {
+        if let Some(&idx) = name_to_idx.get(record.name.as_normalized())
+            && !seen[idx]
+        {
+            seen[idx] = true;
+            order.push(idx);
+        }
+    }
+    // Append anything the sort didn't cover so no package vanishes.
+    for (idx, was_seen) in seen.iter().enumerate() {
+        if !was_seen {
+            order.push(idx);
+        }
+    }
+    order
 }
 
 /// Mount a pre-built metadata tree. Returns a handle that unmounts on drop.
@@ -1362,13 +1528,14 @@ mod tests {
     #[test]
     fn test_single_file_at_root() {
         let paths_json = make_paths_json(vec!["foo.txt"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert_eq!(env_paths.len(), 2); // root + foo.txt
@@ -1382,13 +1549,14 @@ mod tests {
     #[test]
     fn test_nested_directories() {
         let paths_json = make_paths_json(vec!["a/b/c.txt"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "a", dir "a/b", file "c.txt"
@@ -1412,13 +1580,14 @@ mod tests {
     #[test]
     fn test_directory_dedup() {
         let paths_json = make_paths_json(vec!["lib/foo", "lib/bar"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "lib", file "foo", file "bar"
@@ -1436,13 +1605,14 @@ mod tests {
         let pkg1 = make_paths_json(vec!["lib/foo.so"]);
         let pkg2 = make_paths_json(vec!["lib/bar.so"]);
 
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &pkg1,
             Path::new("/cache/pkg1"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
         path_parse(
             &pkg2,
@@ -1450,6 +1620,7 @@ mod tests {
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root, dir "lib", file "foo.so", file "bar.so"
@@ -1468,13 +1639,14 @@ mod tests {
     #[test]
     fn test_empty_paths_json() {
         let paths_json = make_paths_json(vec![]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert_eq!(env_paths.len(), 1); // root only
@@ -1503,14 +1675,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_creates_bin_dir() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Platform::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // root + bin dir + 2 files
@@ -1521,14 +1695,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_adds_files() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Platform::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1546,14 +1722,16 @@ mod tests {
 
     #[test]
     fn test_entry_points_virtual_content() {
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         let python_info = make_python_info();
         add_entry_points(
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Platform::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1583,13 +1761,14 @@ mod tests {
     fn test_entry_points_dedup_bin_dir() {
         // Create a tree that already has bin/ from another package
         let pkg = make_paths_json(vec!["bin/existing"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &pkg,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let bin_idx = dir_indices[&PathBuf::from("./bin")];
@@ -1601,8 +1780,10 @@ mod tests {
             &make_entry_points(),
             "/prefix",
             &python_info,
+            Platform::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // bin dir should now have 3 children (existing + ipython + ipython3), not a new bin dir
@@ -1623,13 +1804,14 @@ mod tests {
             "site-packages/foo/bar.py",
         ]);
         let python_info = make_python_info(); // python 3.11
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Should have: lib/python3.11/site-packages/foo/ directory structure
@@ -1645,13 +1827,14 @@ mod tests {
     fn test_noarch_python_rewrites_python_scripts() {
         let paths_json = make_paths_json(vec!["python-scripts/mycmd"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Should appear under bin/
@@ -1667,13 +1850,14 @@ mod tests {
     fn test_noarch_python_preserves_cache_path() {
         let paths_json = make_paths_json(vec!["site-packages/foo/bar.py"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/noarch-pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Find bar.py
@@ -1695,13 +1879,14 @@ mod tests {
         // Files not under site-packages/ or python-scripts/ should be unchanged
         let paths_json = make_paths_json(vec!["share/data/file.txt"]);
         let python_info = make_python_info();
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert!(dir_indices.contains_key(&PathBuf::from("./share")));
@@ -1719,13 +1904,14 @@ mod tests {
     fn test_non_noarch_no_rewrite() {
         // Without python_info, site-packages/ stays as-is
         let paths_json = make_paths_json(vec!["site-packages/foo/bar.py"]);
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             Path::new("/cache/pkg"),
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         assert!(dir_indices.contains_key(&PathBuf::from("./site-packages")));
@@ -1783,5 +1969,145 @@ packages:
              update this golden value. If accidental, investigate what changed in the \
              canonical form."
         );
+    }
+
+    // --- clobbering (#2580, sub-bug 1) ---
+
+    #[test]
+    fn test_clobber_single_entry_last_writer_wins() {
+        // A path shipped by two packages yields one readdir entry, served from
+        // whichever package is processed last (the deterministic installer
+        // winner, since the caller feeds packages in topological order).
+        let build = |order: [(&str, &Path); 2]| -> PathBuf {
+            let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+            for (rel, cache) in order {
+                path_parse(
+                    &make_paths_json(vec![rel]),
+                    cache,
+                    None,
+                    &mut env_paths,
+                    &mut dir_indices,
+                    &mut file_indices,
+                );
+            }
+            let bin_idx = dir_indices[&PathBuf::from("./bin")];
+            let bin = env_paths[bin_idx].as_directory().unwrap();
+            assert_eq!(bin.children.len(), 1);
+            env_paths[bin.children[0]]
+                .as_file()
+                .unwrap()
+                .cache_base_path
+                .to_path_buf()
+        };
+
+        assert_eq!(
+            build([("bin/tool", Path::new("/a")), ("bin/tool", Path::new("/b"))]),
+            PathBuf::from("/b"),
+        );
+        assert_eq!(
+            build([("bin/tool", Path::new("/b")), ("bin/tool", Path::new("/a"))]),
+            PathBuf::from("/a"),
+        );
+    }
+
+    fn record_with_depends(name: &str, depends: &[&str]) -> PackageRecord {
+        use rattler_conda_types::{PackageName, VersionWithSource};
+        use std::str::FromStr;
+        let mut record = PackageRecord::new(
+            PackageName::new_unchecked(name),
+            VersionWithSource::from_str("1.0").unwrap(),
+            "0".to_string(),
+        );
+        record.depends = depends.iter().map(|d| (*d).to_string()).collect();
+        record
+    }
+
+    #[test]
+    fn test_topological_order_deterministic_dependency_before_dependent() {
+        // `a` depends on `b`; `c` is independent. The result must (1) place a
+        // dependency before its dependent (last = clobber winner) and (2) be
+        // identical however the input is arranged, so clobbering is stable.
+        let mk = |names: [&str; 3]| {
+            let recs = vec![
+                record_with_depends(names[0], if names[0] == "a" { &["b"] } else { &[] }),
+                record_with_depends(names[1], if names[1] == "a" { &["b"] } else { &[] }),
+                record_with_depends(names[2], if names[2] == "a" { &["b"] } else { &[] }),
+            ];
+            topological_order_of_records(&recs)
+                .into_iter()
+                .map(|i| recs[i].name.as_normalized().to_string())
+                .collect::<Vec<_>>()
+        };
+        let order = mk(["a", "b", "c"]);
+        let pos = |n: &str| order.iter().position(|x| x == n).unwrap();
+        assert!(
+            pos("b") < pos("a"),
+            "dependency before dependent: {order:?}"
+        );
+        assert_eq!(order, mk(["c", "b", "a"]));
+        assert_eq!(order, mk(["b", "a", "c"]));
+    }
+
+    // --- pypi loud warning (#2580, sub-bug 2) ---
+
+    #[test]
+    fn test_format_dropped_pypi_warning_lists_packages() {
+        let msg = format_dropped_pypi_warning(&["requests 2.31.0".into(), "flask 3.0.0".into()]);
+        assert!(msg.contains("2 pypi package(s)"), "count missing: {msg}");
+        assert!(msg.contains("requests 2.31.0"), "pkg missing: {msg}");
+        assert!(msg.contains("flask 3.0.0"), "pkg missing: {msg}");
+        assert!(
+            msg.contains("incomplete"),
+            "should flag incompleteness: {msg}"
+        );
+    }
+
+    // --- entry point layout on Windows (#2580, sub-bug 3) ---
+    // The Unix path (single shebang script under bin/) is covered by the
+    // `test_entry_points_*` tests above; here we check the Windows divergence.
+
+    #[test]
+    fn test_windows_entry_points_script_exe_under_scripts_dir() {
+        use rattler_conda_types::Version;
+        use std::str::FromStr;
+        // A Windows target gives bin_dir == Scripts.
+        let python_info =
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), None, Platform::Win64)
+                .unwrap();
+        assert_eq!(python_info.bin_dir, PathBuf::from("Scripts"));
+
+        // Each entry point becomes a `<cmd>-script.py` (no shebang) plus a
+        // `<cmd>.exe` carrying the vendored conda launcher bytes.
+        let eps = make_entry_points();
+        let arts = entry_point_artifacts("C:/prefix", &eps[0], &python_info, Platform::Win64);
+        let by_name = |suffix: &str| {
+            arts.iter()
+                .find(|a| a.file_name.to_string_lossy().ends_with(suffix))
+                .unwrap_or_else(|| panic!("missing {suffix}"))
+        };
+        assert_eq!(arts.len(), 2);
+        assert_eq!(
+            by_name(".exe").content,
+            rattler::install::get_windows_launcher(&Platform::Win64),
+        );
+        assert!(!by_name("-script.py").content.starts_with(b"#!"));
+
+        // Integration: they land under ./Scripts, not ./bin.
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+        add_entry_points(
+            &make_entry_points(),
+            "C:/prefix",
+            &python_info,
+            Platform::Win64,
+            &mut env_paths,
+            &mut dir_indices,
+            &mut file_indices,
+        );
+        assert!(dir_indices.contains_key(&PathBuf::from("./Scripts")));
+        assert!(!dir_indices.contains_key(&PathBuf::from("./bin")));
+        let scripts = env_paths[dir_indices[&PathBuf::from("./Scripts")]]
+            .as_directory()
+            .unwrap();
+        assert_eq!(scripts.children.len(), 4); // 2 entry points x (script + exe)
     }
 }

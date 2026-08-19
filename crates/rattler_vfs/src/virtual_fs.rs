@@ -38,6 +38,20 @@ fn names_match(entry_name: &OsStr, lookup_name: &OsStr) -> bool {
     }
 }
 
+/// Target-prefix string spliced into prefix-placeholder files, mirroring
+/// `rattler::install::link`. On Windows targets backslashes become forward
+/// slashes (as the installer does, so patched text files stay validly escaped);
+/// elsewhere the mount point is used verbatim. Branches on `platform` (not
+/// `cfg!`) so it's testable on any host.
+pub(crate) fn target_prefix_for_platform(mount_point: &Path, platform: Platform) -> String {
+    let raw = mount_point.to_string_lossy();
+    if platform.is_windows() {
+        raw.replace('\\', "/")
+    } else {
+        raw.into_owned()
+    }
+}
+
 /// Bounded cache keyed by inode, evicting entries to stay within `max_entries`.
 ///
 /// The eviction policy is chosen at construction via `touch_on_get`:
@@ -151,7 +165,7 @@ impl VirtualFS {
         mount_point: &Path,
         platform: Platform,
     ) -> Self {
-        let target_prefix = mount_point.to_string_lossy();
+        let target_prefix = target_prefix_for_platform(mount_point, platform);
         let mut offset_cache = HashMap::new();
 
         // Eagerly compute replacement offsets and text-mode file sizes.
@@ -299,25 +313,29 @@ impl VirtualFS {
                     ReplacementPlan::Text(text_plan)
                 }
                 FileMode::Binary => {
-                    let groups = match recorded_ranges {
-                        Some(Some(OffsetRanges::Binary(g))) => g.clone(),
-                        // Valid metadata with no UTF-8 group: nothing to
-                        // splice, and empty groups make the ranged reads serve
-                        // the bytes verbatim.
-                        Some(None) => Vec::new(),
-                        _ => match fs::read(&cache_path) {
-                            Ok(source) => crate::prefix_replacement::collect_binary_offsets(
-                                &source, old_prefix,
-                            ),
-                            Err(e) => {
-                                tracing::warn!(
-                                    "failed to read {} for offset computation: {}",
-                                    cache_path.display(),
-                                    e
-                                );
-                                continue;
-                            }
-                        },
+                    // Like rattler's installer, skip binary prefix replacement
+                    // on Windows (empty groups serve the bytes verbatim).
+                    let groups = if platform.is_windows() {
+                        Vec::new()
+                    } else {
+                        match recorded_ranges {
+                            Some(Some(OffsetRanges::Binary(g))) => g.clone(),
+                            // Valid metadata, no UTF-8 group: nothing to splice.
+                            Some(None) => Vec::new(),
+                            _ => match fs::read(&cache_path) {
+                                Ok(source) => crate::prefix_replacement::collect_binary_offsets(
+                                    &source, old_prefix,
+                                ),
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "failed to read {} for offset computation: {}",
+                                        cache_path.display(),
+                                        e
+                                    );
+                                    continue;
+                                }
+                            },
+                        }
                     };
                     ReplacementPlan::Binary(groups)
                 }
@@ -532,7 +550,8 @@ impl VirtualFS {
         let mmap = self.mmap_for(ino, &path)?;
 
         let old_prefix = placeholder.placeholder.as_bytes();
-        let new_prefix_str = self.mount_point.to_string_lossy();
+        // Must match the prefix used to build the plan in `with_platform`.
+        let new_prefix_str = target_prefix_for_platform(&self.mount_point, self.platform);
         let new_prefix = new_prefix_str.as_bytes();
 
         let start = offset as usize;
@@ -879,13 +898,14 @@ mod tests {
             paths_version: 1,
         };
 
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             cache_path,
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let mount_point = PathBuf::from("/new/prefix");
@@ -1222,13 +1242,14 @@ mod tests {
             paths_version: 1,
         };
 
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             cache_path,
             None,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         // Add a virtual entry point
@@ -1243,8 +1264,10 @@ mod tests {
             &[ep],
             "/new/prefix",
             &python_info,
+            Platform::Linux64,
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let vfs = VirtualFS::with_platform(env_paths, Path::new("/new/prefix"), Platform::Linux64);
@@ -1315,13 +1338,14 @@ mod tests {
         )
         .unwrap();
 
-        let (mut env_paths, mut dir_indices) = new_empty_tree();
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
         path_parse(
             &paths_json,
             cache_path,
             Some(&python_info),
             &mut env_paths,
             &mut dir_indices,
+            &mut file_indices,
         );
 
         let mount_point = PathBuf::from("/new/prefix");
@@ -1373,6 +1397,89 @@ mod tests {
         assert!(
             content.contains("main()"),
             "function call missing: {content}"
+        );
+    }
+
+    // --- Windows prefix parity (#2580, sub-bug 4) ---
+
+    #[test]
+    fn test_target_prefix_windows_backslash_conversion() {
+        // Unix targets: mount point used verbatim.
+        assert_eq!(
+            target_prefix_for_platform(Path::new("/unix/prefix"), Platform::Linux64),
+            "/unix/prefix"
+        );
+        // Windows targets: backslashes are converted to forward slashes, just
+        // like rattler::install::link does, so patched text files stay valid.
+        assert_eq!(
+            target_prefix_for_platform(Path::new(r"C:\Users\me\env"), Platform::Win64),
+            "C:/Users/me/env"
+        );
+        // A non-Windows target keeps backslashes (valid filename chars on Unix).
+        assert_eq!(
+            target_prefix_for_platform(Path::new(r"a\b"), Platform::Linux64),
+            r"a\b"
+        );
+    }
+
+    /// Build a VFS over a single binary-mode placeholder file for `platform`.
+    /// Returns the fixture dir, the VFS, and the file's inode.
+    fn binary_placeholder_vfs(platform: Platform) -> (TempDir, VirtualFS, u64) {
+        let tmpdir = TempDir::new().unwrap();
+        let cache_path = tmpdir.path();
+        // Placeholder inside a NUL-terminated c-string, as in a real binary.
+        fs::write(cache_path.join("libx.so"), b"/old/prefix\x00rest").unwrap();
+
+        let paths_json = PathsJson {
+            paths: vec![PathsEntry {
+                relative_path: PathBuf::from("libx.so"),
+                path_type: PathType::HardLink,
+                prefix_placeholder: Some(PrefixPlaceholder {
+                    file_mode: FileMode::Binary,
+                    placeholder: "/old/prefix".to_string(),
+                    experimental_offsets: None,
+                    experimental_shebang_length: None,
+                }),
+                no_link: false,
+                sha256: None,
+                size_in_bytes: None,
+            }],
+            paths_version: 1,
+        };
+
+        let (mut env_paths, mut dir_indices, mut file_indices) = new_empty_tree();
+        path_parse(
+            &paths_json,
+            cache_path,
+            None,
+            &mut env_paths,
+            &mut dir_indices,
+            &mut file_indices,
+        );
+        let vfs = VirtualFS::with_platform(env_paths, Path::new("/new/prefix"), platform);
+        let ino = vfs.do_lookup(1, OsStr::new("libx.so")).unwrap().ino;
+        (tmpdir, vfs, ino)
+    }
+
+    #[test]
+    fn test_windows_skips_binary_prefix_replacement() {
+        let src: &[u8] = b"/old/prefix\x00rest";
+
+        // Unix: binary replacement applies (prefix rewritten to /new/prefix).
+        let (_t, vfs, ino) = binary_placeholder_vfs(Platform::Linux64);
+        let out = vfs.do_read(ino, 0, src.len() as u32).unwrap();
+        assert!(
+            out.starts_with(b"/new/prefix"),
+            "unix must apply binary prefix replacement, got {out:?}"
+        );
+
+        // Windows: binary replacement is skipped, matching conda/rattler — the
+        // bytes are served verbatim.
+        let (_t2, vfs_win, ino_win) = binary_placeholder_vfs(Platform::Win64);
+        let out_win = vfs_win.do_read(ino_win, 0, src.len() as u32).unwrap();
+        assert_eq!(
+            out_win, src,
+            "windows must NOT apply binary prefix replacement"
         );
     }
 }
