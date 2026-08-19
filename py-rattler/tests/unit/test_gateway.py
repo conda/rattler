@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+import os
 
 import pytest
 
-from rattler import Gateway, Channel, SourceConfig
+from rattler import Gateway, Channel, PackageFormatSelection, SourceConfig, SparseRepoData
 
 
 @pytest.mark.asyncio
@@ -67,6 +68,63 @@ async def test_channel_notices(tmp_path: Path) -> None:
     names = await gateway.names([channel], ["noarch"], channel_notices=True)
     assert names.names is names
     assert names.notices == notices
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "package_format,expected_results",
+    [
+        (PackageFormatSelection.BOTH, 6),
+        (PackageFormatSelection.ONLY_TAR_BZ2, 3),
+        (PackageFormatSelection.PREFER_CONDA, 6),
+        (PackageFormatSelection.ONLY_CONDA, 3),
+        (PackageFormatSelection.PREFER_CONDA_WITH_WHL, 25),
+        (None, 6),
+    ],
+)
+async def test_query_package_format_selection(package_format: PackageFormatSelection, expected_results: int) -> None:
+    channel = Channel("with-wheels")
+
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    noarch_path = os.path.join(data_dir, "channels/with-wheels/noarch/repodata.json")
+    noarch_data = SparseRepoData(
+        channel=channel,
+        subdir="noarch",
+        path=noarch_path,
+    )
+
+    result = await Gateway().query(
+        [noarch_data], ["noarch"], ["six"], package_format_selection=package_format
+    )
+    assert len(result[0]) == expected_results
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "package_format,expected_results",
+    [
+        (PackageFormatSelection.BOTH, 6),
+        (PackageFormatSelection.ONLY_TAR_BZ2, 3),
+        (PackageFormatSelection.PREFER_CONDA, 6),
+        (PackageFormatSelection.ONLY_CONDA, 3),
+        (PackageFormatSelection.PREFER_CONDA_WITH_WHL, 25),
+    ],
+)
+async def test_names_package_format_selection(package_format: PackageFormatSelection, expected_results: int) -> None:
+    channel = Channel("with-wheels")
+
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    noarch_path = os.path.join(data_dir, "channels/with-wheels/noarch/repodata.json")
+    noarch_data = SparseRepoData(
+        channel=channel,
+        subdir="noarch",
+        path=noarch_path,
+    )
+
+    result = await Gateway().names(
+        [noarch_data], ["noarch"]#, package_format_selection=package_format
+    )
+    assert len(result[0]) == expected_results
 
 
 def test_init_per_channel_config_key() -> None:
