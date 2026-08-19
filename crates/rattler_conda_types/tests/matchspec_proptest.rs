@@ -5,8 +5,8 @@
 //! dialects: rendering may produce text the parser rejects (a loud failure),
 //! but whenever the text parses it must describe the same query. Silent
 //! divergence is always a bug. The canonical dialect is stricter: an `Ok`
-//! must reparse equal (modulo documented URL credential redaction) and must
-//! be idempotent.
+//! must reparse equal (modulo the documented URL stripping) and must be
+//! idempotent.
 //!
 //! The fuzz property runs the opposite direction: fragment-composed raw
 //! strings go straight into the parsers, which must never panic, and
@@ -15,8 +15,8 @@
 //! Documented equivalences the assertions allow:
 //! * A reparsed [`Channel`] may carry a different display `name`. The URL
 //!   and platform selector are the channel's identity, the name is derived.
-//! * Canonical output redacts URL credentials, so URLs are compared after
-//!   redaction.
+//! * Canonical output strips URL credentials, so URLs are compared after
+//!   stripping.
 //! * A `NamelessMatchSpec` with no fields at all renders as `*`, which
 //!   reparses as `version: Any`, a matcher identical to `version: None`.
 
@@ -27,7 +27,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, MatchSpecCondition, NamelessMatchSpec, PackageName,
     PackageNameMatcher, ParseMatchSpecOptions, RepodataRevision, StringMatcher, VersionSpec,
 };
-use rattler_redaction::redact_url_for_serialization;
+use rattler_redaction::strip_url_for_serialization;
 use url::Url;
 
 fn strict_v3() -> ParseMatchSpecOptions {
@@ -456,15 +456,15 @@ fn spec_with_optional_condition() -> BoxedStrategy<MatchSpec> {
 // -------------------------------------------------------------------------
 
 /// Compares a reparsed channel against the original: the base URL (optionally
-/// after credential redaction) and platform selector are the identity; the
+/// after credentials are stripped) and platform selector are the identity; the
 /// display name is derived and may differ.
-fn channel_equivalent(original: &Channel, reparsed: &Channel, redacted: bool) -> bool {
-    let original_url = if redacted {
-        redact_url_for_serialization(original.base_url.url())
+fn channel_equivalent(original: &Channel, reparsed: &Channel, stripped: bool) -> bool {
+    let original_url = if stripped {
+        strip_url_for_serialization(original.base_url.url())
     } else {
         (**original.base_url.url()).clone()
     };
-    // Redaction can swallow a trailing slash that reparsing re-adds.
+    // A channel URL is a directory either way it is written.
     reparsed.base_url.url().as_str().trim_end_matches('/')
         == original_url.as_str().trim_end_matches('/')
         && reparsed.platforms == original.platforms
@@ -495,9 +495,9 @@ fn option_matcher_equivalent(
     }
 }
 
-/// Track features have no quoting grammar: the rendered value re-splits on
-/// spaces and commas, so elements containing those separators (or empty
-/// elements) are compared against the re-split form.
+/// Track features have no quoting grammar in either form: the rendered value
+/// re-splits on spaces and commas, so elements containing those separators (or
+/// empty elements) are compared against the re-split form.
 fn track_features_equivalent(original: Option<&[String]>, reparsed: Option<&[String]>) -> bool {
     match (original, reparsed) {
         (None, None) => true,
@@ -514,16 +514,16 @@ fn track_features_equivalent(original: Option<&[String]>, reparsed: Option<&[Str
 }
 
 /// Asserts that `reparsed` describes the same query as `original`, allowing
-/// only the documented equivalences. `redacted` selects canonical semantics.
-fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str, redacted: bool) {
-    let expected_url = if redacted {
-        original.url.as_ref().map(redact_url_for_serialization)
+/// only the documented equivalences. `stripped` selects canonical semantics.
+fn assert_faithful(original: &MatchSpec, reparsed: &MatchSpec, rendered: &str, stripped: bool) {
+    let expected_url = if stripped {
+        original.url.as_ref().map(strip_url_for_serialization)
     } else {
         original.url.clone()
     };
     let channel_ok = match (original.channel.as_deref(), reparsed.channel.as_deref()) {
         (None, None) => true,
-        (Some(original), Some(reparsed)) => channel_equivalent(original, reparsed, redacted),
+        (Some(original), Some(reparsed)) => channel_equivalent(original, reparsed, stripped),
         _ => false,
     };
 
@@ -607,8 +607,8 @@ proptest! {
         }
     }
 
-    /// Every canonical `Ok` reparses to an equal spec (modulo credential
-    /// redaction) and the canonical form is idempotent. Errors are allowed;
+    /// Every canonical `Ok` reparses to an equal spec (modulo stripped
+    /// credentials) and the canonical form is idempotent. Errors are allowed;
     /// panics and silent divergence are not.
     #[test]
     fn canonical_is_verified_and_idempotent(spec in spec_with_optional_condition()) {

@@ -221,9 +221,10 @@ impl MatchSpec {
     /// [`CanonicalMatchSpecError`] variant. Round-trip fidelity is enforced
     /// by the property tests in `tests/matchspec_proptest.rs`.
     ///
-    /// Channel and package URL userinfo, known token paths, query strings,
-    /// and non-digest fragments are redacted, so URLs containing such data do
-    /// not round-trip with exact equality.
+    /// Channel and package URLs are reduced to what another user can fetch:
+    /// userinfo, a `/t/<token>/` path prefix, the query string, and any
+    /// fragment other than a package digest are removed. URLs carrying such
+    /// data therefore do not round-trip with exact equality.
     pub fn to_canonical_string(&self) -> Result<String, CanonicalMatchSpecError> {
         format::to_canonical_string(self)
     }

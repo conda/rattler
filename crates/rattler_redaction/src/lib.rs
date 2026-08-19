@@ -8,7 +8,7 @@ pub const DEFAULT_REDACTION_STR: &str = "********";
 /// in a `/t/<token>/` path. Query strings and fragments are left untouched,
 /// so the URL stays recognizable for debugging.
 ///
-/// Use [`redact_url_for_serialization`] instead when the URL is written into
+/// Use [`strip_url_for_serialization`] instead when the URL is written into
 /// durable output.
 ///
 /// The `redaction` argument replaces each masked secret. For consistency
@@ -61,18 +61,21 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
     redact_url_for_display(url, redaction)
 }
 
-/// Scrubs a URL for serialization into durable output such as canonical
-/// match specs, repodata, or lockfiles: the entire userinfo is removed, the
-/// token in a `/t/<token>/` path is masked, and any query string or fragment
-/// is replaced wholesale. Query strings are intentionally not filtered by
-/// key: arbitrary services use arbitrary parameter names for credentials, so
-/// no allowlist can provide a meaningful guarantee. The only fragments kept
-/// are conda artifact digests (`md5:<hex>` or `sha256:<hex>`), which are
-/// content addresses, not secrets.
+/// Strips a URL down to what is safe to write into durable output such as
+/// canonical match specs, repodata, or lockfiles: the userinfo, a
+/// `/t/<token>/` path prefix, and the query string are dropped, as is any
+/// fragment that is not a conda artifact digest (`md5:<hex>` or
+/// `sha256:<hex>`), which is a content address rather than a secret.
+///
+/// Secrets are removed rather than masked so that what remains is a URL that
+/// still resolves: the same channel, reached without the credentials. Query
+/// strings go wholesale instead of by key, because arbitrary services use
+/// arbitrary parameter names for credentials and no allowlist can promise
+/// otherwise. Stripping an already stripped URL leaves it unchanged.
 ///
 /// Use [`redact_url_for_display`] instead when the URL is only shown to a
 /// human and should stay recognizable.
-pub fn redact_url_for_serialization(url: &Url) -> Url {
+pub fn strip_url_for_serialization(url: &Url) -> Url {
     fn is_artifact_digest(fragment: &str) -> bool {
         let Some((algorithm, digest)) = fragment.split_once(':') else {
             return false;
@@ -82,19 +85,32 @@ pub fn redact_url_for_serialization(url: &Url) -> Url {
             && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
     }
 
-    let mut url = redact_url_for_display(url, DEFAULT_REDACTION_STR).unwrap_or_else(|| url.clone());
+    let mut url = url.clone();
     if !url.username().is_empty() || url.password().is_some() {
         let _ = url.set_username("");
         let _ = url.set_password(None);
     }
-    if url.query().is_some() {
-        url.set_query(Some(DEFAULT_REDACTION_STR));
+
+    // A `/t/<token>/` prefix authenticates the request; the same location is
+    // reachable without it.
+    let path_without_token = url.path_segments().and_then(|mut segments| {
+        match (segments.next(), segments.next()) {
+            // The remaining segments include the empty one a trailing slash
+            // produces, so rejoining them preserves it.
+            (Some("t"), Some(_)) => Some(format!("/{}", segments.collect::<Vec<_>>().join("/"))),
+            _ => None,
+        }
+    });
+    if let Some(path) = path_without_token {
+        url.set_path(&path);
     }
+
+    url.set_query(None);
     if url
         .fragment()
         .is_some_and(|fragment| !is_artifact_digest(fragment))
     {
-        url.set_fragment(Some(DEFAULT_REDACTION_STR));
+        url.set_fragment(None);
     }
 
     url
@@ -196,18 +212,27 @@ mod test {
     }
 
     #[test]
-    fn test_redact_url_for_serialization() {
+    fn test_strip_url_for_serialization() {
         let url = Url::parse(
             "https://user:password@prefix.dev/t/path-token/channel?auth=session&keep=value#ticket=fragment-token",
         )
         .unwrap();
+        let stripped = strip_url_for_serialization(&url);
 
+        assert_eq!(stripped.as_str(), "https://prefix.dev/channel");
+        // Stripping is a fixed point, so repeated renders agree.
+        assert_eq!(strip_url_for_serialization(&stripped), stripped);
+
+        // A trailing slash marks a directory, so it has to survive.
         assert_eq!(
-            redact_url_for_serialization(&url).as_str(),
-            "https://prefix.dev/t/********/channel?********#********"
+            strip_url_for_serialization(
+                &Url::parse("https://prefix.dev/t/path-token/channel/").unwrap()
+            )
+            .as_str(),
+            "https://prefix.dev/channel/"
         );
 
         let digest_url = Url::parse("https://prefix.dev/pkg.conda#sha256:deadbeef").unwrap();
-        assert_eq!(redact_url_for_serialization(&digest_url), digest_url);
+        assert_eq!(strip_url_for_serialization(&digest_url), digest_url);
     }
 }

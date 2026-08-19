@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use rattler_digest::{Md5Hash, Sha256Hash};
-use rattler_redaction::redact_url_for_serialization;
+use rattler_redaction::strip_url_for_serialization;
 use url::Url;
 
 use super::condition::MatchSpecCondition;
@@ -274,6 +274,16 @@ fn string_matcher_is_canonical(matcher: &StringMatcher) -> bool {
     }
 }
 
+/// Whether a track feature can stand as one element of a canonical
+/// `track_features=[..]` list. The parser splits elements on commas and
+/// whitespace and the bracket tokenizer ends the list at the first `]`, so a
+/// feature containing any of those has no element text.
+fn is_bare_track_feature(feature: &str) -> bool {
+    !feature.is_empty()
+        && !feature.chars().any(char::is_whitespace)
+        && !feature.contains([',', '[', ']', '"', '\'', '\\'])
+}
+
 /// Writes the positional package name for the canonical dialect, refusing
 /// matchers whose text would not reparse as the same matcher.
 fn fmt_canonical_name(f: &mut dyn Write, name: &PackageNameMatcher) -> Result<(), FormatError> {
@@ -396,19 +406,11 @@ fn is_safe_positional_token(value: &str) -> bool {
 }
 
 /// Renders a channel as its base URL plus any explicit platform selector.
-/// The canonical dialect redacts credentials; the legacy dialect historically
+/// The canonical dialect strips credentials; the legacy dialect historically
 /// renders values raw.
-fn channel_url_value(channel: &Channel, redact: bool) -> String {
-    let mut value = if redact {
-        let mut redacted = redact_url_for_serialization(channel.base_url.url());
-        // Redacting a token path swallows the trailing slash channel URLs
-        // carry; restore it so the rendered URL stays normalized and a second
-        // render produces the same text.
-        if !redacted.path().ends_with('/') {
-            let path = format!("{}/", redacted.path());
-            redacted.set_path(&path);
-        }
-        redacted.to_string()
+fn channel_url_value(channel: &Channel, strip: bool) -> String {
+    let mut value = if strip {
+        strip_url_for_serialization(channel.base_url.url()).to_string()
     } else {
         channel.base_url.url().to_string()
     };
@@ -809,7 +811,7 @@ impl SpecView<'_> {
                     DisplayStyle::Legacy => write_scalar(f, ctx, "url", url),
                     // The canonical dialect never serializes credentials.
                     DisplayStyle::Canonical => {
-                        write_scalar(f, ctx, "url", &redact_url_for_serialization(url))
+                        write_scalar(f, ctx, "url", &strip_url_for_serialization(url))
                     }
                 }
             }
@@ -833,19 +835,35 @@ impl SpecView<'_> {
             }
             Field::TrackFeatures => {
                 let track_features = self.track_features.expect("presence checked by caller");
-                if ctx.style == DisplayStyle::Canonical {
-                    let invalid = track_features
-                        .iter()
-                        .find(|feature| feature.is_empty() || feature.contains([',', ' ']))
-                        .cloned()
-                        .or_else(|| track_features.is_empty().then(String::new));
-                    if let Some(feature) = invalid {
-                        return Err(
-                            CanonicalMatchSpecError::UnrepresentableTrackFeature(feature).into(),
-                        );
+                match ctx.style {
+                    // Historically one scalar holding the features separated
+                    // by spaces.
+                    DisplayStyle::Legacy => {
+                        write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
+                    }
+                    // Canonical writes the list as a list, like `extras` and
+                    // `flags`, so each feature stands on its own.
+                    DisplayStyle::Canonical => {
+                        let invalid = track_features
+                            .iter()
+                            .find(|feature| !is_bare_track_feature(feature))
+                            .cloned()
+                            .or_else(|| track_features.is_empty().then(String::new));
+                        if let Some(feature) = invalid {
+                            return Err(CanonicalMatchSpecError::UnrepresentableTrackFeature(
+                                feature,
+                            )
+                            .into());
+                        }
+                        write_list(
+                            f,
+                            ctx,
+                            "track_features",
+                            track_features.iter(),
+                            is_bare_track_feature,
+                        )
                     }
                 }
-                write_scalar(f, ctx, "track_features", &track_features.iter().format(" "))
             }
         }
     }

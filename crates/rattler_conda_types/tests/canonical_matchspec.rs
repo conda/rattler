@@ -169,18 +169,12 @@ fn canonical_urls_do_not_serialize_credentials() {
         ..MatchSpec::default()
     };
 
-    let canonical = spec.to_canonical_string().unwrap();
-    for secret in [
-        "user",
-        "password",
-        "path-token",
-        "session",
-        "fragment-token",
-    ] {
-        assert!(!canonical.contains(secret));
-    }
-    assert!(canonical.contains("/t/********/"));
-    assert!(canonical.contains("?********"));
+    // Credentials are dropped rather than masked, leaving URLs that still
+    // resolve: the same channel, reached without them.
+    assert_eq!(
+        spec.to_canonical_string().unwrap(),
+        r#"target[channel="https://prefix.dev/channel/pkg.conda/",url="https://prefix.dev/channel/pkg.conda"]"#
+    );
 }
 
 #[test]

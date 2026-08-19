@@ -273,6 +273,10 @@ fn channels() {
         "https://repo.example/custom::foo",
         "https://repo.example/custom[linux-64,noarch]::foo",
         "conda-forge[noarch]::foo",
+        // The credentials authenticate the request; the channel is the same
+        // one without them.
+        "https://prefix.dev/t/path-token/conda-forge::foo",
+        r#"foo[channel="https://user:secret@prefix.dev/t/path-token/conda-forge"]"#,
     ]);
 
     let with_channel = |channel: Channel| MatchSpec {
@@ -379,7 +383,11 @@ fn list_fields() {
         r#"foo[extras=[docs]]"#,
         r#"foo[extras=[docs,tests]]"#,
         r#"foo[flags=[cuda,mkl]]"#,
+        // Track features are accepted as the historic space-separated scalar
+        // and as the list the canonical dialect writes.
         r#"foo[track_features="mkl debug"]"#,
+        r#"foo[track_features="mkl, debug"]"#,
+        r#"foo[track_features=[mkl,debug]]"#,
     ]);
 
     for extras in [vec![], vec![String::new()], vec!["docs,tests".to_string()]] {

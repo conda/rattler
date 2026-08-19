@@ -23,7 +23,19 @@ canonical : foo[flags=[cuda,mkl]]
 case      : foo[track_features="mkl debug"]
 legacy    : foo[track_features="mkl debug"]
   reparse : same spec
-canonical : foo[track_features="mkl debug"]
+canonical : foo[track_features=[mkl,debug]]
+  reparse : same spec, stable
+
+case      : foo[track_features="mkl, debug"]
+legacy    : foo[track_features="mkl debug"]
+  reparse : same spec
+canonical : foo[track_features=[mkl,debug]]
+  reparse : same spec, stable
+
+case      : foo[track_features=[mkl,debug]]
+legacy    : foo[track_features="mkl debug"]
+  reparse : same spec
+canonical : foo[track_features=[mkl,debug]]
   reparse : same spec, stable
 
 case      : extras = []
