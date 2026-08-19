@@ -174,7 +174,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist  --no-default-features --features rustls,pty
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
@@ -229,7 +229,7 @@ jobs:
       # Skipped for both PowerPC targets: the emulated container hangs in
       # apt-get while installing Python. uv dropped the same step for the
       # same reason in astral-sh/uv#11229 and has never restored it.
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         if: ${{ !startsWith(matrix.platform.arch, 'ppc64') }}
         name: Test wheel
         with:
@@ -327,7 +327,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
           args: --release --out dist --no-default-features --features rustls,pty
-      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
+      - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
