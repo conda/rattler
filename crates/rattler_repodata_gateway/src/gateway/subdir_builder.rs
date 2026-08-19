@@ -131,6 +131,8 @@ impl<'g> SubdirBuilder<'g> {
             self.channel.clone(),
             self.platform,
             self.gateway.client.clone(),
+            #[cfg(target_arch = "wasm32")]
+            self.gateway.js_fetch.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             source_config.clone(),
@@ -148,6 +150,8 @@ impl<'g> SubdirBuilder<'g> {
             self.channel.clone(),
             self.platform.to_string(),
             self.gateway.client.clone(),
+            #[cfg(target_arch = "wasm32")]
+            self.gateway.js_fetch.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             #[cfg(not(target_arch = "wasm32"))]

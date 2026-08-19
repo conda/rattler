@@ -14,6 +14,8 @@ pub(crate) mod simple_channel_server;
 mod body;
 #[cfg(not(target_arch = "wasm32"))]
 mod flock;
+#[cfg(target_arch = "wasm32")]
+pub mod js_fetch;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use flock::LockedFile;
