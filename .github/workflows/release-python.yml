@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           command: sdist
@@ -58,20 +58,23 @@ jobs:
           path: py-rattler/dist
 
   windows:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.platform.runner }}
     name: Build ${{ matrix.platform.target }}
     strategy:
       fail-fast: false
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
+            runner: windows-latest
             arch: x64
           - target: i686-pc-windows-msvc
+            runner: windows-latest
             arch: x86
-    #     There are a number of issues with cross compiling ring to windows on aarch64.
-    #     For now, we just won't build a wheel, we will revisit this in the future.
-    #      - target: aarch64-pc-windows-msvc
-    #        arch: x64
+          # Cross compiling ring to aarch64-windows is what kept this target
+          # off the list, so build it on a native arm64 runner instead.
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -81,13 +84,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           args: --release --out dist --no-default-features --features rustls
       - name: "Test wheel"
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
           python -m pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
@@ -116,7 +118,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -145,8 +147,18 @@ jobs:
         platform:
           - target: aarch64-unknown-linux-gnu
             arch: aarch64
+            manylinux: "2_28"
+            distro: ubuntu22.04
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+            manylinux: "2_28"
+            distro: ubuntu22.04
+          # riscv64 has no manylinux_2_28 image, and run-on-arch only ships a
+          # riscv64 rootfs for ubuntu20.04, so it carries its own pair.
+          - target: riscv64gc-unknown-linux-gnu
+            arch: riscv64
+            manylinux: "2_31"
+            distro: ubuntu20.04
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -156,18 +168,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
-          manylinux: "2_28"
+          manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist  --no-default-features --features rustls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
-          distro: ubuntu22.04
+          distro: ${{ matrix.platform.distro }}
           githubToken: ${{ github.token }}
           install: |
             apt-get update
@@ -209,7 +220,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -257,7 +268,7 @@ jobs:
           architecture: x64
       - name: "Build wheels (rustls)"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -265,7 +276,7 @@ jobs:
           args: --release --out dist --no-default-features --features rustls,pty
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -299,6 +310,8 @@ jobs:
             arch: aarch64
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+          - target: riscv64gc-unknown-linux-musl
+            arch: riscv64
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -308,7 +321,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -343,7 +356,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: py-rattler
           target: x86_64
@@ -370,7 +383,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - universal2"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls,pty
           working-directory: py-rattler
