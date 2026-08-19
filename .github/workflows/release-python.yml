@@ -155,13 +155,14 @@ jobs:
             arch: armv7
             manylinux: "2_28"
             distro: ubuntu22.04
-          # riscv64 has no manylinux_2_28 image, and run-on-arch only ships a
-          # riscv64 rootfs for ubuntu20.04, so it carries its own pair.
+          # riscv64 has no manylinux_2_28 image, so it builds against 2_31.
+          # The distro still has to carry python 3.10 or newer for our abi3
+          # wheel, which rules out the ubuntu20.04 rootfs.
           - target: riscv64gc-unknown-linux-gnu
             runner: ubuntu-latest
             arch: riscv64
             manylinux: "2_31"
-            distro: ubuntu20.04
+            distro: ubuntu22.04
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -235,11 +236,9 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
-      # Skipped for both PowerPC targets: the emulated container hangs in
-      # apt-get while installing Python. uv dropped the same step for the
-      # same reason in astral-sh/uv#11229 and has never restored it.
+      # Only ppc64le: run-on-arch ships no rootfs for big endian ppc64.
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
-        if: ${{ !startsWith(matrix.platform.arch, 'ppc64') }}
+        if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
