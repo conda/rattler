@@ -183,6 +183,17 @@ jobs:
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           python3 -c "import rattler; print(rattler.__version__)"
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: ${{ matrix.platform.distro }}
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         if: ${{ matrix.platform.distro }}
         name: Test wheel (emulated)
@@ -236,6 +247,17 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: matrix.platform.arch != 'ppc64'
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
       # Only ppc64le: run-on-arch ships no rootfs for big endian ppc64.
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         if: matrix.platform.arch != 'ppc64'
@@ -351,6 +373,17 @@ jobs:
             apk add py3-pip
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall --break-system-packages
             python3 -c "import rattler; print(rattler.__version__)"
+      # run-on-arch runs `apt update` on the runner before it configures QEMU,
+      # and apt retries a failing mirror instead of moving on to the next one.
+      - name: "Bound apt on the runner"
+        if: ${{ matrix.platform.distro }}
+        run: |
+          cat /etc/apt/apt-mirrors.txt || true
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
       - uses: uraimo/run-on-arch-action@460cb8e6d9f726a588fc9b5e681c8a6cab09ae41 # v3.2.0
         if: ${{ matrix.platform.distro }}
         name: Test wheel (emulated)
